@@ -13,12 +13,25 @@ mkdir -p "$artifacts"
 
 node70="$artifacts/dn70.qcow2"
 node71="$artifacts/dn71.qcow2"
+seed70="$artifacts/dn70.seed.iso"
+seed71="$artifacts/dn71.seed.iso"
 log70="$artifacts/dn70.serial.log"
 log71="$artifacts/dn71.serial.log"
 pcap="$artifacts/lan.pcap"
 
-"$repo_root/tests/lab/prepare-image.sh" "$base" "$node70" 31.70 DN70 aa:00:04:00:47:7c
-"$repo_root/tests/lab/prepare-image.sh" "$base" "$node71" 31.71 DN71 aa:00:04:00:46:7c
+lan70=aa:00:04:00:46:7c
+lan71=aa:00:04:00:47:7c
+mgmt70=52:54:00:70:00:01
+mgmt71=52:54:00:71:00:01
+
+rm -f "$node70" "$node71" "$seed70" "$seed71" "$log70" "$log71" "$pcap"
+cp --reflink=auto "$base" "$node70"
+cp --reflink=auto "$base" "$node71"
+
+"$repo_root/tests/lab/make-nocloud-seed.sh" \
+    "$seed70" 31.70 DN70 "$lan70" "$lan71" "$mgmt70"
+"$repo_root/tests/lab/make-nocloud-seed.sh" \
+    "$seed71" 31.71 DN71 "$lan71" "$lan70" "$mgmt71"
 
 cleanup() {
     set +e
@@ -50,22 +63,28 @@ fi
 echo "two-node lab: QEMU acceleration=${accel}"
 
 qemu-system-x86_64 \
-    -accel "$accel" -m 256 -smp 1 \
+    -accel "$accel" -m 512 -smp 1 \
     -drive "file=$node70,if=virtio,format=qcow2" \
-    -netdev tap,id=lan,ifname=dniv70,script=no,downscript=no \
-    -device virtio-net-pci,netdev=lan,mac=aa:00:04:00:46:7c \
+    -drive "file=$seed70,format=raw,media=cdrom,readonly=on" \
+    -netdev tap,id=lan70,ifname=dniv70,script=no,downscript=no \
+    -device virtio-net-pci,netdev=lan70,mac="$lan70" \
+    -netdev user,id=mgmt70 \
+    -device virtio-net-pci,netdev=mgmt70,mac="$mgmt70" \
     -display none -monitor none -serial "file:$log70" &
 Q70_PID=$!
 
 qemu-system-x86_64 \
-    -accel "$accel" -m 256 -smp 1 \
+    -accel "$accel" -m 512 -smp 1 \
     -drive "file=$node71,if=virtio,format=qcow2" \
-    -netdev tap,id=lan,ifname=dniv71,script=no,downscript=no \
-    -device virtio-net-pci,netdev=lan,mac=aa:00:04:00:47:7c \
+    -drive "file=$seed71,format=raw,media=cdrom,readonly=on" \
+    -netdev tap,id=lan71,ifname=dniv71,script=no,downscript=no \
+    -device virtio-net-pci,netdev=lan71,mac="$lan71" \
+    -netdev user,id=mgmt71 \
+    -device virtio-net-pci,netdev=mgmt71,mac="$mgmt71" \
     -display none -monitor none -serial "file:$log71" &
 Q71_PID=$!
 
-deadline=$((SECONDS + 180))
+deadline=$((SECONDS + 600))
 finished=0
 while (( SECONDS < deadline )); do
     done70=0
@@ -82,9 +101,9 @@ done
 if (( ! finished )); then
     echo "two-node lab: guests did not finish before timeout" >&2
     echo "--- DN70 serial tail ---" >&2
-    tail -80 "$log70" 2>/dev/null >&2 || true
+    tail -120 "$log70" 2>/dev/null >&2 || true
     echo "--- DN71 serial tail ---" >&2
-    tail -80 "$log71" 2>/dev/null >&2 || true
+    tail -120 "$log71" 2>/dev/null >&2 || true
     exit 1
 fi
 
@@ -98,6 +117,8 @@ unset TCPDUMP_PID
 
 grep -Eq 'Routing frames received = [1-9][0-9]*' "$log70"
 grep -Eq 'Routing frames received = [1-9][0-9]*' "$log71"
+grep -q 'module=.*/kernel/extra/akms/decnet_iv.ko' "$log70"
+grep -q 'module=.*/kernel/extra/akms/decnet_iv.ko' "$log71"
 
 frames=$(sudo tcpdump -nn -r "$pcap" 'ether proto 0x6003' 2>/dev/null | wc -l)
 if (( frames < 2 )); then
