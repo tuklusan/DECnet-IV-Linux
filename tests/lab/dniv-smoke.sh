@@ -27,22 +27,23 @@ find_iface() {
     return 1
 }
 
-adjacency_state() {
+wait_adjacency_up() {
     peer_address=$1
-    expected_state=$2
-    output=$(/usr/local/sbin/dnctl adjacencies 2>/dev/null || true)
-    printf '%s\n' "$output"
-    printf '%s\n' "$output" | grep -F "$peer_address via " | \
-        grep -Fq " L1 router $expected_state "
-}
-
-wait_adjacency_state() {
-    peer_address=$1
-    expected_state=$2
+    init_marker=$2
     tries=$3
+    init_seen=0
     i=0
     while [ "$i" -lt "$tries" ]; do
-        if adjacency_state "$peer_address" "$expected_state"; then
+        output=$(/usr/local/sbin/dnctl adjacencies 2>/dev/null || true)
+        printf '%s\n' "$output"
+        if [ "$init_seen" -eq 0 ] && \
+           printf '%s\n' "$output" | grep -F "$peer_address via " | \
+               grep -Fq ' L1 router INIT '; then
+            init_seen=1
+            echo "$init_marker session=$session node=$name peer=$peer_address"
+        fi
+        if printf '%s\n' "$output" | grep -F "$peer_address via " | \
+           grep -Fq ' L1 router UP '; then
             return 0
         fi
         i=$((i + 1))
@@ -133,12 +134,7 @@ e1)
     /usr/local/sbin/dnctl reset-stats
     ip link set "$iface" up
 
-    if ! wait_adjacency_state "$peer_node" INIT 80; then
-        echo "DNIV-E1-FAIL session=$session node=$name reason=no-initial-init"
-        exit 1
-    fi
-    echo "DNIV-E1-INIT session=$session node=$name peer=$peer_node"
-    if ! wait_adjacency_state "$peer_node" UP 120; then
+    if ! wait_adjacency_up "$peer_node" DNIV-E1-INIT 120; then
         echo "DNIV-E1-FAIL session=$session node=$name reason=initial-adjacency"
         exit 1
     fi
@@ -162,12 +158,7 @@ e1)
         modprobe decnet_iv default_area="$area" default_node="$node" default_name="$name" \
             default_node_type=2 router_priority=64 hello_interval=2
         ip link set "$iface" up
-        if ! wait_adjacency_state "$peer_node" INIT 80; then
-            echo "DNIV-E1-FAIL session=$session node=$name reason=no-restart-init"
-            exit 1
-        fi
-        echo "DNIV-E1-RESTART-INIT session=$session node=$name peer=$peer_node"
-        if ! wait_adjacency_state "$peer_node" UP 120; then
+        if ! wait_adjacency_up "$peer_node" DNIV-E1-RESTART-INIT 120; then
             echo "DNIV-E1-FAIL session=$session node=$name reason=recovery-adjacency"
             exit 1
         fi
@@ -177,11 +168,18 @@ e1)
     fi
 
     seen_expired=0
+    restart_init_reported=0
     i=0
     while [ "$i" -lt 160 ]; do
         output=$(/usr/local/sbin/dnctl adjacencies 2>/dev/null || true)
         printf '%s\n' "$output"
         if printf '%s\n' "$output" | grep -Fq "$peer_node via "; then
+            if [ "$seen_expired" -eq 1 ] && [ "$restart_init_reported" -eq 0 ] && \
+               printf '%s\n' "$output" | grep -F "$peer_node via " | \
+                   grep -Fq ' L1 router INIT '; then
+                restart_init_reported=1
+                echo "DNIV-E1-RESTART-INIT session=$session node=$name peer=$peer_node"
+            fi
             if [ "$seen_expired" -eq 1 ] && \
                printf '%s\n' "$output" | grep -F "$peer_node via " | \
                    grep -Fq ' L1 router UP '; then

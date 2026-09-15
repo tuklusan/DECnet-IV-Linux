@@ -34,7 +34,7 @@ Deliver DECnet Ethernet address handling, endnode/router hello parsing and gener
 
 Exit criteria: DN70/DN71 form and age adjacencies correctly and repeat against independent peers where their roles apply.
 
-The E1 acceptance harness must prove an observable router INIT-to-UP transition, generated/parsed hello traffic, listener expiry after peer silence, clean module restart/recovery, and correct DECnet multicast/source-MAC evidence on both native CPU architectures before Phase 3 can advance.
+The E1 acceptance harness must prove generated/parsed hello traffic, observable INIT evidence during initial convergence and restart, both router adjacencies reaching UP, listener expiry after peer silence, clean module restart/recovery, and correct DECnet multicast/source-MAC evidence on both native CPU architectures before Phase 3 can advance.
 
 ## Phase 4 - Phase IV routing
 

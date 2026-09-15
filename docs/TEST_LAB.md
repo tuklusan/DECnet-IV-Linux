@@ -49,9 +49,9 @@ Check address encoding, DECnet MAC derivation, routing header forms, checksums a
 
 ### E1 - two nodes on one LAN
 
-Start with 31.70 and 31.71. Prove generated/parsed router hellos, an observable INIT-to-UP transition, adjacency creation/expiry, all-routers and designated-router all-endnodes multicast behavior, correct DECnet source MACs and clean module restart/recovery. Repeat with independent peers where supported.
+Start with 31.70 and 31.71. Prove generated/parsed router hellos, observable INIT evidence during initial convergence, both adjacencies reaching UP, adjacency creation/expiry, all-routers and designated-router all-endnodes multicast behavior, correct DECnet source MACs and clean module restart/recovery. Repeat with independent peers where supported.
 
-The automated E1 self-to-self gate deliberately silences one router long enough to exceed the 3.1x listen timer, requires the peer adjacency to disappear, reloads the silent router, and requires both sides to return through INIT to UP before accepting the run. This is a prerequisite for, not a substitute for, independent-peer interoperability.
+The automated E1 self-to-self gate deliberately silences one router long enough to exceed the 3.1x listen timer, requires the peer adjacency to disappear, reloads the silent router, requires observable INIT evidence during restart convergence, and requires both sides to return to UP before accepting the run. Because the first hello from a peer can already list the local router, either side may move from its newly created initialising adjacency to UP within the same hello-processing cycle; the gate therefore requires INIT evidence from at least one side rather than assuming both INIT states remain externally visible. This is a prerequisite for, not a substitute for, independent-peer interoperability.
 
 ### E2 - router on two LANs
 

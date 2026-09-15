@@ -269,23 +269,28 @@ if [[ "$mode" == e1 ]]; then
         echo "two-node: E1 wire evidence incomplete routers=$all_routers endnodes=$all_endnodes srcA=$from_a srcB=$from_b" >&2
         exit 1
     fi
-    for log_marker in \
-        "DNIV-E1-INIT session=$session node=$name_a" \
-        "DNIV-E1-INIT session=$session node=$name_b" \
-        "DNIV-E1-RESTART-INIT session=$session node=$name_a" \
-        "DNIV-E1-EXPIRED session=$session node=$name_b" \
-        "DNIV-E1-RECOVERED session=$session node=$name_a" \
-        "DNIV-E1-RECOVERED session=$session node=$name_b"; do
-        if [[ "$log_marker" == *"node=$name_b"* ]]; then
-            evidence_log=$log_b
-        else
-            evidence_log=$log_a
-        fi
-        grep -Fq "$log_marker" "$evidence_log" || {
-            echo "two-node: missing E1 evidence: $log_marker" >&2
-            exit 1
-        }
-    done
+    if ! grep -Fq "DNIV-E1-INIT session=$session" "$log_a" && \
+       ! grep -Fq "DNIV-E1-INIT session=$session" "$log_b"; then
+        echo "two-node: E1 initial INIT state was not observed" >&2
+        exit 1
+    fi
+    grep -Fq "DNIV-E1-EXPIRED session=$session node=$name_b" "$log_b" || {
+        echo "two-node: E1 listener expiry was not observed" >&2
+        exit 1
+    }
+    if ! grep -Fq "DNIV-E1-RESTART-INIT session=$session" "$log_a" && \
+       ! grep -Fq "DNIV-E1-RESTART-INIT session=$session" "$log_b"; then
+        echo "two-node: E1 restart INIT state was not observed" >&2
+        exit 1
+    fi
+    grep -Fq "DNIV-E1-RECOVERED session=$session node=$name_a" "$log_a" || {
+        echo "two-node: E1 node A recovery was not observed" >&2
+        exit 1
+    }
+    grep -Fq "DNIV-E1-RECOVERED session=$session node=$name_b" "$log_b" || {
+        echo "two-node: E1 node B recovery was not observed" >&2
+        exit 1
+    }
     echo "two-node: E1 pass on $host_arch for $area.$node_a/$area.$node_b, captured $frames DECnet frames"
 else
     echo "two-node: Phase 2 pass on $host_arch for $area.$node_a/$area.$node_b, captured $frames DECnet routing frames"
