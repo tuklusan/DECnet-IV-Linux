@@ -2,6 +2,13 @@
 
 This is the execution order for DECnet-IV-Linux. Later phases do not replace the acceptance gates of earlier phases.
 
+## Test discipline
+
+- Run every useful, internally consistent upstream/reference test unmodified and keep it green. If an upstream revision contains a self-contradictory regression, pin the last passing revision for that suite while retaining the current revision separately for live reference work.
+- Prefer native DECnet on raw Ethernet or native DDCMP media. Do not use DECnet-over-IP tunneling as a shortcut around unfinished native protocol layers.
+- Stress the native stack aggressively as each layer arrives: node count, traffic volume, churn, loss, restart, route change, reconnect and long-duration runs.
+- Management networks used to provision guests are out-of-band and must never carry DECnet acceptance traffic.
+
 ## Phase 0 - repository continuity and reference discipline
 
 Exit criteria:
@@ -9,6 +16,7 @@ Exit criteria:
 - repository policy gate is active;
 - every substantive commit refreshes `docs/PROJECT_STATE.md`;
 - Route20 and PyDECnet are documented as external conformance peers;
+- all useful upstream/reference tests available at the pinned revisions pass unmodified;
 - no legacy Linux DECnet kernel implementation is used as the implementation base;
 - protocol/reference licensing boundaries are documented before source reuse is considered.
 
@@ -24,21 +32,25 @@ Deliver:
 - Routing Layer EtherType receive registration and counters;
 - small `dnctl` diagnostic/configuration program;
 - native x86_64 and ARM64 compile gates;
+- AKMS metadata for Alpine and DKMS metadata for Debian/RHEL-family systems;
 - unit tests for address encoding and UAPI constants.
 
-Exit criteria: module, userspace, and unit tests build cleanly on both required architectures.
+Exit criteria: module, userspace, lifecycle metadata, and unit tests build cleanly on both required architectures.
 
 ## Phase 2 - reproducible tiny VM image and two-node lab
 
 Deliver:
 
 - pinned Alpine reference image build;
+- NoCloud first-boot provisioning instead of offline image mutation;
+- AKMS-managed module source and automatic kernel rebuild path;
 - module and userspace installed into the image;
 - DN70 and DN71 boot as separate VMs on one raw Ethernet LAN;
+- out-of-band management NICs only for package provisioning;
 - packet capture and per-node logs retained on failure;
 - KVM when available, software emulation fallback otherwise.
 
-Exit criteria: two images boot independently and exchange deliberately generated DECnet Routing Layer frames on the isolated LAN.
+Exit criteria: two images boot independently, load the AKMS-managed module, and exchange deliberately generated native DECnet Routing Layer frames on the isolated LAN.
 
 ## Phase 3 - Ethernet Phase IV initialization and adjacency
 
@@ -71,7 +83,7 @@ Deliver:
 - native socket family integration using the reserved DECnet protocol family number;
 - compatibility-oriented socket structures only where they are still technically sound.
 
-Exit criteria: reliable bidirectional logical links pass stress, reconnect and loss tests against an independent peer.
+Exit criteria: reliable bidirectional logical links pass sustained load, reconnect, loss, churn and long-duration tests against independent peers.
 
 ## Phase 6 - Session Control and network management
 
@@ -81,7 +93,7 @@ Deliver:
 - NICE/NML subset required for useful local and remote management;
 - executor, node, circuit, line and counters needed by the planned `ncp` experience.
 
-Exit criteria: scripted and interactive management queries work locally and against independent DECnet peers.
+Exit criteria: scripted and interactive management queries work locally and against independent DECnet peers under sustained native DECnet load.
 
 ## Phase 7 - familiar user-mode tools
 
@@ -93,7 +105,7 @@ Implement tools only when their underlying protocol layer is ready:
 4. `phone` and `phoned` on the PHONE protocol;
 5. related query, directory, login and task utilities as useful.
 
-Exit criteria: command names, common syntax and interaction remain familiar to DECnet/Linux users while using the new kernel stack.
+Exit criteria: command names, common syntax and interaction remain familiar to DECnet/Linux users while using the new kernel stack, with repeated and concurrent application stress over native DECnet.
 
 ## Phase 8 - DDCMP
 
@@ -101,7 +113,7 @@ Deliver:
 
 - kernel DDCMP framing/state machine;
 - CRC, ACK/NAK/REP, sequencing, retransmission, timers and restart handling;
-- test byte-stream carriage over TCP/UDP for CI without moving DDCMP logic out of the kernel;
+- controlled byte-stream carriage over TCP/UDP only as a CI transport for DDCMP fault injection, not as DECnet-over-IP;
 - PyDECnet DDCMP interoperability;
 - Route20 DDCMP interoperability where its supported mode applies;
 - later asynchronous serial and synchronous hardware tests.
@@ -118,13 +130,16 @@ Exercise routing, NSP, Session Control, NICE, CTERM, PHONE and DAP across the mi
 
 Exit criteria: application traffic traverses mixed media in both directions and survives link failure/recovery.
 
-## Phase 10 - scale, physical hardware and release images
+## Phase 10 - scale, portability, physical hardware and release images
 
 Deliver:
 
-- 4, 8 and 16-node virtual topologies;
+- 4, 8 and 16-node virtual topologies with sustained native DECnet stress;
 - x86_64-to-x86_64, ARM64-to-ARM64 and mixed-architecture cases;
+- smallest-maintained-image portability lab across Alpine, Debian and RHEL-family guests;
+- real kernel package upgrade/reboot tests proving AKMS/DKMS automatic module rebuilds;
+- mixed-distro native DECnet topologies;
 - small physical lab with x86_64 and ARM64 hosts on a managed switch;
 - QCOW2 and RAW release images, checksums, manifest and reproducible build metadata.
 
-Exit criteria: release candidate passes all applicable external conformance, virtual topology, mixed-media and physical-hardware gates.
+Exit criteria: release candidate passes all applicable upstream/reference conformance, virtual topology, mixed-distro, mixed-media, kernel-upgrade and physical-hardware gates.
