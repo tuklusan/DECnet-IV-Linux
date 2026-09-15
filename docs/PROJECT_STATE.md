@@ -113,11 +113,13 @@ The active `phase3-e1-adjacency` feature branch adds the E1 self-to-self accepta
 
 An adversarial E1 harness review found that the observing router's expiry/recovery loop allowed only 40 seconds while the silent router's scripted silence plus maximum recovery wait could approach 39 seconds. The observation window is widened to 60 seconds so scheduler and boot jitter cannot create a false failure at the boundary.
 
+A subsequent wire-evidence review found that merely seeing some all-endnodes traffic would not prove correct designated-router election. With equal priority, DN71 must win over DN70, so E1 now requires all-routers hellos from both DECnet source MACs, at least one all-endnodes hello from DN71, and zero all-endnodes hellos from DN70.
+
 No native VM or live independent-peer runtime claim is made yet for the E1 branch. The E1 branch must complete the SoP gate before hosted execution, then pass the required cheap build/reference checks and native x86_64/aarch64 E1 runs before promotion.
 
 ## Resume point
 
-`main` remains at reviewed Phase 3 baseline `7070768397230b990bad7703a8c29a9501e5433b`. Active work is on feature branch `phase3-e1-adjacency`, which contains the E1 two-router adjacency acceptance harness while preserving the Phase 2 smoke gate and legacy checkpoint behavior. The harness is designed to prove hello traffic, INIT evidence during convergence, both adjacencies reaching UP, listener expiry, module restart/recovery, multicast behavior and DECnet source addressing; it has not yet been promoted or given a hosted runtime pass.
+`main` remains at reviewed Phase 3 baseline `7070768397230b990bad7703a8c29a9501e5433b`. Active work is on feature branch `phase3-e1-adjacency`, which contains the E1 two-router adjacency acceptance harness while preserving the Phase 2 smoke gate and legacy checkpoint behavior. The harness is designed to prove hello traffic, INIT evidence during convergence, both adjacencies reaching UP, listener expiry, module restart/recovery, designated-router multicast behavior and DECnet source addressing; it has not yet been promoted or given a hosted runtime pass.
 
 ## Next action
 

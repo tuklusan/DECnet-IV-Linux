@@ -257,16 +257,16 @@ if (( frames < 2 )); then
 fi
 
 if [[ "$mode" == e1 ]]; then
-    all_routers=$(sudo tcpdump -nn -e -r "$pcap" \
-        'ether proto 0x6003 and ether dst ab:00:00:03:00:00' 2>/dev/null | wc -l)
-    all_endnodes=$(sudo tcpdump -nn -e -r "$pcap" \
-        'ether proto 0x6003 and ether dst ab:00:00:04:00:00' 2>/dev/null | wc -l)
-    from_a=$(sudo tcpdump -nn -e -r "$pcap" \
-        "ether proto 0x6003 and ether src $mac_a" 2>/dev/null | wc -l)
-    from_b=$(sudo tcpdump -nn -e -r "$pcap" \
-        "ether proto 0x6003 and ether src $mac_b" 2>/dev/null | wc -l)
-    if (( all_routers < 4 || all_endnodes < 1 || from_a < 2 || from_b < 2 )); then
-        echo "two-node: E1 wire evidence incomplete routers=$all_routers endnodes=$all_endnodes srcA=$from_a srcB=$from_b" >&2
+    routers_from_a=$(sudo tcpdump -nn -e -r "$pcap" \
+        "ether proto 0x6003 and ether dst ab:00:00:03:00:00 and ether src $mac_a" 2>/dev/null | wc -l)
+    routers_from_b=$(sudo tcpdump -nn -e -r "$pcap" \
+        "ether proto 0x6003 and ether dst ab:00:00:03:00:00 and ether src $mac_b" 2>/dev/null | wc -l)
+    endnodes_from_a=$(sudo tcpdump -nn -e -r "$pcap" \
+        "ether proto 0x6003 and ether dst ab:00:00:04:00:00 and ether src $mac_a" 2>/dev/null | wc -l)
+    endnodes_from_b=$(sudo tcpdump -nn -e -r "$pcap" \
+        "ether proto 0x6003 and ether dst ab:00:00:04:00:00 and ether src $mac_b" 2>/dev/null | wc -l)
+    if (( routers_from_a < 2 || routers_from_b < 2 || endnodes_from_a != 0 || endnodes_from_b < 1 )); then
+        echo "two-node: E1 wire evidence incomplete routersA=$routers_from_a routersB=$routers_from_b endnodesA=$endnodes_from_a endnodesB=$endnodes_from_b" >&2
         exit 1
     fi
     if ! grep -Fq "DNIV-E1-INIT session=$session" "$log_a" && \
