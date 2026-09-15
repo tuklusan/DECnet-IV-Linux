@@ -21,6 +21,7 @@ permissions:
 jobs:
   two-node-x86:
     runs-on: ubuntu-24.04
+    timeout-minutes: 25
     env:
       DNIV_LAB_ARTIFACTS: ${{ github.workspace }}/tests/lab/artifacts
     steps:
@@ -34,6 +35,9 @@ jobs:
           set -euo pipefail
           session='${{ inputs.lab_session_id }}'
           resume_run='${{ inputs.resume_run_id }}'
+          if [[ -z "$resume_run" && "$GITHUB_REF_NAME" =~ ^resume-([0-9]+)$ ]]; then
+            resume_run="${BASH_REMATCH[1]}"
+          fi
           if [[ -z "$session" ]]; then
             if [[ -n "$resume_run" ]]; then
               session="gha-${resume_run}"
@@ -52,17 +56,18 @@ jobs:
           echo "DNIV_LAB_RESUME=$resume" >> "$GITHUB_ENV"
           echo "session_id=$session" >> "$GITHUB_OUTPUT"
           echo "resume=$resume" >> "$GITHUB_OUTPUT"
-          echo "lab session=$session attempt=$attempt resume=$resume"
+          echo "resume_run_id=$resume_run" >> "$GITHUB_OUTPUT"
+          echo "lab session=$session attempt=$attempt resume=$resume resume-run=$resume_run"
 
       # A prior session artifact contains the stateful qcow2 disks, seeds and manifests.
       - name: Restore prior VM session
-        if: ${{ inputs.resume_run_id != '' }}
+        if: ${{ steps.session.outputs.resume == '1' }}
         uses: actions/download-artifact@v4
         with:
           name: two-node-x86-session-${{ steps.session.outputs.session_id }}
           path: tests/lab/artifacts/sessions/${{ steps.session.outputs.session_id }}
           github-token: ${{ github.token }}
-          run-id: ${{ inputs.resume_run_id }}
+          run-id: ${{ steps.session.outputs.resume_run_id }}
 
       # NoCloud provisions each guest; the DECnet data NIC stays on an isolated bridge.
       - name: Install VM lab dependencies
@@ -96,14 +101,32 @@ jobs:
           compression-level: 1
           retention-days: 30
 
-  pinned-arm-image:
-    runs-on: ubuntu-24.04
+  two-node-aarch64:
+    if: ${{ !startsWith(github.ref_name, 'resume-') }}
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 55
+    env:
+      DNIV_LAB_ARTIFACTS: ${{ github.workspace }}/tests/lab/artifacts
+      DNIV_LAB_TIMEOUT_SECONDS: 2400
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      # ARM execution follows after x86 is green; this gate keeps its base immutable meanwhile.
-      - name: Verify pinned aarch64 Alpine image
+      - name: Install AArch64 VM lab dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-arm qemu-utils qemu-efi-aarch64 tcpdump curl genisoimage
+          firmware=''
+          for candidate in /usr/share/AAVMF/AAVMF_CODE.fd /usr/share/qemu-efi-aarch64/QEMU_EFI.fd; do
+            if [[ -r "$candidate" ]]; then
+              firmware=$candidate
+              break
+            fi
+          done
+          test -n "$firmware"
+          echo "DNIV_AARCH64_UEFI=$firmware" >> "$GITHUB_ENV"
+
+      - name: Download and verify pinned AArch64 Alpine image
         run: |
           set -eu
           . image/alpine/images.env
@@ -112,3 +135,76 @@ jobs:
           curl -fLO "$ALPINE_BASE_URL/$ALPINE_AARCH64_IMAGE.sha512"
           python3 "$GITHUB_WORKSPACE/tools/verify_sha512.py" \
             "$ALPINE_AARCH64_IMAGE" "$ALPINE_AARCH64_IMAGE.sha512"
+          echo "ALPINE_ARM_IMAGE=$RUNNER_TEMP/$ALPINE_AARCH64_IMAGE" >> "$GITHUB_ENV"
+
+      - name: Run native AArch64 DN70 and DN71 smoke test
+        run: tests/lab/run-two-node-arch.sh arm-arm "$ALPINE_ARM_IMAGE" "$ALPINE_ARM_IMAGE"
+
+      - name: Retain AArch64 failure evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: two-node-aarch64-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            tests/lab/artifacts/sessions/*/session.env
+            tests/lab/artifacts/sessions/*/attempts/
+          if-no-files-found: warn
+          compression-level: 1
+          retention-days: 30
+
+  mixed-x86-aarch64:
+    if: ${{ !startsWith(github.ref_name, 'resume-') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [x86-arm, arm-x86]
+    env:
+      DNIV_LAB_ARTIFACTS: ${{ github.workspace }}/tests/lab/artifacts
+      DNIV_LAB_TIMEOUT_SECONDS: 2400
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install mixed-architecture VM lab dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 qemu-system-arm qemu-utils qemu-efi-aarch64 tcpdump curl genisoimage
+          firmware=''
+          for candidate in /usr/share/AAVMF/AAVMF_CODE.fd /usr/share/qemu-efi-aarch64/QEMU_EFI.fd; do
+            if [[ -r "$candidate" ]]; then
+              firmware=$candidate
+              break
+            fi
+          done
+          test -n "$firmware"
+          echo "DNIV_AARCH64_UEFI=$firmware" >> "$GITHUB_ENV"
+
+      - name: Download and verify pinned x86_64 and AArch64 Alpine images
+        run: |
+          set -eu
+          . image/alpine/images.env
+          cd "$RUNNER_TEMP"
+          for image in "$ALPINE_X86_64_IMAGE" "$ALPINE_AARCH64_IMAGE"; do
+            curl -fLO "$ALPINE_BASE_URL/$image"
+            curl -fLO "$ALPINE_BASE_URL/$image.sha512"
+            python3 "$GITHUB_WORKSPACE/tools/verify_sha512.py" "$image" "$image.sha512"
+          done
+          echo "ALPINE_X86_IMAGE=$RUNNER_TEMP/$ALPINE_X86_64_IMAGE" >> "$GITHUB_ENV"
+          echo "ALPINE_ARM_IMAGE=$RUNNER_TEMP/$ALPINE_AARCH64_IMAGE" >> "$GITHUB_ENV"
+
+      - name: Run mixed-architecture DN70 and DN71 smoke test
+        run: tests/lab/run-two-node-arch.sh '${{ matrix.mode }}' "$ALPINE_X86_IMAGE" "$ALPINE_ARM_IMAGE"
+
+      - name: Retain mixed-architecture failure evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: two-node-${{ matrix.mode }}-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            tests/lab/artifacts/sessions/*/session.env
+            tests/lab/artifacts/sessions/*/attempts/
+          if-no-files-found: warn
+          compression-level: 1
+          retention-days: 30

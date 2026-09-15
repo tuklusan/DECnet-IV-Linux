@@ -45,7 +45,14 @@ EOF_META
 cat >"$tmp/user-data" <<'EOF_HEAD'
 #!/bin/sh
 set -eu
-exec >/dev/ttyS0 2>&1
+if [ -c /dev/ttyS0 ]; then
+    serial_console=/dev/ttyS0
+elif [ -c /dev/ttyAMA0 ]; then
+    serial_console=/dev/ttyAMA0
+else
+    serial_console=/dev/console
+fi
+exec >"$serial_console" 2>&1
 
 state=/var/lib/decnet-lab
 mkdir -p "$state"
@@ -85,7 +92,7 @@ ip link set "$mgmt_iface" up
 udhcpc -q -n -t 10 -i "$mgmt_iface"
 
 apk update
-apk add --no-cache linux-virt linux-virt-dev kmod akms build-base
+apk add --no-cache --upgrade linux-virt linux-virt-dev kmod akms build-base
 
 src_root=/opt/decnet-src
 rm -rf "$src_root"

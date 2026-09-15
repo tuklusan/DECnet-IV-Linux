@@ -23,7 +23,8 @@ Each guest:
 4. proves the loaded `decnet_iv.ko` came from the AKMS-managed module path;
 5. configures its node identity with `dnctl`;
 6. transmits raw DECnet Routing Layer EtherType `0x6003` frames to its peer;
-7. prints receive counters to the serial console and powers off.
+7. waits for non-zero receive counters, prints final counters to the serial console,
+   and powers off.
 
 The host captures only the isolated DECnet bridge to `lan.pcap`. The gate succeeds
 only when both guests report received routing frames and the capture contains native
@@ -32,10 +33,30 @@ DECnet EtherType traffic. The management NIC is never part of the DECnet data pa
 This proves VM/image/module-lifecycle/Ethernet plumbing only; it does not yet claim
 Phase IV hello, adjacency, routing or NSP behavior.
 
+## Phase 2 architecture matrix
+
+The Phase 2 promotion gate runs the same native-Ethernet acceptance in four CPU
+pairings:
+
+- x86_64 DN70 with x86_64 DN71;
+- aarch64 DN70 with aarch64 DN71 on an aarch64 runner;
+- x86_64 DN70 with aarch64 DN71;
+- aarch64 DN70 with x86_64 DN71.
+
+The aarch64 guests boot the pinned Alpine UEFI tiny image through QEMU AArch64 UEFI.
+Mixed pairs share one Linux bridge exactly like the x86-only case; one architecture
+may use software emulation when the runner cannot accelerate both guest types. Guest
+startup therefore keeps sending bounded probes until the slower peer is online rather
+than assuming both architectures provision at the same speed.
+
+`run-two-node-arch.sh` records both guest architectures and base-image checksums in
+its session evidence. ARM and mixed jobs retain manifests, serial logs and pcaps but
+not their disposable multi-gigabyte guest disks.
+
 ## Resumable lab sessions
 
-Every run has a stable session ID and a separate attempt ID. Stateful files live under
-`tests/lab/artifacts/sessions/<session-id>/`:
+Every x86 recovery run has a stable session ID and a separate attempt ID. Stateful
+files live under `tests/lab/artifacts/sessions/<session-id>/`:
 
 - `session.env` records the session ID, provisioned source revision, base-image
   checksum, virtual disk size, MACs and stateful disk/seed names;
@@ -60,9 +81,15 @@ Attempt metadata records both `SESSION_SOURCE_REV` and `RUNNER_SOURCE_REV` (and 
 corresponding base-image checksums), so a preserved image cannot be mistaken for an
 image freshly provisioned from the launcher revision that happens to resume it.
 
-CI uploads the entire session directory, including the QCOW2 disks. A manual workflow
-run can restore a prior session by supplying its workflow run ID. If no explicit
-session ID is supplied, the restored session defaults to `gha-<prior-run-id>`.
+CI uploads the entire x86 session directory, including the QCOW2 disks. A manual
+workflow run can restore a prior session by supplying its workflow run ID. If no
+explicit session ID is supplied, the restored session defaults to `gha-<prior-run-id>`.
+
+For an exact-commit recovery check without manual workflow inputs, a validation branch
+named `resume-<prior-run-id>` selects the same restore path and inferred
+`gha-<prior-run-id>` session. ARM/mixed jobs are skipped on these recovery-only
+branches; the x86 job must restore the retained artifact and pass on the exact commit
+being validated.
 
 ## Portability lab
 

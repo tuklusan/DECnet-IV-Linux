@@ -109,48 +109,52 @@ A later phase never removes an earlier acceptance gate.
 
 ## Phase 1 status
 
-Phase 1 is on `main` and green on both required CPU architectures. It contains UAPI version 1, `decnet_iv.ko`, default 31.70/DN70 identity, `/dev/decnet_iv`, DEC DNA Routing EtherType receive registration/counters, `dnctl`, centralized test addressing, unit address tests, and native x86_64/aarch64 build gates.
+Phase 1 is included in `main` and is green on both required CPU architectures. It contains UAPI version 1, `decnet_iv.ko`, default 31.70/DN70 identity, `/dev/decnet_iv`, DEC DNA Routing EtherType receive registration/counters, `dnctl`, centralized test addressing, unit address tests, and native x86_64/aarch64 build gates.
 
 The bootstrap does not yet claim adjacency, routing, NSP, Session Control, NICE/NML application behavior, or DDCMP functionality.
 
 ## External baseline status
 
-The external-reference baseline on the Phase 2 base is green at its pinned revisions. Route20 builds at `ROUTE20_REF`. The full usable unmodified PyDECnet suite runs at `PYDECNET_TEST_REF`, the last internally consistent revision immediately before the current `Macaddr("1.24")` contradiction; `PYDECNET_REF` remains the current documentation/vector/live-interoperability pin.
+The external-reference baseline is green at its pinned revisions. Route20 builds at `ROUTE20_REF`. The full usable unmodified PyDECnet suite runs at `PYDECNET_TEST_REF`, the last internally consistent revision immediately before the current `Macaddr("1.24")` contradiction; `PYDECNET_REF` remains the current documentation/vector/live-interoperability pin.
 
-The documentation reconciliation changes the execution repositories from the two upstreams to the preferred `tuklusan/Route20` and `tuklusan/pydecnet` forks without changing those verified SHAs. `tests/reference/refs.env` now owns both repository URLs and revisions so the workflow cannot silently disagree with the documented source policy.
+Reference CI consumes the preferred `tuklusan/Route20` and `tuklusan/pydecnet` forks through repository URLs in `tests/reference/refs.env`; the upstream URLs are retained there only for explicit comparison provenance.
 
 ## Phase 2 status
 
-The Phase 2 implementation base is `work/phase2-vm-lab` at `58f4353c88834f7c71d4508fa0b55b8ad62f2e82`. Alpine 3.24.1 official tiny QCOW2 bases are pinned for x86_64 BIOS and aarch64 UEFI. The x86 lab uses NoCloud `CIDATA` first-boot provisioning instead of offline image mutation. DN70 and DN71 each have an isolated DECnet NIC plus a disposable QEMU user-network management NIC used only to install packages. The seed carries the source tree, installs the module under `/usr/src`, registers/builds it with AKMS, installs the small user tools, reboots into the installed kernel, and requires the test to load the AKMS-managed module before exchanging EtherType `0x6003` frames. DKMS metadata and a native-build smoke test cover the parallel lifecycle path for Debian/RHEL-family systems.
+The Phase 2 implementation base before promotion is `work/phase2-vm-lab` at `58f4353c88834f7c71d4508fa0b55b8ad62f2e82`. Alpine 3.24.1 official tiny QCOW2 bases are pinned for x86_64 BIOS and aarch64 UEFI. The x86 lab uses NoCloud `CIDATA` first-boot provisioning instead of offline image mutation. DN70 and DN71 each have an isolated DECnet NIC plus a disposable QEMU user-network management NIC used only to install packages. The seed carries the source tree, installs the module under `/usr/src`, registers/builds it with AKMS, installs the small user tools, reboots into the installed kernel, and requires the test to load the AKMS-managed module before exchanging EtherType `0x6003` frames. DKMS metadata and a native-build smoke test cover the parallel lifecycle path for Debian/RHEL-family systems.
 
-A resumable lab session has stable `DNIV_LAB_SESSION_ID` separate from each `DNIV_LAB_ATTEMPT_ID`. Session disks, matching NoCloud seeds, and `session.env` live under `tests/lab/artifacts/sessions/<session-id>/`; attempts keep their own serial logs, pcap, and result manifest. Resume requires the known manifest/disks/seeds and does not silently replace disk identity.
+A resumable x86 lab session has stable `DNIV_LAB_SESSION_ID` separate from each `DNIV_LAB_ATTEMPT_ID`. Session disks, matching NoCloud seeds, and `session.env` live under `tests/lab/artifacts/sessions/<session-id>/`; attempts keep their own serial logs, pcap, and result manifest. Resume requires the known manifest/disks/seeds and does not silently replace disk identity.
 
-Known retained session `gha-34948868114` comes from workflow run `34948868114`. Its original 128 MiB root filled while installing `linux-virt-dev` and build dependencies. The launcher now sparse-grows new and resumed QCOW2 disks to 4 GiB and retries interrupted Tiny Cloud bootstrap only when the project's provisioned marker is absent.
+Known retained session `gha-34948868114` comes from workflow run `34948868114`. Its original 128 MiB root filled while installing `linux-virt-dev` and build dependencies. The launcher sparse-grows new and resumed QCOW2 disks to 4 GiB and retries interrupted Tiny Cloud bootstrap only when the project's provisioned marker is absent.
 
-Fresh session `gha-34950592707` from workflow run `34950592707` proved the 4 GiB path: package installation completed at 472.8 MiB. It then exposed AKMS selecting stale running kernel `6.18.35-0-virt` while repositories installed `6.18.52-0-virt`. The seed now reads `/usr/share/kernel/virt/kernel.release` and explicitly invokes AKMS for the installed kernel that will boot after provisioning.
+Fresh session `gha-34950592707` from workflow run `34950592707` proved the 4 GiB path: package installation completed at 472.8 MiB. It first exposed AKMS selecting the stale running kernel while newer headers were available. Commit `c103b708c082b136aaaf200162fbf54c5bb8969d`, tested by workflow run `34956282545`, then proved the remaining package-lifecycle defect: plain `apk add linux-virt linux-virt-dev` left the already-installed `linux-virt` at `6.18.35-0-virt` while installing `linux-virt-dev` `6.18.52-r0`, so `/usr/share/kernel/virt/kernel.release` correctly remained `6.18.35-0-virt` and AKMS could not obtain matching old headers.
+
+The promotion candidate fixes the root cause by using `apk add --upgrade` for `linux-virt` and `linux-virt-dev` together, then reading `/usr/share/kernel/virt/kernel.release` and building AKMS for that upgraded installed kernel before reboot. The failing `34956282545` session is retained as evidence; it is not promoted.
 
 For an incomplete resumed guest, the launcher refreshes only that guest's NoCloud provisioning payload while preserving stable session ID, instance ID, and QCOW2 disk; successfully provisioned guests retain their seed. Manifests/attempt metadata track each seed's source revision. Earlier session `gha-34948701365` remains intentionally non-resumable because its failure preceded seed/manifest retention.
 
+The Phase 2 promotion candidate extends the VM gate from x86_64/x86_64 to aarch64/aarch64 plus both mixed x86_64/aarch64 directions. AArch64 guests use the pinned UEFI tiny image and AArch64 UEFI firmware. Mixed guests share one native Ethernet bridge; one guest may use QEMU software emulation where the runner cannot accelerate both architectures. Guest completion no longer assumes equal provisioning speed: each node sends bounded native probes until it receives peer traffic, then returns confirmation probes before shutdown.
+
+The x86 workflow retains manual `workflow_dispatch` recovery and also recognizes a validation branch named `resume-<prior-run-id>`. On that branch it infers the retained `gha-<prior-run-id>` session, restores the prior workflow artifact, and exercises the same recovery path on the exact commit under test. ARM/mixed jobs are deliberately skipped on recovery-only branches because their normal-branch results already belong to the same commit.
+
 ## Documentation reconciliation status
 
-`work/project-doc-reconcile` is based on the Phase 2 head above. The reconciliation:
+The reconciliation adds `docs/PROJECT_INSTRUCTIONS.md` as the exact compact project contract; aligns README, architecture, roadmap, test-lab, reference-baseline, state, and generated handover documentation; expands Phase 7 to the complete useful DECnet/Linux userspace scope; records preferred forks, upstream-comparison-only policy, SHA pinning, and license boundaries; makes reference CI consume preferred repository URLs from `tests/reference/refs.env`; and carries the SoP rule into project state and generated handover.
 
-- adds `docs/PROJECT_INSTRUCTIONS.md` as the exact compact project contract;
-- aligns README, architecture, roadmap, test-lab, reference-baseline, state, and generated handover documentation with the contract;
-- expands Phase 7 to the complete useful DECnet/Linux userspace scope;
-- records preferred forks, upstream-comparison-only policy, SHA pinning, and license boundaries;
-- makes reference CI consume preferred repository URLs from `tests/reference/refs.env`;
-- carries the SoP rule into project state and generated handover;
-- leaves Phase 2 implementation behavior unchanged.
+Component-specific Alpine, kernel-bootstrap, packaging, and distro-matrix documentation was reviewed and remains accurate, so it is not changed merely for churn. The VM-lab README is updated only where Phase 2 architecture/recovery behavior now changes.
 
-Component-specific Alpine, kernel-bootstrap, packaging, VM-session, and distro-matrix documentation was reviewed and remains accurate, so it is not changed merely for churn.
+## Promotion state
+
+This repository state is designed to be the Phase 2/documentation promotion commit. On a feature branch it is only a candidate and must not be promoted until the exact same commit has all required normal-branch gates green and also passes retained-session recovery on `resume-34948868114`. Required normal-branch VM evidence is fresh x86_64/x86_64, aarch64/aarch64, x86_64/aarch64, and aarch64/x86_64 native-Ethernet acceptance, in addition to repository policy, continuity, native build, reference-baseline, and pinned-image verification embedded in those jobs.
+
+If this exact state is read from `main`, its presence there records that those promotion conditions were satisfied before the fast-forward. No merge or follow-up edit is permitted to substitute a different untested commit.
 
 ## Resume point
 
-Phase 1 remains green on both required architectures. Phase 2 implementation remains unpromoted on `work/phase2-vm-lab` at `58f4353c88834f7c71d4508fa0b55b8ad62f2e82`. The current documentation/reference-policy reconciliation is prepared on `work/project-doc-reconcile` from that exact head. It does not change Phase 2 protocol or VM implementation. Preferred Route20/PyDECnet pins have been verified to exist in the user forks; reference CI is being redirected to those forks through `tests/reference/refs.env`.
+The documentation/reference-policy reconciliation and the Phase 2 architecture/recovery gate are integrated into one promotion candidate. The implementation still stops at Routing Layer EtherType plumbing: no adjacency, routing, NSP, Session Control, NICE/NML application behavior, or DDCMP is claimed yet. The retained recovery source remains workflow run `34948868114`, session `gha-34948868114`.
 
-The prior Phase 2 technical next step remains: prove the explicit-installed-kernel AKMS fix on a fresh x86 session, then resume known session `gha-34948868114` and prove repair using the exact retained disks.
+When read on a feature branch, finish the exact-commit gates described above. When read from `main`, Phase 2 and the documentation reconciliation have been promoted together and the next development work is Phase 3 Ethernet hello/adjacency on a new feature branch.
 
 ## Next action
 
-Run all required gates on the exact `work/project-doc-reconcile` commit, including repository policy, continuity/handover, native x86_64/aarch64 build gates, reference baselines from the preferred forks, and applicable pinned-image/VM gates. If and only if that exact commit is green, fast-forward the Phase 2 working branch to that exact commit without additional edits. Then continue the existing Phase 2 acceptance: first prove a fresh x86 DN70/DN71 session provisions, reboots into the installed kernel, loads the AKMS-managed module, exchanges native EtherType `0x6003` frames and reports non-zero receive counters with retained logs/pcap; then resume `gha-34948868114` from run `34948868114` and prove exact-disk recovery. After fresh and resumed x86 paths pass, add native aarch64 UEFI and mixed-architecture runs, promote only the exact green Phase 2 commit, and begin Phase 3 hello/adjacency work. DECnet-over-IP remains deferred.
+If this state is not yet on `main`, require every normal-branch gate on this exact commit to pass, then validate the same commit on recovery branch `resume-34948868114` and require its restored x86 session to pass without replacing the retained disks. Only then fast-forward `main` to this exact commit. After promotion, or if this file is already being read from `main`, begin Phase 3 on a new feature branch: implement DECnet Ethernet address handling, endnode/router hello parsing and generation, adjacency state/expiry, and independent Route20/PyDECnet interoperability vectors while retaining all Phase 0-2 gates. DECnet-over-IP remains deferred.

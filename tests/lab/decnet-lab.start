@@ -2,7 +2,14 @@
 set -eu
 
 . /etc/decnet-lab.env
-exec >/dev/ttyS0 2>&1
+if [ -c /dev/ttyS0 ]; then
+    serial_console=/dev/ttyS0
+elif [ -c /dev/ttyAMA0 ]; then
+    serial_console=/dev/ttyAMA0
+else
+    serial_console=/dev/console
+fi
+exec >"$serial_console" 2>&1
 
 find_iface_by_mac() {
     target=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
@@ -38,16 +45,39 @@ modprobe decnet_iv
 dnctl set "$NODE_ADDR" "$NODE_NAME"
 dnctl reset-stats
 
-# Give both guests time to finish the post-provision reboot before raw Routing Layer traffic.
-sleep 8
+# Mixed-architecture peers can complete provisioning at very different times.
+# Keep sending probes until at least one peer frame is received, then stay alive
+# long enough to return several probes so the peer can satisfy the same test.
 i=1
-while [ "$i" -le 8 ]; do
+received=0
+while [ "$i" -le 900 ]; do
     dnraw "$iface" "$PEER_MAC" "${LAB_SESSION_ID}-${NODE_NAME}-probe-${i}"
+    stats=$(dnctl stats)
+    if printf '%s\n' "$stats" | grep -Eq 'Routing frames received = [1-9][0-9]*'; then
+        received=1
+        printf '%s\n' "$stats"
+        break
+    fi
+    if [ $((i % 30)) -eq 0 ]; then
+        echo "DNIV-LAB session=${LAB_SESSION_ID} node=${NODE_NAME} waiting-for-peer probes=${i}"
+    fi
     i=$((i + 1))
+    sleep 2
+done
+
+if [ "$received" -ne 1 ]; then
+    echo "DNIV-LAB session=${LAB_SESSION_ID} node=${NODE_NAME} peer timeout" >&2
+    dnctl stats >&2 || true
+    exit 1
+fi
+
+j=1
+while [ "$j" -le 8 ]; do
+    dnraw "$iface" "$PEER_MAC" "${LAB_SESSION_ID}-${NODE_NAME}-confirm-${j}"
+    j=$((j + 1))
     sleep 1
 done
 
-sleep 4
 dnctl stats
 echo "DNIV-LAB-DONE session=${LAB_SESSION_ID} node=${NODE_NAME}"
 sync
