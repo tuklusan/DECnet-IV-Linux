@@ -103,13 +103,15 @@ Local development evidence for this slice: userspace and unit tests build with b
 
 The first restarted complete SoP review found two additional Phase 3 defects: the router-list maximum was incorrectly 35 instead of the 33-entry architectural/reference limit (`NBRA=33` in the pinned Route20 fork, consistent with the pinned PyDECnet E-list bound), and the shared hello builders did not reject a null output buffer before writing. Both are corrected with unit coverage. The same pass found the kernel-module README still described only the bootstrap milestone; it is synchronized with UAPI version 2 and the active Phase 3 scope.
 
-The following restarted review found a cross-phase regression: the retained Phase 2 VM smoke test could pass from automatically generated Phase 3 router hellos even if its deliberate raw-frame exchange failed. The smoke nodes now load explicitly as endnodes, isolating the old EtherType receive gate from Phase 3 multicast hello traffic. This fix resets the SoP sequence again.
+The following restarted review found a cross-phase regression: the retained Phase 2 VM smoke test could pass from automatically generated Phase 3 router hellos even if its deliberate raw-frame exchange failed. The smoke nodes now load explicitly as endnodes, isolating the old EtherType receive gate from Phase 3 multicast hello traffic.
+
+The next adversarial review found that correcting the serialized router-list bound alone was insufficient: the kernel could still retain more than 33 router adjacencies on one interface and silently omit the excess from its hello, creating asymmetric adjacency state. Router admission is now capped per interface at 33. When the set is full, a new router replaces only the lowest `(priority, node address)` entry, matching the pinned reference selection rule; otherwise it is ignored. This fix resets the SoP sequence again.
 
 No native VM or live independent-peer runtime claim is made yet for this slice. The root README current-baseline summary is synchronized with UAPI version 2 and the Phase 3 in-progress state.
 
 ## Resume point
 
-Phase 2 infrastructure is stable and intentionally unchanged except for explicitly selecting endnode mode in its smoke service so Phase 3 automatic router hellos cannot weaken the older acceptance gate. Phase 3 Ethernet initialization and adjacency code is the active protocol work. The latest reviews corrected the router-list architectural bound, null-output handling in hello builders, stale kernel-module documentation and the cross-phase smoke-test ambiguity. The next runtime proof must exercise actual generated/parsed hellos and adjacency state, not just arbitrary EtherType frames.
+Phase 2 infrastructure is stable except for explicitly selecting endnode mode in its retained smoke service so Phase 3 automatic router hellos cannot weaken the older acceptance gate. Phase 3 Ethernet initialization and adjacency code is the active protocol work. The latest reviews corrected the router-list wire bound and admission policy, null-output handling in hello builders, stale kernel-module documentation and the cross-phase smoke-test ambiguity. The next runtime proof must exercise actual generated/parsed hellos and adjacency state, not just arbitrary EtherType frames.
 
 ## Next action
 

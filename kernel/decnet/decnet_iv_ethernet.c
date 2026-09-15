@@ -89,6 +89,40 @@ static void dniv_drop_adj_locked(struct dniv_adj_entry *adj)
     memset(adj, 0, sizeof(*adj));
 }
 
+static struct dniv_adj_entry *dniv_alloc_router_adj_locked(
+    int ifindex, __u16 address, __u8 priority, bool *rejected)
+{
+    struct dniv_adj_entry *lowest = NULL;
+    unsigned int count = 0;
+    unsigned int i;
+
+    *rejected = false;
+    for (i = 0; i < DNIV_MAX_ADJACENCIES; i++) {
+        struct dniv_adj_entry *adj = &dniv_adjacencies[i];
+
+        if (!adj->used || adj->ifindex != ifindex ||
+            adj->node_type == DNIV_NODE_TYPE_ENDNODE)
+            continue;
+        count++;
+        if (!lowest || adj->priority < lowest->priority ||
+            (adj->priority == lowest->priority &&
+             adj->address < lowest->address))
+            lowest = adj;
+    }
+
+    if (count < DNIV_WIRE_MAX_RS_ENTRIES)
+        return dniv_alloc_adj_locked();
+
+    if (!lowest || priority < lowest->priority ||
+        (priority == lowest->priority && address <= lowest->address)) {
+        *rejected = true;
+        return NULL;
+    }
+
+    dniv_drop_adj_locked(lowest);
+    return lowest;
+}
+
 static void dniv_clear_adjacencies_locked(void)
 {
     unsigned int i;
@@ -370,6 +404,7 @@ static void dniv_handle_valid_hello(int ifindex, const __u8 source[ETH_ALEN],
 {
     struct dniv_adj_entry *adj;
     unsigned long flags;
+    bool rejected = false;
     __u8 new_state;
 
     if (hello->address == READ_ONCE(dniv_local_address) ||
@@ -414,10 +449,15 @@ static void dniv_handle_valid_hello(int ifindex, const __u8 source[ETH_ALEN],
         adj = NULL;
     }
     if (!adj) {
-        adj = dniv_alloc_adj_locked();
+        if (hello->is_router)
+            adj = dniv_alloc_router_adj_locked(ifindex, hello->address,
+                                               hello->priority, &rejected);
+        else
+            adj = dniv_alloc_adj_locked();
         if (!adj) {
             spin_unlock_irqrestore(&dniv_adj_lock, flags);
-            atomic64_inc(&dniv_hello_errors);
+            if (!rejected)
+                atomic64_inc(&dniv_hello_errors);
             return;
         }
         memset(adj, 0, sizeof(*adj));
