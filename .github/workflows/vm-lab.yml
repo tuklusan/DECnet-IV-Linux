@@ -21,9 +21,10 @@ permissions:
 jobs:
   two-node-x86:
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 30
     env:
       DNIV_LAB_ARTIFACTS: ${{ github.workspace }}/tests/lab/artifacts
+      DNIV_LAB_TIMEOUT_SECONDS: 1200
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -89,6 +90,19 @@ jobs:
       # Guests must load the AKMS-managed module and exchange native EtherType 0x6003 traffic.
       - name: Run DN70 and DN71 Ethernet smoke test
         run: tests/lab/run-two-node-x86.sh "$ALPINE_X86_IMAGE"
+
+      - name: Retain compact x86 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: two-node-x86-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            tests/lab/artifacts/sessions/*/session.env
+            tests/lab/artifacts/sessions/*/latest-attempt
+            tests/lab/artifacts/sessions/*/attempts/
+          if-no-files-found: warn
+          compression-level: 1
+          retention-days: 30
 
       - name: Retain resumable VM session
         if: always()

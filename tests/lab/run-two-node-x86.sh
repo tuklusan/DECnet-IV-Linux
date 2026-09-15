@@ -13,6 +13,7 @@ session_id=${DNIV_LAB_SESSION_ID:-"local-$(date -u +%Y%m%dT%H%M%SZ)-$$"}
 attempt_id=${DNIV_LAB_ATTEMPT_ID:-"attempt-$(date -u +%Y%m%dT%H%M%SZ)-$$"}
 resume=${DNIV_LAB_RESUME:-0}
 disk_bytes=${DNIV_LAB_DISK_BYTES:-4294967296}
+timeout_seconds=${DNIV_LAB_TIMEOUT_SECONDS:-1200}
 
 for value in "$session_id" "$attempt_id"; do
     if [[ ! "$value" =~ ^[A-Za-z0-9._-]+$ ]]; then
@@ -26,6 +27,10 @@ if [[ "$resume" != 0 && "$resume" != 1 ]]; then
 fi
 if [[ ! "$disk_bytes" =~ ^[0-9]+$ ]] || (( disk_bytes < 1073741824 )); then
     echo "two-node lab: DNIV_LAB_DISK_BYTES must be an integer >= 1073741824" >&2
+    exit 2
+fi
+if [[ ! "$timeout_seconds" =~ ^[0-9]+$ ]] || (( timeout_seconds < 60 )); then
+    echo "two-node lab: DNIV_LAB_TIMEOUT_SECONDS must be an integer >= 60" >&2
     exit 2
 fi
 
@@ -199,6 +204,7 @@ BASE_IMAGE_SHA256=$session_base_sha256
 SESSION_BASE_IMAGE_SHA256=$session_base_sha256
 RUNNER_BASE_IMAGE_SHA256=$runner_base_sha256
 DISK_VIRTUAL_SIZE_BYTES=$disk_bytes
+TIMEOUT_SECONDS=$timeout_seconds
 DN70_SEED_SOURCE_REV=$seed70_source_rev
 DN71_SEED_SOURCE_REV=$seed71_source_rev
 DN70_LOG=dn70.serial.log
@@ -206,6 +212,24 @@ DN71_LOG=dn71.serial.log
 PCAP=lan.pcap
 EOF_ATTEMPT
 printf '%s\n' "$attempt_id" >"$session_dir/latest-attempt"
+
+guest_running() {
+    local pid=$1 stat tail proc_state proc_ppid rest
+    [[ -r "/proc/$pid/stat" ]] || return 1
+    IFS= read -r stat <"/proc/$pid/stat" || return 1
+    tail=${stat##*) }
+    read -r proc_state proc_ppid rest <<<"$tail"
+    [[ "$proc_ppid" == "$$" && "$proc_state" != Z && "$proc_state" != X && "$proc_state" != x ]]
+}
+
+record_failure() {
+    local reason=$1
+    cat >>"$attempt_manifest" <<EOF_FAILURE
+COMPLETED_UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+RESULT=fail
+FAILURE_REASON=$reason
+EOF_FAILURE
+}
 
 suffix=$(printf '%s' "$session_id" | sha256sum | cut -c1-6)
 bridge="db${suffix}"
@@ -245,6 +269,7 @@ qemu-system-x86_64 \
     -name "DN70-${session_id}" \
     -pidfile "$attempt_dir/dn70.pid" \
     -accel "$accel" -m 512 -smp 1 \
+    -smbios type=1,serial=ds=nocloud \
     -drive "file=$node70,if=virtio,format=qcow2" \
     -drive "file=$seed70,format=raw,media=cdrom,readonly=on" \
     -netdev tap,id=lan70,ifname="$tap70",script=no,downscript=no \
@@ -258,6 +283,7 @@ qemu-system-x86_64 \
     -name "DN71-${session_id}" \
     -pidfile "$attempt_dir/dn71.pid" \
     -accel "$accel" -m 512 -smp 1 \
+    -smbios type=1,serial=ds=nocloud \
     -drive "file=$node71,if=virtio,format=qcow2" \
     -drive "file=$seed71,format=raw,media=cdrom,readonly=on" \
     -netdev tap,id=lan71,ifname="$tap71",script=no,downscript=no \
@@ -267,8 +293,9 @@ qemu-system-x86_64 \
     -display none -monitor none -serial "file:$log71" &
 Q71_PID=$!
 
-deadline=$((SECONDS + 600))
+deadline=$((SECONDS + timeout_seconds))
 finished=0
+failure_reason=timeout
 while (( SECONDS < deadline )); do
     done70=0
     done71=0
@@ -278,11 +305,17 @@ while (( SECONDS < deadline )); do
         finished=1
         break
     fi
+    if ! guest_running "$Q70_PID" || ! guest_running "$Q71_PID"; then
+        failure_reason=guest-exit
+        echo "two-node lab: a guest exited before reporting completion" >&2
+        break
+    fi
     sleep 2
 done
 
 if (( ! finished )); then
-    echo "two-node lab: session=${session_id} attempt=${attempt_id} guests did not finish before timeout" >&2
+    record_failure "$failure_reason"
+    echo "two-node lab: session=${session_id} attempt=${attempt_id} guests did not finish: ${failure_reason}" >&2
     kill "$Q70_PID" "$Q71_PID" 2>/dev/null || true
     wait "$Q70_PID" 2>/dev/null || true
     wait "$Q71_PID" 2>/dev/null || true
@@ -294,21 +327,48 @@ if (( ! finished )); then
     exit 1
 fi
 
-wait "$Q70_PID"
+q70_rc=0
+q71_rc=0
+wait "$Q70_PID" || q70_rc=$?
 unset Q70_PID
-wait "$Q71_PID"
+wait "$Q71_PID" || q71_rc=$?
 unset Q71_PID
 sudo kill "$TCPDUMP_PID" 2>/dev/null || true
 wait "$TCPDUMP_PID" 2>/dev/null || true
 unset TCPDUMP_PID
 
-grep -Eq 'Routing frames received = [1-9][0-9]*' "$log70"
-grep -Eq 'Routing frames received = [1-9][0-9]*' "$log71"
-grep -q 'module=.*/kernel/extra/akms/decnet_iv.ko' "$log70"
-grep -q 'module=.*/kernel/extra/akms/decnet_iv.ko' "$log71"
-
-frames=$(sudo tcpdump -nn -r "$pcap" 'ether proto 0x6003' 2>/dev/null | wc -l)
+if (( q70_rc != 0 || q71_rc != 0 )); then
+    record_failure qemu-exit-status
+    echo "two-node lab: guest exit status DN70=${q70_rc} DN71=${q71_rc}" >&2
+    exit 1
+fi
+if ! grep -Eq 'Routing frames received = [1-9][0-9]*' "$log70"; then
+    record_failure dn70-no-routing-rx
+    echo "two-node lab: DN70 did not report received routing frames" >&2
+    exit 1
+fi
+if ! grep -Eq 'Routing frames received = [1-9][0-9]*' "$log71"; then
+    record_failure dn71-no-routing-rx
+    echo "two-node lab: DN71 did not report received routing frames" >&2
+    exit 1
+fi
+if ! grep -q 'module=.*/kernel/extra/akms/decnet_iv.ko' "$log70"; then
+    record_failure dn70-module-path
+    echo "two-node lab: DN70 did not prove the AKMS module path" >&2
+    exit 1
+fi
+if ! grep -q 'module=.*/kernel/extra/akms/decnet_iv.ko' "$log71"; then
+    record_failure dn71-module-path
+    echo "two-node lab: DN71 did not prove the AKMS module path" >&2
+    exit 1
+fi
+if ! frames=$(sudo tcpdump -nn -r "$pcap" 'ether proto 0x6003' 2>/dev/null | wc -l); then
+    record_failure pcap-read
+    echo "two-node lab: could not read DECnet routing capture" >&2
+    exit 1
+fi
 if (( frames < 2 )); then
+    record_failure pcap-routing-frames
     echo "two-node lab: expected DECnet routing frames, saw $frames" >&2
     exit 1
 fi

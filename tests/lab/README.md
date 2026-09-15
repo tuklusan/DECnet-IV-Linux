@@ -10,10 +10,19 @@ The first lab boots DN70 (31.70) and DN71 (31.71) on one isolated Linux bridge.
 The official Alpine tiny image is not modified with libguestfs. Instead, each node
 receives a NoCloud `CIDATA` seed and provisions itself on first boot.
 
+QEMU sets the SMBIOS type-1 product serial to `ds=nocloud` for every guest so Alpine
+Tiny Cloud enables its NoCloud provider without depending on the seed block device
+being visible during the earliest label probe. The attached ISO or FAT `cidata`
+volume remains the source of `meta-data` and `user-data`.
+
 The launcher sparse-grows each tiny QCOW2 guest disk to 4 GiB by default before
 first boot. Tiny Cloud then expands the root filesystem during initial bootstrap.
 Set `DNIV_LAB_DISK_BYTES` to an integer number of bytes to use a different size;
-values below 1 GiB are rejected.
+values below 1 GiB are rejected. `DNIV_LAB_TIMEOUT_SECONDS` controls the guest
+completion window; the x86 launcher defaults to 1200 seconds and the ARM/mixed CI
+jobs use 2400 seconds to allow for software emulation. Attempt metadata records the
+selected timeout and an explicit failure result/reason, and the launcher fails
+promptly if either guest exits without its completion marker.
 
 Each guest:
 
@@ -81,9 +90,12 @@ Attempt metadata records both `SESSION_SOURCE_REV` and `RUNNER_SOURCE_REV` (and 
 corresponding base-image checksums), so a preserved image cannot be mistaken for an
 image freshly provisioned from the launcher revision that happens to resume it.
 
-CI uploads the entire x86 session directory, including the QCOW2 disks. A manual
-workflow run can restore a prior session by supplying its workflow run ID. If no
-explicit session ID is supplied, the restored session defaults to `gha-<prior-run-id>`.
+CI uploads the entire x86 session directory, including the QCOW2 disks, for recovery.
+It also uploads a separate compact x86 evidence artifact containing the session and
+attempt manifests, serial logs and pcap so a failure can be inspected without the
+stateful disks. A manual workflow run can restore a prior session by supplying its
+workflow run ID. If no explicit session ID is supplied, the restored session defaults
+to `gha-<prior-run-id>`.
 
 For an exact-commit recovery check without manual workflow inputs, a validation branch
 named `resume-<prior-run-id>` selects the same restore path and inferred
