@@ -82,7 +82,7 @@ Automated tests, diffs, excerpts or prior reviews do not replace this rule.
 
 ## Phase 1 status
 
-Complete foundation retained on `main`: versioned UAPI, `decnet_iv.ko`, configurable 31.70/DN70 identity, `/dev/decnet_iv`, DEC DNA Routing EtherType receive registration/counters, `dnctl`, centralized test addressing, unit address tests and native x86_64/aarch64 build gates.
+Complete foundation retained on `main`: versioned UAPI, `decnet_iv.ko`, configurable 31.70/DN70 identity, `/dev/decnet_iv`, DEC DNA Routing Layer EtherType receive registration/counters, `dnctl`, centralized test addressing, unit address tests and native x86_64/aarch64 build gates.
 
 ## Phase 2 status
 
@@ -120,7 +120,7 @@ The restarted review then found that the EtherType packet handler remained globa
 
 The next full pass found that receive-filter ownership depended on whether the DECnet node MAC happened to equal the device primary MAC at the instant filters were installed. A later primary-MAC change could therefore either remove DECnet receive coverage or make teardown unable to know whether a secondary filter reference existed. Each attached Ethernet device now owns one explicit `dev_uc` reference for the DECnet node MAC regardless of the current primary MAC, and address changes transfer that owned reference transactionally. This makes DECnet receive coverage and teardown independent of `NETDEV_CHANGEADDR`.
 
-The following complete review found that E1 proved delivery when the device MAC merely started different from the DECnet MAC, but did not exercise the specific lifetime case corrected above: a primary device-MAC change after DECnet had installed its owned receive filter. E1 now changes each guest NIC to a second deterministic hardware MAC while the module remains loaded, requires a fresh peer hello and an UP adjacency after that change, sends the raw-unicast probe stream from that changed hardware MAC to the peer DECnet MAC, and verifies in host capture that protocol hellos still use only the DECnet source MAC. This correction resets the SoP sequence.
+The following complete review found that E1 proved delivery when the device MAC merely started different from the DECnet MAC, but did not exercise the specific lifetime case corrected above: a primary device-MAC change after DECnet had installed its owned receive filter. E1 now changes each guest NIC to a second deterministic hardware MAC while the module remains loaded, requires a fresh peer hello and an UP adjacency after that change, sends the raw-unicast probe stream from that changed hardware MAC to the peer DECnet MAC, and verifies in host capture that protocol hellos still use only the DECnet source MAC. `docs/TEST_LAB.md` records the same acceptance behavior. This correction resets the SoP sequence.
 
 ## Resume point
 
