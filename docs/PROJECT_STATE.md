@@ -10,6 +10,7 @@ Build a minimal maintained Linux distribution with a fresh native DECnet Phase I
 
 - Reference distribution: Alpine Linux 3.24 initially using `linux-virt`.
 - Kernel delivery: out-of-tree module; avoid a permanent kernel fork.
+- Module lifecycle: automatic rebuild after supported kernel package changes is mandatory. Alpine uses AKMS; DKMS metadata is maintained for Debian and RHEL-family systems.
 - Implementation base: fresh code informed by DECnet specifications and independent interoperability behavior, not the removed/legacy Linux DECnet kernel stack.
 - Kernel scope as the project matures: Ethernet, Phase IV routing, NSP, DDCMP, socket/UAPI plumbing, timers, forwarding and management hooks.
 - Userspace target: familiar DECnet/Linux command experience for `ncp`, `sethost`, `dncopy`, `phone` and related tools.
@@ -22,7 +23,7 @@ The implementation must be exercised independently against Route20 and PyDECnet,
 
 Pinned revisions are stored in `tests/reference/refs.env`. Route20 is a behavioral/reference peer; its source license is not assumed suitable for direct incorporation into the kernel module.
 
-The current PyDECnet reference is pinned for documentation, vectors and live interoperability. Its present tree has a pre-existing self-test contradiction in `Macaddr("1.24")`: the code takes the hexadecimal path before the DECnet `area.node` path while the upstream test still requires `area.node`. The hard full-suite pin is therefore the immediately preceding revision. The suite is run unmodified; no tests are skipped or rewritten. Move the test pin forward when upstream fixes the contradiction.
+Every useful and internally consistent upstream/reference test at the pinned revisions must pass unmodified. The current PyDECnet reference is pinned for documentation, vectors and live interoperability. Its present tree has a pre-existing self-test contradiction in `Macaddr("1.24")`: the code takes the hexadecimal path before the DECnet `area.node` path while the upstream test still requires `area.node`. The hard full-suite pin is therefore the immediately preceding revision. The suite is run unmodified; no tests are skipped or rewritten. Move the test pin forward when upstream fixes the contradiction.
 
 ## Execution order
 
@@ -38,7 +39,7 @@ The current PyDECnet reference is pinned for documentation, vectors and live int
 7. familiar user-mode tools as their protocols become ready;
 8. DDCMP;
 9. mixed Ethernet/DDCMP routing and applications;
-10. scale to 16 nodes, physical mixed-CPU testing and release images.
+10. scale, portability, physical mixed-CPU testing and release images.
 
 A later phase never removes an earlier acceptance gate.
 
@@ -54,8 +55,11 @@ A later phase never removes an earlier acceptance gate.
 
 - Primary acceptance nodes are separate tiny VMs, not containers sharing one kernel.
 - Linux bridges provide raw Ethernet LANs.
+- Disposable management NICs may be used only for provisioning/package access; DECnet acceptance traffic must stay on isolated native DECnet media.
+- Native DECnet is stressed first and aggressively. DECnet-over-IP tunneling is deferred until the native Ethernet, routing, transport, session and application layers are mature.
 - Failure artifacts include topology, addressing, packet capture, kernel logs, DECnet counters and fault-injection seed where applicable.
 - Required CPU matrix: x86_64/x86_64, aarch64/aarch64 and mixed x86_64/aarch64.
+- Later portability matrix uses the smallest official maintained images from Alpine, Debian and RHEL-family distributions and proves real kernel package upgrades rebuild the module automatically.
 - Physical lab target: at least two x86_64 and two aarch64 nodes, managed switch, independent management path and mirror capture.
 - Required mixed-media path eventually includes Ethernet -> router -> DDCMP -> router -> Ethernet.
 
@@ -82,12 +86,12 @@ The corrected external-reference baseline is promoted to `main` and green. Route
 
 ## Phase 2 status
 
-Work is on `work/phase2-vm-lab`. Alpine 3.24.1 official tiny QCOW2 bases are pinned for x86_64 BIOS and aarch64 UEFI. The first VM gate builds `decnet_iv.ko` against the guest's installed `linux-virt` headers, installs `dnctl` and a tiny raw-frame probe, boots DN70 and DN71 on one Linux bridge, retains serial logs and a pcap, and requires bidirectional EtherType `0x6003` receive counters. The first CI attempt established that Alpine's 129-byte `.sha512` sidecars contain a bare SHA-512 digest rather than a GNU checksum manifest; verification now accepts bare, GNU and BSD/OpenSSL SHA-512 formats. Native AArch64 VM execution follows after the x86 lab is green.
+Work is on `work/phase2-vm-lab`. Alpine 3.24.1 official tiny QCOW2 bases are pinned for x86_64 BIOS and aarch64 UEFI. The x86 lab uses NoCloud `CIDATA` first-boot provisioning instead of `virt-customize`, eliminating the hosted-runner libguestfs/supermin failure. DN70 and DN71 each have an isolated DECnet NIC plus a disposable QEMU user-network management NIC used only to install packages. The seed carries the source tree, installs the module under `/usr/src`, registers/builds it with AKMS, installs the small user tools, reboots into the installed kernel, and requires the test to load the AKMS-managed module before exchanging EtherType `0x6003` frames. DKMS metadata and a native-build smoke test cover the parallel lifecycle path for Debian/RHEL-family systems. The later portability lab is documented in `tests/lab/DISTRO_MATRIX.md`.
 
 ## Resume point
 
-Phase 1 and the external reference baselines are promoted and green on `main`. Phase 2 remains unpromoted on `work/phase2-vm-lab` and is being kept as one clean substantive commit directly on top of `main`. The current rewrite includes the two-node VM lab, generated handover enforcement, force-push-safe continuity range selection, and corrected Alpine SHA-512 verification. The previous VM run did not reach guest boot because both architecture jobs stopped at the checksum-format mismatch.
+Phase 1 and the external reference baselines are promoted and green on `main`. Phase 2 remains unpromoted on `work/phase2-vm-lab` as one clean substantive commit directly on top of `main`. The previous x86 VM run failed before guest boot because `virt-customize` could not start its supermin appliance on the hosted runner. The Phase 2 rewrite now replaces offline image mutation with NoCloud provisioning, adds AKMS/DKMS automatic module-lifecycle metadata, keeps DECnet traffic on an isolated raw Ethernet NIC, and documents the later smallest-image Debian/RHEL-family portability matrix. DN70/DN71 must now be rerun on this rewritten commit.
 
 ## Next action
 
-Run every workflow on the rewritten Phase 2 commit. Confirm the Project State Gate now validates from the main merge-base after a branch rewrite and that both pinned Alpine images verify. Then repair any next x86 VM-lab failure until DN70 and DN71 boot customized Alpine, load the module, exchange EtherType `0x6003` frames and report non-zero receive counters with a retained pcap. Add native aarch64 UEFI and mixed-architecture runs only after x86 is green; promote only after all gates pass, then begin Phase 3 hello and adjacency logic.
+Run every workflow on the rewritten Phase 2 commit. Keep the full usable upstream/reference baselines green. Repair any x86 VM-lab failure until DN70 and DN71 provision through NoCloud, reboot, load the AKMS-managed module, exchange native EtherType `0x6003` frames and report non-zero receive counters with retained serial logs and pcap. Only after x86 is green add native aarch64 UEFI and mixed-architecture runs, then promote the exact green commit and begin Phase 3 hello/adjacency work with progressively heavier native DECnet stress. The documented Debian/RHEL-family portability matrix follows without replacing the Alpine reference gate; DECnet-over-IP work remains deferred.
