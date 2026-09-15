@@ -99,7 +99,9 @@ mkdir -p "$akms_src"
 cp -R "$src_root/kernel" "$akms_src/"
 cp -R "$src_root/include" "$akms_src/"
 install -m 0644 "$src_root/packaging/akms/AKMBUILD" "$akms_src/AKMBUILD"
-akms install "$akms_src"
+target_kernel=$(cat /usr/share/kernel/virt/kernel.release)
+echo "DNIV-PROVISION node=${NODE_NAME} building module for kernel=${target_kernel}"
+akms install -k "$target_kernel" "$akms_src"
 
 cc -O2 -Wall -Wextra -Werror \
     -I"$src_root/include/uapi" \
@@ -154,4 +156,4 @@ EOF_PY
     genisoimage -quiet -output "$out" -volid CIDATA -joliet -rock user-data meta-data
 )
 
-echo "nocloud seed: session=${session_id} node=${node_name} -> ${out}"
+echo "nocloud seed: session=$session_id node=$node_name -> $out"

@@ -95,10 +95,12 @@ reset_incomplete_bootstrap() (
 
     sudo mount "$rootdev" "$mnt"
     if sudo test -f "$mnt/var/lib/decnet-lab/provisioned"; then
-        echo "two-node lab: ${node_name} already provisioned; preserving Tiny Cloud completion state"
+        echo "two-node lab: ${node_name} already provisioned; preserving Tiny Cloud completion state" >&2
+        printf '%s\n' provisioned
     else
         sudo rm -f "$mnt/var/lib/cloud/.bootstrap-complete"
-        echo "two-node lab: ${node_name} incomplete; Tiny Cloud bootstrap reset for retry"
+        echo "two-node lab: ${node_name} incomplete; Tiny Cloud bootstrap reset for retry" >&2
+        printf '%s\n' incomplete
     fi
 )
 
@@ -113,6 +115,8 @@ runner_source_rev=$(git -C "$repo_root" rev-parse HEAD 2>/dev/null || printf unk
 runner_base_sha256=$(sha256sum "$base" | awk '{print $1}')
 session_source_rev=$runner_source_rev
 session_base_sha256=$runner_base_sha256
+seed70_source_rev=$runner_source_rev
+seed71_source_rev=$runner_source_rev
 
 if [[ "$resume" == 1 ]]; then
     for required in "$manifest" "$node70" "$node71" "$seed70" "$seed71"; do
@@ -129,11 +133,26 @@ if [[ "$resume" == 1 ]]; then
     fi
     session_source_rev=${SOURCE_REV:-unknown}
     session_base_sha256=${BASE_IMAGE_SHA256:-unknown}
+    seed70_source_rev=${DN70_SEED_SOURCE_REV:-$session_source_rev}
+    seed71_source_rev=${DN71_SEED_SOURCE_REV:-$session_source_rev}
 
     grow_qcow2 "$node70"
     grow_qcow2 "$node71"
-    reset_incomplete_bootstrap "$node70" DN70
-    reset_incomplete_bootstrap "$node71" DN71
+    state70=$(reset_incomplete_bootstrap "$node70" DN70)
+    state71=$(reset_incomplete_bootstrap "$node71" DN71)
+
+    if [[ "$state70" == incomplete ]]; then
+        "$repo_root/tests/lab/make-nocloud-seed.sh" \
+            "$seed70" "$session_id" 31.70 DN70 "$lan70" "$lan71" "$mgmt70"
+        seed70_source_rev=$runner_source_rev
+        set_manifest_value DN70_SEED_SOURCE_REV "$seed70_source_rev" "$manifest"
+    fi
+    if [[ "$state71" == incomplete ]]; then
+        "$repo_root/tests/lab/make-nocloud-seed.sh" \
+            "$seed71" "$session_id" 31.71 DN71 "$lan71" "$lan70" "$mgmt71"
+        seed71_source_rev=$runner_source_rev
+        set_manifest_value DN71_SEED_SOURCE_REV "$seed71_source_rev" "$manifest"
+    fi
     set_manifest_value DISK_VIRTUAL_SIZE_BYTES "$disk_bytes" "$manifest"
 
     echo "two-node lab: resuming session=${session_id} attempt=${attempt_id} session-source=${session_source_rev} runner-source=${runner_source_rev}"
@@ -158,6 +177,8 @@ DN70_IMAGE=dn70.qcow2
 DN71_IMAGE=dn71.qcow2
 DN70_SEED=dn70.seed.iso
 DN71_SEED=dn71.seed.iso
+DN70_SEED_SOURCE_REV=$seed70_source_rev
+DN71_SEED_SOURCE_REV=$seed71_source_rev
 DN70_LAN_MAC=$lan70
 DN71_LAN_MAC=$lan71
 DN70_MGMT_MAC=$mgmt70
@@ -178,6 +199,8 @@ BASE_IMAGE_SHA256=$session_base_sha256
 SESSION_BASE_IMAGE_SHA256=$session_base_sha256
 RUNNER_BASE_IMAGE_SHA256=$runner_base_sha256
 DISK_VIRTUAL_SIZE_BYTES=$disk_bytes
+DN70_SEED_SOURCE_REV=$seed70_source_rev
+DN71_SEED_SOURCE_REV=$seed71_source_rev
 DN70_LOG=dn70.serial.log
 DN71_LOG=dn71.serial.log
 PCAP=lan.pcap
