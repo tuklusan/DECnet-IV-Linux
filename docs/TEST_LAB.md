@@ -2,182 +2,74 @@
 
 ## Purpose
 
-The lab must prove protocol interoperability, not merely that two copies of the same implementation can talk to each other.
-
-Every protocol milestone is tested against independent peers and on both x86_64 and aarch64.
+The lab proves protocol interoperability, not merely that two copies of the same implementation can talk to each other. Every protocol milestone is tested against independent peers and on both x86_64 and aarch64.
 
 The default isolated DECnet test pool is area 31, nodes 70 through 79. Tests may override the pool when more nodes or multiple areas are required.
 
-## Two complementary labs
+## Phase 2 boot rule
 
-### Disposable virtual lab
+The basic VM gate uses the pinned Ubuntu Base rootfs and direct QEMU kernel/initrd boot. Images are assembled before boot. Acceptance VMs have one DECnet Ethernet NIC and no management NIC. Runtime installers and provisioning systems are deliberately absent from this path.
 
-This is the normal per-change test environment.
+Each node is a separate VM with its own kernel. Network namespaces are not sufficient for acceptance tests because they share kernel/module state.
+
+## Virtual lab
 
 - Build x86_64 and aarch64 images natively where possible.
-- Boot each node as a small VM with its own kernel.
 - Connect VM NICs to Linux bridges made by the test controller.
-- Carry DECnet directly as Ethernet frames. IP is not required on the DECnet test LAN.
-- Give router VMs two or more virtual NICs and attach them to separate bridges.
-- Capture traffic on every bridge for failure diagnosis and protocol checks.
-- Use hardware virtualization when available and QEMU software emulation as the portable fallback.
+- Carry DECnet directly as Ethernet frames; IP is not required on the DECnet LAN.
+- Give router VMs multiple NICs only when routing tests need them.
+- Capture traffic on every bridge and retain per-node serial/kernel/application evidence on failure.
+- Use KVM when available and QEMU software emulation only as fallback.
 
-A separate kernel per node is important. Network namespaces alone are not sufficient for the main tests because they share one kernel and one copy of the DECnet module state.
+## Physical architecture lab
 
-### Physical architecture lab
-
-A small permanent lab validates real drivers, timing, DMA, alignment, endian assumptions, multicast filtering and actual Ethernet hardware.
-
-Recommended shape:
-
-- two x86_64 Linux nodes;
-- two aarch64 Linux nodes;
-- one test controller;
-- a managed Ethernet switch with VLAN and port-mirroring support;
-- separate management connectivity where practical so test-LAN failures do not remove control of a node.
-
-The controller installs the same disk image artifacts produced by the normal build, starts tests, collects serial/console output, captures traffic from the mirror port and restores nodes after failures.
+Later physical testing uses at least two x86_64 nodes, two aarch64 nodes, a test controller, a managed switch with port mirroring and an independent management path.
 
 ## Architecture matrix
 
-The minimum native matrix is:
+Required cases are x86_64/x86_64, aarch64/aarch64 and both mixed directions. Independent peer implementations are substituted for either side as the corresponding protocol layers become available.
 
-| Node A | Node B | Required |
-| --- | --- | --- |
-| x86_64 | x86_64 | yes |
-| aarch64 | aarch64 | yes |
-| x86_64 | aarch64 | yes |
+## Ethernet ladder
 
-Independent peer implementations are then substituted for either side. This catches assumptions that self-to-self tests miss.
+### E0 - wire vectors
 
-## Ethernet test ladder
+Check address encoding, DECnet MAC derivation, routing header forms, checksums and packet decoders against independent vectors.
 
-### E0 - Wire vectors
+### E1 - two nodes on one LAN
 
-Check address encoding, DECnet MAC derivation, routing header forms, checksums and all packet decoders against independent vectors.
+Start with 31.70 and 31.71. Prove hello transmission/reception, adjacency creation/expiry, correct multicast/unicast addresses, routing-layer delivery and clean restart. Repeat with independent peers where supported.
 
-### E1 - Two nodes on one LAN
+### E2 - router on two LANs
 
-Start with two nodes on one Ethernet segment using addresses 31.70 and 31.71.
+An endnode on each LAN communicates only through the router. Prove route installation, forwarding, visit-count handling, adjacency loss and reconvergence.
 
-Prove:
+### E3 - multiple routers
 
-- hello transmission and reception;
-- adjacency creation and expiry;
-- correct multicast and unicast destination addresses;
-- short and long data reception;
-- bidirectional routing-layer data delivery;
-- clean recovery after one node disappears and returns.
+Use alternate paths. Remove links and routers while traffic is active and verify convergence without loops.
 
-Run the topology as implementation-to-implementation, implementation-to-DECnet/Python and implementation-to-Route20 where the peer role is supported.
+### E4 - multiple areas
 
-### E2 - Router on two LANs
+Use the normal area-31 pool plus a second configurable area for Level 2 tests.
 
-A router node has one interface on LAN A and one on LAN B. Endnodes on opposite LANs must communicate only through the router.
+## DDCMP ladder
 
-Prove route installation, forwarding, visit-count handling, adjacency loss, reconvergence and correct packet captures on both LANs.
+Keep DDCMP framing/state in kernel space. Automated byte-stream transports are test plumbing only.
 
-### E3 - Multiple routers
-
-Use at least two alternate paths. Remove links and routers while traffic is active and verify convergence without loops.
-
-### E4 - Multiple areas
-
-The default area-31 pool remains the normal test range. Dedicated Level 2 tests allocate a second configurable area so area routing can be tested without changing normal defaults.
-
-## DDCMP architecture
-
-DDCMP protocol processing belongs in the kernel implementation.
-
-For automated testing the DDCMP engine should have pluggable byte-stream transports. A test transport can connect the kernel DDCMP endpoint to a small userspace relay while keeping framing, CRC, sequence, acknowledgement, retransmission and link state in the kernel.
-
-This gives three useful backends:
-
-1. test relay over TCP or UDP for interoperability with existing implementations and simulators;
-2. asynchronous TTY/serial for physical serial testing;
-3. synchronous hardware/framer support for real DDCMP links.
-
-The relay is transport plumbing only. It must not implement DDCMP protocol state.
-
-## DDCMP test ladder
-
-### D0 - Frame vectors
-
-Test start/control/data frames, header and data CRCs, sequence-number wrap, ACK, NAK, REP and malformed input.
-
-### D1 - Two local endpoints
-
-Connect two fresh-kernel VMs by an emulated serial link and run sustained bidirectional traffic.
-
-### D2 - Independent peer
-
-Connect one node to DECnet/Python using its DDCMP TCP/UDP support and exercise startup, data, errors and reconnects.
-
-Connect separately to Route20 using its supported point-to-point transport.
-
-### D3 - Error injection
-
-Inject deterministic loss, delay, duplication, corruption, disconnects and reconnects. Verify counters and retransmission behavior, not just final delivery.
-
-### D4 - Physical asynchronous serial
-
-Connect x86_64 and aarch64 nodes through real UART/serial hardware. Repeat startup, sustained traffic and fault/reconnect tests at several line speeds.
-
-### D5 - Physical synchronous DDCMP
-
-Use synchronous DDCMP framing hardware or a compatible simulator/physical peer. This is the final check that the byte-stream test transport has not hidden timing or framing assumptions.
+- D0: vectors for frames, CRCs, sequence wrap, ACK/NAK/REP and malformed input.
+- D1: two fresh-kernel VMs over an emulated serial link.
+- D2: independent peers.
+- D3: deterministic loss, delay, duplication, corruption, disconnect and reconnect.
+- D4: physical asynchronous serial.
+- D5: physical synchronous DDCMP or compatible peer.
 
 ## Mixed-circuit tests
 
-Mixed tests are essential because routing across unlike circuits is where layer boundaries are most likely to leak.
-
-### M1 - Ethernet to DDCMP
-
-- 31.70: x86_64 endnode on Ethernet LAN A
-- 31.71: router with Ethernet LAN A plus one DDCMP circuit
-- 31.72: aarch64 endnode on the DDCMP side
-
-Send traffic in both directions and verify headers, counters and route state on all three nodes.
-
-### M2 - DDCMP between two Ethernet LANs
-
-- LAN A contains an implementation node plus an independent Ethernet peer.
-- Router A connects LAN A to a DDCMP link.
-- Router B connects the DDCMP link to LAN B.
-- LAN B contains an implementation node plus a second independent peer.
-
-Exercise endnode-to-endnode, router-to-router, NSP and application traffic across the complete path.
-
-### M3 - Mixed implementations
-
-Replace individual nodes with DECnet/Python, Route20 and later SIMH guests running DEC operating systems. No topology is accepted solely on implementation-to-implementation success.
-
-## Fault matrix
-
-Ethernet tests should include link down/up, multicast loss, packet loss, duplication, delay, reordering where meaningful, router restart and interface restart.
-
-DDCMP tests should include corrupted header CRC, corrupted data CRC, missing ACK, duplicate data, delayed ACK, sequence wrap, carrier loss, process/peer restart and reconnect.
-
-Mixed tests should fail one circuit while traffic is active and verify route withdrawal and recovery.
+Required end state includes `Ethernet -> router -> DDCMP -> router -> Ethernet`, mixed CPU architectures and independent implementations. No topology is accepted solely on self-to-self success.
 
 ## Evidence retained for every failed test
 
-The controller keeps:
-
-- per-node console log;
-- kernel log;
-- DECnet counters and route/adjacency state;
-- packet capture for every Ethernet segment;
-- DDCMP byte/frame trace when enabled;
-- topology and address allocation used by the run;
-- random seed for any fault injection.
-
-A failure should be reproducible from the saved topology and seed.
+Keep per-node console/kernel/application logs, DECnet counters/state, packet captures, DDCMP traces when enabled, topology/address allocation, exact source/kernel/module/reference revisions and fault seed.
 
 ## Scale plan
 
-Normal pull-request tests stop at small topologies.
-
-Nightly or manual tests grow through 4, 8 and 16 nodes. The default 31.70-31.79 pool is extended by configuration for the 16-node case; the default itself does not change.
-
-The 16-node topology should mix x86_64, aarch64, Ethernet, DDCMP, routers, endnodes and at least one independent implementation whenever runner capacity allows.
+Grow deliberately through 2, 4, 8 and 16 independent VMs with real routed topologies. The default 31.70-31.79 pool may be extended by configuration for larger tests.

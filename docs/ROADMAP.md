@@ -4,43 +4,29 @@ This is the execution order for DECnet-IV-Linux. Later phases do not replace ear
 
 ## Phase 0 - repository continuity and reference discipline
 
-Exit criteria:
-
-- repository policy and continuity gates are active;
-- every substantive commit refreshes `docs/PROJECT_STATE.md`;
-- Route20, PyDECnet, LinuxDECnet and SIMH reference roles are documented;
-- no legacy Linux DECnet kernel implementation is used as the implementation base;
-- protocol/reference licensing boundaries are checked before source reuse;
-- development stays on one maintained `main` line.
+Exit criteria: repository policy/continuity gates are active; every substantive commit refreshes `docs/PROJECT_STATE.md`; preferred reference roles and license boundaries are documented; the removed legacy Linux DECnet stack is not the implementation base; development stays on one maintained `main` line.
 
 ## Phase 1 - buildable kernel and userspace bootstrap
 
-Deliver:
-
-- versioned UAPI header;
-- out-of-tree `decnet_iv.ko`;
-- configurable local DECnet identity, defaulting to 31.70 / DN70;
-- Routing Layer EtherType receive registration and counters;
-- small `dnctl` diagnostic/configuration program;
-- native x86_64 and aarch64 compile gates;
-- unit tests for address encoding and UAPI constants.
+Deliver versioned UAPI, out-of-tree `decnet_iv.ko`, configurable identity, Routing Layer EtherType receive counters, `dnctl`, native x86_64/aarch64 builds and unit tests.
 
 Exit criteria: module, userspace and unit tests build cleanly on both required architectures.
 
 Status: complete foundation retained on `main`.
 
-## Phase 2 - reproducible small VM image and two-node lab
+## Phase 2 - reproducible Ubuntu Base image and two-node lab
 
 Deliver:
 
-- select and pin one small maintained non-cloud Linux base with x86_64 and aarch64 support;
-- build a deterministic minimal image without unnecessary provisioning layers;
-- install the module and current userspace tools;
-- boot DN70 and DN71 as separate VMs on one raw Ethernet LAN;
-- retain packet capture and per-node logs on failure;
-- use hardware virtualization when available and software emulation only as fallback.
+- pinned Ubuntu Base 26.04.1 amd64 and arm64 rootfs tarballs;
+- deterministic ext4/QCOW2 test image construction;
+- exact image kernel, headers, module and current userspace tools;
+- direct QEMU kernel/initrd boot with no installer or runtime provisioning layer;
+- DN70 and DN71 as separate VMs on one raw Ethernet LAN;
+- packet capture and per-node serial logs on failure;
+- KVM when available, software emulation fallback otherwise.
 
-Exit criteria: two independent images boot reliably and exchange deliberately generated DECnet Routing Layer frames on the isolated LAN.
+Exit criteria: both native CPU cases boot two independent images reliably and exchange deliberately generated DECnet Routing Layer frames on the isolated LAN.
 
 ## Phase 3 - Ethernet Phase IV initialization and adjacency
 
@@ -80,12 +66,10 @@ Exit criteria: normal and fault-injected links recover correctly and expose corr
 
 ## Phase 9 - mixed-media routing
 
-Required topology includes `Ethernet -> DECnet router -> DDCMP -> DECnet router -> Ethernet`.
-
-Exercise routing, NSP, Session Control, NICE, terminal access, PHONE and DAP across the path as those layers become available.
+Required topology includes `Ethernet -> DECnet router -> DDCMP -> DECnet router -> Ethernet`. Exercise higher layers across the path as they become available.
 
 ## Phase 10 - scale, portability, real peers and release images
 
-Deliver 4/8/16-node routed topologies, both CPU architectures and mixed directions, maintained distro portability, real DEC peers, physical mixed-CPU testing, QCOW2/RAW images, checksums and reproducible manifests.
+Deliver 4/8/16-node routed topologies, both CPU architectures and mixed directions, maintained distro portability, real DEC peers, physical mixed-CPU testing, self-booting QCOW2/RAW images, checksums and reproducible manifests.
 
 Exit criteria: the release candidate passes all applicable external conformance, virtual topology, mixed-media, fault/stress and physical-hardware gates.

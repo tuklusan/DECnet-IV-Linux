@@ -4,28 +4,25 @@ A minimal modern Linux distribution with native DECnet Phase IV networking.
 
 ## Project goals
 
-- Use a small, actively maintained Linux base.
-- Implement DECnet Phase IV as a fresh out-of-tree Linux kernel module.
-- Do not depend on the removed legacy Linux DECnet implementation.
-- Provide a versioned kernel/userspace ABI.
-- Provide familiar tools such as `sethost`, `ncp`, `phone`, `dncopy`, DAP/FAL utilities, mail, task/object access and administration tools as their protocol layers become ready.
-- Build reproducible bootable VM disk images for x86_64 and aarch64.
-- Test first with two independent VMs and scale through 4, 8 and 16 nodes.
-- Require independent-peer, mixed-architecture, routed, fault and stress testing.
+- Build DECnet Phase IV as a fresh out-of-tree Linux kernel module, not the removed legacy stack.
+- Provide a versioned kernel/userspace ABI and the useful DECnet/Linux tool environment.
+- Build reproducible x86_64 and aarch64 images.
+- Test on independent VMs, independent peers, routed/mixed-media topologies, faults and stress.
 
 ## Current baseline
 
-Phase 1 is the buildable bootstrap: UAPI version 1, configurable node identity (default 31.70 / DN70), DECnet Routing Layer EtherType receive registration, receive counters, and the `dnctl` diagnostic controller.
+Phase 1 provides UAPI version 1, configurable node identity (default 31.70 / DN70), DECnet Routing Layer EtherType receive registration/counters and `dnctl`.
 
-The distribution/image base is intentionally unset while Phase 2 is rebuilt cleanly.
+Phase 2 now uses Ubuntu Base 26.04.1 LTS. The official amd64 and arm64 rootfs tarballs are 33 MiB and are pinned by SHA-256. The VM lab builds the root disk before boot and direct-boots its exact kernel/initrd, so there is no installer, cloud provisioning layer, firmware dependency or management NIC in the acceptance path.
 
 ## Layout
 
 - `include/uapi/` — versioned kernel/userspace ABI
 - `kernel/decnet/` — native DECnet Phase IV kernel module
 - `userspace/` — DECnet command-line tools and libraries
+- `image/ubuntu-base/` — pinned rootfs metadata and deterministic image builder
 - `tests/` — unit and interoperability tests
 - `docs/` — architecture, roadmap, test lab and continuity state
-- `.github/workflows/` — repository, build, reference and continuity gates
+- `.github/workflows/` — repository, build, reference, continuity and VM gates
 
 Read `docs/PROJECT_STATE.md` first when resuming work. `docs/ROADMAP.md` is the canonical task order.

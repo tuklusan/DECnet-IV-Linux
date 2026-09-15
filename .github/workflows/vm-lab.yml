@@ -1,0 +1,71 @@
+name: Two-Node VM Lab
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-two-node:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: amd64
+            qemu: qemu-system-x86
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+            qemu: qemu-system-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    env:
+      DNIV_LAB_TIMEOUT_SECONDS: 300
+      DNIV_LAB_ARTIFACTS: ${{ github.workspace }}/tests/lab/artifacts
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install host tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ matrix.qemu }} qemu-utils e2fsprogs tcpdump curl
+
+      - name: Download and verify pinned Ubuntu Base rootfs
+        shell: bash
+        run: |
+          set -euo pipefail
+          . image/ubuntu-base/images.env
+          if [[ '${{ matrix.arch }}' == amd64 ]]; then
+            file=$UBUNTU_BASE_AMD64
+            sha=$UBUNTU_BASE_AMD64_SHA256
+          else
+            file=$UBUNTU_BASE_ARM64
+            sha=$UBUNTU_BASE_ARM64_SHA256
+          fi
+          curl -fL "$UBUNTU_BASE_URL/$file" -o "$RUNNER_TEMP/$file"
+          echo "$sha  $RUNNER_TEMP/$file" | sha256sum -c -
+          echo "UBUNTU_BASE_TARBALL=$RUNNER_TEMP/$file" >> "$GITHUB_ENV"
+
+      - name: Build minimal DECnet test image
+        run: |
+          sudo -v
+          image/ubuntu-base/build-image.sh '${{ matrix.arch }}' "$UBUNTU_BASE_TARBALL" \
+            "$RUNNER_TEMP/dniv-${{ matrix.arch }}.qcow2" "$RUNNER_TEMP/boot-${{ matrix.arch }}"
+
+      - name: Boot two independent nodes and exchange native DECnet frames
+        run: |
+          tests/lab/run-two-node.sh "$RUNNER_TEMP/dniv-${{ matrix.arch }}.qcow2" \
+            "$RUNNER_TEMP/boot-${{ matrix.arch }}/vmlinuz" \
+            "$RUNNER_TEMP/boot-${{ matrix.arch }}/initrd.img"
+
+      - name: Retain failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: two-node-${{ matrix.arch }}-${{ github.run_id }}
+          path: tests/lab/artifacts/
+          if-no-files-found: warn
+          retention-days: 14

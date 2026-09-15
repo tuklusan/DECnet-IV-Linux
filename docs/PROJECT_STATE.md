@@ -8,7 +8,7 @@ Build a complete native DECnet Phase IV stack for maintained Linux, delivered pr
 
 ## Non-negotiable architecture
 
-- Distribution base: deliberately unset until Phase 2 selects and pins a small maintained base.
+- Distribution base: Ubuntu Base 26.04.1 LTS, pinned official amd64 and arm64 rootfs tarballs.
 - Kernel delivery: fresh out-of-tree module; avoid a permanent kernel fork and do not revive the removed legacy Linux DECnet kernel stack.
 - Kernel scope: native Ethernet, endnode/Level 1/Level 2 routing, NSP, sockets/UAPI, Session Control support, NICE/NML hooks/state and DDCMP.
 - Core routing, NSP and DDCMP state machines remain in kernel space.
@@ -34,7 +34,7 @@ Pinned automated references live in `tests/reference/refs.env`. Existing referen
 
 0. continuity, repository/reference/licensing/SoP discipline;
 1. buildable UAPI/module/control utility on x86_64 and aarch64;
-2. reproducible base image and two-VM native Ethernet lab;
+2. reproducible Ubuntu Base image and two-VM native Ethernet lab;
 3. Ethernet initialization and adjacency;
 4. endnode, Level 1 and Level 2 routing;
 5. NSP and DECnet sockets;
@@ -59,6 +59,7 @@ A later phase never removes an earlier acceptance gate.
 - Primary acceptance nodes are separate VMs, not containers or namespaces sharing one kernel.
 - Linux bridges provide raw native Ethernet LANs.
 - DECnet acceptance traffic stays on isolated native DECnet media.
+- The Phase 2 lab has one NIC per VM and no runtime provisioning network.
 - Scale deliberately from 2 to 4, 8 and 16 independent VMs with routed topologies.
 - Required CPU cases include x86_64/x86_64, aarch64/aarch64 and both mixed directions.
 - Fault and stress work includes deterministic loss, duplication, delay/reordering where meaningful, link/circuit failure, restart, convergence, connection churn, long-duration traffic and resource/lifetime failures.
@@ -87,14 +88,16 @@ Phase 1 is on `main` and contains UAPI version 1, `decnet_iv.ko`, default 31.70/
 
 The bootstrap does not claim adjacency, routing, NSP, Session Control, NICE/NML application behavior or DDCMP functionality.
 
-## Current status
+## Phase 2 status
 
-Phase 2 image/lab work has been reset. Stale distribution-specific image assumptions and dangling development histories are not part of the active tree. The active tree contains no distribution-specific image files or naming. The kernel/userspace Phase 1 bootstrap and independent reference gates are the retained foundation.
+Ubuntu Base 26.04.1 was selected because it is the smallest official non-cloud Ubuntu rootfs intended for custom images and is published for both required CPU architectures. The pinned release provides 33 MiB amd64 and arm64 tarballs. Exact filenames and SHA-256 values are in `image/ubuntu-base/images.env`.
+
+The new lab deliberately removes the old boot/provisioning complexity. CI expands the rootfs, installs Ubuntu's virtual kernel plus the module/tools, copies out the exact kernel and initrd, then direct-boots two QCOW2 overlays with QEMU `-kernel`/`-initrd`. Each guest has one raw Ethernet NIC. A small boot-conditioned smoke service sets node identity, sends EtherType `0x6003` frames to its peer, verifies kernel receive counters and powers off. No installer, cloud metadata, firmware image or management NIC is involved.
 
 ## Resume point
 
-Work resumes on `main` from the clean Phase 1 foundation. The distribution base is unset. No Phase 2 VM provisioning mechanism is considered authoritative.
+The repository is cleanly based on Ubuntu Base 26.04.1 and the Phase 2 lab has been replaced with the direct-kernel-boot design. The exact new VM gate must now prove both native CPU cases before protocol work proceeds.
 
 ## Next action
 
-Select and verify the smallest practical maintained non-cloud Linux base that satisfies the project requirements, pin its exact release artifacts for x86_64 and aarch64, then rebuild Phase 2 from scratch with the simplest deterministic two-VM native-Ethernet path. Do not recreate old provisioning machinery unless a measured requirement proves it is necessary.
+Run the exact new VM gate on amd64 and arm64. Fix only defects demonstrated by retained serial/pcap evidence. Once both native two-node cases are green and the SoP gate is clean, move immediately into Phase 3: implement DECnet Ethernet address handling, hello parsing/generation and adjacency state/expiry with independent Route20/PyDECnet vectors. Add mixed-CPU VM execution after the native lab is stable; do not let VM plumbing block protocol implementation again.
