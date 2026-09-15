@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
+#define _DEFAULT_SOURCE
 #include <arpa/inet.h>
 #include <errno.h>
 #include <linux/if_ether.h>
@@ -17,10 +18,11 @@
 static int parse_mac(const char *text, unsigned char mac[ETH_ALEN])
 {
     unsigned int b[ETH_ALEN];
+    char tail;
     int i;
 
-    if (sscanf(text, "%x:%x:%x:%x:%x:%x",
-               &b[0], &b[1], &b[2], &b[3], &b[4], &b[5]) != ETH_ALEN)
+    if (sscanf(text, "%x:%x:%x:%x:%x:%x%c",
+               &b[0], &b[1], &b[2], &b[3], &b[4], &b[5], &tail) != ETH_ALEN)
         return -1;
     for (i = 0; i < ETH_ALEN; i++) {
         if (b[i] > 0xff)

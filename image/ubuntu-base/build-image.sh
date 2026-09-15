@@ -15,7 +15,11 @@ case "$arch" in
     *) echo "build-image: unsupported architecture: $arch" >&2; exit 2 ;;
 esac
 
-repo_root=$(cd "$(dirname "$0")/../.." && pwd)
+script_dir=$(cd "$(dirname "$0")" && pwd)
+repo_root=$(cd "$script_dir/../.." && pwd)
+# shellcheck disable=SC1091
+. "$script_dir/images.env"
+snapshot=${UBUNTU_APT_SNAPSHOT:?images.env must pin UBUNTU_APT_SNAPSHOT}
 disk_bytes=${DNIV_DISK_BYTES:-2147483648}
 if [[ ! "$disk_bytes" =~ ^[0-9]+$ ]] || (( disk_bytes < 1073741824 )); then
     echo "build-image: DNIV_DISK_BYTES must be an integer >= 1073741824" >&2
@@ -74,10 +78,10 @@ exit 101
 EOF_POLICY
 sudo chmod 0755 "$mnt/usr/sbin/policy-rc.d"
 
-sudo chroot "$mnt" /bin/bash -euxc '
+sudo chroot "$mnt" /usr/bin/env UBUNTU_APT_SNAPSHOT="$snapshot" /bin/bash -euxc '
 export DEBIAN_FRONTEND=noninteractive
-apt-get update
-apt-get install -y --no-install-recommends \
+apt-get --snapshot "$UBUNTU_APT_SNAPSHOT" update
+apt-get --snapshot "$UBUNTU_APT_SNAPSHOT" install -y --no-install-recommends \
     systemd-sysv kmod iproute2 ca-certificates build-essential \
     linux-image-virtual-hwe-26.04 linux-headers-virtual-hwe-26.04
 krel=$(ls -1 /lib/modules | sort -V | tail -1)

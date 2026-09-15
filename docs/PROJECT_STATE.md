@@ -92,7 +92,11 @@ The bootstrap does not claim adjacency, routing, NSP, Session Control, NICE/NML 
 
 Ubuntu Base 26.04.1 was selected because it is the smallest official non-cloud Ubuntu rootfs intended for custom images and is published for both required CPU architectures. The pinned release provides 33 MiB amd64 and arm64 tarballs. Exact filenames and SHA-256 values are in `image/ubuntu-base/images.env`.
 
+The apt dependency set is also frozen with Ubuntu Snapshot Service timestamp `20260915T000000Z`; apt in Ubuntu 24.04 and later accepts snapshot IDs directly, so later rebuilds do not silently pick newer kernel or userspace packages.
+
 The new lab deliberately removes the old boot/provisioning complexity. CI expands the rootfs, installs Ubuntu's virtual kernel plus the module/tools, copies out the exact kernel and initrd, then direct-boots two QCOW2 overlays with QEMU `-kernel`/`-initrd`. Each guest has one raw Ethernet NIC. A small boot-conditioned smoke service sets node identity, sends EtherType `0x6003` frames to its peer, verifies kernel receive counters and powers off. No installer, cloud metadata, firmware image or management NIC is involved.
+
+A pre-gate static pass caught two issues before relying on CI: the strict-C11 raw-frame helper now enables the libc interfaces needed for `struct ifreq`, and MAC parsing rejects trailing garbage. This change resets the SoP sequence.
 
 ## Resume point
 
