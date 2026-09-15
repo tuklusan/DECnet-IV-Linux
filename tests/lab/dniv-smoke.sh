@@ -155,9 +155,27 @@ e1)
         exit 1
     fi
 
-    # The E1 NIC address differs from the DECnet node MAC.  Compare the
-    # non-hello receive count before and after a probe stream addressed to
-    # the DECnet node MAC; the overlap avoids a baseline race between peers.
+    # Change the device primary MAC while DECnet remains loaded. The DECnet
+    # unicast receive filter must be an independently owned reference, so the
+    # protocol address must remain reachable across NETDEV_CHANGEADDR. Bring
+    # the link down first because not every Ethernet driver permits a live
+    # primary-address change.
+    address=$((area * 1024 + node))
+    changed_mac=$(printf '52:54:01:00:%02x:%02x' \
+        "$((address & 255))" "$(((address >> 8) & 255))")
+    ip link set dev "$iface" down
+    ip link set dev "$iface" address "$changed_mac"
+    ip link set dev "$iface" up
+    echo "DNIV-E1-CHANGEADDR session=$session node=$name mac=$changed_mac"
+    if ! wait_adjacency_up "$peer_node" DNIV-E1-CHANGEADDR-INIT 40; then
+        echo "DNIV-E1-FAIL session=$session node=$name reason=changeaddr-adjacency"
+        exit 1
+    fi
+
+    # Compare the non-hello receive count before and after a probe stream
+    # addressed to the DECnet node MAC. The probes now leave from the changed
+    # primary MAC, so this proves receive coverage survived the address change.
+    # The overlap also avoids a baseline race between peers.
     routing_before=$(stat_value 'Routing frames received')
     hello_before=$(stat_value 'Hello frames received')
     for value in "$routing_before" "$hello_before"; do
@@ -258,5 +276,3 @@ esac
 
 sync
 sleep 1
-poweroff -f
-exit 1

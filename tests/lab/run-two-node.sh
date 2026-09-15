@@ -55,15 +55,25 @@ lab_nic_mac() {
     address=$(((area_value << 10) | node_value))
     printf '52:54:00:00:%02x:%02x' "$((address & 0xff))" "$(((address >> 8) & 0xff))"
 }
+changed_lab_nic_mac() {
+    local area_value=$1 node_value=$2 address
+    address=$(((area_value << 10) | node_value))
+    printf '52:54:01:00:%02x:%02x' "$((address & 0xff))" "$(((address >> 8) & 0xff))"
+}
 mac_a=$(decnet_mac "$area" "$node_a")
 mac_b=$(decnet_mac "$area" "$node_b")
 nic_mac_a=$mac_a
 nic_mac_b=$mac_b
+changed_mac_a=$nic_mac_a
+changed_mac_b=$nic_mac_b
 if [[ "$mode" == e1 ]]; then
     # Keep the emulated NIC addresses deliberately different from DECnet node
     # MACs so E1 proves that the kernel emits the protocol-derived source MAC.
+    # The guests later change these primary MACs again while DECnet is loaded.
     nic_mac_a=$(lab_nic_mac "$area" "$node_a")
     nic_mac_b=$(lab_nic_mac "$area" "$node_b")
+    changed_mac_a=$(changed_lab_nic_mac "$area" "$node_a")
+    changed_mac_b=$(changed_lab_nic_mac "$area" "$node_b")
 fi
 
 artifacts=${DNIV_LAB_ARTIFACTS:-"$(pwd)/tests/lab/artifacts"}
@@ -282,14 +292,26 @@ if [[ "$mode" == e1 ]]; then
         "ether proto 0x6003 and ether src $nic_mac_a and (ether dst ab:00:00:03:00:00 or ether dst ab:00:00:04:00:00)" 2>/dev/null | wc -l)
     nic_hello_b=$(sudo tcpdump -nn -e -r "$pcap" \
         "ether proto 0x6003 and ether src $nic_mac_b and (ether dst ab:00:00:03:00:00 or ether dst ab:00:00:04:00:00)" 2>/dev/null | wc -l)
+    changed_nic_hello_a=$(sudo tcpdump -nn -e -r "$pcap" \
+        "ether proto 0x6003 and ether src $changed_mac_a and (ether dst ab:00:00:03:00:00 or ether dst ab:00:00:04:00:00)" 2>/dev/null | wc -l)
+    changed_nic_hello_b=$(sudo tcpdump -nn -e -r "$pcap" \
+        "ether proto 0x6003 and ether src $changed_mac_b and (ether dst ab:00:00:03:00:00 or ether dst ab:00:00:04:00:00)" 2>/dev/null | wc -l)
     ucast_a_to_b=$(sudo tcpdump -nn -e -r "$pcap" \
-        "ether proto 0x6003 and ether src $nic_mac_a and ether dst $mac_b" 2>/dev/null | wc -l)
+        "ether proto 0x6003 and ether src $changed_mac_a and ether dst $mac_b" 2>/dev/null | wc -l)
     ucast_b_to_a=$(sudo tcpdump -nn -e -r "$pcap" \
-        "ether proto 0x6003 and ether src $nic_mac_b and ether dst $mac_a" 2>/dev/null | wc -l)
-    if (( routers_from_a < 2 || routers_from_b < 2 || endnodes_from_a != 0 || endnodes_from_b < 1 || nic_hello_a != 0 || nic_hello_b != 0 || ucast_a_to_b < 3 || ucast_b_to_a < 3 )); then
-        echo "two-node: E1 wire evidence incomplete routersA=$routers_from_a routersB=$routers_from_b endnodesA=$endnodes_from_a endnodesB=$endnodes_from_b nicHelloA=$nic_hello_a nicHelloB=$nic_hello_b ucastAB=$ucast_a_to_b ucastBA=$ucast_b_to_a" >&2
+        "ether proto 0x6003 and ether src $changed_mac_b and ether dst $mac_a" 2>/dev/null | wc -l)
+    if (( routers_from_a < 2 || routers_from_b < 2 || endnodes_from_a != 0 || endnodes_from_b < 1 || nic_hello_a != 0 || nic_hello_b != 0 || changed_nic_hello_a != 0 || changed_nic_hello_b != 0 || ucast_a_to_b < 3 || ucast_b_to_a < 3 )); then
+        echo "two-node: E1 wire evidence incomplete routersA=$routers_from_a routersB=$routers_from_b endnodesA=$endnodes_from_a endnodesB=$endnodes_from_b nicHelloA=$nic_hello_a nicHelloB=$nic_hello_b changedNicHelloA=$changed_nic_hello_a changedNicHelloB=$changed_nic_hello_b ucastAB=$ucast_a_to_b ucastBA=$ucast_b_to_a" >&2
         exit 1
     fi
+    grep -Fq "DNIV-E1-CHANGEADDR session=$session node=$name_a mac=$changed_mac_a" "$log_a" || {
+        echo "two-node: E1 node A primary-MAC change was not observed" >&2
+        exit 1
+    }
+    grep -Fq "DNIV-E1-CHANGEADDR session=$session node=$name_b mac=$changed_mac_b" "$log_b" || {
+        echo "two-node: E1 node B primary-MAC change was not observed" >&2
+        exit 1
+    }
     grep -Fq "DNIV-E1-UCAST session=$session node=$name_a" "$log_a" || {
         echo "two-node: E1 node A unicast receive-filter proof was not observed" >&2
         exit 1
