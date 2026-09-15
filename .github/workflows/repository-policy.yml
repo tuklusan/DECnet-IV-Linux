@@ -1,13 +1,11 @@
 name: Repository Policy
 
 on:
-  push:
-    branches: [main]
-  pull_request_target:
-    types: [opened, synchronize, reopened, edited]
-  merge_group:
   workflow_dispatch:
-  member:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -16,7 +14,7 @@ jobs:
   repository-policy:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out trusted base
+      - name: Check out repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0

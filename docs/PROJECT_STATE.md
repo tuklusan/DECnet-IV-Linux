@@ -69,13 +69,13 @@ A later phase never removes an earlier acceptance gate.
 
 - Do not create development branches. Keep one maintained `main` line.
 - Historical working refs were reconciled into `main` at commit `b51618cbf49ae43b223d3dcd15f156086fea41dc`; they are aliases only and must not carry divergent work.
-- Workflows execute normal push gates only on `main`, so historical aliases cannot consume runners if they are touched again.
 - Every substantive commit updates this file in the same commit.
 - `tools/project_state_gate.py` enforces continuity requirements.
 - Local policy hooks are installed with `tools/install-hooks.sh`; both hook entry points are executable in the repository.
 - Keep commits atomic and run applicable static/unit/reference gates before advancing work.
 - Generated VM evidence stays under ignored `tests/lab/artifacts/`; do not commit generated images, captures or logs.
 - Keep only project-relevant source, tests, build/image machinery and continuity documentation.
+- Runner use is demand-driven. All repository workflows are manual-dispatch only and use per-workflow/ref concurrency with cancellation of duplicate in-progress runs. Launch only the exact gate needed for the exact commit being evaluated; do not fan out routine pushes into runner work.
 
 ## SoP delivery rule
 
@@ -102,12 +102,14 @@ The lab deliberately removes the old boot/provisioning complexity. CI expands th
 
 The latest complete review caught two final lifetime mistakes in the VM harness. First, the base machine identity was being cleared before package installation, allowing package scripts to recreate it before the image was cloned. It is now cleared after all package work. Second, background shell functions rather than QEMU itself were the recorded guest PIDs, so teardown could kill a wrapper and leave its emulator behind; the launch path now `exec`s QEMU and guest termination uses a TERM grace period followed by KILL.
 
-The following adversarial pass found one UAPI consistency gap: `dnctl stats` consumed the kernel statistics structure without checking its returned UAPI version, unlike the identity path. Statistics output now rejects an unsupported kernel UAPI version before interpreting counters. This fix resets the SoP sequence.
+The following adversarial pass found one UAPI consistency gap: `dnctl stats` consumed the kernel statistics structure without checking its returned UAPI version, unlike the identity path. Statistics output now rejects an unsupported kernel UAPI version before interpreting counters.
+
+Runner pressure then exposed an operational flaw in the gate layout: every main-line promotion launched all gates, including expensive reference and two-VM jobs, producing a large queued backlog. Workflows are now demand-driven `workflow_dispatch` jobs with duplicate-run concurrency cancellation. This operational change resets the SoP sequence.
 
 ## Resume point
 
-The repository is based on Ubuntu Base 26.04.1, historical branch refs are reconciled aliases of the maintained line, generated VM artifacts are ignored, and Phase 2 uses a direct-kernel-boot two-VM design driven by the centralized test address pool. Normal workflow pushes are limited to `main`, and reference CI consumes the preferred fork URLs. The exact VM gate must prove both native CPU cases before protocol work proceeds.
+The repository is based on Ubuntu Base 26.04.1, historical branch refs are reconciled aliases of the maintained line, generated VM artifacts are ignored, and Phase 2 uses a direct-kernel-boot two-VM design driven by the centralized test address pool. Reference CI consumes the preferred fork URLs. Repository runners are no longer launched by routine pushes; gates are started only when the exact commit and exact evidence need them.
 
 ## Next action
 
-Restart SoP pass 1 from the complete latest repository copy. In parallel, let the exact Phase 2 VM gate run on amd64 and arm64; fix only defects demonstrated by retained serial/pcap evidence. Once both native two-node cases are green and three consecutive full SoP passes are clean, move immediately into Phase 3: implement DECnet Ethernet address handling, hello parsing/generation and adjacency state/expiry with independent Route20/PyDECnet vectors. Add mixed-CPU VM execution after the native lab is stable; do not let VM plumbing block protocol implementation again.
+Restart SoP pass 1 from the complete latest repository copy. Do not launch another runner until a specific gate is required. When Phase 2 is ready for runtime proof, run only the exact native two-node VM gate for the exact candidate commit; fix only defects demonstrated by retained serial/pcap evidence. Once both native CPU cases are green and three consecutive full SoP passes are clean, move immediately into Phase 3: implement DECnet Ethernet address handling, hello parsing/generation and adjacency state/expiry with independent Route20/PyDECnet vectors. Add mixed-CPU VM execution after the native lab is stable; do not let VM plumbing block protocol implementation again.
