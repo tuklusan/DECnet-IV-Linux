@@ -50,8 +50,21 @@ decnet_mac() {
     address=$(((area_value << 10) | node_value))
     printf 'aa:00:04:00:%02x:%02x' "$((address & 0xff))" "$(((address >> 8) & 0xff))"
 }
+lab_nic_mac() {
+    local area_value=$1 node_value=$2 address
+    address=$(((area_value << 10) | node_value))
+    printf '52:54:00:00:%02x:%02x' "$((address & 0xff))" "$(((address >> 8) & 0xff))"
+}
 mac_a=$(decnet_mac "$area" "$node_a")
 mac_b=$(decnet_mac "$area" "$node_b")
+nic_mac_a=$mac_a
+nic_mac_b=$mac_b
+if [[ "$mode" == e1 ]]; then
+    # Keep the emulated NIC addresses deliberately different from DECnet node
+    # MACs so E1 proves that the kernel emits the protocol-derived source MAC.
+    nic_mac_a=$(lab_nic_mac "$area" "$node_a")
+    nic_mac_b=$(lab_nic_mac "$area" "$node_b")
+fi
 
 artifacts=${DNIV_LAB_ARTIFACTS:-"$(pwd)/tests/lab/artifacts"}
 timeout_seconds=${DNIV_LAB_TIMEOUT_SECONDS:-240}
@@ -182,8 +195,8 @@ start_node() {
     esac
 }
 
-start_node "$name_a" "$node_a" "$mac_b" "$node_b" A "$mac_a" "$tap_a" "$disk_a" "$log_a" & QA_PID=$!
-start_node "$name_b" "$node_b" "$mac_a" "$node_a" B "$mac_b" "$tap_b" "$disk_b" "$log_b" & QB_PID=$!
+start_node "$name_a" "$node_a" "$mac_b" "$node_b" A "$nic_mac_a" "$tap_a" "$disk_a" "$log_a" & QA_PID=$!
+start_node "$name_b" "$node_b" "$mac_a" "$node_a" B "$nic_mac_b" "$tap_b" "$disk_b" "$log_b" & QB_PID=$!
 
 if [[ "$mode" == e1 ]]; then
     marker=DNIV-E1-PASS
@@ -265,8 +278,12 @@ if [[ "$mode" == e1 ]]; then
         "ether proto 0x6003 and ether dst ab:00:00:04:00:00 and ether src $mac_a" 2>/dev/null | wc -l)
     endnodes_from_b=$(sudo tcpdump -nn -e -r "$pcap" \
         "ether proto 0x6003 and ether dst ab:00:00:04:00:00 and ether src $mac_b" 2>/dev/null | wc -l)
-    if (( routers_from_a < 2 || routers_from_b < 2 || endnodes_from_a != 0 || endnodes_from_b < 1 )); then
-        echo "two-node: E1 wire evidence incomplete routersA=$routers_from_a routersB=$routers_from_b endnodesA=$endnodes_from_a endnodesB=$endnodes_from_b" >&2
+    nic_from_a=$(sudo tcpdump -nn -e -r "$pcap" \
+        "ether proto 0x6003 and ether src $nic_mac_a" 2>/dev/null | wc -l)
+    nic_from_b=$(sudo tcpdump -nn -e -r "$pcap" \
+        "ether proto 0x6003 and ether src $nic_mac_b" 2>/dev/null | wc -l)
+    if (( routers_from_a < 2 || routers_from_b < 2 || endnodes_from_a != 0 || endnodes_from_b < 1 || nic_from_a != 0 || nic_from_b != 0 )); then
+        echo "two-node: E1 wire evidence incomplete routersA=$routers_from_a routersB=$routers_from_b endnodesA=$endnodes_from_a endnodesB=$endnodes_from_b nicA=$nic_from_a nicB=$nic_from_b" >&2
         exit 1
     fi
     if ! grep -Fq "DNIV-E1-INIT session=$session" "$log_a" && \
