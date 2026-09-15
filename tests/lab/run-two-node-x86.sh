@@ -293,21 +293,28 @@ qemu-system-x86_64 \
     -display none -monitor none -serial "file:$log71" &
 Q71_PID=$!
 
+marker70="DNIV-LAB-DONE session=${session_id} node=DN70"
+marker71="DNIV-LAB-DONE session=${session_id} node=DN71"
 deadline=$((SECONDS + timeout_seconds))
 finished=0
 failure_reason=timeout
 while (( SECONDS < deadline )); do
     done70=0
     done71=0
-    grep -q "DNIV-LAB-DONE session=${session_id} node=DN70" "$log70" 2>/dev/null && done70=1
-    grep -q "DNIV-LAB-DONE session=${session_id} node=DN71" "$log71" 2>/dev/null && done71=1
+    grep -Fq "$marker70" "$log70" 2>/dev/null && done70=1
+    grep -Fq "$marker71" "$log71" 2>/dev/null && done71=1
     if (( done70 && done71 )); then
         finished=1
         break
     fi
-    if ! guest_running "$Q70_PID" || ! guest_running "$Q71_PID"; then
-        failure_reason=guest-exit
-        echo "two-node lab: a guest exited before reporting completion" >&2
+    if (( ! done70 )) && ! guest_running "$Q70_PID"; then
+        failure_reason=dn70-exit-before-completion
+        echo "two-node lab: DN70 exited before reporting completion" >&2
+        break
+    fi
+    if (( ! done71 )) && ! guest_running "$Q71_PID"; then
+        failure_reason=dn71-exit-before-completion
+        echo "two-node lab: DN71 exited before reporting completion" >&2
         break
     fi
     sleep 2
