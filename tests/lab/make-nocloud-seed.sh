@@ -118,6 +118,7 @@ target_kernel=$(cat /usr/share/kernel/virt/kernel.release)
 echo "DNIV-PROVISION node=${NODE_NAME} building module for kernel=${target_kernel}"
 akms install -k "$target_kernel" "$akms_src"
 
+mkdir -p /usr/local/sbin /etc/local.d
 cc -O2 -Wall -Wextra -Werror \
     -I"$src_root/include/uapi" \
     -o /usr/local/sbin/dnctl "$src_root/userspace/dnctl/dnctl.c"
