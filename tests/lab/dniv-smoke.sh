@@ -22,7 +22,10 @@ if [ -z "$peer" ]; then
     exit 1
 fi
 
-modprobe decnet_iv default_area="$area" default_node="$node" default_name="$name"
+# Keep the retained Phase 2 EtherType gate independent of Phase 3 router
+# hellos: two endnodes do not subscribe to the all-routers multicast group.
+modprobe decnet_iv default_area="$area" default_node="$node" default_name="$name" \
+    default_node_type=3
 /usr/local/sbin/dnctl set "$area.$node" "$name"
 /usr/local/sbin/dnctl reset-stats
 

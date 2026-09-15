@@ -89,7 +89,7 @@ Complete foundation retained on `main`: pinned Ubuntu Base 26.04.1 amd64/arm64 r
 
 All workflows are manual-dispatch. Jobs share the repository-wide x64/arm64 concurrency slots. The VM lab checkpoints the base QCOW2, portable node overlays, exact kernel/initrd, checksums, session metadata, logs and capture as resumable artifacts; a resume is accepted only for the same source commit and architecture.
 
-The Phase 2 smoke test deliberately remains a low-level EtherType receive gate. It sends arbitrary payloads and is not a Phase 3 adjacency acceptance test.
+The Phase 2 smoke test deliberately remains a low-level EtherType receive gate. It sends arbitrary unicast payloads and is not a Phase 3 adjacency acceptance test. Since Phase 3 router mode now emits hellos automatically, the smoke service explicitly loads both test nodes as endnodes; endnodes do not subscribe to the all-routers multicast group, so automatic Phase 3 hello traffic cannot satisfy the retained receive-counter gate.
 
 ## Phase 3 status
 
@@ -101,13 +101,15 @@ The wire implementation is independent and was cross-checked against pinned Rout
 
 Local development evidence for this slice: userspace and unit tests build with both GCC and Clang; the Phase 3 vectors pass; the module builds cleanly with `W=1` against Linux 6.12.96 headers. That build also exposed and fixed a pre-existing portability gap by explicitly including the header that defines `MODULE_ALIAS_NETPROTO`.
 
-The first restarted complete SoP review found two additional Phase 3 defects: the router-list maximum was incorrectly 35 instead of the 33-entry architectural/reference limit (`NBRA=33` in the pinned Route20 fork, consistent with the pinned PyDECnet E-list bound), and the shared hello builders did not reject a null output buffer before writing. Both are corrected with unit coverage. The same pass found the kernel-module README still described only the bootstrap milestone; it is synchronized with UAPI version 2 and the active Phase 3 scope. These fixes reset the SoP sequence.
+The first restarted complete SoP review found two additional Phase 3 defects: the router-list maximum was incorrectly 35 instead of the 33-entry architectural/reference limit (`NBRA=33` in the pinned Route20 fork, consistent with the pinned PyDECnet E-list bound), and the shared hello builders did not reject a null output buffer before writing. Both are corrected with unit coverage. The same pass found the kernel-module README still described only the bootstrap milestone; it is synchronized with UAPI version 2 and the active Phase 3 scope.
+
+The following restarted review found a cross-phase regression: the retained Phase 2 VM smoke test could pass from automatically generated Phase 3 router hellos even if its deliberate raw-frame exchange failed. The smoke nodes now load explicitly as endnodes, isolating the old EtherType receive gate from Phase 3 multicast hello traffic. This fix resets the SoP sequence again.
 
 No native VM or live independent-peer runtime claim is made yet for this slice. The root README current-baseline summary is synchronized with UAPI version 2 and the Phase 3 in-progress state.
 
 ## Resume point
 
-Phase 2 infrastructure is stable and intentionally unchanged. Phase 3 Ethernet initialization and adjacency code is now the active protocol work. The latest review corrected the router-list architectural bound, null-output handling in hello builders and stale kernel-module documentation. The next runtime proof must exercise actual generated/parsed hellos and adjacency state, not just arbitrary EtherType frames.
+Phase 2 infrastructure is stable and intentionally unchanged except for explicitly selecting endnode mode in its smoke service so Phase 3 automatic router hellos cannot weaken the older acceptance gate. Phase 3 Ethernet initialization and adjacency code is the active protocol work. The latest reviews corrected the router-list architectural bound, null-output handling in hello builders, stale kernel-module documentation and the cross-phase smoke-test ambiguity. The next runtime proof must exercise actual generated/parsed hellos and adjacency state, not just arbitrary EtherType frames.
 
 ## Next action
 
