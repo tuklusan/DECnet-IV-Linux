@@ -4,17 +4,45 @@ set -eu
 . /etc/decnet-lab.env
 exec >/dev/ttyS0 2>&1
 
-echo "DNIV-LAB node=${NODE_NAME} address=${NODE_ADDR} start"
-ip link set "${IFACE}" up
+find_iface_by_mac() {
+    target=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+    for address_file in /sys/class/net/*/address; do
+        [ -r "$address_file" ] || continue
+        if [ "$(cat "$address_file")" = "$target" ]; then
+            basename "$(dirname "$address_file")"
+            return 0
+        fi
+    done
+    return 1
+}
+
+test -f /var/lib/decnet-lab/provisioned
+test -f /usr/src/decnet_iv-0.1.0/AKMBUILD
+find /etc/kernel-hooks.d -maxdepth 1 -name '*akms*.hook' -print -quit | grep -q .
+
+module_path=$(modinfo -n decnet_iv)
+case "$module_path" in
+    */kernel/extra/akms/decnet_iv.ko*) ;;
+    *)
+        echo "DNIV-LAB unexpected module path: $module_path" >&2
+        exit 1
+        ;;
+esac
+
+iface=$(find_iface_by_mac "$LAN_MAC")
+echo "DNIV-LAB node=${NODE_NAME} address=${NODE_ADDR} iface=${iface} module=${module_path} start"
+akms status || true
+
+ip link set "$iface" up
 modprobe decnet_iv
-dnctl set "${NODE_ADDR}" "${NODE_NAME}"
+dnctl set "$NODE_ADDR" "$NODE_NAME"
 dnctl reset-stats
 
-# Give both guests time to finish booting before exchanging raw Routing Layer frames.
+# Give both guests time to finish the post-provision reboot before raw Routing Layer traffic.
 sleep 8
 i=1
 while [ "$i" -le 8 ]; do
-    dnraw "${IFACE}" "${PEER_MAC}" "${NODE_NAME}-probe-${i}"
+    dnraw "$iface" "$PEER_MAC" "${NODE_NAME}-probe-${i}"
     i=$((i + 1))
     sleep 1
 done
