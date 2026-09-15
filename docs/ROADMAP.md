@@ -1,24 +1,27 @@
 # Implementation Roadmap
 
-This is the execution order for DECnet-IV-Linux. Later phases do not replace the acceptance gates of earlier phases.
+This is the canonical execution order for DECnet-IV-Linux. `PROJECT_INSTRUCTIONS.md` is the project contract. Later phases never remove earlier acceptance gates.
 
-## Test discipline
+## Test and delivery discipline
 
-- Run every useful, internally consistent upstream/reference test unmodified and keep it green. If an upstream revision contains a self-contradictory regression, pin the last passing revision for that suite while retaining the current revision separately for live reference work.
-- Prefer native DECnet on raw Ethernet or native DDCMP media. Do not use DECnet-over-IP tunneling as a shortcut around unfinished native protocol layers.
-- Stress the native stack aggressively as each layer arrives: node count, traffic volume, churn, loss, restart, route change, reconnect and long-duration runs.
-- Management networks used to provision guests are out-of-band and must never carry DECnet acceptance traffic.
+- Prefer `tuklusan/Route20`, `tuklusan/pydecnet`, `tuklusan/LinuxDECnet`, and `tuklusan/simh`; pin exact revisions when used by a gate. Upstreams are comparison sources only.
+- Run every useful, internally consistent reference test unmodified. If a reference revision contradicts its own suite, document it and hard-pin the last internally consistent revision while retaining the newer revision separately for live reference work.
+- Prefer native DECnet on raw Ethernet or native DDCMP media. DECnet-over-IP must not substitute for unfinished native layers.
+- Stress each layer for node count, traffic volume, churn, loss, restart, route changes, reconnects, resource lifetime, and long-duration operation.
+- Management networks are out of band and never carry DECnet acceptance traffic.
+- Before delivery/promotion, apply the SoP rule: complete untruncated latest-disk review, reset after any fix, three consecutive clean passes, and reset after any later change.
 
 ## Phase 0 - repository continuity and reference discipline
 
 Exit criteria:
 
-- repository policy gate is active;
-- every substantive commit refreshes `docs/PROJECT_STATE.md`;
-- Route20 and PyDECnet are documented as external conformance peers;
-- all useful upstream/reference tests available at the pinned revisions pass unmodified;
-- no legacy Linux DECnet kernel implementation is used as the implementation base;
-- protocol/reference licensing boundaries are documented before source reuse is considered.
+- repository policy and continuity gates are active;
+- every substantive commit refreshes `PROJECT_STATE.md` and generated `HANDOVER.md`;
+- feature branches are used and only exact green commits are promoted;
+- preferred forks and SHA pins are recorded; upstreams are comparison-only;
+- licensing boundaries are checked before source reuse;
+- Route20 and PyDECnet baselines are green at their pinned revisions;
+- the SoP delivery rule is documented and followed.
 
 Status: substantially complete.
 
@@ -26,120 +29,101 @@ Status: substantially complete.
 
 Deliver:
 
-- versioned UAPI header;
+- versioned UAPI;
 - out-of-tree `decnet_iv.ko`;
-- configurable local DECnet identity, defaulting to 31.70 / DN70;
-- Routing Layer EtherType receive registration and counters;
-- small `dnctl` diagnostic/configuration program;
-- native x86_64 and ARM64 compile gates;
-- AKMS metadata for Alpine and DKMS metadata for Debian/RHEL-family systems;
-- unit tests for address encoding and UAPI constants.
+- configurable local identity, default 31.70 / DN70;
+- DEC DNA Routing EtherType receive registration/counters;
+- `dnctl`;
+- native x86_64 and aarch64 build gates;
+- Alpine AKMS and Debian/RHEL-family DKMS metadata;
+- address/UAPI unit tests.
 
-Exit criteria: module, userspace, lifecycle metadata, and unit tests build cleanly on both required architectures.
+Exit criteria: module, userspace bootstrap, lifecycle metadata, and unit tests build cleanly on both architectures.
 
-## Phase 2 - reproducible tiny VM image and two-node lab
-
-Deliver:
-
-- pinned Alpine reference image build;
-- NoCloud first-boot provisioning instead of offline image mutation;
-- AKMS-managed module source and automatic kernel rebuild path;
-- module and userspace installed into the image;
-- DN70 and DN71 boot as separate VMs on one raw Ethernet LAN;
-- out-of-band management NICs only for package provisioning;
-- packet capture and per-node logs retained on failure;
-- KVM when available, software emulation fallback otherwise.
-
-Exit criteria: two images boot independently, load the AKMS-managed module, and exchange deliberately generated native DECnet Routing Layer frames on the isolated LAN.
-
-## Phase 3 - Ethernet Phase IV initialization and adjacency
+## Phase 2 - reproducible VM image and two-node lab
 
 Deliver:
 
-- DECnet Ethernet address handling;
-- endnode/router hello parsing and generation as required by node role;
-- adjacency state and expiry timers;
-- packet parsing cross-checked against protocol documentation and PyDECnet vectors.
+- pinned Alpine base images;
+- NoCloud first-boot provisioning;
+- AKMS-managed module install/rebuild;
+- DN70 and DN71 as separate VMs on isolated native Ethernet;
+- out-of-band management NICs only for provisioning;
+- retained serial logs, kernel evidence, counters, and pcap;
+- resumable known VM sessions.
 
-Exit criteria: DN70/DN71 form and age adjacencies correctly, then repeat with a PyDECnet peer and a Route20 peer where applicable.
+Exit criteria: both VMs independently boot the installed kernel, load the AKMS-managed module, exchange deliberate EtherType `0x6003` frames on the isolated LAN, and report non-zero receive counters.
+
+## Phase 3 - Ethernet initialization and adjacency
+
+Deliver address/MAC handling, initialization, endnode/router hellos, adjacency state, and expiry timers.
+
+Exit criteria: local peers form/age adjacencies correctly and repeat applicable behavior with the pinned PyDECnet and Route20 forks.
 
 ## Phase 4 - Phase IV routing
 
-Deliver:
+Deliver endnode, Level 1, Level 2/inter-area routing, routing/forwarding databases, metrics, visit count, aging, convergence, and multi-LAN topologies.
 
-- endnode routing behavior;
-- Level 1 routing;
-- Level 2/area routing;
-- routing database, forwarding database, metrics, visit count, route aging and convergence;
-- multi-LAN VM topologies.
+Exit criteria: forced routed paths work; failures converge without loops; independent-peer interoperability passes.
 
-Exit criteria: traffic crosses forced one-router and two-router paths, failures converge, loops are prevented, and live interoperability works with Route20 and PyDECnet.
+## Phase 5 - NSP transport and DECnet sockets
 
-## Phase 5 - NSP transport and DECnet socket ABI
+Deliver NSP connection state, sequencing, ACK/retransmission, flow control, timers, teardown, and native DECnet socket integration.
 
-Deliver:
+Exit criteria: reliable sustained bidirectional logical links pass load, reconnect, loss, churn, peer restart, and long-duration tests against independent peers.
 
-- NSP connection state machine, flow control, sequencing, retransmission and timers;
-- native socket family integration using the reserved DECnet protocol family number;
-- compatibility-oriented socket structures only where they are still technically sound.
+## Phase 6 - Session Control and NICE/NML
 
-Exit criteria: reliable bidirectional logical links pass sustained load, reconnect, loss, churn and long-duration tests against independent peers.
+Deliver Session Control object dispatch and useful NICE/NML executor/node/circuit/line/counter management.
 
-## Phase 6 - Session Control and network management
+Exit criteria: scripted and interactive local/remote management works under sustained native DECnet load.
 
-Deliver:
+## Phase 7 - complete DECnet/Linux userspace
 
-- Session Control object dispatch;
-- NICE/NML subset required for useful local and remote management;
-- executor, node, circuit, line and counters needed by the planned `ncp` experience.
+Implement each capability when its lower-layer dependencies are ready. Account explicitly for the useful `tuklusan/LinuxDECnet/dnprogs` inventory.
 
-Exit criteria: scripted and interactive management queries work locally and against independent DECnet peers under sustained native DECnet load.
+Deliver at least:
 
-## Phase 7 - familiar user-mode tools
+- `ncp`;
+- `sethost`, `dnlogin`, `ctermd`, `rmtermd`, CTERM and required DTERM compatibility;
+- DAP/FAL/RMS: `dncopy`, `dntype`, `dndir`, `dndel`, `dnsubmit`, `dnprint`, `fal`, then `dnmount`/`dapfs`;
+- PHONE client/server: `phone`, `phoned`;
+- DECnet mail including the roles of `vmsmaild` and `sendvmsmail`;
+- `dntask`, `dnetd`, and general object/task dispatch;
+- useful diagnostics such as `dnping` and maintained equivalents of `dts`/`dtr`;
+- administration/configuration roles including `startnet`, `decnetconf`, `setether`, `dnroute`, NML services, and deferred legacy tunnel compatibility;
+- maintained equivalents of `libdnet`, daemon support libraries, `libdap`, `librms`, and `libvaxdata`.
 
-Implement tools only when their underlying protocol layer is ready:
+Every historical capability is implemented, replaced by a documented modern equivalent, explicitly obsolete with justification, or deferred with a tracked dependency.
 
-1. `ncp` on NICE/NML;
-2. `sethost` on Session Control plus CTERM;
-3. `dncopy`/`dntype` on DAP/FAL;
-4. `phone` and `phoned` on the PHONE protocol;
-5. related query, directory, login and task utilities as useful.
-
-Exit criteria: command names, common syntax and interaction remain familiar to DECnet/Linux users while using the new kernel stack, with repeated and concurrent application stress over native DECnet.
+Exit criteria: useful application interoperability passes repeatedly and concurrently against independent implementations and suitable real DEC peers.
 
 ## Phase 8 - DDCMP
 
-Deliver:
+Deliver kernel DDCMP framing/state, CRC, ACK/NAK/REP, sequencing, retransmission, timers, restart/recovery, counters, and a CI byte-stream carrier that does not implement protocol state.
 
-- kernel DDCMP framing/state machine;
-- CRC, ACK/NAK/REP, sequencing, retransmission, timers and restart handling;
-- controlled byte-stream carriage over TCP/UDP only as a CI transport for DDCMP fault injection, not as DECnet-over-IP;
-- PyDECnet DDCMP interoperability;
-- Route20 DDCMP interoperability where its supported mode applies;
-- later asynchronous serial and synchronous hardware tests.
+Exit criteria: normal and deterministic fault-injected links recover correctly; applicable PyDECnet/Route20 interoperability passes; later physical serial tests follow.
 
-Exit criteria: normal and fault-injected DDCMP links recover correctly and expose correct counters.
+## Phase 9 - mixed-media routing and applications
 
-## Phase 9 - mixed-media routing
+Required topology:
 
-Required topology includes:
+`Ethernet -> DECnet router -> DDCMP -> DECnet router -> Ethernet`
 
-Ethernet -> DECnet router -> DDCMP -> DECnet router -> Ethernet.
+Exercise routing, NSP, Session Control, NICE/NML, CTERM, DAP/FAL, PHONE, mail, and task/object access as available.
 
-Exercise routing, NSP, Session Control, NICE, CTERM, PHONE and DAP across the mixed path as those layers become available.
+Exit criteria: application traffic traverses mixed media in both directions and survives link/circuit failure and recovery.
 
-Exit criteria: application traffic traverses mixed media in both directions and survives link failure/recovery.
-
-## Phase 10 - scale, portability, physical hardware and release images
+## Phase 10 - scale, portability, physical systems, and release
 
 Deliver:
 
-- 4, 8 and 16-node virtual topologies with sustained native DECnet stress;
-- x86_64-to-x86_64, ARM64-to-ARM64 and mixed-architecture cases;
-- smallest-maintained-image portability lab across Alpine, Debian and RHEL-family guests;
-- real kernel package upgrade/reboot tests proving AKMS/DKMS automatic module rebuilds;
-- mixed-distro native DECnet topologies;
-- small physical lab with x86_64 and ARM64 hosts on a managed switch;
-- QCOW2 and RAW release images, checksums, manifest and reproducible build metadata.
+- 4, 8, and 16-node routed/stress topologies;
+- x86_64/x86_64, aarch64/aarch64, and mixed-architecture cases;
+- Alpine, Debian-family, and RHEL-family lifecycle/portability tests;
+- real supported kernel upgrades proving automatic module rebuild;
+- SIMH-hosted real DEC peers and, where practical, more than one DEC OS family;
+- physical x86_64/aarch64 Ethernet lab and later physical DDCMP;
+- reproducible QCOW2/RAW images, packages, checksums, manifest, source/kernel/reference revisions.
 
-Exit criteria: release candidate passes all applicable upstream/reference conformance, virtual topology, mixed-distro, mixed-media, kernel-upgrade and physical-hardware gates.
+Exit criteria: all applicable build, conformance, routed, mixed-media, fault, stress, kernel-lifetime, portability, physical-hardware, release-reproducibility, repository, and SoP gates pass.

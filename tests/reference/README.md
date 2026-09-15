@@ -1,17 +1,31 @@
 # External reference baselines
 
-These gates answer different questions and keep the answers reproducible.
+Reference gates use the user's forks as the normal sources and pin exact commits in `refs.env`. Upstream repositories are comparison sources only.
 
 ## Route20
 
-Route20 currently provides a build and live-interoperability reference. Its pinned source must compile in CI. Protocol interoperability tests are added as each relevant DECnet layer becomes functional.
+Preferred source: `https://github.com/tuklusan/Route20`
+
+Comparison upstream: `https://github.com/rjarratt/Route20`
+
+Route20 provides a build and live-interoperability reference. Its pinned source must compile in CI; protocol interoperability gates are added as relevant DECnet layers become functional.
 
 ## PyDECnet
 
-`PYDECNET_REF` pins the current reference used for documentation, packet behavior and live interoperability.
+Preferred source: `https://github.com/tuklusan/pydecnet`
 
-The current reference contains a pre-existing upstream self-test regression in `Macaddr("1.24")`: its test requires DECnet `area.node` parsing, while a July 2024 change attempts to parse any separator-free string as hexadecimal first. The failing test is unrelated to this repository and fails before our implementation participates.
+Comparison upstream: `https://github.com/pkoning2/pydecnet`
 
-`PYDECNET_TEST_REF` therefore pins the immediately preceding upstream revision. Its complete upstream unit suite is run unmodified as the hard baseline. We do not skip or rewrite failing tests. When upstream resolves the current self-test contradiction, move the test pin forward and remove this exception.
+`PYDECNET_REF` pins the current reference for documentation, packet vectors/behavior, and live interoperability.
 
-The revisions live in `refs.env` so changes to either reference baseline are explicit and reviewable.
+The current reference has a pre-existing self-test contradiction in `Macaddr("1.24")`: the implementation takes the hexadecimal path before DECnet `area.node`, while the test still requires `area.node`.
+
+`PYDECNET_TEST_REF` therefore pins the last internally consistent revision immediately before that contradiction. Its complete usable unit suite is run unmodified as the hard baseline. Tests are not skipped or rewritten. Move the hard pin forward when the contradiction is resolved.
+
+## Other preferred references
+
+`tuklusan/LinuxDECnet` is the compatibility inventory for historical userspace, socket/application behavior, daemons, libraries, and administration tools. `tuklusan/simh` is the preferred simulator fork for later real DEC operating-system peers.
+
+Pin exact SHAs before either becomes an automated gate. Respect each repository's license; upstreams remain comparison-only.
+
+`refs.env` is the single source for repository URLs and revisions consumed by reference CI so source ownership and pins change together and remain reviewable.

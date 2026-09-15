@@ -43,9 +43,9 @@ Do not edit it by hand.
 ```text
 Continue the DECnet-IV-Linux project: https://github.com/tuklusan/DECnet-IV-Linux
 
-Use the repository as canonical project memory. First read `docs/PROJECT_STATE.md`,
-`docs/ROADMAP.md`, and `docs/HANDOVER.md`, then inspect the active working branch
-and its CI status before changing code.
+Use repository state as canonical project memory. First read `docs/PROJECT_INSTRUCTIONS.md`,
+`docs/PROJECT_STATE.md`, `docs/HANDOVER.md`, and `docs/ROADMAP.md`, then inspect the active
+working branch and its CI status before changing code.
 
 Goal:
 {goal}
@@ -57,14 +57,15 @@ Next action:
 {next_action}
 
 Continuity rules:
-- Every substantive commit must update `docs/PROJECT_STATE.md` in that same commit.
-- Regenerate `docs/HANDOVER.md` with `python3 tools/render_handover.py`; CI must reject drift.
-- Work on a working branch and promote only an exact commit whose required gates are green.
-- Keep the fresh out-of-tree DECnet Phase IV kernel implementation; do not fall back to the removed legacy Linux DECnet stack.
-- Keep Route20 and PyDECnet as independent conformance/interoperability references.
-- Keep x86_64 and aarch64 as required targets and the configurable default lab range at 31.70-31.79.
+- Every substantive commit must update `docs/PROJECT_STATE.md` and generated `docs/HANDOVER.md` together.
+- Work on a feature/working branch and promote only the exact commit whose required gates are green.
+- Prefer `tuklusan/Route20`, `tuklusan/pydecnet`, `tuklusan/LinuxDECnet`, and `tuklusan/simh`; pin exact SHAs when used by a gate, and use upstreams only for comparison.
+- Respect source licenses and implement independently when reuse is unclear or incompatible.
+- Keep the fresh out-of-tree kernel design; do not fall back to the removed legacy Linux DECnet stack.
+- Keep x86_64/aarch64, independent VMs, routed/mixed-media networks, independent/real DEC peers, fault injection, and stress as acceptance requirements.
+- Apply the SoP rule to every updated deliverable: read the complete latest disk copy untruncated, fix defects/gaps, reset after any fix, require three consecutive clean full passes, and reset after any later change.
 
-Proceed directly from the Next action. Do not ask me to reconstruct prior chat history.
+Proceed directly from the Next action. Do not reconstruct project state from prior chat history.
 ```
 """
 
