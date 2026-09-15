@@ -236,18 +236,25 @@ while (( SECONDS < deadline )); do
     done71=0
     grep -Fq "$marker70" "$log70" 2>/dev/null && done70=1
     grep -Fq "$marker71" "$log71" 2>/dev/null && done71=1
-    if (( done70 && done71 )); then
-        finished=1
-        break
-    fi
+
     if (( ! done70 )) && ! guest_running "$Q70_PID"; then
-        failure_reason=dn70-exit-before-completion
-        echo "two-node arch lab: mode=${mode} DN70 exited before reporting completion" >&2
-        break
+        grep -Fq "$marker70" "$log70" 2>/dev/null && done70=1
+        if (( ! done70 )); then
+            failure_reason=dn70-exit-before-completion
+            echo "two-node arch lab: mode=${mode} DN70 exited before reporting completion" >&2
+            break
+        fi
     fi
     if (( ! done71 )) && ! guest_running "$Q71_PID"; then
-        failure_reason=dn71-exit-before-completion
-        echo "two-node arch lab: mode=${mode} DN71 exited before reporting completion" >&2
+        grep -Fq "$marker71" "$log71" 2>/dev/null && done71=1
+        if (( ! done71 )); then
+            failure_reason=dn71-exit-before-completion
+            echo "two-node arch lab: mode=${mode} DN71 exited before reporting completion" >&2
+            break
+        fi
+    fi
+    if (( done70 && done71 )); then
+        finished=1
         break
     fi
     sleep 2
