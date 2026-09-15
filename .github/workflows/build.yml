@@ -20,11 +20,11 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      # Generic headers are sufficient for a compile gate; image CI will later build against the exact Alpine kernel.
+      # Generic headers are sufficient for compile and DKMS packaging gates.
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential linux-headers-generic
+          sudo apt-get install -y build-essential linux-headers-generic dkms
 
       - name: Build userspace and run unit tests
         run: make all
@@ -34,3 +34,19 @@ jobs:
           KDIR="$(find /usr/src -maxdepth 1 -type d -name 'linux-headers-*-generic' | sort -V | tail -1)"
           test -n "$KDIR"
           make kernel KDIR="$KDIR"
+
+      # DKMS is the lifecycle path for Debian/RHEL-family portability guests.
+      - name: Smoke-test DKMS rebuild metadata
+        run: |
+          set -eu
+          KDIR="$(find /usr/src -maxdepth 1 -type d -name 'linux-headers-*-generic' | sort -V | tail -1)"
+          test -n "$KDIR"
+          kernelver="$(basename "$KDIR" | sed 's/^linux-headers-//')"
+          src=/usr/src/decnet-iv-0.1.0
+          sudo rm -rf "$src"
+          sudo mkdir -p "$src"
+          sudo cp -R kernel include "$src/"
+          sudo cp packaging/dkms/dkms.conf "$src/dkms.conf"
+          sudo dkms add -m decnet-iv -v 0.1.0
+          sudo dkms build -m decnet-iv -v 0.1.0 -k "$kernelver"
+          find "/var/lib/dkms/decnet-iv/0.1.0/$kernelver" -name decnet_iv.ko -print -quit | grep -q .
