@@ -516,6 +516,8 @@ static int dniv_packet_rcv(struct sk_buff *skb, struct net_device *dev,
 
     (void)pt;
     (void)orig_dev;
+    if (!net_eq(dev_net(dev), &init_net))
+        goto out;
     atomic64_inc(&dniv_rx_frames);
     atomic64_add(skb->len, &dniv_rx_bytes);
 
