@@ -1,0 +1,36 @@
+name: Build Bootstrap
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    # Native builds on both required CPU architectures catch ABI and compiler assumptions early.
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      # Generic headers are sufficient for a compile gate; image CI will later build against the exact Alpine kernel.
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential linux-headers-generic
+
+      - name: Build userspace and run unit tests
+        run: make all
+
+      - name: Build kernel module
+        run: |
+          KDIR="$(find /usr/src -maxdepth 1 -type d -name 'linux-headers-*-generic' | sort -V | tail -1)"
+          test -n "$KDIR"
+          make kernel KDIR="$KDIR"
