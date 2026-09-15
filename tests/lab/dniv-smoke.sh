@@ -128,6 +128,22 @@ e1)
         *) echo "DNIV-E1-FAIL session=$session node=$name reason=bad-role"; exit 1 ;;
     esac
 
+    # DN70 must not be judged against the steady-state DR rule before DN71 is
+    # actually present. Bootstrap role A as an endnode until it receives the
+    # higher-address router's designated-router hello, then restart as L1.
+    if [ "$role" = A ]; then
+        modprobe decnet_iv default_area="$area" default_node="$node" default_name="$name" \
+            default_node_type=3 hello_interval=2
+        /usr/local/sbin/dnctl set "$area.$node" "$name"
+        /usr/local/sbin/dnctl reset-stats
+        ip link set "$iface" up
+        if ! wait_adjacency_up "$peer_node" DNIV-E1-BOOTSTRAP 120; then
+            echo "DNIV-E1-FAIL session=$session node=$name reason=bootstrap-peer"
+            exit 1
+        fi
+        modprobe -r decnet_iv
+    fi
+
     modprobe decnet_iv default_area="$area" default_node="$node" default_name="$name" \
         default_node_type=2 router_priority=64 hello_interval=2
     /usr/local/sbin/dnctl set "$area.$node" "$name"

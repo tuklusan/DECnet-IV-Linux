@@ -121,11 +121,13 @@ The next receive-path review found that multicast hello success still did not pr
 
 The first complete review of that unicast proof found a synchronization race: one guest could finish a three-packet burst before the peer recorded its receive baseline, causing a false failure despite working filters. The probes are now overlapping ten-second streams, while acceptance still requires at least three post-baseline receives. The canonical Phase 3 roadmap is also synchronized to make unicast delivery to a protocol node MAC distinct from the device MAC an explicit E1 requirement.
 
+A later adversarial timing review found that the whole-capture assertion of zero DN70 all-endnodes traffic was not safe under arbitrary guest boot skew. A valid lone router may self-elect designated router after the five-second holdoff before the higher-address equal-priority peer has booted. E1 now bootstraps DN70 temporarily as an endnode until it has received DN71's designated-router hello, then reloads DN70 as an L1 router. DN70's router holdoff therefore begins only after DN71 presence has been proved, so the zero-DN70 all-endnodes assertion tests the intended election rather than startup timing. This correction resets the SoP sequence.
+
 No native VM or live independent-peer runtime claim is made yet for the E1 branch. The E1 branch must complete the SoP gate before hosted execution, then pass the required cheap build/reference checks and native x86_64/aarch64 E1 runs before promotion.
 
 ## Resume point
 
-`main` remains at reviewed Phase 3 baseline `7070768397230b990bad7703a8c29a9501e5433b`. Active work is on feature branch `phase3-e1-adjacency`, which contains the E1 two-router adjacency acceptance harness while preserving the Phase 2 smoke gate and legacy checkpoint behavior. The harness now covers hello traffic, INIT evidence during convergence, both adjacencies reaching UP, listener expiry, module restart/recovery, designated-router multicast behavior, kernel-derived DECnet hello source addressing and DECnet unicast receive-filter delivery; it has not yet been promoted or given a hosted runtime pass.
+`main` remains at reviewed Phase 3 baseline `7070768397230b990bad7703a8c29a9501e5433b`. Active work is on feature branch `phase3-e1-adjacency`, which contains the E1 two-router adjacency acceptance harness while preserving the Phase 2 smoke gate and legacy checkpoint behavior. The harness now covers hello traffic, INIT evidence during convergence, both adjacencies reaching UP, listener expiry, module restart/recovery, designated-router multicast behavior, kernel-derived DECnet hello source addressing and DECnet unicast receive-filter delivery; the latest correction makes the designated-router capture assertion independent of guest boot skew. It has not yet been promoted or given a hosted runtime pass.
 
 ## Next action
 
