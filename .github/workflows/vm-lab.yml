@@ -108,6 +108,7 @@ jobs:
     env:
       DNIV_LAB_ARTIFACTS: ${{ github.workspace }}/tests/lab/artifacts
       DNIV_LAB_TIMEOUT_SECONDS: 2400
+      DNIV_NOCLOUD_SEED_FORMAT: fat
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -115,7 +116,7 @@ jobs:
       - name: Install AArch64 VM lab dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y qemu-system-arm qemu-utils qemu-efi-aarch64 tcpdump curl genisoimage
+          sudo apt-get install -y qemu-system-arm qemu-utils qemu-efi-aarch64 tcpdump curl genisoimage dosfstools mtools
           firmware=''
           for candidate in /usr/share/AAVMF/AAVMF_CODE.fd /usr/share/qemu-efi-aarch64/QEMU_EFI.fd; do
             if [[ -r "$candidate" ]]; then
@@ -163,6 +164,7 @@ jobs:
     env:
       DNIV_LAB_ARTIFACTS: ${{ github.workspace }}/tests/lab/artifacts
       DNIV_LAB_TIMEOUT_SECONDS: 2400
+      DNIV_NOCLOUD_SEED_FORMAT: fat
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -170,7 +172,7 @@ jobs:
       - name: Install mixed-architecture VM lab dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y qemu-system-x86 qemu-system-arm qemu-utils qemu-efi-aarch64 tcpdump curl genisoimage
+          sudo apt-get install -y qemu-system-x86 qemu-system-arm qemu-utils qemu-efi-aarch64 tcpdump curl genisoimage dosfstools mtools
           firmware=''
           for candidate in /usr/share/AAVMF/AAVMF_CODE.fd /usr/share/qemu-efi-aarch64/QEMU_EFI.fd; do
             if [[ -r "$candidate" ]]; then

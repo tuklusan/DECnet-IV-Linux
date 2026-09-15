@@ -2,7 +2,7 @@
 set -eu
 
 if [ "$#" -ne 7 ]; then
-    echo "usage: $0 OUTPUT-ISO SESSION-ID AREA.NODE NAME LAN-MAC PEER-MAC MGMT-MAC" >&2
+    echo "usage: $0 OUTPUT-IMAGE SESSION-ID AREA.NODE NAME LAN-MAC PEER-MAC MGMT-MAC" >&2
     exit 2
 fi
 
@@ -20,10 +20,18 @@ mgmt_mac=$7
 repo_root=$(CDPATH= cd -- "$(dirname "$0")/../.." && pwd)
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT INT TERM
+seed_format=${DNIV_NOCLOUD_SEED_FORMAT:-iso}
 
 case "$session_id" in
     *[!A-Za-z0-9._-]*|'')
         echo "invalid session id: $session_id" >&2
+        exit 2
+        ;;
+esac
+case "$seed_format" in
+    iso|fat) ;;
+    *)
+        echo "invalid DNIV_NOCLOUD_SEED_FORMAT: $seed_format (expected iso or fat)" >&2
         exit 2
         ;;
 esac
@@ -92,7 +100,7 @@ ip link set "$mgmt_iface" up
 udhcpc -q -n -t 10 -i "$mgmt_iface"
 
 apk update
-apk add --no-cache --upgrade linux-virt linux-virt-dev kmod akms build-base
+apk add --no-cache --upgrade linux-virt linux-virt-dev linux-headers kmod akms build-base
 
 src_root=/opt/decnet-src
 rm -rf "$src_root"
@@ -127,7 +135,7 @@ EOF_ENV
 rc-update add local default
 
 # Future AKMS rebuilds install build requirements in a disposable overlay.
-apk del build-base linux-virt-dev
+apk del build-base linux-virt-dev linux-headers
 rm -rf "$src_root"
 
 touch "$state/provisioned"
@@ -158,9 +166,27 @@ text = text[:insert] + payload_text + "\n" + text[insert:]
 path.write_text(text)
 EOF_PY
 
-(
-    cd "$tmp"
-    genisoimage -quiet -output "$out" -volid CIDATA -joliet -rock user-data meta-data
-)
+case "$seed_format" in
+    iso)
+        (
+            cd "$tmp"
+            genisoimage -quiet -output "$out" -volid CIDATA -joliet -rock user-data meta-data
+        )
+        ;;
+    fat)
+        user_bytes=$(wc -c <"$tmp/user-data")
+        meta_bytes=$(wc -c <"$tmp/meta-data")
+        seed_bytes=$((user_bytes + meta_bytes + 2097152))
+        if [ "$seed_bytes" -lt 4194304 ]; then
+            seed_bytes=4194304
+        fi
+        seed_bytes=$(( (seed_bytes + 1048575) / 1048576 * 1048576 ))
+        rm -f "$out"
+        truncate -s "$seed_bytes" "$out"
+        mkfs.vfat -n cidata "$out" >/dev/null
+        mcopy -o -i "$out" "$tmp/user-data" ::user-data
+        mcopy -o -i "$out" "$tmp/meta-data" ::meta-data
+        ;;
+esac
 
-echo "nocloud seed: session=$session_id node=$node_name -> $out"
+echo "nocloud seed: session=$session_id node=$node_name format=$seed_format -> $out"

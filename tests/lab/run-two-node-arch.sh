@@ -176,7 +176,8 @@ qemu_node() {
             -pidfile "$pidfile" \
             -accel "$x86_accel" -m 512 -smp 1 \
             -drive "file=$image,if=virtio,format=qcow2" \
-            -drive "file=$seed,format=raw,media=cdrom,readonly=on" \
+            -drive "file=$seed,if=none,format=raw,readonly=on,id=cidata" \
+            -device virtio-blk-pci,drive=cidata \
             -netdev tap,id=lan,ifname="$tap",script=no,downscript=no \
             -device virtio-net-pci,netdev=lan,mac="$lan_mac" \
             -netdev user,id=mgmt \
