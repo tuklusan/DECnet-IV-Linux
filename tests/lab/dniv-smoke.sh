@@ -119,8 +119,8 @@ phase2)
     ;;
 
 e1)
-    if [ -z "$peer_node" ]; then
-        echo "DNIV-E1-FAIL session=$session node=$name reason=missing-peer-node"
+    if [ -z "$peer" ] || [ -z "$peer_node" ]; then
+        echo "DNIV-E1-FAIL session=$session node=$name reason=missing-peer"
         exit 1
     fi
     case "$role" in
@@ -139,15 +139,53 @@ e1)
         exit 1
     fi
 
-    hello_rx=$(stat_value 'Hello frames received')
+    # The E1 NIC address differs from the DECnet node MAC.  Compare the
+    # non-hello receive count before and after three raw frames addressed to
+    # the DECnet node MAC; this proves the kernel-added unicast filter works.
+    routing_before=$(stat_value 'Routing frames received')
+    hello_before=$(stat_value 'Hello frames received')
+    for value in "$routing_before" "$hello_before"; do
+        case "$value" in
+            ''|*[!0-9]*) echo "DNIV-E1-FAIL session=$session node=$name reason=bad-stats"; exit 1 ;;
+        esac
+    done
+    if [ "$routing_before" -lt "$hello_before" ]; then
+        echo "DNIV-E1-FAIL session=$session node=$name reason=bad-stats"
+        exit 1
+    fi
+
+    i=0
+    while [ "$i" -lt 3 ]; do
+        i=$((i + 1))
+        /usr/local/sbin/dnraw "$iface" "$peer" "DNIV-E1-UCAST-$session-$name-$i"
+        sleep 0.1
+    done
+    sleep 1
+
+    routing_after=$(stat_value 'Routing frames received')
+    hello_after=$(stat_value 'Hello frames received')
     hello_tx=$(stat_value 'Hello frames sent')
-    case "$hello_rx:$hello_tx" in
-        *[!0-9:]*|:*|*:) echo "DNIV-E1-FAIL session=$session node=$name reason=bad-hello-stats"; exit 1 ;;
-    esac
-    if [ "$hello_rx" -eq 0 ] || [ "$hello_tx" -eq 0 ]; then
+    for value in "$routing_after" "$hello_after" "$hello_tx"; do
+        case "$value" in
+            ''|*[!0-9]*) echo "DNIV-E1-FAIL session=$session node=$name reason=bad-stats"; exit 1 ;;
+        esac
+    done
+    if [ "$routing_after" -lt "$hello_after" ]; then
+        echo "DNIV-E1-FAIL session=$session node=$name reason=bad-stats"
+        exit 1
+    fi
+    nonhello_before=$((routing_before - hello_before))
+    nonhello_after=$((routing_after - hello_after))
+    unicast_delta=$((nonhello_after - nonhello_before))
+    if [ "$hello_after" -eq 0 ] || [ "$hello_tx" -eq 0 ]; then
         echo "DNIV-E1-FAIL session=$session node=$name reason=no-hello-traffic"
         exit 1
     fi
+    if [ "$unicast_delta" -lt 3 ]; then
+        echo "DNIV-E1-FAIL session=$session node=$name reason=no-decnet-unicast-rx delta=$unicast_delta"
+        exit 1
+    fi
+    echo "DNIV-E1-UCAST session=$session node=$name peer=$peer_node delta=$unicast_delta"
     echo "DNIV-E1-INITIAL session=$session node=$name peer=$peer_node"
 
     if [ "$role" = A ]; then

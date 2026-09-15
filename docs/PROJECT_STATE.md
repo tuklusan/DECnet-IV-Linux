@@ -115,13 +115,15 @@ An adversarial E1 harness review found that the observing router's expiry/recove
 
 A subsequent wire-evidence review found that merely seeing some all-endnodes traffic would not prove correct designated-router election. With equal priority, DN71 must win over DN70, so E1 now requires all-routers hellos from both DECnet source MACs, at least one all-endnodes hello from DN71, and zero all-endnodes hellos from DN70.
 
-A further source-address review found the original E1 VM NICs were themselves configured with the DECnet node MACs, making the source-MAC assertion circular. E1 now assigns distinct emulated NIC MACs and additionally requires zero Routing Layer frames sourced from those device addresses, so captured AA-00-04 source addresses prove kernel DECnet MAC generation.
+A further source-address review found the original E1 VM NICs were themselves configured with the DECnet node MACs, making the source-MAC assertion circular. E1 now assigns distinct emulated NIC MACs, requires protocol hello multicast frames to use only the AA-00-04 DECnet source addresses, and keeps the device addresses visibly distinct in capture.
+
+The next receive-path review found that multicast hello success still did not prove the per-device DECnet unicast filter installed by `dev_uc_add()`. E1 now sends three raw EtherType `0x6003` probes in each direction to the peer's DECnet node MAC while the hardware NIC uses a different address. Each guest compares its non-hello receive counter before and after those probes, and the host capture independently requires all three hardware-source unicast probes in both directions. This also fixes the earlier source-MAC check so those deliberate raw probes are not mistaken for kernel-generated hello traffic.
 
 No native VM or live independent-peer runtime claim is made yet for the E1 branch. The E1 branch must complete the SoP gate before hosted execution, then pass the required cheap build/reference checks and native x86_64/aarch64 E1 runs before promotion.
 
 ## Resume point
 
-`main` remains at reviewed Phase 3 baseline `7070768397230b990bad7703a8c29a9501e5433b`. Active work is on feature branch `phase3-e1-adjacency`, which contains the E1 two-router adjacency acceptance harness while preserving the Phase 2 smoke gate and legacy checkpoint behavior. The harness is designed to prove hello traffic, INIT evidence during convergence, both adjacencies reaching UP, listener expiry, module restart/recovery, designated-router multicast behavior and kernel-derived DECnet source addressing; it has not yet been promoted or given a hosted runtime pass.
+`main` remains at reviewed Phase 3 baseline `7070768397230b990bad7703a8c29a9501e5433b`. Active work is on feature branch `phase3-e1-adjacency`, which contains the E1 two-router adjacency acceptance harness while preserving the Phase 2 smoke gate and legacy checkpoint behavior. The harness now covers hello traffic, INIT evidence during convergence, both adjacencies reaching UP, listener expiry, module restart/recovery, designated-router multicast behavior, kernel-derived DECnet hello source addressing and DECnet unicast receive-filter delivery; it has not yet been promoted or given a hosted runtime pass.
 
 ## Next action
 

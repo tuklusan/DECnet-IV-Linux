@@ -278,14 +278,26 @@ if [[ "$mode" == e1 ]]; then
         "ether proto 0x6003 and ether dst ab:00:00:04:00:00 and ether src $mac_a" 2>/dev/null | wc -l)
     endnodes_from_b=$(sudo tcpdump -nn -e -r "$pcap" \
         "ether proto 0x6003 and ether dst ab:00:00:04:00:00 and ether src $mac_b" 2>/dev/null | wc -l)
-    nic_from_a=$(sudo tcpdump -nn -e -r "$pcap" \
-        "ether proto 0x6003 and ether src $nic_mac_a" 2>/dev/null | wc -l)
-    nic_from_b=$(sudo tcpdump -nn -e -r "$pcap" \
-        "ether proto 0x6003 and ether src $nic_mac_b" 2>/dev/null | wc -l)
-    if (( routers_from_a < 2 || routers_from_b < 2 || endnodes_from_a != 0 || endnodes_from_b < 1 || nic_from_a != 0 || nic_from_b != 0 )); then
-        echo "two-node: E1 wire evidence incomplete routersA=$routers_from_a routersB=$routers_from_b endnodesA=$endnodes_from_a endnodesB=$endnodes_from_b nicA=$nic_from_a nicB=$nic_from_b" >&2
+    nic_hello_a=$(sudo tcpdump -nn -e -r "$pcap" \
+        "ether proto 0x6003 and ether src $nic_mac_a and (ether dst ab:00:00:03:00:00 or ether dst ab:00:00:04:00:00)" 2>/dev/null | wc -l)
+    nic_hello_b=$(sudo tcpdump -nn -e -r "$pcap" \
+        "ether proto 0x6003 and ether src $nic_mac_b and (ether dst ab:00:00:03:00:00 or ether dst ab:00:00:04:00:00)" 2>/dev/null | wc -l)
+    ucast_a_to_b=$(sudo tcpdump -nn -e -r "$pcap" \
+        "ether proto 0x6003 and ether src $nic_mac_a and ether dst $mac_b" 2>/dev/null | wc -l)
+    ucast_b_to_a=$(sudo tcpdump -nn -e -r "$pcap" \
+        "ether proto 0x6003 and ether src $nic_mac_b and ether dst $mac_a" 2>/dev/null | wc -l)
+    if (( routers_from_a < 2 || routers_from_b < 2 || endnodes_from_a != 0 || endnodes_from_b < 1 || nic_hello_a != 0 || nic_hello_b != 0 || ucast_a_to_b < 3 || ucast_b_to_a < 3 )); then
+        echo "two-node: E1 wire evidence incomplete routersA=$routers_from_a routersB=$routers_from_b endnodesA=$endnodes_from_a endnodesB=$endnodes_from_b nicHelloA=$nic_hello_a nicHelloB=$nic_hello_b ucastAB=$ucast_a_to_b ucastBA=$ucast_b_to_a" >&2
         exit 1
     fi
+    grep -Fq "DNIV-E1-UCAST session=$session node=$name_a" "$log_a" || {
+        echo "two-node: E1 node A unicast receive-filter proof was not observed" >&2
+        exit 1
+    }
+    grep -Fq "DNIV-E1-UCAST session=$session node=$name_b" "$log_b" || {
+        echo "two-node: E1 node B unicast receive-filter proof was not observed" >&2
+        exit 1
+    }
     if ! grep -Fq "DNIV-E1-INIT session=$session" "$log_a" && \
        ! grep -Fq "DNIV-E1-INIT session=$session" "$log_b"; then
         echo "two-node: E1 initial INIT state was not observed" >&2
