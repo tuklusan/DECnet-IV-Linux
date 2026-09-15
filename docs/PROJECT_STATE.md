@@ -98,7 +98,7 @@ The apt dependency set is frozen with Ubuntu Snapshot Service timestamp `2026091
 
 The new lab deliberately removes the old boot/provisioning complexity. CI expands the rootfs, installs Ubuntu's virtual kernel plus the module/tools, copies out the exact kernel and initrd, then direct-boots two QCOW2 overlays with QEMU `-kernel`/`-initrd`. Each guest has one raw Ethernet NIC. A small boot-conditioned smoke service sets node identity, sends EtherType `0x6003` frames to its peer, verifies kernel receive counters and powers off. No installer, cloud metadata, firmware image or management NIC is involved.
 
-A pre-gate static pass caught two issues before relying on CI: the strict-C11 raw-frame helper now enables the libc interfaces needed for `struct ifreq`, and MAC parsing rejects trailing garbage. This change reset the SoP sequence.
+The first full disk review after the distribution reset found and fixed Phase 1 validation defects as well as stale architecture text. Kernel character classification now uses unsigned bytes, ioctl identity updates no longer silently truncate a non-terminated seven-byte name, and raw module parameters are range/name-checked before address packing. This change resets the SoP sequence.
 
 ## Resume point
 
@@ -106,4 +106,4 @@ The repository is cleanly based on Ubuntu Base 26.04.1 and the Phase 2 lab has b
 
 ## Next action
 
-Run the exact new VM gate on amd64 and arm64. Fix only defects demonstrated by retained serial/pcap evidence. Once both native two-node cases are green and the SoP gate is clean, move immediately into Phase 3: implement DECnet Ethernet address handling, hello parsing/generation and adjacency state/expiry with independent Route20/PyDECnet vectors. Add mixed-CPU VM execution after the native lab is stable; do not let VM plumbing block protocol implementation again.
+Run the exact new VM gate on amd64 and arm64. Fix only defects demonstrated by retained serial/pcap evidence. Once both native two-node cases are green and three consecutive full SoP passes are clean, move immediately into Phase 3: implement DECnet Ethernet address handling, hello parsing/generation and adjacency state/expiry with independent Route20/PyDECnet vectors. Add mixed-CPU VM execution after the native lab is stable; do not let VM plumbing block protocol implementation again.

@@ -2,41 +2,34 @@
 
 ## Kernel
 
-The target is an out-of-tree kernel module providing native DECnet Phase IV networking.
+DECnet Phase IV is implemented as a fresh out-of-tree Linux kernel module. The distribution tracks maintained kernels without carrying a permanent kernel fork or reviving the removed legacy Linux DECnet stack.
 
-Initial areas of work:
+Kernel scope grows in dependency order:
 
-1. Ethernet data-link integration
-2. DECnet addressing and node identity
-3. Phase IV routing packet handling
-4. NSP transport
-5. Session-control interface
-6. Socket/API surface for userspace
-7. Network management hooks
+1. native Ethernet and DECnet address/MAC handling;
+2. endnode, Level 1 and Level 2 routing plus adjacency/timers;
+3. NSP transport and native DECnet socket/UAPI support;
+4. Session Control support and NICE/NML management hooks/state;
+5. DDCMP framing, state machines, timers and routing integration.
 
-The module should remain separable from the Linux kernel tree so the distribution can track maintained upstream kernels without carrying a permanent kernel fork.
+Core routing, NSP and DDCMP state machines stay in kernel space. The versioned UAPI is kept intentionally small and is extended only when a userspace dependency requires it.
 
 ## Userspace
 
-Userspace will be built against the new kernel ABI. Initial tools:
+Userspace is built against the new kernel ABI. The target is the useful DECnet/Linux environment: `ncp`, `sethost`/`dnlogin`, DAP/FAL/RMS copy/type/directory tools, PHONE, mail, task/object access, daemons, libraries, diagnostics and administration tools.
 
-- sethost
-- ncp
-- phone
-- dncopy
-- node/query utilities
+Historical behavior is implemented, replaced by a documented modern equivalent, explicitly retired with justification, or deferred behind a tracked protocol dependency.
 
 ## Distribution image
 
-The reference VM image will use a small, maintained Linux base with only the packages needed for boot, networking, the minimal GUI, DECnet, diagnostics, and test access.
+Phase 2 uses pinned Ubuntu Base 26.04.1 LTS amd64 and arm64 root filesystems. The acceptance lab assembles the image before boot and direct-boots its exact kernel/initrd, avoiding installer and runtime provisioning machinery. Release images remain QCOW2-first, with RAW and conversion formats later.
+
+A graphical desktop is not part of the protocol acceptance path. Any later GUI layer must remain optional and must not enlarge or destabilize the core DECnet image unnecessarily.
 
 ## Testing
 
-CI milestones:
+Acceptance nodes are independent VMs with independent kernels. Network namespaces or containers that share one kernel do not satisfy the VM gate.
 
-- 2-node end-to-end connectivity
-- 4-node routing tests
-- 8-node mixed topology
-- 16-node stress and routing convergence tests
+The test ladder grows from 2 to 4, 8 and 16 nodes and covers x86_64, aarch64, both mixed directions, routed multi-LAN topologies, deterministic faults, stress, independent Route20/PyDECnet peers, later SIMH-hosted real DEC systems, and eventually mixed Ethernet/DDCMP paths and physical hardware.
 
-Each node runs in an isolated VM or equivalent sandbox with virtual Ethernet links.
+Self-to-self success is useful for development but never sufficient for final interoperability claims.
