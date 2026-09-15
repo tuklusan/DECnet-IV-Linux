@@ -1,17 +1,14 @@
 name: Repository Policy
 
-# Repository-wide guardrail. This runs on normal code changes, merge-queue
-# candidates, manual checks, and collaborator changes. Keep this workflow
-# small because it is the first line of defence for repository policy.
 on:
   push:
+    branches: [main]
   pull_request_target:
     types: [opened, synchronize, reopened, edited]
   merge_group:
   workflow_dispatch:
   member:
 
-# The gate only needs to inspect repository state and event metadata.
 permissions:
   contents: read
 
@@ -19,15 +16,11 @@ jobs:
   repository-policy:
     runs-on: ubuntu-latest
     steps:
-      # For target-triggered pull requests, inspect the trusted base checkout;
-      # tools/repo_policy.py fetches and scans the proposed revision itself.
       - name: Check out trusted base
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # Enforces repository text/identity rules across paths, file contents,
-      # commit metadata, event metadata, and collaborator identities.
       - name: Enforce repository policy
         env:
           GH_TOKEN: ${{ github.token }}

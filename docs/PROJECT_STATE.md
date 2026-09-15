@@ -26,7 +26,7 @@ Every reference is independently licensed. Verify compatibility before copying o
 
 Self-to-self success is never sufficient for final interoperability claims. Exercise the stack against the pinned Route20 and PyDECnet forks, and later against SIMH-hosted real DEC operating systems.
 
-Pinned automated references live in `tests/reference/refs.env`. Existing reference gates remain part of every later phase.
+Pinned automated references live in `tests/reference/refs.env`. CI fetches the preferred forks, not upstream repositories. Existing reference gates remain part of every later phase.
 
 ## Execution order
 
@@ -69,6 +69,7 @@ A later phase never removes an earlier acceptance gate.
 
 - Do not create development branches. Keep one maintained `main` line.
 - Historical working refs were reconciled into `main` at commit `b51618cbf49ae43b223d3dcd15f156086fea41dc`; do not revive divergent work from them.
+- Workflows execute normal push gates only on `main`, so historical aliases cannot consume runners if they are touched again.
 - Every substantive commit updates this file in the same commit.
 - `tools/project_state_gate.py` enforces continuity requirements.
 - Keep commits atomic and run applicable static/unit/reference gates before advancing work.
@@ -93,7 +94,7 @@ The bootstrap does not claim adjacency, routing, NSP, Session Control, NICE/NML 
 
 Ubuntu Base 26.04.1 was selected because it is the smallest official non-cloud Ubuntu rootfs intended for custom images and is published for both required CPU architectures. The pinned release provides 33 MiB amd64 and arm64 tarballs. Exact filenames and SHA-256 values are in `image/ubuntu-base/images.env`.
 
-The apt dependency set is also frozen with Ubuntu Snapshot Service timestamp `20260915T000000Z`; apt in Ubuntu 24.04 and later accepts snapshot IDs directly, so later rebuilds do not silently pick newer kernel or userspace packages.
+The apt dependency set is frozen with Ubuntu Snapshot Service timestamp `20260915T000000Z`; apt in Ubuntu 24.04 and later accepts snapshot IDs directly, so later rebuilds do not silently pick newer kernel or userspace packages.
 
 The new lab deliberately removes the old boot/provisioning complexity. CI expands the rootfs, installs Ubuntu's virtual kernel plus the module/tools, copies out the exact kernel and initrd, then direct-boots two QCOW2 overlays with QEMU `-kernel`/`-initrd`. Each guest has one raw Ethernet NIC. A small boot-conditioned smoke service sets node identity, sends EtherType `0x6003` frames to its peer, verifies kernel receive counters and powers off. No installer, cloud metadata, firmware image or management NIC is involved.
 
@@ -101,7 +102,7 @@ A pre-gate static pass caught two issues before relying on CI: the strict-C11 ra
 
 ## Resume point
 
-The repository is cleanly based on Ubuntu Base 26.04.1 and the Phase 2 lab has been replaced with the direct-kernel-boot design. The exact new VM gate must now prove both native CPU cases before protocol work proceeds.
+The repository is cleanly based on Ubuntu Base 26.04.1 and the Phase 2 lab has been replaced with the direct-kernel-boot design. Normal workflow pushes are limited to `main`, and reference CI consumes the preferred fork URLs. The exact new VM gate must now prove both native CPU cases before protocol work proceeds.
 
 ## Next action
 
