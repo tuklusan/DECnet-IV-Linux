@@ -30,7 +30,7 @@ case "$module_path" in
 esac
 
 iface=$(find_iface_by_mac "$LAN_MAC")
-echo "DNIV-LAB node=${NODE_NAME} address=${NODE_ADDR} iface=${iface} module=${module_path} start"
+echo "DNIV-LAB session=${LAB_SESSION_ID} node=${NODE_NAME} address=${NODE_ADDR} iface=${iface} module=${module_path} start"
 akms status || true
 
 ip link set "$iface" up
@@ -42,13 +42,13 @@ dnctl reset-stats
 sleep 8
 i=1
 while [ "$i" -le 8 ]; do
-    dnraw "$iface" "$PEER_MAC" "${NODE_NAME}-probe-${i}"
+    dnraw "$iface" "$PEER_MAC" "${LAB_SESSION_ID}-${NODE_NAME}-probe-${i}"
     i=$((i + 1))
     sleep 1
 done
 
 sleep 4
 dnctl stats
-echo "DNIV-LAB-DONE ${NODE_NAME}"
+echo "DNIV-LAB-DONE session=${LAB_SESSION_ID} node=${NODE_NAME}"
 sync
 poweroff -f
