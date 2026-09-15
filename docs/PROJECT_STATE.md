@@ -94,13 +94,13 @@ The bootstrap does not claim adjacency, routing, NSP, Session Control, NICE/NML 
 
 ## Phase 2 status
 
-Ubuntu Base 26.04.1 was selected because it is the smallest official non-cloud Ubuntu rootfs intended for custom images and is published for both required CPU architectures. The pinned release provides 33 MiB amd64 and arm64 tarballs. Exact filenames and SHA-256 values are in `image/ubuntu-base/images.env`.
+Ubuntu Base 26.04.1 was selected because it is the smallest official non-cloud Ubuntu rootfs intended for custom images and is published for both required CPU architectures. The pinned release provides 33 MiB amd64 and arm64 tarballs. Exact filenames and SHA-256 values are in `image/ubuntu-base/images.env`; those pins have also been cross-checked against the current official Ubuntu Base SHA256SUMS.
 
 The apt dependency set is frozen with Ubuntu Snapshot Service timestamp `20260915T000000Z`; apt in Ubuntu 24.04 and later accepts snapshot IDs directly, so later rebuilds do not silently pick newer kernel or userspace packages.
 
 The lab deliberately removes the old boot/provisioning complexity. CI expands the rootfs, installs Ubuntu's virtual kernel plus the module/tools, copies out the exact kernel and initrd, then direct-boots two QCOW2 overlays with QEMU `-kernel`/`-initrd`. Each guest has one raw Ethernet NIC. A boot-conditioned smoke service sets node identity, sends EtherType `0x6003` frames to its peer, verifies kernel receive counters and powers off. No installer, cloud metadata, firmware image or management NIC is involved.
 
-A complete pass over the latest repository then found two remaining VM determinism gaps: cloned guests could inherit a rootfs machine ID, and the host's lab deadline could expire only to block indefinitely while waiting for a stuck QEMU process. Image construction now clears machine identity before cloning, the host terminates unfinished guests at its deadline or early failure, and a guest that has proved receive traffic sends two final frames before shutdown to remove a reciprocal-startup race. This change resets the SoP sequence again.
+The latest complete review caught two final lifetime mistakes in the VM harness. First, the base machine identity was being cleared before package installation, allowing package scripts to recreate it before the image was cloned. It is now cleared after all package work. Second, background shell functions rather than QEMU itself were the recorded guest PIDs, so teardown could kill a wrapper and leave its emulator behind; the launch path now `exec`s QEMU and guest termination uses a TERM grace period followed by KILL. These fixes reset the SoP sequence.
 
 ## Resume point
 

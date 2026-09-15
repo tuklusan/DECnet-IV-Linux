@@ -70,10 +70,31 @@ suffix=$(printf '%s' "$session" | sha256sum | cut -c1-6)
 bridge="br${suffix}"
 tap_a="da${suffix}"
 tap_b="db${suffix}"
+
+terminate_guest() {
+    local pid=$1
+    local i
+
+    if ! kill -0 "$pid" 2>/dev/null; then
+        wait "$pid" 2>/dev/null || true
+        return
+    fi
+    kill "$pid" 2>/dev/null || true
+    for i in {1..50}; do
+        if ! kill -0 "$pid" 2>/dev/null; then
+            wait "$pid" 2>/dev/null || true
+            return
+        fi
+        sleep 0.1
+    done
+    kill -KILL "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
+}
+
 cleanup() {
     set +e
-    [[ -n "${QA_PID:-}" ]] && kill "$QA_PID" 2>/dev/null
-    [[ -n "${QB_PID:-}" ]] && kill "$QB_PID" 2>/dev/null
+    [[ -n "${QA_PID:-}" ]] && terminate_guest "$QA_PID"
+    [[ -n "${QB_PID:-}" ]] && terminate_guest "$QB_PID"
     [[ -n "${TCPDUMP_PID:-}" ]] && sudo kill "$TCPDUMP_PID" 2>/dev/null
     for tap in "$tap_a" "$tap_b"; do sudo ip link del "$tap" 2>/dev/null; done
     sudo ip link del "$bridge" 2>/dev/null
@@ -108,7 +129,7 @@ start_node() {
     local common="root=LABEL=dniv-root rootfstype=ext4 rw dniv.smoke=1 dniv.area=$area dniv.node=$node dniv.name=$name dniv.peer=$peer dniv.session=$session"
     case "$host_arch" in
         x86_64)
-            qemu-system-x86_64 -name "$name" -accel "$accel" -m 512 -smp 1 \
+            exec qemu-system-x86_64 -name "$name" -accel "$accel" -m 512 -smp 1 \
                 -kernel "$kernel" -initrd "$initrd" \
                 -append "$common console=ttyS0" \
                 -drive "file=$disk,if=virtio,format=qcow2" \
@@ -119,7 +140,7 @@ start_node() {
         aarch64)
             local cpu=max
             [[ "$accel" == kvm ]] && cpu=host
-            qemu-system-aarch64 -name "$name" -machine virt -accel "$accel" -cpu "$cpu" -m 512 -smp 1 \
+            exec qemu-system-aarch64 -name "$name" -machine virt -accel "$accel" -cpu "$cpu" -m 512 -smp 1 \
                 -kernel "$kernel" -initrd "$initrd" \
                 -append "$common console=ttyAMA0" \
                 -drive "file=$disk,if=virtio,format=qcow2" \
@@ -152,11 +173,11 @@ while (( SECONDS < deadline )); do
     sleep 1
 done
 
-if (( ! pass_a || ! pass_b )); then
-    kill "$QA_PID" "$QB_PID" 2>/dev/null || true
-fi
-wait "$QA_PID" 2>/dev/null || true
-wait "$QB_PID" 2>/dev/null || true
+# Let successful guests flush their final reciprocal frames and normal shutdown,
+# but never let guest teardown turn a failed lab into an unbounded wait.
+if (( pass_a && pass_b )); then sleep 3; fi
+terminate_guest "$QA_PID"
+terminate_guest "$QB_PID"
 unset QA_PID QB_PID
 sudo kill "$TCPDUMP_PID" 2>/dev/null || true
 wait "$TCPDUMP_PID" 2>/dev/null || true

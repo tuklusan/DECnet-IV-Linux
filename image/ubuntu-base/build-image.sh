@@ -64,8 +64,6 @@ sudo tar -C "$repo_root" --exclude=.git --exclude=out -cf - . | \
 
 sudo rm -f "$mnt/etc/resolv.conf"
 sudo cp -L /etc/resolv.conf "$mnt/etc/resolv.conf"
-sudo rm -f "$mnt/etc/machine-id" "$mnt/var/lib/dbus/machine-id"
-sudo touch "$mnt/etc/machine-id"
 printf 'LABEL=dniv-root / ext4 defaults 0 1\n' | sudo tee "$mnt/etc/fstab" >/dev/null
 printf 'dniv\n' | sudo tee "$mnt/etc/hostname" >/dev/null
 
@@ -103,6 +101,11 @@ apt-get clean
 rm -rf /var/lib/apt/lists/*
 rm -f /usr/sbin/policy-rc.d
 '
+
+# Package scripts may create a machine identity. Clear it only after all
+# package work so every QCOW2 overlay creates its own identity on first boot.
+sudo rm -f "$mnt/etc/machine-id" "$mnt/var/lib/dbus/machine-id"
+sudo touch "$mnt/etc/machine-id"
 
 sudo install -m 0755 "$repo_root/tests/lab/dniv-smoke.sh" "$mnt/usr/local/sbin/dniv-smoke"
 sudo install -m 0644 "$repo_root/tests/lab/dniv-smoke.service" \
