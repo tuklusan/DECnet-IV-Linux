@@ -11,6 +11,7 @@ get_arg() {
     return 1
 }
 
+area=$(get_arg dniv.area || printf '31')
 node=$(get_arg dniv.node || printf '70')
 name=$(get_arg dniv.name || printf 'DN70')
 peer=$(get_arg dniv.peer || true)
@@ -21,17 +22,22 @@ if [ -z "$peer" ]; then
     exit 1
 fi
 
-modprobe decnet_iv default_area=31 default_node="$node" default_name="$name"
-/usr/local/sbin/dnctl set "31.$node" "$name"
+modprobe decnet_iv default_area="$area" default_node="$node" default_name="$name"
+/usr/local/sbin/dnctl set "$area.$node" "$name"
 /usr/local/sbin/dnctl reset-stats
 
 iface=''
-for path in /sys/class/net/*; do
-    candidate=${path##*/}
-    if [ "$candidate" != lo ]; then
-        iface=$candidate
-        break
-    fi
+i=0
+while [ "$i" -lt 50 ]; do
+    for path in /sys/class/net/*; do
+        candidate=${path##*/}
+        if [ "$candidate" != lo ]; then
+            iface=$candidate
+            break 2
+        fi
+    done
+    i=$((i + 1))
+    sleep 0.1
 done
 if [ -z "$iface" ]; then
     echo "DNIV-LAB-FAIL session=$session node=$name reason=no-interface"

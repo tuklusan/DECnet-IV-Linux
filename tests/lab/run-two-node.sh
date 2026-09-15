@@ -12,38 +12,73 @@ for file in "$base" "$kernel" "$initrd"; do
     [[ -r "$file" ]] || { echo "two-node: missing $file" >&2; exit 2; }
 done
 
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck disable=SC1091
+. "$script_dir/test-addresses.env"
+area=${DECNET_TEST_AREA:?test-addresses.env must set DECNET_TEST_AREA}
+node_a=${DECNET_TEST_FIRST_NODE:?test-addresses.env must set DECNET_TEST_FIRST_NODE}
+last_node=${DECNET_TEST_LAST_NODE:?test-addresses.env must set DECNET_TEST_LAST_NODE}
+name_prefix=${DECNET_TEST_NAME_PREFIX:?test-addresses.env must set DECNET_TEST_NAME_PREFIX}
+if [[ ! "$area" =~ ^[1-9][0-9]*$ ]] || (( area > 63 )); then
+    echo "two-node: invalid DECnet area in test-addresses.env" >&2
+    exit 2
+fi
+if [[ ! "$node_a" =~ ^[1-9][0-9]*$ ]] || [[ ! "$last_node" =~ ^[1-9][0-9]*$ ]]; then
+    echo "two-node: invalid DECnet node pool in test-addresses.env" >&2
+    exit 2
+fi
+node_b=$((node_a + 1))
+if (( node_a > 1023 || node_b > last_node || last_node > 1023 )); then
+    echo "two-node: invalid DECnet node pool in test-addresses.env" >&2
+    exit 2
+fi
+name_a="${name_prefix}${node_a}"
+name_b="${name_prefix}${node_b}"
+if [[ ! "$name_a" =~ ^[A-Za-z0-9]{1,6}$ || ! "$name_b" =~ ^[A-Za-z0-9]{1,6}$ ]]; then
+    echo "two-node: generated DECnet node name is invalid" >&2
+    exit 2
+fi
+
+decnet_mac() {
+    local area_value=$1 node_value=$2 address
+    address=$(((area_value << 10) | node_value))
+    printf 'aa:00:04:00:%02x:%02x' "$((address & 0xff))" "$(((address >> 8) & 0xff))"
+}
+mac_a=$(decnet_mac "$area" "$node_a")
+mac_b=$(decnet_mac "$area" "$node_b")
+
 artifacts=${DNIV_LAB_ARTIFACTS:-"$(pwd)/tests/lab/artifacts"}
 timeout_seconds=${DNIV_LAB_TIMEOUT_SECONDS:-240}
 session=${DNIV_LAB_SESSION_ID:-"local-$(date -u +%Y%m%dT%H%M%SZ)-$$"}
 [[ "$session" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "two-node: invalid session id" >&2; exit 2; }
 mkdir -p "$artifacts/$session"
 work="$artifacts/$session"
-log70="$work/dn70.serial.log"
-log71="$work/dn71.serial.log"
+log_a="$work/node-a.serial.log"
+log_b="$work/node-b.serial.log"
 pcap="$work/lan.pcap"
-node70="$work/dn70.qcow2"
-node71="$work/dn71.qcow2"
+disk_a="$work/node-a.qcow2"
+disk_b="$work/node-b.qcow2"
 
-qemu-img create -q -f qcow2 -F qcow2 -b "$(readlink -f "$base")" "$node70"
-qemu-img create -q -f qcow2 -F qcow2 -b "$(readlink -f "$base")" "$node71"
+qemu-img create -q -f qcow2 -F qcow2 -b "$(readlink -f "$base")" "$disk_a"
+qemu-img create -q -f qcow2 -F qcow2 -b "$(readlink -f "$base")" "$disk_b"
 
 suffix=$(printf '%s' "$session" | sha256sum | cut -c1-6)
-bridge="db${suffix}"
-tap70="d70${suffix}"
-tap71="d71${suffix}"
+bridge="br${suffix}"
+tap_a="da${suffix}"
+tap_b="db${suffix}"
 cleanup() {
     set +e
-    [[ -n "${Q70_PID:-}" ]] && kill "$Q70_PID" 2>/dev/null
-    [[ -n "${Q71_PID:-}" ]] && kill "$Q71_PID" 2>/dev/null
+    [[ -n "${QA_PID:-}" ]] && kill "$QA_PID" 2>/dev/null
+    [[ -n "${QB_PID:-}" ]] && kill "$QB_PID" 2>/dev/null
     [[ -n "${TCPDUMP_PID:-}" ]] && sudo kill "$TCPDUMP_PID" 2>/dev/null
-    for tap in "$tap70" "$tap71"; do sudo ip link del "$tap" 2>/dev/null; done
+    for tap in "$tap_a" "$tap_b"; do sudo ip link del "$tap" 2>/dev/null; done
     sudo ip link del "$bridge" 2>/dev/null
 }
 trap cleanup EXIT INT TERM
 
 sudo ip link add "$bridge" type bridge
 sudo ip link set "$bridge" up
-for tap in "$tap70" "$tap71"; do
+for tap in "$tap_a" "$tap_b"; do
     sudo ip tuntap add dev "$tap" mode tap user "$(id -un)"
     sudo ip link set "$tap" master "$bridge"
     sudo ip link set "$tap" up
@@ -57,7 +92,7 @@ if [[ -e /dev/kvm && -r /dev/kvm && -w /dev/kvm ]]; then accel=kvm; fi
 
 start_node() {
     local name=$1 node=$2 peer=$3 mac=$4 tap=$5 disk=$6 log=$7
-    local common="root=LABEL=dniv-root rootfstype=ext4 rw dniv.smoke=1 dniv.node=$node dniv.name=$name dniv.peer=$peer dniv.session=$session"
+    local common="root=LABEL=dniv-root rootfstype=ext4 rw dniv.smoke=1 dniv.area=$area dniv.node=$node dniv.name=$name dniv.peer=$peer dniv.session=$session"
     case "$host_arch" in
         x86_64)
             qemu-system-x86_64 -name "$name" -accel "$accel" -m 512 -smp 1 \
@@ -83,39 +118,37 @@ start_node() {
     esac
 }
 
-mac70=aa:00:04:00:46:7c
-mac71=aa:00:04:00:47:7c
-start_node DN70 70 "$mac71" "$mac70" "$tap70" "$node70" "$log70" & Q70_PID=$!
-start_node DN71 71 "$mac70" "$mac71" "$tap71" "$node71" "$log71" & Q71_PID=$!
+start_node "$name_a" "$node_a" "$mac_b" "$mac_a" "$tap_a" "$disk_a" "$log_a" & QA_PID=$!
+start_node "$name_b" "$node_b" "$mac_a" "$mac_b" "$tap_b" "$disk_b" "$log_b" & QB_PID=$!
 
 deadline=$((SECONDS + timeout_seconds))
-pass70=0
-pass71=0
+pass_a=0
+pass_b=0
 while (( SECONDS < deadline )); do
-    grep -Fq "DNIV-LAB-PASS session=$session node=DN70" "$log70" 2>/dev/null && pass70=1
-    grep -Fq "DNIV-LAB-PASS session=$session node=DN71" "$log71" 2>/dev/null && pass71=1
-    if (( pass70 && pass71 )); then break; fi
-    if ! kill -0 "$Q70_PID" 2>/dev/null && (( ! pass70 )); then
-        grep -Fq "DNIV-LAB-PASS session=$session node=DN70" "$log70" 2>/dev/null && pass70=1
-        (( pass70 )) || { echo "two-node: DN70 exited before pass" >&2; break; }
+    grep -Fq "DNIV-LAB-PASS session=$session node=$name_a" "$log_a" 2>/dev/null && pass_a=1
+    grep -Fq "DNIV-LAB-PASS session=$session node=$name_b" "$log_b" 2>/dev/null && pass_b=1
+    if (( pass_a && pass_b )); then break; fi
+    if ! kill -0 "$QA_PID" 2>/dev/null && (( ! pass_a )); then
+        grep -Fq "DNIV-LAB-PASS session=$session node=$name_a" "$log_a" 2>/dev/null && pass_a=1
+        (( pass_a )) || { echo "two-node: $name_a exited before pass" >&2; break; }
     fi
-    if ! kill -0 "$Q71_PID" 2>/dev/null && (( ! pass71 )); then
-        grep -Fq "DNIV-LAB-PASS session=$session node=DN71" "$log71" 2>/dev/null && pass71=1
-        (( pass71 )) || { echo "two-node: DN71 exited before pass" >&2; break; }
+    if ! kill -0 "$QB_PID" 2>/dev/null && (( ! pass_b )); then
+        grep -Fq "DNIV-LAB-PASS session=$session node=$name_b" "$log_b" 2>/dev/null && pass_b=1
+        (( pass_b )) || { echo "two-node: $name_b exited before pass" >&2; break; }
     fi
     sleep 1
 done
 
-wait "$Q70_PID" 2>/dev/null || true
-wait "$Q71_PID" 2>/dev/null || true
-unset Q70_PID Q71_PID
+wait "$QA_PID" 2>/dev/null || true
+wait "$QB_PID" 2>/dev/null || true
+unset QA_PID QB_PID
 sudo kill "$TCPDUMP_PID" 2>/dev/null || true
 wait "$TCPDUMP_PID" 2>/dev/null || true
 unset TCPDUMP_PID
 
-if (( ! pass70 || ! pass71 )); then
-    echo "--- DN70 ---" >&2; tail -120 "$log70" >&2 || true
-    echo "--- DN71 ---" >&2; tail -120 "$log71" >&2 || true
+if (( ! pass_a || ! pass_b )); then
+    echo "--- $name_a ---" >&2; tail -120 "$log_a" >&2 || true
+    echo "--- $name_b ---" >&2; tail -120 "$log_b" >&2 || true
     exit 1
 fi
 frames=$(sudo tcpdump -nn -r "$pcap" 'ether proto 0x6003' 2>/dev/null | wc -l)
@@ -123,4 +156,4 @@ if (( frames < 2 )); then
     echo "two-node: expected captured DECnet frames, saw $frames" >&2
     exit 1
 fi
-echo "two-node: pass on $host_arch, captured $frames DECnet routing frames"
+echo "two-node: pass on $host_arch for $area.$node_a/$area.$node_b, captured $frames DECnet routing frames"

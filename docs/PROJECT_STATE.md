@@ -68,7 +68,7 @@ A later phase never removes an earlier acceptance gate.
 ## Repository discipline
 
 - Do not create development branches. Keep one maintained `main` line.
-- Historical working refs were reconciled into `main` at commit `b51618cbf49ae43b223d3dcd15f156086fea41dc`; do not revive divergent work from them.
+- Historical working refs were reconciled into `main` at commit `b51618cbf49ae43b223d3dcd15f156086fea41dc`; they are aliases only and must not carry divergent work.
 - Workflows execute normal push gates only on `main`, so historical aliases cannot consume runners if they are touched again.
 - Every substantive commit updates this file in the same commit.
 - `tools/project_state_gate.py` enforces continuity requirements.
@@ -96,14 +96,14 @@ Ubuntu Base 26.04.1 was selected because it is the smallest official non-cloud U
 
 The apt dependency set is frozen with Ubuntu Snapshot Service timestamp `20260915T000000Z`; apt in Ubuntu 24.04 and later accepts snapshot IDs directly, so later rebuilds do not silently pick newer kernel or userspace packages.
 
-The new lab deliberately removes the old boot/provisioning complexity. CI expands the rootfs, installs Ubuntu's virtual kernel plus the module/tools, copies out the exact kernel and initrd, then direct-boots two QCOW2 overlays with QEMU `-kernel`/`-initrd`. Each guest has one raw Ethernet NIC. A small boot-conditioned smoke service sets node identity, sends EtherType `0x6003` frames to its peer, verifies kernel receive counters and powers off. No installer, cloud metadata, firmware image or management NIC is involved.
+The lab deliberately removes the old boot/provisioning complexity. CI expands the rootfs, installs Ubuntu's virtual kernel plus the module/tools, copies out the exact kernel and initrd, then direct-boots two QCOW2 overlays with QEMU `-kernel`/`-initrd`. Each guest has one raw Ethernet NIC. A boot-conditioned smoke service sets node identity, sends EtherType `0x6003` frames to its peer, verifies kernel receive counters and powers off. No installer, cloud metadata, firmware image or management NIC is involved.
 
-The first full disk review after the distribution reset found and fixed Phase 1 validation defects as well as stale architecture text. Kernel character classification now uses unsigned bytes, ioctl identity updates no longer silently truncate a non-terminated seven-byte name, and raw module parameters are range/name-checked before address packing. This change resets the SoP sequence.
+The latest full disk review found that the Phase 2 scripts had duplicated the default area/nodes instead of consuming the documented `tests/lab/test-addresses.env` source of truth, and that guest NIC discovery had an avoidable startup race. The host lab now validates and derives the first two identities and DECnet MAC addresses from that file, passes the area into each guest, and the guest waits briefly for its NIC. This change resets the SoP sequence.
 
 ## Resume point
 
-The repository is cleanly based on Ubuntu Base 26.04.1 and the Phase 2 lab has been replaced with the direct-kernel-boot design. Normal workflow pushes are limited to `main`, and reference CI consumes the preferred fork URLs. The exact new VM gate must now prove both native CPU cases before protocol work proceeds.
+The repository is cleanly based on Ubuntu Base 26.04.1, all historical branch refs have been reconciled to the maintained line, and Phase 2 uses a direct-kernel-boot two-VM design driven by the centralized test address pool. Normal workflow pushes are limited to `main`, and reference CI consumes the preferred fork URLs. The exact VM gate must prove both native CPU cases before protocol work proceeds.
 
 ## Next action
 
-Run the exact new VM gate on amd64 and arm64. Fix only defects demonstrated by retained serial/pcap evidence. Once both native two-node cases are green and three consecutive full SoP passes are clean, move immediately into Phase 3: implement DECnet Ethernet address handling, hello parsing/generation and adjacency state/expiry with independent Route20/PyDECnet vectors. Add mixed-CPU VM execution after the native lab is stable; do not let VM plumbing block protocol implementation again.
+Run the exact Phase 2 VM gate on amd64 and arm64. Fix defects demonstrated by retained serial/pcap evidence. Once both native two-node cases are green and three consecutive full SoP passes are clean, move immediately into Phase 3: implement DECnet Ethernet address handling, hello parsing/generation and adjacency state/expiry with independent Route20/PyDECnet vectors. Add mixed-CPU VM execution after the native lab is stable; do not let VM plumbing block protocol implementation again.
