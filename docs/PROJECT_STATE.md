@@ -72,6 +72,7 @@ A later phase never removes an earlier acceptance gate.
 - Every substantive commit updates this file in the same commit.
 - `tools/project_state_gate.py` enforces continuity requirements.
 - Keep commits atomic and run applicable static/unit/reference gates before advancing work.
+- Keep only project-relevant source, tests, build/image machinery and continuity documentation. The unrelated repository-update batch utility was removed during this cleanup.
 
 ## SoP delivery rule
 
@@ -96,7 +97,7 @@ The apt dependency set is also frozen with Ubuntu Snapshot Service timestamp `20
 
 The new lab deliberately removes the old boot/provisioning complexity. CI expands the rootfs, installs Ubuntu's virtual kernel plus the module/tools, copies out the exact kernel and initrd, then direct-boots two QCOW2 overlays with QEMU `-kernel`/`-initrd`. Each guest has one raw Ethernet NIC. A small boot-conditioned smoke service sets node identity, sends EtherType `0x6003` frames to its peer, verifies kernel receive counters and powers off. No installer, cloud metadata, firmware image or management NIC is involved.
 
-A pre-gate static pass caught two issues before relying on CI: the strict-C11 raw-frame helper now enables the libc interfaces needed for `struct ifreq`, and MAC parsing rejects trailing garbage. This change resets the SoP sequence.
+A pre-gate static pass caught two issues before relying on CI: the strict-C11 raw-frame helper now enables the libc interfaces needed for `struct ifreq`, and MAC parsing rejects trailing garbage. This change reset the SoP sequence.
 
 ## Resume point
 
