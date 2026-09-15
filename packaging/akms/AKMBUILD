@@ -1,0 +1,10 @@
+modname=decnet_iv
+modver=0.1.0
+built_modules='kernel/decnet/decnet_iv.ko'
+makedepends='build-base'
+
+build() {
+    cp -R "$srcdir/kernel" "$builddir/"
+    cp -R "$srcdir/include" "$builddir/"
+    make ${MAKEFLAGS:-} -C "$builddir/kernel/decnet" KDIR="$kernel_srcdir"
+}
