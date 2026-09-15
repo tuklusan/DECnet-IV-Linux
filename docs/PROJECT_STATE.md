@@ -22,11 +22,7 @@ Preferred project references are `tuklusan/Route20`, `tuklusan/pydecnet`, `tuklu
 
 Every reference is independently licensed. Verify compatibility before copying or adapting source and preserve required notices. If reuse is unclear or incompatible, use observable protocol behavior and implement independently.
 
-## External conformance
-
-Self-to-self success is never sufficient for final interoperability claims. Exercise the stack against the pinned Route20 and PyDECnet forks, and later against SIMH-hosted real DEC operating systems.
-
-Pinned automated references live in `tests/reference/refs.env`. CI fetches the preferred forks, not upstream repositories. Existing reference gates remain part of every later phase.
+Pinned automated references live in `tests/reference/refs.env`. Self-to-self success is never sufficient for final interoperability claims. Exercise the stack against the pinned Route20 and PyDECnet forks, and later against SIMH-hosted real DEC operating systems.
 
 ## Execution order
 
@@ -57,9 +53,7 @@ A later phase never removes an earlier acceptance gate.
 ## Test lab rules
 
 - Primary acceptance nodes are separate VMs, not containers or namespaces sharing one kernel.
-- Linux bridges provide raw native Ethernet LANs.
-- DECnet acceptance traffic stays on isolated native DECnet media.
-- The Phase 2 lab has one NIC per VM and no runtime provisioning network.
+- Linux bridges provide raw native Ethernet LANs; DECnet acceptance traffic stays on isolated native DECnet media.
 - Scale deliberately from 2 to 4, 8 and 16 independent VMs with routed topologies.
 - Required CPU cases include x86_64/x86_64, aarch64/aarch64 and both mixed directions.
 - Fault and stress work includes deterministic loss, duplication, delay/reordering where meaningful, link/circuit failure, restart, convergence, connection churn, long-duration traffic and resource/lifetime failures.
@@ -67,16 +61,14 @@ A later phase never removes an earlier acceptance gate.
 
 ## Repository discipline
 
-- Do not create development branches. Keep one maintained `main` line.
+- One developer works directly on the maintained `main` line; do not create development branches.
 - Historical working refs were reconciled into `main` at commit `b51618cbf49ae43b223d3dcd15f156086fea41dc`; they are aliases only and must not carry divergent work.
 - Every substantive commit updates this file in the same commit.
 - `tools/project_state_gate.py` enforces continuity requirements.
-- Local policy hooks are installed with `tools/install-hooks.sh`; both hook entry points are executable in the repository.
 - Keep commits atomic and run applicable static/unit/reference gates before advancing work.
 - Generated VM evidence stays under ignored `tests/lab/artifacts/`; do not commit generated images, captures or logs.
-- Keep only project-relevant source, tests, build/image machinery and continuity documentation.
-- Runner use is demand-driven. All repository workflows are manual-dispatch only. Every job is assigned to a shared x64 or arm64 concurrency slot, hard-capping the repository at one runner of each architecture at a time; x64-only gates share the x64 slot and waiting jobs queue. A running workflow is never cancelled merely because another copy is dispatched; the default single pending slot keeps only the newest duplicate waiting run.
-- GitHub-hosted runner disks and processes are ephemeral. Any state required across jobs must be explicit repository data or retained workflow artifacts; never depend on the outer runner filesystem surviving.
+- Runner use is demand-driven. All repository workflows are manual-dispatch only and share one x64 plus one arm64 repository-wide concurrency slot. Do not redesign this unless a demonstrated blocker requires it.
+- GitHub-hosted runner disks and processes are ephemeral. State required across jobs must be explicit repository data or retained workflow artifacts.
 
 ## SoP delivery rule
 
@@ -89,32 +81,32 @@ Automated tests, diffs, excerpts or prior reviews do not replace this rule.
 
 ## Phase 1 status
 
-Phase 1 is on `main` and contains UAPI version 1, `decnet_iv.ko`, default 31.70/DN70 identity, `/dev/decnet_iv`, DEC DNA Routing EtherType receive registration/counters, `dnctl`, centralized test addressing, unit address tests and native x86_64/aarch64 build gates.
-
-The bootstrap does not claim adjacency, routing, NSP, Session Control, NICE/NML application behavior or DDCMP functionality.
+Complete foundation retained on `main`: versioned UAPI, `decnet_iv.ko`, configurable 31.70/DN70 identity, `/dev/decnet_iv`, DEC DNA Routing EtherType receive registration/counters, `dnctl`, centralized test addressing, unit address tests and native x86_64/aarch64 build gates.
 
 ## Phase 2 status
 
-Ubuntu Base 26.04.1 was selected because it is the smallest official non-cloud Ubuntu rootfs intended for custom images and is published for both required CPU architectures. The pinned release provides 33 MiB amd64 and arm64 tarballs. Exact filenames and SHA-256 values are in `image/ubuntu-base/images.env`; those pins have also been cross-checked against the current official Ubuntu Base SHA256SUMS.
+Complete foundation retained on `main`: pinned Ubuntu Base 26.04.1 amd64/arm64 rootfs tarballs, apt snapshot `20260915T000000Z`, deterministic image assembly, exact guest kernel/module build, direct QEMU kernel/initrd boot, two independent one-NIC VMs, raw EtherType `0x6003` exchange, packet capture and serial evidence.
 
-The apt dependency set is frozen with Ubuntu Snapshot Service timestamp `20260915T000000Z`; apt in Ubuntu 24.04 and later accepts snapshot IDs directly, so later rebuilds do not silently pick newer kernel or userspace packages.
+All workflows are manual-dispatch. Jobs share the repository-wide x64/arm64 concurrency slots. The VM lab checkpoints the base QCOW2, portable node overlays, exact kernel/initrd, checksums, session metadata, logs and capture as resumable artifacts; a resume is accepted only for the same source commit and architecture.
 
-The lab deliberately removes the old boot/provisioning complexity. CI expands the rootfs, installs Ubuntu's virtual kernel plus the module/tools, copies out the exact kernel and initrd, then direct-boots two QCOW2 overlays with QEMU `-kernel`/`-initrd`. Each guest has one raw Ethernet NIC. A boot-conditioned smoke service sets node identity, sends EtherType `0x6003` frames to its peer, verifies kernel receive counters and powers off. No installer, cloud metadata, firmware image or management NIC is involved.
+The Phase 2 smoke test deliberately remains a low-level EtherType receive gate. It sends arbitrary payloads and is not a Phase 3 adjacency acceptance test.
 
-The latest complete review caught two final lifetime mistakes in the VM harness. First, the base machine identity was being cleared before package installation, allowing package scripts to recreate it before the image was cloned. It is now cleared after all package work. Second, background shell functions rather than QEMU itself were the recorded guest PIDs, so teardown could kill a wrapper and leave its emulator behind; the launch path now `exec`s QEMU and guest termination uses a TERM grace period followed by KILL.
+## Phase 3 status
 
-The following adversarial pass found one UAPI consistency gap: `dnctl stats` consumed the kernel statistics structure without checking its returned UAPI version, unlike the identity path. Statistics output now rejects an unsupported kernel UAPI version before interpreting counters.
+Phase 3 implementation is in progress. The current slice adds independent DECnet Ethernet wire helpers and UAPI version 2, including standard Phase IV node MAC derivation, router and endnode hello parsing/generation, periodic hello emission, per-interface adjacency state, 3.1x LAN listen-time expiry, and `dnctl adjacencies`/extended counters.
 
-Runner pressure then exposed an operational flaw in the gate layout: every main-line promotion launched all gates, including expensive reference and two-VM jobs, producing a large queued backlog. Workflows are demand-driven `workflow_dispatch` jobs. The current review tightened that policy further: all jobs now share two repository-wide runner slots, one x64 and one arm64, so no combination of the existing workflows can execute more than two runner jobs at once.
+Router-router adjacencies begin in INIT and become UP only when the peer router hello lists the local router with the expected priority. Loss of that two-way evidence returns the adjacency to INIT; listener expiry removes it. Router nodes accept valid endnode hellos as UP. Endnodes accept router hellos as their router adjacency. Same-area rules apply except for Level 2 router peers, which may be out of area. Router priority and node address drive designated-router choice after the five-second holdoff; the designated router also sends its router hello to the all-endnodes multicast address.
 
-The same review found that the VM lab's apparent saved disks were not actually resumable: node overlays referenced a base QCOW2 under ephemeral runner storage, and only failure evidence was uploaded. The lab now creates an explicit portable checkpoint after guest shutdown containing the exact base QCOW2, per-node QCOW2 deltas with a relative base reference, exact kernel/initrd, checksums, session metadata, serial logs and packet capture. The VM workflow retains that state per architecture for 14 days and accepts a `resume_run_id` only when the saved architecture and source commit match. Resumption continues guest disk state on a fresh host; live outer-runner process/RAM state is intentionally not claimed or relied upon.
+The wire implementation is independent and was cross-checked against pinned Route20 `b94115b2615c6463d1f006924ceeadde8e2d4367` and PyDECnet `a7194be8d72dea6f9eb4f77083f056f53e80df58` behavior. Unit vectors cover node MAC encoding, exact router hello bytes, router-list entries, endnode hello layout/test data, padding/malformed input, INIT/UP two-way decisions and listen-time arithmetic.
 
-These concurrency and persistence changes reset the SoP sequence.
+Local development evidence for this slice: userspace and unit tests build with both GCC and Clang; the Phase 3 vectors pass; the module builds cleanly with `W=1` against Linux 6.12.96 headers. That build also exposed and fixed a pre-existing portability gap by explicitly including the header that defines `MODULE_ALIAS_NETPROTO`.
+
+No native VM or live independent-peer runtime claim is made yet for this slice.
 
 ## Resume point
 
-The repository is based on Ubuntu Base 26.04.1, historical branch refs are reconciled aliases of the maintained line, and Phase 2 uses a direct-kernel-boot two-VM design driven by the centralized test address pool. Repository runner work is manual-only and hard-limited to one x64 plus one arm64 job concurrently. VM state needed across jobs is stored explicitly as verified workflow artifacts rather than assumed to survive on hosted runner disks.
+Phase 2 infrastructure is stable and intentionally unchanged. Phase 3 Ethernet initialization and adjacency code is now the active protocol work. The next runtime proof must exercise actual generated/parsed hellos and adjacency state, not just arbitrary EtherType frames.
 
 ## Next action
 
-Restart SoP pass 1 from the complete latest repository copy. Do not launch runner work during review. After three consecutive clean SoP passes, dispatch only the exact cheap gates needed for the reviewed commit and then the exact native two-node VM gate. Use a saved `resume_run_id` only for the same source commit and architecture. Once both native CPU cases are green, move immediately into Phase 3: implement DECnet Ethernet address handling, hello parsing/generation and adjacency state/expiry with independent Route20/PyDECnet vectors. Add mixed-CPU VM execution after the native lab is stable; do not let VM plumbing block protocol implementation again.
+Restart the SoP sequence from the complete latest repository copy and require three consecutive clean passes. Do not launch runners during review. After the reviewed Phase 3 commit is stable, run only the exact cheap build/reference gates needed, then an E1 two-node native VM adjacency gate that proves hello exchange, INIT-to-UP formation, expiry and clean restart on x86_64 and aarch64. Add live interoperability against the pinned Route20 and PyDECnet forks as the next independent gate. Keep mixed-CPU VM work behind the native cases and do not return to CI redesign unless protocol testing demonstrates a real blocker.

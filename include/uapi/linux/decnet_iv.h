@@ -5,7 +5,7 @@
 #include <linux/ioctl.h>
 #include <linux/types.h>
 
-#define DNIV_UAPI_VERSION 1U
+#define DNIV_UAPI_VERSION 2U
 #define DNIV_NODE_NAME_MAX 6U
 #define DNIV_NODE_NAME_BUFSZ (DNIV_NODE_NAME_MAX + 1U)
 
@@ -13,6 +13,13 @@
     ((__u16)((((__u16)(area) & 0x3fU) << 10) | ((__u16)(node) & 0x03ffU)))
 #define DNIV_ADDR_AREA(address) (((__u16)(address) >> 10) & 0x3fU)
 #define DNIV_ADDR_NODE(address) ((__u16)(address) & 0x03ffU)
+
+#define DNIV_NODE_TYPE_L2_ROUTER 1U
+#define DNIV_NODE_TYPE_L1_ROUTER 2U
+#define DNIV_NODE_TYPE_ENDNODE 3U
+
+#define DNIV_ADJ_STATE_INIT 1U
+#define DNIV_ADJ_STATE_UP 2U
 
 struct dniv_identity {
     __u32 uapi_version;
@@ -27,6 +34,26 @@ struct dniv_stats {
     __u32 reserved0;
     __u64 rx_frames;
     __u64 rx_bytes;
+    __u64 hello_rx;
+    __u64 hello_tx;
+    __u64 hello_errors;
+    __u64 adjacency_up;
+    __u64 adjacency_down;
+};
+
+struct dniv_adjacency {
+    __u32 uapi_version;
+    __u32 index;
+    __s32 ifindex;
+    __u16 address;
+    __u8 node_type;
+    __u8 state;
+    __u16 block_size;
+    __u16 hello_timer;
+    __u8 priority;
+    __u8 reserved0;
+    __u8 mac[6];
+    __u32 expires_ms;
 };
 
 #define DNIV_IOC_MAGIC 0xd4
@@ -34,5 +61,6 @@ struct dniv_stats {
 #define DNIV_IOC_SET_IDENTITY _IOW(DNIV_IOC_MAGIC, 0x01, struct dniv_identity)
 #define DNIV_IOC_GET_STATS _IOR(DNIV_IOC_MAGIC, 0x02, struct dniv_stats)
 #define DNIV_IOC_RESET_STATS _IO(DNIV_IOC_MAGIC, 0x03)
+#define DNIV_IOC_GET_ADJACENCY _IOWR(DNIV_IOC_MAGIC, 0x04, struct dniv_adjacency)
 
 #endif /* _UAPI_LINUX_DECNET_IV_H */

@@ -1,0 +1,16 @@
+/* SPDX-License-Identifier: GPL-2.0 */
+#ifndef _DECNET_IV_ETHERNET_H
+#define _DECNET_IV_ETHERNET_H
+
+#include <linux/types.h>
+#include <linux/decnet_iv.h>
+
+int dniv_eth_init(__u16 address, __u8 node_type, __u8 priority,
+                  __u16 hello_interval);
+void dniv_eth_exit(void);
+int dniv_eth_set_address(__u16 address);
+void dniv_eth_get_stats(struct dniv_stats *stats);
+void dniv_eth_reset_stats(void);
+int dniv_eth_get_adjacency(__u32 index, struct dniv_adjacency *adjacency);
+
+#endif /* _DECNET_IV_ETHERNET_H */
