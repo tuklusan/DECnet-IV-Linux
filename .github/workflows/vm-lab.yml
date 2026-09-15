@@ -17,12 +17,11 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      # This gate boots two separate Alpine guests and proves raw DECnet Ethernet frames reach our module.
-      # It intentionally does not claim hello, adjacency or routing protocol conformance yet.
+      # NoCloud provisions each guest; the DECnet data NIC stays on an isolated bridge.
       - name: Install VM lab dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y qemu-system-x86 qemu-utils libguestfs-tools tcpdump curl
+          sudo apt-get install -y qemu-system-x86 qemu-utils tcpdump curl genisoimage
 
       - name: Download and verify pinned Alpine image
         run: |
@@ -35,16 +34,18 @@ jobs:
             "$ALPINE_X86_64_IMAGE" "$ALPINE_X86_64_IMAGE.sha512"
           echo "ALPINE_X86_IMAGE=$RUNNER_TEMP/$ALPINE_X86_64_IMAGE" >> "$GITHUB_ENV"
 
+      # Guests must load the AKMS-managed module and exchange native EtherType 0x6003 traffic.
       - name: Run DN70 and DN71 Ethernet smoke test
         run: tests/lab/run-two-node-x86.sh "$ALPINE_X86_IMAGE"
 
-      - name: Retain serial logs and packet capture
+      - name: Retain serial logs, seeds and packet capture
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: two-node-x86-lab
           path: |
             tests/lab/artifacts/*.serial.log
+            tests/lab/artifacts/*.seed.iso
             tests/lab/artifacts/*.pcap
           if-no-files-found: warn
 
@@ -54,7 +55,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      # ARM execution is the next lab slice; this gate already prevents its pinned base from disappearing or changing unnoticed.
+      # ARM execution follows after x86 is green; this gate keeps its base immutable meanwhile.
       - name: Verify pinned aarch64 Alpine image
         run: |
           set -eu
