@@ -100,7 +100,9 @@ The apt dependency set is frozen with Ubuntu Snapshot Service timestamp `2026091
 
 The lab deliberately removes the old boot/provisioning complexity. CI expands the rootfs, installs Ubuntu's virtual kernel plus the module/tools, copies out the exact kernel and initrd, then direct-boots two QCOW2 overlays with QEMU `-kernel`/`-initrd`. Each guest has one raw Ethernet NIC. A boot-conditioned smoke service sets node identity, sends EtherType `0x6003` frames to its peer, verifies kernel receive counters and powers off. No installer, cloud metadata, firmware image or management NIC is involved.
 
-The latest complete review caught two final lifetime mistakes in the VM harness. First, the base machine identity was being cleared before package installation, allowing package scripts to recreate it before the image was cloned. It is now cleared after all package work. Second, background shell functions rather than QEMU itself were the recorded guest PIDs, so teardown could kill a wrapper and leave its emulator behind; the launch path now `exec`s QEMU and guest termination uses a TERM grace period followed by KILL. These fixes reset the SoP sequence.
+The latest complete review caught two final lifetime mistakes in the VM harness. First, the base machine identity was being cleared before package installation, allowing package scripts to recreate it before the image was cloned. It is now cleared after all package work. Second, background shell functions rather than QEMU itself were the recorded guest PIDs, so teardown could kill a wrapper and leave its emulator behind; the launch path now `exec`s QEMU and guest termination uses a TERM grace period followed by KILL.
+
+The following adversarial pass found one UAPI consistency gap: `dnctl stats` consumed the kernel statistics structure without checking its returned UAPI version, unlike the identity path. Statistics output now rejects an unsupported kernel UAPI version before interpreting counters. This fix resets the SoP sequence.
 
 ## Resume point
 

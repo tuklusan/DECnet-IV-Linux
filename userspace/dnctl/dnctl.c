@@ -143,6 +143,13 @@ static int show_stats(void)
         return 1;
     }
     close(fd);
+
+    if (stats.uapi_version != DNIV_UAPI_VERSION) {
+        fprintf(stderr, "dnctl: unsupported kernel UAPI version %u\n",
+                stats.uapi_version);
+        return 1;
+    }
+
     printf("Routing frames received = %llu\n",
            (unsigned long long)stats.rx_frames);
     printf("Routing bytes received  = %llu\n",
