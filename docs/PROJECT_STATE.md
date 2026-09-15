@@ -18,18 +18,15 @@ Build a minimal maintained Linux distribution with a fresh native DECnet Phase I
 
 ## External conformance
 
-The implementation must be exercised independently against:
-
-1. Route20 for build and live routing/interoperability behavior.
-2. PyDECnet for its protocol behavior, packet vectors, test suite, Ethernet interoperability and DDCMP interoperability.
-3. DECnet protocol documentation plus useful supplementary protocol notes carried with PyDECnet.
-4. Later, SIMH-hosted DEC operating systems for application-level validation.
+The implementation must be exercised independently against Route20 and PyDECnet, using DECnet protocol documentation and useful supplementary protocol notes carried with PyDECnet. Later add SIMH-hosted DEC operating systems for application-level validation.
 
 Pinned revisions are stored in `tests/reference/refs.env`. Route20 is a behavioral/reference peer; its source license is not assumed suitable for direct incorporation into the kernel module.
 
+The current PyDECnet reference is pinned for documentation, vectors and live interoperability. Its present tree has a pre-existing self-test contradiction in `Macaddr("1.24")` introduced by a July 2024 change: the code takes the hexadecimal path before the DECnet `area.node` path while the upstream test still requires `area.node`. The hard full-suite pin is therefore the immediately preceding revision. The suite is run unmodified; no tests are skipped or rewritten. Move the test pin forward when upstream fixes the contradiction.
+
 ## Execution order
 
-`docs/ROADMAP.md` is the canonical ordered task list. The phase order is:
+`docs/ROADMAP.md` is the canonical ordered task list:
 
 0. continuity, repository policy and reference discipline;
 1. buildable UAPI/module/control utility on x86_64 and aarch64;
@@ -68,7 +65,7 @@ A later phase never removes an earlier acceptance gate.
 - `tools/project_state_gate.py` enforces that requirement per commit in CI and the local pre-commit hook.
 - This file must keep non-empty `Resume point` and `Next action` sections.
 - Workflows carry short comments describing what each gate proves.
-- Substantive automated work is prepared on a working branch, gates run there, and `main` is advanced only after the branch is green. This is the project-level pre-promotion hard gate while repository administration is not available through the current connector.
+- Substantive automated work is prepared on a working branch, gates run there, and `main` is advanced only after the branch is green.
 
 ## Phase 1 status
 
@@ -78,12 +75,12 @@ The bootstrap does not yet claim adjacency, routing, NSP, Session Control or DDC
 
 ## External baseline status
 
-A gated change is prepared to pin Route20 at `b94115b2615c6463d1f006924ceeadde8e2d4367` and PyDECnet at `a7194be8d72dea6f9eb4f77083f056f53e80df58`. The baseline requires Route20 to build and runs the pinned PyDECnet upstream unit suite unchanged. Live interoperability gates will be added when the corresponding local protocol layer exists.
+Route20's pinned build passed. The first current-PyDECnet run executed 988 tests: 983 passed, 4 skipped and one upstream `Macaddr("1.24")` test errored because current code contradicts that same test. The baseline has been corrected to keep the current PyDECnet revision for live/docs reference and run the entire unmodified suite at the immediately preceding revision before that upstream regression.
 
 ## Resume point
 
-Phase 1 has passed policy, continuity, x86_64 and aarch64 native build gates and is promoted to `main`. The next working branch contains the pinned external-reference baseline workflow and must pass before promotion.
+Phase 1 is promoted and green. External baselines are on `work/reference-baselines`; Route20 passed, and the PyDECnet suite pin has just been corrected after diagnosing an upstream self-test regression. This corrected branch must pass all gates before promotion.
 
 ## Next action
 
-Run and repair the external-reference baseline gates, then promote them to `main`. After that begin Phase 2: build a pinned Alpine x86_64/aarch64 reference image containing the module and `dnctl`, boot DN70 and DN71 as separate tiny VMs on one raw Ethernet bridge, retain pcaps/logs on failure, and prove bidirectional EtherType `0x6003` frame reception before implementing Phase IV hello/adjacency logic.
+Run the corrected external-reference gates. If green, fast-forward `main` to the tested commit. Then start Phase 2 on a fresh working branch: pin the official Alpine 3.24.1 tiny QCOW2 bases for x86_64 BIOS and aarch64 UEFI, build/install the exact `linux-virt` module plus `dnctl`, boot DN70 and DN71 as separate VMs on a raw Ethernet bridge, collect pcaps/logs, and prove bidirectional EtherType `0x6003` reception before implementing hello/adjacency logic.
