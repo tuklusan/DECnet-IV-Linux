@@ -140,8 +140,8 @@ e1)
     fi
 
     # The E1 NIC address differs from the DECnet node MAC.  Compare the
-    # non-hello receive count before and after three raw frames addressed to
-    # the DECnet node MAC; this proves the kernel-added unicast filter works.
+    # non-hello receive count before and after a probe stream addressed to
+    # the DECnet node MAC; the overlap avoids a baseline race between peers.
     routing_before=$(stat_value 'Routing frames received')
     hello_before=$(stat_value 'Hello frames received')
     for value in "$routing_before" "$hello_before"; do
@@ -155,10 +155,10 @@ e1)
     fi
 
     i=0
-    while [ "$i" -lt 3 ]; do
+    while [ "$i" -lt 40 ]; do
         i=$((i + 1))
         /usr/local/sbin/dnraw "$iface" "$peer" "DNIV-E1-UCAST-$session-$name-$i"
-        sleep 0.1
+        sleep 0.25
     done
     sleep 1
 
