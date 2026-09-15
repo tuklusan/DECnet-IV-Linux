@@ -1,3 +1,10 @@
 #!/bin/sh
 python3 tools/repo_policy.py --staged || exit $?
+
+# Keep the copy/paste handover synchronized automatically for substantive commits.
+if git diff --cached --name-only | grep -qvE '^docs/(PROJECT_STATE|HANDOVER)\.md$'; then
+    python3 tools/render_handover.py || exit $?
+    git add docs/HANDOVER.md
+fi
+
 exec python3 tools/project_state_gate.py --staged

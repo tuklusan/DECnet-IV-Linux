@@ -22,7 +22,7 @@ The implementation must be exercised independently against Route20 and PyDECnet,
 
 Pinned revisions are stored in `tests/reference/refs.env`. Route20 is a behavioral/reference peer; its source license is not assumed suitable for direct incorporation into the kernel module.
 
-The current PyDECnet reference is pinned for documentation, vectors and live interoperability. Its present tree has a pre-existing self-test contradiction in `Macaddr("1.24")` introduced by a July 2024 change: the code takes the hexadecimal path before the DECnet `area.node` path while the upstream test still requires `area.node`. The hard full-suite pin is therefore the immediately preceding revision. The suite is run unmodified; no tests are skipped or rewritten. Move the test pin forward when upstream fixes the contradiction.
+The current PyDECnet reference is pinned for documentation, vectors and live interoperability. Its present tree has a pre-existing self-test contradiction in `Macaddr("1.24")`: the code takes the hexadecimal path before the DECnet `area.node` path while the upstream test still requires `area.node`. The hard full-suite pin is therefore the immediately preceding revision. The suite is run unmodified; no tests are skipped or rewritten. Move the test pin forward when upstream fixes the contradiction.
 
 ## Execution order
 
@@ -61,11 +61,14 @@ A later phase never removes an earlier acceptance gate.
 
 ## Continuity and promotion gates
 
-- Every substantive commit must update this file in the same commit.
-- `tools/project_state_gate.py` enforces that requirement per commit in CI and the local pre-commit hook.
-- This file must keep non-empty `Resume point` and `Next action` sections.
+- Every substantive commit must update this file and `docs/HANDOVER.md` in the same commit.
+- `docs/HANDOVER.md` is generated deterministically from this file by `tools/render_handover.py`; it contains a copy/paste-ready next-session prompt.
+- The local pre-commit hook regenerates and stages the handover before running the continuity gate.
+- `tools/project_state_gate.py` checks every substantive commit in the pushed range, validates non-empty Resume point/Next action sections, and verifies that each commit's handover exactly matches that commit's project state.
+- Force-pushes are handled by falling back to the merge-base with `origin/main` when the event's previous SHA is missing or no longer an ancestor.
 - Workflows carry short comments describing what each gate proves.
 - Substantive automated work is prepared on a working branch, gates run there, and `main` is advanced only after the branch is green.
+- During long interactive work, surface the current handover text before the conversation becomes difficult to continue; the repository copy remains authoritative if no such message is available.
 
 ## Phase 1 status
 
@@ -75,12 +78,16 @@ The bootstrap does not yet claim adjacency, routing, NSP, Session Control or DDC
 
 ## External baseline status
 
-Route20's pinned build passed. The first current-PyDECnet run executed 988 tests: 983 passed, 4 skipped and one upstream `Macaddr("1.24")` test errored because current code contradicts that same test. The baseline has been corrected to keep the current PyDECnet revision for live/docs reference and run the entire unmodified suite at the immediately preceding revision before that upstream regression.
+The corrected external-reference baseline is promoted to `main` and green. Route20 builds at its pinned revision. The full unmodified PyDECnet suite runs at the last passing revision immediately before its current `Macaddr("1.24")` self-test contradiction; the current PyDECnet revision remains pinned separately for documentation, vectors and live interoperability.
+
+## Phase 2 status
+
+Work is on `work/phase2-vm-lab`. Alpine 3.24.1 official tiny QCOW2 bases are pinned for x86_64 BIOS and aarch64 UEFI. The first VM gate builds `decnet_iv.ko` against the guest's installed `linux-virt` headers, installs `dnctl` and a tiny raw-frame probe, boots DN70 and DN71 on one Linux bridge, retains serial logs and a pcap, and requires bidirectional EtherType `0x6003` receive counters. The first CI attempt established that Alpine's 129-byte `.sha512` sidecars contain a bare SHA-512 digest rather than a GNU checksum manifest; verification now accepts bare, GNU and BSD/OpenSSL SHA-512 formats. Native AArch64 VM execution follows after the x86 lab is green.
 
 ## Resume point
 
-Phase 1 is promoted and green. External baselines are on `work/reference-baselines`; Route20 passed, and the PyDECnet suite pin has just been corrected after diagnosing an upstream self-test regression. This corrected branch must pass all gates before promotion.
+Phase 1 and the external reference baselines are promoted and green on `main`. Phase 2 remains unpromoted on `work/phase2-vm-lab` and is being kept as one clean substantive commit directly on top of `main`. The current rewrite includes the two-node VM lab, generated handover enforcement, force-push-safe continuity range selection, and corrected Alpine SHA-512 verification. The previous VM run did not reach guest boot because both architecture jobs stopped at the checksum-format mismatch.
 
 ## Next action
 
-Run the corrected external-reference gates. If green, fast-forward `main` to the tested commit. Then start Phase 2 on a fresh working branch: pin the official Alpine 3.24.1 tiny QCOW2 bases for x86_64 BIOS and aarch64 UEFI, build/install the exact `linux-virt` module plus `dnctl`, boot DN70 and DN71 as separate VMs on a raw Ethernet bridge, collect pcaps/logs, and prove bidirectional EtherType `0x6003` reception before implementing hello/adjacency logic.
+Run every workflow on the rewritten Phase 2 commit. Confirm the Project State Gate now validates from the main merge-base after a branch rewrite and that both pinned Alpine images verify. Then repair any next x86 VM-lab failure until DN70 and DN71 boot customized Alpine, load the module, exchange EtherType `0x6003` frames and report non-zero receive counters with a retained pcap. Add native aarch64 UEFI and mixed-architecture runs only after x86 is green; promote only after all gates pass, then begin Phase 3 hello and adjacency logic.

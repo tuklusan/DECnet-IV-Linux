@@ -15,4 +15,6 @@ out/
 *.img
 *.iso
 *.log
+*.pcap
+tests/lab/artifacts/
 .DS_Store

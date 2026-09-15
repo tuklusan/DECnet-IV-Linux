@@ -13,14 +13,14 @@ jobs:
   project-state:
     runs-on: ubuntu-latest
     steps:
-      # Full history is required because the gate checks every commit in the range.
+      # Full history is required because the gate checks every substantive commit in the range.
       - name: Check out repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # Every substantive commit must refresh the continuity record in that same commit.
-      - name: Verify continuity record
+      # Each substantive commit must carry both its canonical state and an exactly generated handover.
+      - name: Verify continuity record and handover
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}
