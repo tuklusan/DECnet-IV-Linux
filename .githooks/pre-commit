@@ -1,0 +1,2 @@
+#!/bin/sh
+exec python3 tools/repo_policy.py --staged
