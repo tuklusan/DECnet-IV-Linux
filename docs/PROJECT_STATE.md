@@ -79,9 +79,14 @@ Compatibility belongs in userspace. The kernel ABI should remain small, versione
 ## Workflow rules
 
 - Workflows contain short comments explaining what each gate proves and what it does not prove yet.
-- Any substantive repository change must update this file in the same change set.
-- The project-state gate enforces that rule so a fresh session can reconstruct current intent and next work from the repository itself.
+- Every commit that changes any project file other than this continuity record must also update this file in the same commit.
+- `tools/project_state_gate.py` enforces the rule per commit in CI and in the local pre-commit hook.
+- This file must always contain non-empty `Resume point` and `Next action` sections.
 
-## Current next milestone
+## Resume point
 
-Create the first buildable native module/UAPI/userspace control milestone, then establish automated compile checks and two-node Ethernet smoke tests. External conformance gates against Route20 and PyDECnet are required as the relevant protocol layers become functional.
+The repository has its bootstrap architecture, test-lab plan, repository policy gate, and project-state continuity gate. The continuity gate is wired into CI and the local pre-commit hook. No legacy Linux DECnet kernel code is the implementation base. The next implementation work is the first buildable native kernel/UAPI/userspace milestone, followed by two-node Ethernet tests.
+
+## Next action
+
+Implement the initial out-of-tree DECnet Phase IV module and versioned UAPI, add the small diagnostic/control utility, compile both on x86_64 and aarch64, then create the first DN70/DN71 two-VM Ethernet smoke test. Keep Route20 and PyDECnet conformance as hard external acceptance targets as protocol layers become functional.
