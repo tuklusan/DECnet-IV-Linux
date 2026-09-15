@@ -110,11 +110,13 @@ The E1 code history through commit `ea5f8727518926bc113d1d462843b5be9730ebf1` wa
 
 A restarted SoP review after the direct-main policy change found that `tests/reference/refs.env` had lost the preferred LinuxDECnet and SIMH fork pins. The exact current fork revisions are restored and their roles documented.
 
-The next restarted review found that adjacency state was keyed by network-interface index but the netdevice notifier handled registration only. A removed interface could therefore leave an adjacency alive until its listen timer expired, and a quickly reused interface index could inherit stale adjacency/DR state. `NETDEV_UNREGISTER` now drops every adjacency belonging to that interface immediately under the adjacency lock. This correction resets the SoP sequence.
+The next restarted review found that adjacency state was keyed by network-interface index but the netdevice notifier handled registration only. A removed interface could therefore leave an adjacency alive until its listen timer expired, and a quickly reused interface index could inherit stale adjacency/DR state. `NETDEV_UNREGISTER` now drops every adjacency belonging to that interface immediately under the adjacency lock.
+
+The following complete review found that Ethernet receive-filter installation failures during `NETDEV_REGISTER` were logged but reported as notifier success. That allowed module initialization or later interface registration to continue with a DECnet circuit that could not reliably receive its protocol unicast/multicast addresses. The notifier now converts filter errors to notifier errors, allowing the kernel's notifier registration/rollback path to reject the partial setup. This correction resets the SoP sequence.
 
 ## Resume point
 
-`main` is the only active development line and contains the complete E1 two-router adjacency acceptance harness, including expiry/restart, designated-router, protocol-source-MAC and DECnet-unicast-filter evidence. No pull request workflow is used. The previous E1 development ref is historical only. The latest netdevice-lifetime correction removes stale per-interface adjacency state on interface unregister and resets the SoP sequence.
+`main` is the only active development line and contains the complete E1 two-router adjacency acceptance harness, including expiry/restart, designated-router, protocol-source-MAC and DECnet-unicast-filter evidence. No pull request workflow is used. The previous E1 development ref is historical only. The latest correction makes netdevice receive-filter setup fail closed instead of silently accepting a partial DECnet circuit, and resets the SoP sequence.
 
 ## Next action
 

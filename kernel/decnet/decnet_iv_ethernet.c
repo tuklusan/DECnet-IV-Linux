@@ -6,6 +6,7 @@
 #include <linux/if_ether.h>
 #include <linux/jiffies.h>
 #include <linux/netdevice.h>
+#include <linux/notifier.h>
 #include <linux/rtnetlink.h>
 #include <linux/skbuff.h>
 #include <linux/spinlock.h>
@@ -216,9 +217,11 @@ static int dniv_netdev_event(struct notifier_block *nb, unsigned long event,
     if (event != NETDEV_REGISTER)
         return NOTIFY_DONE;
     err = dniv_add_dev_filters(dev);
-    if (err)
+    if (err) {
         pr_warn("decnet_iv: failed to add Ethernet filters on %s: %d\n",
                 dev->name, err);
+        return notifier_from_errno(err);
+    }
     return NOTIFY_DONE;
 }
 
