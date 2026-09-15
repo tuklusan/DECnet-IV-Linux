@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import unicodedata
@@ -13,9 +14,11 @@ from pathlib import Path
 
 BLOCKED = (
     "cl" + "aude",
-    "open" + "ai",
+    "a" + "i",
+    "op" + "en" + "a" + "i",
     "co" + "dex",
     "chat" + "gpt",
+    "anth" + "ropic",
 )
 CONTROL_ROOT = "." + "git" + "hub"
 ENV_PREFIX = ("git" + "hub").upper()
@@ -34,16 +37,41 @@ def fold(value: str) -> str:
     return unicodedata.normalize("NFKC", value).casefold()
 
 
+BLOCKED_PATTERNS = tuple(
+    re.compile(rf"(?<!\w){re.escape(fold(term))}(?!\w)") for term in BLOCKED
+)
+BLOCKED_BYTES_PATTERN = re.compile(
+    rb"(?<![A-Za-z0-9_])(?:"
+    + rb"|".join(re.escape(term.encode("ascii")) for term in BLOCKED)
+    + rb")(?![A-Za-z0-9_])",
+    re.IGNORECASE,
+)
+
+
 def has_blocked_text(value: str) -> bool:
     value = fold(value)
-    return any(fold(term) in value for term in BLOCKED)
+    return any(pattern.search(value) for pattern in BLOCKED_PATTERNS)
 
 
 def has_blocked_bytes(value: bytes) -> bool:
-    lowered = value.lower()
-    if any(term.encode("ascii") in lowered for term in BLOCKED):
+    if BLOCKED_BYTES_PATTERN.search(value):
         return True
     return has_blocked_text(value.decode("utf-8", errors="ignore"))
+
+
+def matcher_self_check() -> list[str]:
+    errors: list[str] = []
+    allowed = ("main", "mail", "detail", "maintained", "chair", "domain")
+
+    for value in allowed:
+        if has_blocked_text(value):
+            errors.append(f"matcher false positive: {value}")
+    for term in BLOCKED:
+        if not has_blocked_text("/" + term.upper() + "/"):
+            errors.append("matcher missed a configured term")
+        if not has_blocked_bytes(b" " + term.encode("ascii") + b" "):
+            errors.append("byte matcher missed a configured term")
+    return errors
 
 
 def report(label: str) -> None:
@@ -84,6 +112,12 @@ def event_checks(event: dict, failures: list[str]) -> None:
     fields = (
         ("sender login", ("sender", "login")),
         ("member login", ("member", "login")),
+        ("issue title", ("issue", "title")),
+        ("issue body", ("issue", "body")),
+        ("comment body", ("comment", "body")),
+        ("discussion title", ("discussion", "title")),
+        ("discussion body", ("discussion", "body")),
+        ("review body", ("review", "body")),
         ("pull request title", ("pull_request", "title")),
         ("pull request body", ("pull_request", "body")),
         ("pull request author", ("pull_request", "user", "login")),
@@ -96,6 +130,11 @@ def event_checks(event: dict, failures: list[str]) -> None:
         ("push ref", ("ref",)),
         ("pusher name", ("pusher", "name")),
         ("pusher email", ("pusher", "email")),
+        ("head commit message", ("head_commit", "message")),
+        ("head commit author name", ("head_commit", "author", "name")),
+        ("head commit author email", ("head_commit", "author", "email")),
+        ("head commit committer name", ("head_commit", "committer", "name")),
+        ("head commit committer email", ("head_commit", "committer", "email")),
     )
     for label, parts in fields:
         check_value(label, dig(event, *parts), failures)
@@ -266,8 +305,33 @@ def scan_commits(base: str | None, head: str, failures: list[str]) -> None:
             check_value(label, value, failures)
 
 
+def scan_refs_and_config(failures: list[str]) -> None:
+    refs = run("git", "for-each-ref", "--format=%(refname)", check=False)
+    if refs.returncode != 0:
+        failures.append("ref inspection")
+        print("repository policy error: ref inspection failed", file=sys.stderr)
+    else:
+        for ref in refs.stdout.decode("utf-8", errors="replace").splitlines():
+            check_value("git ref", ref, failures)
+
+    config = run("git", "config", "--local", "--null", "--list", check=False)
+    if config.returncode != 0:
+        failures.append("local config inspection")
+        print(
+            "repository policy error: local config inspection failed",
+            file=sys.stderr,
+        )
+    else:
+        for record in config.stdout.split(b"\0"):
+            if record and has_blocked_bytes(record):
+                failures.append("local git config")
+                report("local git config")
+
+
 def staged_checks(failures: list[str]) -> None:
-    raw = run("git", "diff", "--cached", "--name-only", "-z", "--diff-filter=ACMR").stdout
+    raw = run(
+        "git", "diff", "--cached", "--name-only", "-z", "--diff-filter=ACMR"
+    ).stdout
     for raw_path in raw.split(b"\0"):
         if not raw_path:
             continue
@@ -287,7 +351,11 @@ def main() -> int:
     parser.add_argument("--message-file")
     args = parser.parse_args()
 
-    failures: list[str] = []
+    failures = matcher_self_check()
+    if failures:
+        for error in failures:
+            print(f"repository policy error: {error}", file=sys.stderr)
+        return 1
 
     if args.message_file:
         data = Path(args.message_file).read_bytes()
@@ -298,6 +366,7 @@ def main() -> int:
 
     if args.staged:
         staged_checks(failures)
+        scan_refs_and_config(failures)
     else:
         event = load_event()
         event_checks(event, failures)
@@ -306,9 +375,13 @@ def main() -> int:
         ensure_object(head)
         scan_tree(head, failures)
         scan_commits(base, head, failures)
+        scan_refs_and_config(failures)
 
     if failures:
-        print(f"repository policy failed with {len(failures)} violation(s)", file=sys.stderr)
+        print(
+            f"repository policy failed with {len(failures)} violation(s)",
+            file=sys.stderr,
+        )
         return 1
 
     print("repository policy passed")

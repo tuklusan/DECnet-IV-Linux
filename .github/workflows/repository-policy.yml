@@ -1,6 +1,22 @@
 name: Repository Policy
 
 on:
+  push:
+  create:
+  issues:
+    types: [opened, edited, transferred]
+  issue_comment:
+    types: [created, edited]
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+  pull_request_review:
+    types: [submitted, edited]
+  pull_request_review_comment:
+    types: [created, edited]
+  discussion:
+    types: [created, edited]
+  discussion_comment:
+    types: [created, edited]
   workflow_dispatch:
 
 concurrency:

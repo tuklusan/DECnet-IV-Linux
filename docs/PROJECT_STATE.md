@@ -66,9 +66,12 @@ A later phase never removes an earlier acceptance gate.
 - Preserve useful code by fast-forwarding or committing it directly to `main`; do not require merge ceremonies.
 - Every substantive commit updates this file in the same commit.
 - `tools/project_state_gate.py` enforces continuity requirements.
+- `tools/repo_policy.py` uses Unicode-normalized, case-insensitive whole-token matching for the configured forbidden-word set. It checks tracked and staged paths/content, commit metadata/history, refs, local Git configuration, selected GitHub event metadata and collaborator logins.
+- Local repository hooks include pre-commit, commit-message and pre-push policy checks when `tools/install-hooks.sh` has enabled `.githooks`.
+- The repository-policy workflow is the sole automatic workflow exception: it runs on pushes and relevant GitHub metadata events as well as manual dispatch. Other build, reference, continuity and VM workflows remain manual-dispatch only.
 - Keep commits atomic and run applicable static/unit/reference gates before advancing work.
 - Generated VM evidence stays under ignored `tests/lab/artifacts/`; do not commit generated images, captures or logs.
-- Runner use is demand-driven. All repository workflows are manual-dispatch only and share one x64 plus one arm64 repository-wide concurrency slot.
+- Runner use is demand-driven except for the automatic repository-policy gate. Runner jobs share one x64 plus one arm64 repository-wide concurrency slot.
 - Hosted runner disks and processes are ephemeral. State required across jobs must be explicit repository data or retained workflow artifacts.
 
 ## SoP delivery rule
@@ -88,7 +91,7 @@ Complete foundation retained on `main`: versioned UAPI, `decnet_iv.ko`, configur
 
 Complete foundation retained on `main`: pinned Ubuntu Base 26.04.1 amd64/arm64 rootfs tarballs, apt snapshot `20260915T000000Z`, deterministic image assembly, exact guest kernel/module build, direct QEMU kernel/initrd boot, two independent one-NIC VMs, raw EtherType `0x6003` exchange, packet capture and serial evidence.
 
-All workflows are manual-dispatch. Jobs share the repository-wide x64/arm64 concurrency slots. The VM lab checkpoints the base QCOW2, portable node overlays, exact kernel/initrd, checksums, session metadata, logs and capture as resumable artifacts; a resume is accepted only for the same source commit and architecture.
+All non-policy workflows are manual-dispatch. Jobs share the repository-wide x64/arm64 concurrency slots. The VM lab checkpoints the base QCOW2, portable node overlays, exact kernel/initrd, checksums, session metadata, logs and capture as resumable artifacts; a resume is accepted only for the same source commit and architecture.
 
 The Phase 2 smoke test remains a low-level EtherType receive gate. It sends deliberate raw unicast payloads and is not a Phase 3 adjacency acceptance test. Smoke nodes load explicitly as endnodes so automatic router hello traffic cannot satisfy the retained counter gate. The two-node workflow preserves this as `phase2` mode; new checkpoints record the selected mode and old checkpoints without a mode remain valid for `phase2` only.
 
@@ -122,10 +125,12 @@ The next full pass found that receive-filter ownership depended on whether the D
 
 The following complete review found that E1 proved delivery when the device MAC merely started different from the DECnet MAC, but did not exercise the specific lifetime case corrected above: a primary device-MAC change after DECnet had installed its owned receive filter. E1 now changes each guest NIC to a second deterministic hardware MAC while the module remains loaded, requires a fresh peer hello and an UP adjacency after that change, sends the raw-unicast probe stream from that changed hardware MAC to the peer DECnet MAC, and verifies in host capture that protocol hellos still use only the DECnet source MAC. `docs/TEST_LAB.md` records the same acceptance behavior. This correction resets the SoP sequence.
 
+An infrastructure hold then strengthened the repository word-policy gate. The matcher now uses case-insensitive whole-token semantics, includes the newly requested configured entries while retaining the prior extra blocked entry, self-checks both text and byte matching, scans local refs/configuration as well as repository/history/event data, adds a pre-push hook, and makes the repository-policy workflow automatic for pushes and relevant GitHub metadata events. GitHub currently reports no repository ruleset, and the available repository connection does not expose ruleset administration, so a server-side pre-receive rule cannot be installed from this session. The local hooks plus automatic policy workflow are the enforceable repository mechanisms available here. This infrastructure change resets the SoP sequence.
+
 ## Resume point
 
-`main` is the only active development line and contains the E1 two-router adjacency acceptance harness, including expiry/restart, designated-router, protocol-source-MAC, DECnet-unicast-filter and post-install primary-MAC-change evidence. No pull request workflow is used. The previous E1 development ref is historical only. Netdevice filters, hello transmission, address updates and EtherType receive processing are restricted to `init_net`, and every attached Ethernet device owns an explicit DECnet unicast-filter reference independent of its primary MAC. The SoP sequence is reset.
+`main` is the only active development line and contains the E1 two-router adjacency acceptance harness, including expiry/restart, designated-router, protocol-source-MAC, DECnet-unicast-filter and post-install primary-MAC-change evidence. Protocol work is intentionally held after the repository-policy infrastructure update. Netdevice filters, hello transmission, address updates and EtherType receive processing are restricted to `init_net`, and every attached Ethernet device owns an explicit DECnet unicast-filter reference independent of its primary MAC. The SoP sequence is reset.
 
 ## Next action
 
-Run the SoP sequence from the exact current `main` HEAD and require three consecutive clean complete passes. Any defect or later edit resets the sequence. Then run the required cheap build/reference gates and native E1 two-node VM mode on x86_64 and aarch64 against that exact HEAD. If all required evidence is green, add live interoperability against the pinned Route20 and PyDECnet forks before beginning Phase 4 routing work. Continue all work directly on current `main` HEAD.
+When protocol work resumes, start the SoP sequence from the exact current `main` HEAD and require three consecutive clean complete passes. Any defect or later edit resets the sequence. Then run the required cheap build/reference gates and native E1 two-node VM mode on x86_64 and aarch64 against that exact HEAD. If all required evidence is green, add live interoperability against the pinned Route20 and PyDECnet forks before beginning Phase 4 routing work. Continue all work directly on current `main` HEAD.
