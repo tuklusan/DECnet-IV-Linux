@@ -62,9 +62,25 @@ log_b="$work/node-b.serial.log"
 pcap="$work/lan.pcap"
 disk_a="$work/node-a.qcow2"
 disk_b="$work/node-b.qcow2"
+resume_dir=${DNIV_LAB_RESUME_DIR:-}
 
-qemu-img create -q -f qcow2 -F qcow2 -b "$(readlink -f "$base")" "$disk_a"
-qemu-img create -q -f qcow2 -F qcow2 -b "$(readlink -f "$base")" "$disk_b"
+if [[ -n "$resume_dir" ]]; then
+    for file in "$resume_dir/base.qcow2" "$resume_dir/node-a.qcow2" \
+                "$resume_dir/node-b.qcow2" "$resume_dir/vmlinuz" \
+                "$resume_dir/initrd.img" "$resume_dir/session.env" \
+                "$resume_dir/SHA256SUMS"; do
+        [[ -r "$file" ]] || { echo "two-node: incomplete resume state: $file" >&2; exit 2; }
+    done
+    qemu-img check -q -f qcow2 "$resume_dir/node-a.qcow2"
+    qemu-img check -q -f qcow2 "$resume_dir/node-b.qcow2"
+    cp --reflink=auto "$resume_dir/node-a.qcow2" "$disk_a"
+    cp --reflink=auto "$resume_dir/node-b.qcow2" "$disk_b"
+    qemu-img rebase -q -u -f qcow2 -F qcow2 -b "$(readlink -f "$base")" "$disk_a"
+    qemu-img rebase -q -u -f qcow2 -F qcow2 -b "$(readlink -f "$base")" "$disk_b"
+else
+    qemu-img create -q -f qcow2 -F qcow2 -b "$(readlink -f "$base")" "$disk_a"
+    qemu-img create -q -f qcow2 -F qcow2 -b "$(readlink -f "$base")" "$disk_b"
+fi
 
 suffix=$(printf '%s' "$session" | sha256sum | cut -c1-6)
 bridge="br${suffix}"
@@ -182,6 +198,35 @@ unset QA_PID QB_PID
 sudo kill "$TCPDUMP_PID" 2>/dev/null || true
 wait "$TCPDUMP_PID" 2>/dev/null || true
 unset TCPDUMP_PID
+
+# Hosted runners are ephemeral. Package an exact bootable disk checkpoint so a
+# later job can resume the guest disks without depending on the destroyed host.
+checkpoint="$work/checkpoint"
+mkdir -p "$checkpoint"
+cp --reflink=auto "$base" "$checkpoint/base.qcow2"
+cp --reflink=auto "$kernel" "$checkpoint/vmlinuz"
+cp --reflink=auto "$initrd" "$checkpoint/initrd.img"
+qemu-img convert -q -f qcow2 -O qcow2 -B "$checkpoint/base.qcow2" -F qcow2 \
+    "$disk_a" "$checkpoint/node-a.qcow2"
+qemu-img convert -q -f qcow2 -O qcow2 -B "$checkpoint/base.qcow2" -F qcow2 \
+    "$disk_b" "$checkpoint/node-b.qcow2"
+(
+    cd "$checkpoint"
+    qemu-img rebase -q -u -f qcow2 -F qcow2 -b base.qcow2 node-a.qcow2
+    qemu-img rebase -q -u -f qcow2 -F qcow2 -b base.qcow2 node-b.qcow2
+    qemu-img check -q -f qcow2 node-a.qcow2
+    qemu-img check -q -f qcow2 node-b.qcow2
+    sha256sum base.qcow2 node-a.qcow2 node-b.qcow2 vmlinuz initrd.img > SHA256SUMS
+)
+{
+    printf 'FORMAT=1\n'
+    printf 'SESSION_ID=%s\n' "$session"
+    printf 'ARCH=%s\n' "${DNIV_LAB_ARCH:-$host_arch}"
+    printf 'SOURCE_SHA=%s\n' "${DNIV_LAB_SOURCE_SHA:-local}"
+    printf 'SOURCE_RUN_ID=%s\n' "${DNIV_LAB_SOURCE_RUN_ID:-local}"
+    printf 'SOURCE_RUN_ATTEMPT=%s\n' "${DNIV_LAB_SOURCE_RUN_ATTEMPT:-1}"
+    printf 'RESUME_PARENT_RUN_ID=%s\n' "${DNIV_LAB_RESUME_RUN_ID:-}"
+} > "$checkpoint/session.env"
 
 if (( ! pass_a || ! pass_b )); then
     echo "--- $name_a ---" >&2; tail -120 "$log_a" >&2 || true

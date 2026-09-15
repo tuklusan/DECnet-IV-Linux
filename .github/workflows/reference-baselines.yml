@@ -5,7 +5,7 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -13,6 +13,9 @@ permissions:
 jobs:
   route20-build:
     runs-on: ubuntu-24.04
+    concurrency:
+      group: dniv-runner-x64
+      queue: max
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -36,6 +39,9 @@ jobs:
 
   pydecnet-tests:
     runs-on: ubuntu-24.04
+    concurrency:
+      group: dniv-runner-x64
+      queue: max
     steps:
       - name: Check out repository
         uses: actions/checkout@v4

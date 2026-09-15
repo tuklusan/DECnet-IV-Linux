@@ -21,6 +21,16 @@ Each node is a separate VM with its own kernel. Network namespaces are not suffi
 - Capture traffic on every bridge and retain per-node serial/kernel/application evidence on failure.
 - Use KVM when available and QEMU software emulation only as fallback.
 
+## Runner concurrency and resumable state
+
+GitHub-hosted runner machines are ephemeral: a later job starts on a fresh host and cannot resume the prior host process, RAM or local filesystem. The project therefore never treats runner-local storage as persistent state.
+
+Every repository workflow is manual-dispatch only. Every runner job also enters one of two repository-wide job concurrency groups: `dniv-runner-x64` or `dniv-runner-arm64`. The groups queue rather than replace waiting jobs. This makes the hard repository ceiling one x64 runner job plus one arm64 runner job at a time; x64-only policy, continuity and reference gates all share the x64 slot. Matrix workflows additionally cap themselves at two parallel jobs.
+
+The two-node VM workflow persists guest disk state explicitly. After QEMU is stopped, the lab stores the exact base QCOW2, portable per-node QCOW2 deltas backed by that base, the exact kernel and initrd, checksums, a session manifest, serial logs and packet capture in a per-architecture workflow artifact. Artifacts are retained for 14 days.
+
+A manual `resume_run_id` may restore a prior artifact only when its architecture and source commit match the current workflow. The restored node disks are copied before use, rebound to the restored base, and checkpointed again after the run. This is disk-state continuation across fresh hosts, not live CPU/RAM suspend-and-resume.
+
 ## Physical architecture lab
 
 Later physical testing uses at least two x86_64 nodes, two aarch64 nodes, a test controller, a managed switch with port mirroring and an independent management path.

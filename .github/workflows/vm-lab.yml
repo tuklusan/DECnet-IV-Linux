@@ -2,31 +2,49 @@ name: Two-Node VM Lab
 
 on:
   workflow_dispatch:
+    inputs:
+      resume_run_id:
+        description: Prior Two-Node VM Lab run ID to resume; blank starts fresh
+        required: false
+        type: string
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
+  actions: read
   contents: read
 
 jobs:
   native-two-node:
     strategy:
       fail-fast: false
+      max-parallel: 2
       matrix:
         include:
           - runner: ubuntu-24.04
+            slot: x64
             arch: amd64
             qemu: qemu-system-x86
           - runner: ubuntu-24.04-arm
+            slot: arm64
             arch: arm64
             qemu: qemu-system-arm
     runs-on: ${{ matrix.runner }}
+    concurrency:
+      group: dniv-runner-${{ matrix.slot }}
+      queue: max
     timeout-minutes: 40
     env:
       DNIV_LAB_TIMEOUT_SECONDS: 300
       DNIV_LAB_ARTIFACTS: ${{ github.workspace }}/tests/lab/artifacts
+      DNIV_LAB_SESSION_ID: run-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.arch }}
+      DNIV_LAB_ARCH: ${{ matrix.arch }}
+      DNIV_LAB_SOURCE_SHA: ${{ github.sha }}
+      DNIV_LAB_SOURCE_RUN_ID: ${{ github.run_id }}
+      DNIV_LAB_SOURCE_RUN_ATTEMPT: ${{ github.run_attempt }}
+      DNIV_LAB_RESUME_RUN_ID: ${{ inputs.resume_run_id }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -36,7 +54,37 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ${{ matrix.qemu }} qemu-utils e2fsprogs tcpdump curl
 
+      - name: Restore prior VM state
+        if: ${{ inputs.resume_run_id != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: two-node-state-${{ matrix.arch }}-${{ inputs.resume_run_id }}
+          path: ${{ runner.temp }}/resume-${{ matrix.arch }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.resume_run_id }}
+
+      - name: Verify restored VM state
+        if: ${{ inputs.resume_run_id != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          state="$RUNNER_TEMP/resume-${{ matrix.arch }}/checkpoint"
+          test -f "$state/session.env"
+          test -f "$state/SHA256SUMS"
+          grep -Fx 'FORMAT=1' "$state/session.env"
+          grep -Fx 'ARCH=${{ matrix.arch }}' "$state/session.env"
+          grep -Fx "SOURCE_SHA=$GITHUB_SHA" "$state/session.env"
+          (cd "$state" && sha256sum -c SHA256SUMS)
+          qemu-img check -q -f qcow2 "$state/node-a.qcow2"
+          qemu-img check -q -f qcow2 "$state/node-b.qcow2"
+          echo "DNIV_LAB_RESUME_DIR=$state" >> "$GITHUB_ENV"
+          echo "DNIV_LAB_BASE=$state/base.qcow2" >> "$GITHUB_ENV"
+          echo "DNIV_LAB_KERNEL=$state/vmlinuz" >> "$GITHUB_ENV"
+          echo "DNIV_LAB_INITRD=$state/initrd.img" >> "$GITHUB_ENV"
+
       - name: Download and verify pinned Ubuntu Base rootfs
+        if: ${{ inputs.resume_run_id == '' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -53,22 +101,26 @@ jobs:
           echo "UBUNTU_BASE_TARBALL=$RUNNER_TEMP/$file" >> "$GITHUB_ENV"
 
       - name: Build minimal DECnet test image
+        if: ${{ inputs.resume_run_id == '' }}
         run: |
           sudo -v
           image/ubuntu-base/build-image.sh '${{ matrix.arch }}' "$UBUNTU_BASE_TARBALL" \
             "$RUNNER_TEMP/dniv-${{ matrix.arch }}.qcow2" "$RUNNER_TEMP/boot-${{ matrix.arch }}"
+          echo "DNIV_LAB_BASE=$RUNNER_TEMP/dniv-${{ matrix.arch }}.qcow2" >> "$GITHUB_ENV"
+          echo "DNIV_LAB_KERNEL=$RUNNER_TEMP/boot-${{ matrix.arch }}/vmlinuz" >> "$GITHUB_ENV"
+          echo "DNIV_LAB_INITRD=$RUNNER_TEMP/boot-${{ matrix.arch }}/initrd.img" >> "$GITHUB_ENV"
 
       - name: Boot two independent nodes and exchange native DECnet frames
         run: |
-          tests/lab/run-two-node.sh "$RUNNER_TEMP/dniv-${{ matrix.arch }}.qcow2" \
-            "$RUNNER_TEMP/boot-${{ matrix.arch }}/vmlinuz" \
-            "$RUNNER_TEMP/boot-${{ matrix.arch }}/initrd.img"
+          tests/lab/run-two-node.sh "$DNIV_LAB_BASE" "$DNIV_LAB_KERNEL" "$DNIV_LAB_INITRD"
 
-      - name: Retain failure evidence
-        if: failure()
+      - name: Retain resumable VM state and evidence
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: two-node-${{ matrix.arch }}-${{ github.run_id }}
-          path: tests/lab/artifacts/
+          name: two-node-state-${{ matrix.arch }}-${{ github.run_id }}
+          path: ${{ env.DNIV_LAB_ARTIFACTS }}/${{ env.DNIV_LAB_SESSION_ID }}/
           if-no-files-found: warn
           retention-days: 14
+          compression-level: 0
+          overwrite: true

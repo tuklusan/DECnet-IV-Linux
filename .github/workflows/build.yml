@@ -5,7 +5,7 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -15,9 +15,17 @@ jobs:
     # Native builds on both required CPU architectures catch ABI and compiler assumptions early.
     strategy:
       fail-fast: false
+      max-parallel: 2
       matrix:
-        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+        include:
+          - runner: ubuntu-24.04
+            slot: x64
+          - runner: ubuntu-24.04-arm
+            slot: arm64
     runs-on: ${{ matrix.runner }}
+    concurrency:
+      group: dniv-runner-${{ matrix.slot }}
+      queue: max
     steps:
       - name: Check out repository
         uses: actions/checkout@v4

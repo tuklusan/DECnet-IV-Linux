@@ -75,7 +75,8 @@ A later phase never removes an earlier acceptance gate.
 - Keep commits atomic and run applicable static/unit/reference gates before advancing work.
 - Generated VM evidence stays under ignored `tests/lab/artifacts/`; do not commit generated images, captures or logs.
 - Keep only project-relevant source, tests, build/image machinery and continuity documentation.
-- Runner use is demand-driven. All repository workflows are manual-dispatch only and use per-workflow/ref concurrency with cancellation of duplicate in-progress runs. Launch only the exact gate needed for the exact commit being evaluated; do not fan out routine pushes into runner work.
+- Runner use is demand-driven. All repository workflows are manual-dispatch only. Every job is assigned to a shared x64 or arm64 concurrency slot, hard-capping the repository at one runner of each architecture at a time; x64-only gates share the x64 slot and waiting jobs queue. A running workflow is never cancelled merely because another copy is dispatched; the default single pending slot keeps only the newest duplicate waiting run.
+- GitHub-hosted runner disks and processes are ephemeral. Any state required across jobs must be explicit repository data or retained workflow artifacts; never depend on the outer runner filesystem surviving.
 
 ## SoP delivery rule
 
@@ -104,12 +105,16 @@ The latest complete review caught two final lifetime mistakes in the VM harness.
 
 The following adversarial pass found one UAPI consistency gap: `dnctl stats` consumed the kernel statistics structure without checking its returned UAPI version, unlike the identity path. Statistics output now rejects an unsupported kernel UAPI version before interpreting counters.
 
-Runner pressure then exposed an operational flaw in the gate layout: every main-line promotion launched all gates, including expensive reference and two-VM jobs, producing a large queued backlog. Workflows are now demand-driven `workflow_dispatch` jobs with duplicate-run concurrency cancellation. This operational change resets the SoP sequence.
+Runner pressure then exposed an operational flaw in the gate layout: every main-line promotion launched all gates, including expensive reference and two-VM jobs, producing a large queued backlog. Workflows are demand-driven `workflow_dispatch` jobs. The current review tightened that policy further: all jobs now share two repository-wide runner slots, one x64 and one arm64, so no combination of the existing workflows can execute more than two runner jobs at once.
+
+The same review found that the VM lab's apparent saved disks were not actually resumable: node overlays referenced a base QCOW2 under ephemeral runner storage, and only failure evidence was uploaded. The lab now creates an explicit portable checkpoint after guest shutdown containing the exact base QCOW2, per-node QCOW2 deltas with a relative base reference, exact kernel/initrd, checksums, session metadata, serial logs and packet capture. The VM workflow retains that state per architecture for 14 days and accepts a `resume_run_id` only when the saved architecture and source commit match. Resumption continues guest disk state on a fresh host; live outer-runner process/RAM state is intentionally not claimed or relied upon.
+
+These concurrency and persistence changes reset the SoP sequence.
 
 ## Resume point
 
-The repository is based on Ubuntu Base 26.04.1, historical branch refs are reconciled aliases of the maintained line, generated VM artifacts are ignored, and Phase 2 uses a direct-kernel-boot two-VM design driven by the centralized test address pool. Reference CI consumes the preferred fork URLs. Repository runners are no longer launched by routine pushes; gates are started only when the exact commit and exact evidence need them.
+The repository is based on Ubuntu Base 26.04.1, historical branch refs are reconciled aliases of the maintained line, and Phase 2 uses a direct-kernel-boot two-VM design driven by the centralized test address pool. Repository runner work is manual-only and hard-limited to one x64 plus one arm64 job concurrently. VM state needed across jobs is stored explicitly as verified workflow artifacts rather than assumed to survive on hosted runner disks.
 
 ## Next action
 
-Restart SoP pass 1 from the complete latest repository copy. Do not launch another runner until a specific gate is required. When Phase 2 is ready for runtime proof, run only the exact native two-node VM gate for the exact candidate commit; fix only defects demonstrated by retained serial/pcap evidence. Once both native CPU cases are green and three consecutive full SoP passes are clean, move immediately into Phase 3: implement DECnet Ethernet address handling, hello parsing/generation and adjacency state/expiry with independent Route20/PyDECnet vectors. Add mixed-CPU VM execution after the native lab is stable; do not let VM plumbing block protocol implementation again.
+Restart SoP pass 1 from the complete latest repository copy. Do not launch runner work during review. After three consecutive clean SoP passes, dispatch only the exact cheap gates needed for the reviewed commit and then the exact native two-node VM gate. Use a saved `resume_run_id` only for the same source commit and architecture. Once both native CPU cases are green, move immediately into Phase 3: implement DECnet Ethernet address handling, hello parsing/generation and adjacency state/expiry with independent Route20/PyDECnet vectors. Add mixed-CPU VM execution after the native lab is stable; do not let VM plumbing block protocol implementation again.
