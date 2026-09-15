@@ -1,8 +1,8 @@
 #!/bin/sh
 set -eu
 
-if [ "$#" -ne 6 ]; then
-    echo "usage: $0 OUTPUT-ISO AREA.NODE NAME LAN-MAC PEER-MAC MGMT-MAC" >&2
+if [ "$#" -ne 7 ]; then
+    echo "usage: $0 OUTPUT-ISO SESSION-ID AREA.NODE NAME LAN-MAC PEER-MAC MGMT-MAC" >&2
     exit 2
 fi
 
@@ -11,14 +11,22 @@ case "$out" in
     /*) ;;
     *) out="$(pwd)/$out" ;;
 esac
-node_addr=$2
-node_name=$3
-lan_mac=$4
-peer_mac=$5
-mgmt_mac=$6
+session_id=$2
+node_addr=$3
+node_name=$4
+lan_mac=$5
+peer_mac=$6
+mgmt_mac=$7
 repo_root=$(CDPATH= cd -- "$(dirname "$0")/../.." && pwd)
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT INT TERM
+
+case "$session_id" in
+    *[!A-Za-z0-9._-]*|'')
+        echo "invalid session id: $session_id" >&2
+        exit 2
+        ;;
+esac
 
 mkdir -p "$(dirname "$out")"
 
@@ -30,7 +38,7 @@ tar -C "$repo_root" \
     -czf "$tmp/source.tgz" .
 
 cat >"$tmp/meta-data" <<EOF_META
-instance-id: dniv-${node_name}
+instance-id: dniv-${session_id}-${node_name}
 local-hostname: $(printf '%s' "$node_name" | tr '[:upper:]' '[:lower:]')
 EOF_META
 
@@ -49,6 +57,7 @@ fi
 EOF_HEAD
 
 cat >>"$tmp/user-data" <<EOF_NODE
+LAB_SESSION_ID='$session_id'
 NODE_ADDR='$node_addr'
 NODE_NAME='$node_name'
 LAN_MAC='$lan_mac'
@@ -70,7 +79,7 @@ find_iface_by_mac() {
     return 1
 }
 
-echo "DNIV-PROVISION node=${NODE_NAME} address=${NODE_ADDR} start"
+echo "DNIV-PROVISION session=${LAB_SESSION_ID} node=${NODE_NAME} address=${NODE_ADDR} start"
 mgmt_iface=$(find_iface_by_mac "$MGMT_MAC")
 ip link set "$mgmt_iface" up
 udhcpc -q -n -t 10 -i "$mgmt_iface"
@@ -100,6 +109,7 @@ cc -O2 -Wall -Wextra -Werror \
 
 install -m 0755 "$src_root/tests/lab/decnet-lab.start" /etc/local.d/decnet-lab.start
 cat >/etc/decnet-lab.env <<EOF_ENV
+LAB_SESSION_ID=${LAB_SESSION_ID}
 NODE_ADDR=${NODE_ADDR}
 NODE_NAME=${NODE_NAME}
 LAN_MAC=${LAN_MAC}
@@ -107,13 +117,13 @@ PEER_MAC=${PEER_MAC}
 EOF_ENV
 rc-update add local default
 
-# AKMS carries build dependencies in a disposable overlay on future rebuilds.
+# Future AKMS rebuilds install build requirements in a disposable overlay.
 apk del build-base linux-virt-dev
 rm -rf "$src_root"
 
 touch "$state/provisioned"
 sync
-echo "DNIV-PROVISION node=${NODE_NAME} complete; rebooting into installed kernel"
+echo "DNIV-PROVISION session=${LAB_SESSION_ID} node=${NODE_NAME} complete; rebooting into installed kernel"
 reboot -f
 EOF_BODY
 
@@ -144,4 +154,4 @@ EOF_PY
     genisoimage -quiet -output "$out" -volid CIDATA -joliet -rock user-data meta-data
 )
 
-echo "nocloud seed: ${node_name} -> ${out}"
+echo "nocloud seed: session=${session_id} node=${node_name} -> ${out}"
