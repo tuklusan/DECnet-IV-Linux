@@ -1,0 +1,62 @@
+name: External Reference Baselines
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  route20-build:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      # Route20 has no comparable upstream unit-test suite; this gate proves the pinned reference still builds.
+      - name: Install Route20 build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libpcap-dev
+
+      - name: Build pinned Route20
+        run: |
+          set -eu
+          . tests/reference/refs.env
+          work="$RUNNER_TEMP/route20"
+          git init "$work"
+          git -C "$work" remote add origin https://github.com/rjarratt/Route20.git
+          git -C "$work" fetch --depth=1 origin "$ROUTE20_REF"
+          git -C "$work" checkout --detach FETCH_HEAD
+          test "$(git -C "$work" rev-parse HEAD)" = "$ROUTE20_REF"
+          make -C "$work/Route20"
+
+  pydecnet-tests:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      # The upstream suite is executed unchanged; later gates add live interoperation with our stack.
+      - name: Install Python test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-venv libpcap-dev
+
+      - name: Run pinned PyDECnet unit suite
+        run: |
+          set -eu
+          . tests/reference/refs.env
+          work="$RUNNER_TEMP/pydecnet"
+          git init "$work"
+          git -C "$work" remote add origin https://github.com/pkoning2/pydecnet.git
+          git -C "$work" fetch --depth=1 origin "$PYDECNET_REF"
+          git -C "$work" checkout --detach FETCH_HEAD
+          test "$(git -C "$work" rev-parse HEAD)" = "$PYDECNET_REF"
+          python3 -m venv "$RUNNER_TEMP/pyvenv"
+          "$RUNNER_TEMP/pyvenv/bin/python" -m pip install --upgrade pip setuptools
+          "$RUNNER_TEMP/pyvenv/bin/python" -m pip install "$work/pydecnet"
+          cd "$work/pydecnet"
+          "$RUNNER_TEMP/pyvenv/bin/python" -m unittest discover -s tests -t . -p 'test_*.py'

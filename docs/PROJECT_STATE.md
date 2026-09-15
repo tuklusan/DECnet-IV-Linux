@@ -25,7 +25,7 @@ The implementation must be exercised independently against:
 3. DECnet protocol documentation plus useful supplementary protocol notes carried with PyDECnet.
 4. Later, SIMH-hosted DEC operating systems for application-level validation.
 
-Route20 is a behavioral/reference peer. Its source license is not assumed suitable for direct incorporation into the kernel module.
+Pinned revisions are stored in `tests/reference/refs.env`. Route20 is a behavioral/reference peer; its source license is not assumed suitable for direct incorporation into the kernel module.
 
 ## Execution order
 
@@ -68,25 +68,22 @@ A later phase never removes an earlier acceptance gate.
 - `tools/project_state_gate.py` enforces that requirement per commit in CI and the local pre-commit hook.
 - This file must keep non-empty `Resume point` and `Next action` sections.
 - Workflows carry short comments describing what each gate proves.
-- Substantive automated work is prepared on a working branch, gates run there, and `main` is advanced only after the branch is green. This gives our project workflow a pre-promotion hard gate even while repository administration is not available through the current connector.
+- Substantive automated work is prepared on a working branch, gates run there, and `main` is advanced only after the branch is green. This is the project-level pre-promotion hard gate while repository administration is not available through the current connector.
 
-## Phase 1 implementation state
+## Phase 1 status
 
-A Phase 1 change is prepared containing:
+Phase 1 is on `main` and green on both required CPU architectures. It contains UAPI version 1, `decnet_iv.ko`, default 31.70/DN70 identity, `/dev/decnet_iv`, DEC DNA Routing EtherType receive registration/counters, `dnctl`, centralized test addressing, unit address tests and native x86_64/ARM64 build gates.
 
-- `include/uapi/linux/decnet_iv.h`: UAPI version 1, DECnet address encoding and bootstrap ioctls;
-- `kernel/decnet/decnet_iv_main.c`: loadable module, default 31.70/DN70 identity, `/dev/decnet_iv`, Routing Layer EtherType receive registration and counters;
-- `userspace/dnctl`: diagnostic identity/statistics control utility;
-- `tests/unit/test_uapi.c`: address encoding checks including 31.70 = 0x7c46 and 31.79 = 0x7c4f;
-- native x86_64/ARM64 build workflow;
-- the centralized lab address configuration and ordered roadmap.
+The bootstrap does not yet claim adjacency, routing, NSP, Session Control or DDCMP functionality.
 
-Local verification before promotion: userspace builds with warnings as errors, UAPI tests pass, and `decnet_iv.ko` builds against Linux 6.12 headers.
+## External baseline status
+
+A gated change is prepared to pin Route20 at `b94115b2615c6463d1f006924ceeadde8e2d4367` and PyDECnet at `a7194be8d72dea6f9eb4f77083f056f53e80df58`. The baseline requires Route20 to build and runs the pinned PyDECnet upstream unit suite unchanged. Live interoperability gates will be added when the corresponding local protocol layer exists.
 
 ## Resume point
 
-Phase 0 is complete enough to proceed. The first real kernel/userspace bootstrap has been written and verified locally, but must be promoted through the working-branch CI gates before `main` is advanced. The module is intentionally only a receive/control bootstrap; it does not yet claim adjacency, routing, NSP, Session Control or DDCMP functionality.
+Phase 1 has passed policy, continuity, x86_64 and aarch64 native build gates and is promoted to `main`. The next working branch contains the pinned external-reference baseline workflow and must pass before promotion.
 
 ## Next action
 
-Promote the Phase 1 bootstrap through a working branch, inspect both x86_64 and aarch64 build results, fix any CI-only failures, then advance `main`. Immediately after that, add pinned external-reference baseline gates: Route20 must build, PyDECnet's upstream unit suite must run, and protocol-layer interoperability gates are added as each corresponding layer becomes functional. Then begin Phase 2: reproducible Alpine image plus the DN70/DN71 two-VM raw-Ethernet lab.
+Run and repair the external-reference baseline gates, then promote them to `main`. After that begin Phase 2: build a pinned Alpine x86_64/aarch64 reference image containing the module and `dnctl`, boot DN70 and DN71 as separate tiny VMs on one raw Ethernet bridge, retain pcaps/logs on failure, and prove bidirectional EtherType `0x6003` frame reception before implementing Phase IV hello/adjacency logic.
