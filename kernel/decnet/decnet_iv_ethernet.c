@@ -209,6 +209,7 @@ static int dniv_netdev_event(struct notifier_block *nb, unsigned long event,
 
     (void)nb;
     if (event == NETDEV_UNREGISTER) {
+        dniv_remove_dev_filters(dev, READ_ONCE(dniv_local_address));
         spin_lock_irqsave(&dniv_adj_lock, flags);
         dniv_drop_if_adjacencies_locked(dev->ifindex);
         spin_unlock_irqrestore(&dniv_adj_lock, flags);
@@ -568,7 +569,7 @@ int dniv_eth_init(__u16 address, __u8 node_type, __u8 priority,
     dniv_started = jiffies;
     memset(dniv_adjacencies, 0, sizeof(dniv_adjacencies));
 
-    err = register_netdevice_notifier(&dniv_netdev_notifier);
+    err = register_netdevice_notifier_net(&init_net, &dniv_netdev_notifier);
     if (err)
         return err;
     dev_add_pack(&dniv_packet_type);
@@ -579,18 +580,10 @@ int dniv_eth_init(__u16 address, __u8 node_type, __u8 priority,
 
 void dniv_eth_exit(void)
 {
-    struct net_device *dev;
-    __u16 address = READ_ONCE(dniv_local_address);
-
     cancel_delayed_work_sync(&dniv_hello_work);
     cancel_delayed_work_sync(&dniv_age_work);
     dev_remove_pack(&dniv_packet_type);
-
-    rtnl_lock();
-    for_each_netdev(&init_net, dev)
-        dniv_remove_dev_filters(dev, address);
-    rtnl_unlock();
-    unregister_netdevice_notifier(&dniv_netdev_notifier);
+    unregister_netdevice_notifier_net(&init_net, &dniv_netdev_notifier);
 }
 
 int dniv_eth_set_address(__u16 address)
