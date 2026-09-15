@@ -4,9 +4,19 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+    inputs:
+      lab_session_id:
+        description: Stable lab session ID; blank creates one from the workflow run ID
+        required: false
+        type: string
+      resume_run_id:
+        description: Prior workflow run ID whose saved VM session should be restored
+        required: false
+        type: string
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   two-node-x86:
@@ -16,6 +26,43 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Initialize lab session
+        id: session
+        shell: bash
+        run: |
+          set -euo pipefail
+          session='${{ inputs.lab_session_id }}'
+          resume_run='${{ inputs.resume_run_id }}'
+          if [[ -z "$session" ]]; then
+            if [[ -n "$resume_run" ]]; then
+              session="gha-${resume_run}"
+            else
+              session="gha-${GITHUB_RUN_ID}"
+            fi
+          fi
+          attempt="gha-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          if [[ -n "$resume_run" ]]; then
+            resume=1
+          else
+            resume=0
+          fi
+          echo "DNIV_LAB_SESSION_ID=$session" >> "$GITHUB_ENV"
+          echo "DNIV_LAB_ATTEMPT_ID=$attempt" >> "$GITHUB_ENV"
+          echo "DNIV_LAB_RESUME=$resume" >> "$GITHUB_ENV"
+          echo "session_id=$session" >> "$GITHUB_OUTPUT"
+          echo "resume=$resume" >> "$GITHUB_OUTPUT"
+          echo "lab session=$session attempt=$attempt resume=$resume"
+
+      # A prior session artifact contains the stateful qcow2 disks, seeds and manifests.
+      - name: Restore prior VM session
+        if: ${{ inputs.resume_run_id != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: two-node-x86-session-${{ steps.session.outputs.session_id }}
+          path: tests/lab/artifacts/sessions/${{ steps.session.outputs.session_id }}
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.resume_run_id }}
 
       # NoCloud provisions each guest; the DECnet data NIC stays on an isolated bridge.
       - name: Install VM lab dependencies
@@ -38,16 +85,16 @@ jobs:
       - name: Run DN70 and DN71 Ethernet smoke test
         run: tests/lab/run-two-node-x86.sh "$ALPINE_X86_IMAGE"
 
-      - name: Retain serial logs, seeds and packet capture
+      - name: Retain resumable VM session
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: two-node-x86-lab
-          path: |
-            tests/lab/artifacts/*.serial.log
-            tests/lab/artifacts/*.seed.iso
-            tests/lab/artifacts/*.pcap
+          name: two-node-x86-session-${{ steps.session.outputs.session_id }}
+          path: tests/lab/artifacts/sessions/${{ steps.session.outputs.session_id }}
           if-no-files-found: warn
+          overwrite: true
+          compression-level: 1
+          retention-days: 30
 
   pinned-arm-image:
     runs-on: ubuntu-24.04
