@@ -57,6 +57,9 @@ while [ "$i" -lt 180 ]; do
     esac
     if [ "$count" -gt 0 ]; then
         echo "DNIV-LAB-PASS session=$session node=$name frames=$count"
+        /usr/local/sbin/dnraw "$iface" "$peer" "DNIV-$session-$name-final-1" || true
+        sleep 1
+        /usr/local/sbin/dnraw "$iface" "$peer" "DNIV-$session-$name-final-2" || true
         sync
         sleep 1
         poweroff -f

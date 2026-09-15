@@ -100,7 +100,7 @@ The apt dependency set is frozen with Ubuntu Snapshot Service timestamp `2026091
 
 The lab deliberately removes the old boot/provisioning complexity. CI expands the rootfs, installs Ubuntu's virtual kernel plus the module/tools, copies out the exact kernel and initrd, then direct-boots two QCOW2 overlays with QEMU `-kernel`/`-initrd`. Each guest has one raw Ethernet NIC. A boot-conditioned smoke service sets node identity, sends EtherType `0x6003` frames to its peer, verifies kernel receive counters and powers off. No installer, cloud metadata, firmware image or management NIC is involved.
 
-The latest full review found additional cleanup and determinism gaps: generated packet captures were not ignored, the local commit-message hook had lost its executable bit, image DNS setup could trip over a rootfs resolver symlink, packet capture startup had a race, the bootstrap identity UAPI did not zero unused name bytes, and the stable handover entry point was missing. These are corrected together here; UAPI structure sizes are also asserted in the native unit build. This change resets the SoP sequence.
+A complete pass over the latest repository then found two remaining VM determinism gaps: cloned guests could inherit a rootfs machine ID, and the host's lab deadline could expire only to block indefinitely while waiting for a stuck QEMU process. Image construction now clears machine identity before cloning, the host terminates unfinished guests at its deadline or early failure, and a guest that has proved receive traffic sends two final frames before shutdown to remove a reciprocal-startup race. This change resets the SoP sequence again.
 
 ## Resume point
 

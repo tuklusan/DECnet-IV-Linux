@@ -152,6 +152,9 @@ while (( SECONDS < deadline )); do
     sleep 1
 done
 
+if (( ! pass_a || ! pass_b )); then
+    kill "$QA_PID" "$QB_PID" 2>/dev/null || true
+fi
 wait "$QA_PID" 2>/dev/null || true
 wait "$QB_PID" 2>/dev/null || true
 unset QA_PID QB_PID
