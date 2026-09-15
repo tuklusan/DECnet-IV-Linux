@@ -27,6 +27,27 @@ DECnet EtherType traffic. The management NIC is never part of the DECnet data pa
 This proves VM/image/module-lifecycle/Ethernet plumbing only; it does not yet claim
 Phase IV hello, adjacency, routing or NSP behavior.
 
+## Resumable lab sessions
+
+Every run has a stable session ID and a separate attempt ID. Stateful files live under
+`tests/lab/artifacts/sessions/<session-id>/`:
+
+- `session.env` records the session ID, source revision, base-image checksum, MACs and
+  stateful disk/seed names;
+- `dn70.qcow2` and `dn71.qcow2` are the resumable guest disks;
+- the NoCloud seeds carry the same session ID in their instance IDs;
+- `attempts/<attempt-id>/` contains that attempt's serial logs, pcap, PID files and
+  `attempt.env` result metadata;
+- `latest-attempt` identifies the newest attempt.
+
+A fresh run creates the session. To continue preserved disks locally, set the same
+`DNIV_LAB_SESSION_ID`, choose a new `DNIV_LAB_ATTEMPT_ID`, set
+`DNIV_LAB_RESUME=1`, and run the launcher again.
+
+CI uploads the entire session directory, including the qcow2 disks. A manual workflow
+run can restore a prior session by supplying its workflow run ID. If no explicit
+session ID is supplied, the restored session defaults to `gha-<prior-run-id>`.
+
 ## Portability lab
 
 `DISTRO_MATRIX.md` defines the later smallest-image Alpine, Debian and RHEL-family
