@@ -108,11 +108,13 @@ With equal priority, DN71 must win designated-router election over DN70. To make
 
 The E1 code history through commit `ea5f8727518926bc113d1d462843b5be9730ebf1` was fast-forwarded intact onto `main` when the project switched to direct-current-HEAD development. No runtime claim is implied by that fast-forward. Hosted build/reference/native E1 evidence is still required.
 
-A restarted SoP review after the direct-main policy change found that `tests/reference/refs.env` had lost the preferred LinuxDECnet and SIMH fork pins. The exact current fork revisions are restored, the reference README documents their roles, and this correction resets the SoP sequence.
+A restarted SoP review after the direct-main policy change found that `tests/reference/refs.env` had lost the preferred LinuxDECnet and SIMH fork pins. The exact current fork revisions are restored and their roles documented.
+
+The next restarted review found that adjacency state was keyed by network-interface index but the netdevice notifier handled registration only. A removed interface could therefore leave an adjacency alive until its listen timer expired, and a quickly reused interface index could inherit stale adjacency/DR state. `NETDEV_UNREGISTER` now drops every adjacency belonging to that interface immediately under the adjacency lock. This correction resets the SoP sequence.
 
 ## Resume point
 
-`main` is the only active development line and contains the complete E1 two-router adjacency acceptance harness, including expiry/restart, designated-router, protocol-source-MAC and DECnet-unicast-filter evidence. No pull request workflow is used. The previous E1 development ref is historical only. The latest reference-pin correction restores all four preferred fork references and resets the SoP sequence.
+`main` is the only active development line and contains the complete E1 two-router adjacency acceptance harness, including expiry/restart, designated-router, protocol-source-MAC and DECnet-unicast-filter evidence. No pull request workflow is used. The previous E1 development ref is historical only. The latest netdevice-lifetime correction removes stale per-interface adjacency state on interface unregister and resets the SoP sequence.
 
 ## Next action
 

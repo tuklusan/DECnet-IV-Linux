@@ -131,6 +131,17 @@ static void dniv_clear_adjacencies_locked(void)
         dniv_drop_adj_locked(&dniv_adjacencies[i]);
 }
 
+static void dniv_drop_if_adjacencies_locked(int ifindex)
+{
+    unsigned int i;
+
+    for (i = 0; i < DNIV_MAX_ADJACENCIES; i++) {
+        if (dniv_adjacencies[i].used &&
+            dniv_adjacencies[i].ifindex == ifindex)
+            dniv_drop_adj_locked(&dniv_adjacencies[i]);
+    }
+}
+
 static unsigned long dniv_listen_expires(__u16 timer)
 {
     __u32 milliseconds = dniv_wire_listen_msecs(timer, dniv_hello_interval);
@@ -192,9 +203,16 @@ static int dniv_netdev_event(struct notifier_block *nb, unsigned long event,
                              void *ptr)
 {
     struct net_device *dev = netdev_notifier_info_to_dev(ptr);
+    unsigned long flags;
     int err;
 
     (void)nb;
+    if (event == NETDEV_UNREGISTER) {
+        spin_lock_irqsave(&dniv_adj_lock, flags);
+        dniv_drop_if_adjacencies_locked(dev->ifindex);
+        spin_unlock_irqrestore(&dniv_adj_lock, flags);
+        return NOTIFY_DONE;
+    }
     if (event != NETDEV_REGISTER)
         return NOTIFY_DONE;
     err = dniv_add_dev_filters(dev);
