@@ -1,0 +1,23 @@
+name: Repository Policy
+
+on:
+  push:
+  pull_request_target:
+    types: [opened, synchronize, reopened, edited]
+  merge_group:
+  workflow_dispatch:
+  member:
+
+permissions:
+  contents: read
+
+jobs:
+  repository-policy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out trusted base
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Enforce repository policy
+        run: python3 tools/repo_policy.py
