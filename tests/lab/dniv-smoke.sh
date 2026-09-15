@@ -57,6 +57,29 @@ stat_value() {
     /usr/local/sbin/dnctl stats | sed -n "s/^$label = //p"
 }
 
+wait_post_change_hello() {
+    peer_address=$1
+    hello_baseline=$2
+    tries=$3
+    i=0
+    while [ "$i" -lt "$tries" ]; do
+        output=$(/usr/local/sbin/dnctl adjacencies 2>/dev/null || true)
+        hello_now=$(stat_value 'Hello frames received')
+        case "$hello_now" in
+            ''|*[!0-9]*) return 1 ;;
+        esac
+        if [ "$hello_now" -gt "$hello_baseline" ] && \
+           printf '%s\n' "$output" | grep -F "$peer_address via " | \
+               grep -Fq ' L1 router UP '; then
+            echo "DNIV-E1-CHANGEADDR-RX session=$session node=$name peer=$peer_address hellos=$hello_now"
+            return 0
+        fi
+        i=$((i + 1))
+        sleep 0.25
+    done
+    return 1
+}
+
 poweroff_pass() {
     marker=$1
     sync
@@ -160,6 +183,10 @@ e1)
     # protocol address must remain reachable across NETDEV_CHANGEADDR. Bring
     # the link down first because not every Ethernet driver permits a live
     # primary-address change.
+    change_hello_before=$(stat_value 'Hello frames received')
+    case "$change_hello_before" in
+        ''|*[!0-9]*) echo "DNIV-E1-FAIL session=$session node=$name reason=bad-changeaddr-stats"; exit 1 ;;
+    esac
     address=$((area * 1024 + node))
     changed_mac=$(printf '52:54:01:00:%02x:%02x' \
         "$((address & 255))" "$(((address >> 8) & 255))")
@@ -167,8 +194,8 @@ e1)
     ip link set dev "$iface" address "$changed_mac"
     ip link set dev "$iface" up
     echo "DNIV-E1-CHANGEADDR session=$session node=$name mac=$changed_mac"
-    if ! wait_adjacency_up "$peer_node" DNIV-E1-CHANGEADDR-INIT 40; then
-        echo "DNIV-E1-FAIL session=$session node=$name reason=changeaddr-adjacency"
+    if ! wait_post_change_hello "$peer_node" "$change_hello_before" 80; then
+        echo "DNIV-E1-FAIL session=$session node=$name reason=changeaddr-hello"
         exit 1
     fi
 
