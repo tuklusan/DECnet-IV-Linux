@@ -13,17 +13,20 @@ A minimal modern Linux distribution with native DECnet Phase IV networking.
 - Test first with two isolated VMs and scale to sixteen nodes in CI.
 - Target x86_64 first, then aarch64.
 
-## Planned architecture
+## Current baseline
 
+The reference distribution target is Alpine Linux 3.24 with `linux-virt`, a minimal X.Org + Fluxbox GUI, and the new `decnet_iv.ko` module built against the exact image kernel.
+
+Milestone 0 introduces the fresh kernel plumbing: a versioned `/dev/decnet_iv` control ABI, node identity configuration, DECnet Routing Layer EtherType (`0x6003`) receive registration, receive statistics, and the `dnctl` userspace controller. No old Linux DECnet implementation has been imported.
+
+## Layout
+
+- `include/uapi/` — versioned kernel/userspace ABI
 - `kernel/decnet/` — native DECnet Phase IV kernel module
 - `userspace/` — DECnet command-line tools and libraries
-- `image/alpine/` — minimal Linux image construction
+- `image/alpine/` — reference VM image construction
 - `tests/` — multi-node DECnet interoperability tests
-- `docs/` — protocol and architecture notes
+- `docs/` — protocol, architecture, and milestone notes
 - `.github/workflows/` — build, test, and image CI
 
-## Status
-
-Bootstrap repository. No DECnet implementation has been imported.
-
-The kernel networking stack will be a fresh implementation guided by DECnet Phase IV specifications and interoperability testing. Existing implementations may be studied for externally observable behavior, but code will not be copied into the kernel module unless licensing is explicitly compatible.
+See `docs/MILESTONES.md` for the implementation path.
