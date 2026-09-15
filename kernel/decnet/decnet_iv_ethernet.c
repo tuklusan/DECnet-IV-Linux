@@ -169,17 +169,20 @@ static int dniv_add_dev_filters(struct net_device *dev)
     if (dev->type != ARPHRD_ETHER || (dev->flags & IFF_LOOPBACK))
         return 0;
 
+    /* Own one secondary-unicast-list reference even when it matches the
+     * device's primary address.  That makes the DECnet receive address
+     * independent of later NETDEV_CHANGEADDR events and gives teardown an
+     * exact reference to release.
+     */
     dniv_wire_mac_from_address(READ_ONCE(dniv_local_address), local_mac);
-    if (!ether_addr_equal(local_mac, dev->dev_addr)) {
-        err = dev_uc_add(dev, local_mac);
-        if (err)
-            return err;
-    }
+    err = dev_uc_add(dev, local_mac);
+    if (err)
+        return err;
 
     group = dniv_local_node_type == DNIV_NODE_TYPE_ENDNODE ?
             dniv_all_endnodes : dniv_all_routers;
     err = dev_mc_add(dev, group);
-    if (err && !ether_addr_equal(local_mac, dev->dev_addr))
+    if (err)
         dev_uc_del(dev, local_mac);
     return err;
 }
@@ -193,8 +196,7 @@ static void dniv_remove_dev_filters(struct net_device *dev, __u16 address)
         return;
 
     dniv_wire_mac_from_address(address, local_mac);
-    if (!ether_addr_equal(local_mac, dev->dev_addr))
-        dev_uc_del(dev, local_mac);
+    dev_uc_del(dev, local_mac);
     group = dniv_local_node_type == DNIV_NODE_TYPE_ENDNODE ?
             dniv_all_endnodes : dniv_all_routers;
     dev_mc_del(dev, group);
@@ -608,8 +610,7 @@ int dniv_eth_set_address(__u16 address)
     /* Install every new receive filter before publishing the new address. */
     rtnl_lock();
     for_each_netdev(&init_net, dev) {
-        if (dev->type != ARPHRD_ETHER || (dev->flags & IFF_LOOPBACK) ||
-            ether_addr_equal(new_mac, dev->dev_addr))
+        if (dev->type != ARPHRD_ETHER || (dev->flags & IFF_LOOPBACK))
             continue;
         err = dev_uc_add(dev, new_mac);
         if (err) {
@@ -622,8 +623,7 @@ int dniv_eth_set_address(__u16 address)
         for_each_netdev(&init_net, dev) {
             if (dev == failed_dev)
                 break;
-            if (dev->type != ARPHRD_ETHER || (dev->flags & IFF_LOOPBACK) ||
-                ether_addr_equal(new_mac, dev->dev_addr))
+            if (dev->type != ARPHRD_ETHER || (dev->flags & IFF_LOOPBACK))
                 continue;
             dev_uc_del(dev, new_mac);
         }
@@ -641,8 +641,7 @@ int dniv_eth_set_address(__u16 address)
     for_each_netdev(&init_net, dev) {
         if (dev->type != ARPHRD_ETHER || (dev->flags & IFF_LOOPBACK))
             continue;
-        if (!ether_addr_equal(old_mac, dev->dev_addr))
-            dev_uc_del(dev, old_mac);
+        dev_uc_del(dev, old_mac);
     }
     rtnl_unlock();
     schedule_delayed_work(&dniv_hello_work, 0);
