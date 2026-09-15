@@ -62,6 +62,7 @@ sudo mkdir -p "$mnt/usr/src/decnet-iv-linux" "$mnt/usr/local/sbin" \
 sudo tar -C "$repo_root" --exclude=.git --exclude=out -cf - . | \
     sudo tar -C "$mnt/usr/src/decnet-iv-linux" -xf -
 
+sudo rm -f "$mnt/etc/resolv.conf"
 sudo cp -L /etc/resolv.conf "$mnt/etc/resolv.conf"
 printf 'LABEL=dniv-root / ext4 defaults 0 1\n' | sudo tee "$mnt/etc/fstab" >/dev/null
 printf 'dniv\n' | sudo tee "$mnt/etc/hostname" >/dev/null

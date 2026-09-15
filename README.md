@@ -13,7 +13,7 @@ A minimal modern Linux distribution with native DECnet Phase IV networking.
 
 Phase 1 provides UAPI version 1, configurable node identity (default 31.70 / DN70), DECnet Routing Layer EtherType receive registration/counters and `dnctl`.
 
-Phase 2 now uses Ubuntu Base 26.04.1 LTS. The official amd64 and arm64 rootfs tarballs are 33 MiB and are pinned by SHA-256. The VM lab builds the root disk before boot and direct-boots its exact kernel/initrd, so there is no installer, cloud provisioning layer, firmware dependency or management NIC in the acceptance path.
+Phase 2 uses Ubuntu Base 26.04.1 LTS. The official amd64 and arm64 rootfs tarballs are 33 MiB and are pinned by SHA-256. The VM lab builds the root disk before boot and direct-boots its exact kernel/initrd, so there is no installer, cloud provisioning layer, firmware dependency or management NIC in the acceptance path.
 
 ## Layout
 
@@ -22,7 +22,7 @@ Phase 2 now uses Ubuntu Base 26.04.1 LTS. The official amd64 and arm64 rootfs ta
 - `userspace/` — DECnet command-line tools and libraries
 - `image/ubuntu-base/` — pinned rootfs metadata and deterministic image builder
 - `tests/` — unit and interoperability tests
-- `docs/` — architecture, roadmap, test lab and continuity state
+- `docs/` — architecture, roadmap, test lab, handover and continuity state
 - `.github/workflows/` — repository, build, reference, continuity and VM gates
 
-Read `docs/PROJECT_STATE.md` first when resuming work. `docs/ROADMAP.md` is the canonical task order.
+Start with `docs/HANDOVER.md` when resuming work. It points to the authoritative project state and ordered roadmap.

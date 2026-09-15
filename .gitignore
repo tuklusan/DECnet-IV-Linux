@@ -10,9 +10,11 @@ modules.order
 build/
 dist/
 out/
+tests/lab/artifacts/
 *.qcow2
 *.raw
 *.img
 *.iso
+*.pcap
 *.log
 .DS_Store

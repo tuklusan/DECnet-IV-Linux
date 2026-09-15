@@ -49,6 +49,10 @@ mac_b=$(decnet_mac "$area" "$node_b")
 
 artifacts=${DNIV_LAB_ARTIFACTS:-"$(pwd)/tests/lab/artifacts"}
 timeout_seconds=${DNIV_LAB_TIMEOUT_SECONDS:-240}
+if [[ ! "$timeout_seconds" =~ ^[1-9][0-9]*$ ]]; then
+    echo "two-node: invalid DNIV_LAB_TIMEOUT_SECONDS" >&2
+    exit 2
+fi
 session=${DNIV_LAB_SESSION_ID:-"local-$(date -u +%Y%m%dT%H%M%SZ)-$$"}
 [[ "$session" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "two-node: invalid session id" >&2; exit 2; }
 mkdir -p "$artifacts/$session"
@@ -85,6 +89,15 @@ for tap in "$tap_a" "$tap_b"; do
 done
 sudo tcpdump -U -i "$bridge" -w "$pcap" 'ether proto 0x6003' >/dev/null 2>&1 &
 TCPDUMP_PID=$!
+for _ in {1..50}; do
+    [[ -s "$pcap" ]] && break
+    if ! kill -0 "$TCPDUMP_PID" 2>/dev/null; then
+        echo "two-node: tcpdump exited before capture became ready" >&2
+        exit 1
+    fi
+    sleep 0.1
+done
+[[ -s "$pcap" ]] || { echo "two-node: packet capture did not become ready" >&2; exit 1; }
 
 host_arch=$(uname -m)
 accel=tcg

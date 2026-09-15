@@ -1,6 +1,6 @@
 # Project State
 
-This is the continuity record for DECnet-IV-Linux. Repository state is authoritative. Read this file and `docs/ROADMAP.md` completely before changing code.
+This is the continuity record for DECnet-IV-Linux. Repository state is authoritative. Start at `docs/HANDOVER.md`, then read this file and `docs/ROADMAP.md` completely before changing code.
 
 ## Goal
 
@@ -72,8 +72,10 @@ A later phase never removes an earlier acceptance gate.
 - Workflows execute normal push gates only on `main`, so historical aliases cannot consume runners if they are touched again.
 - Every substantive commit updates this file in the same commit.
 - `tools/project_state_gate.py` enforces continuity requirements.
+- Local policy hooks are installed with `tools/install-hooks.sh`; both hook entry points are executable in the repository.
 - Keep commits atomic and run applicable static/unit/reference gates before advancing work.
-- Keep only project-relevant source, tests, build/image machinery and continuity documentation. The unrelated repository-update batch utility was removed during this cleanup.
+- Generated VM evidence stays under ignored `tests/lab/artifacts/`; do not commit generated images, captures or logs.
+- Keep only project-relevant source, tests, build/image machinery and continuity documentation.
 
 ## SoP delivery rule
 
@@ -98,12 +100,12 @@ The apt dependency set is frozen with Ubuntu Snapshot Service timestamp `2026091
 
 The lab deliberately removes the old boot/provisioning complexity. CI expands the rootfs, installs Ubuntu's virtual kernel plus the module/tools, copies out the exact kernel and initrd, then direct-boots two QCOW2 overlays with QEMU `-kernel`/`-initrd`. Each guest has one raw Ethernet NIC. A boot-conditioned smoke service sets node identity, sends EtherType `0x6003` frames to its peer, verifies kernel receive counters and powers off. No installer, cloud metadata, firmware image or management NIC is involved.
 
-The latest full disk review found that the Phase 2 scripts had duplicated the default area/nodes instead of consuming the documented `tests/lab/test-addresses.env` source of truth, and that guest NIC discovery had an avoidable startup race. The host lab now validates and derives the first two identities and DECnet MAC addresses from that file, passes the area into each guest, and the guest waits briefly for its NIC. This change resets the SoP sequence.
+The latest full review found additional cleanup and determinism gaps: generated packet captures were not ignored, the local commit-message hook had lost its executable bit, image DNS setup could trip over a rootfs resolver symlink, packet capture startup had a race, the bootstrap identity UAPI did not zero unused name bytes, and the stable handover entry point was missing. These are corrected together here; UAPI structure sizes are also asserted in the native unit build. This change resets the SoP sequence.
 
 ## Resume point
 
-The repository is cleanly based on Ubuntu Base 26.04.1, all historical branch refs have been reconciled to the maintained line, and Phase 2 uses a direct-kernel-boot two-VM design driven by the centralized test address pool. Normal workflow pushes are limited to `main`, and reference CI consumes the preferred fork URLs. The exact VM gate must prove both native CPU cases before protocol work proceeds.
+The repository is based on Ubuntu Base 26.04.1, historical branch refs are reconciled aliases of the maintained line, generated VM artifacts are ignored, and Phase 2 uses a direct-kernel-boot two-VM design driven by the centralized test address pool. Normal workflow pushes are limited to `main`, and reference CI consumes the preferred fork URLs. The exact VM gate must prove both native CPU cases before protocol work proceeds.
 
 ## Next action
 
-Run the exact Phase 2 VM gate on amd64 and arm64. Fix defects demonstrated by retained serial/pcap evidence. Once both native two-node cases are green and three consecutive full SoP passes are clean, move immediately into Phase 3: implement DECnet Ethernet address handling, hello parsing/generation and adjacency state/expiry with independent Route20/PyDECnet vectors. Add mixed-CPU VM execution after the native lab is stable; do not let VM plumbing block protocol implementation again.
+Restart SoP pass 1 from the complete latest repository copy. In parallel, let the exact Phase 2 VM gate run on amd64 and arm64; fix only defects demonstrated by retained serial/pcap evidence. Once both native two-node cases are green and three consecutive full SoP passes are clean, move immediately into Phase 3: implement DECnet Ethernet address handling, hello parsing/generation and adjacency state/expiry with independent Route20/PyDECnet vectors. Add mixed-CPU VM execution after the native lab is stable; do not let VM plumbing block protocol implementation again.

@@ -63,15 +63,18 @@ static bool dniv_name_valid(const char *name)
 
 static void dniv_identity_normalize(struct dniv_identity *identity)
 {
+    size_t len;
     size_t i;
 
     identity->uapi_version = DNIV_UAPI_VERSION;
     identity->reserved0 = 0;
     identity->reserved1 = 0;
     identity->name[DNIV_NODE_NAME_MAX] = '\0';
+    len = strnlen(identity->name, DNIV_NODE_NAME_BUFSZ);
 
-    for (i = 0; identity->name[i] != '\0'; i++)
+    for (i = 0; i < len; i++)
         identity->name[i] = toupper((unsigned char)identity->name[i]);
+    memset(identity->name + len, 0, sizeof(identity->name) - len);
 }
 
 static long dniv_ioctl(struct file *file, unsigned int cmd, unsigned long arg)

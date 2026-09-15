@@ -3,6 +3,9 @@
 #include <linux/decnet_iv.h>
 #include <stdio.h>
 
+_Static_assert(sizeof(struct dniv_identity) == 16, "dniv_identity UAPI size changed");
+_Static_assert(sizeof(struct dniv_stats) == 24, "dniv_stats UAPI size changed");
+
 int main(void)
 {
     __u16 first = DNIV_ADDR(31, 70);
