@@ -1,0 +1,28 @@
+name: Paranoid Review Gate
+
+on:
+  push:
+  pull_request:
+  merge_group:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  paranoid-review:
+    runs-on: ubuntu-latest
+    steps:
+      # Full history is required because the gate checks every commit in the range.
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Every substantive commit must carry a fresh independent-review receipt
+      # bound to the complete tracked repository snapshot, excluding the receipt itself.
+      - name: Verify independent review receipt
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}
+        run: python3 tools/paranoid_review_gate.py --base "$BASE_SHA" --head "$HEAD_SHA"

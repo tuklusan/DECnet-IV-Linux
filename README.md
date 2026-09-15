@@ -24,9 +24,11 @@ Phase 1 is the buildable bootstrap: UAPI version 1, configurable node identity (
 - `include/uapi/` — versioned kernel/userspace ABI
 - `kernel/decnet/` — native DECnet Phase IV kernel module
 - `userspace/` — DECnet command-line tools and libraries
-- `image/alpine/` — reference VM image construction
 - `tests/` — unit and multi-node interoperability tests
 - `docs/` — architecture, ordered roadmap, test lab and continuity state
-- `.github/workflows/` — policy, build, test and image gates
+- `reviews/` — exact-snapshot check-in review receipt
+- `.github/workflows/` — policy, build, reference, continuity and review gates
 
-Read `docs/PROJECT_STATE.md` first when resuming work. `docs/ROADMAP.md` is the canonical task order.
+The Phase 2 image-builder directory will be added when reproducible Alpine image construction begins.
+
+Start at `docs/HANDOVER.md` when resuming work. It points to the detailed `docs/PROJECT_STATE.md` continuity record and the canonical `docs/ROADMAP.md` task order.

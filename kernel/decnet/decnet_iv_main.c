@@ -43,14 +43,18 @@ static bool dniv_address_valid(__u16 address)
 
 static bool dniv_name_valid(const char *name)
 {
-    size_t len = strnlen(name, DNIV_NODE_NAME_BUFSZ);
+    size_t len;
     size_t i;
 
+    if (!name)
+        return false;
+
+    len = strnlen(name, DNIV_NODE_NAME_BUFSZ);
     if (len == 0 || len > DNIV_NODE_NAME_MAX)
         return false;
 
     for (i = 0; i < len; i++) {
-        if (!isalnum(name[i]))
+        if (!isalnum((unsigned char)name[i]))
             return false;
     }
 
@@ -67,7 +71,7 @@ static void dniv_identity_normalize(struct dniv_identity *identity)
     identity->name[DNIV_NODE_NAME_MAX] = '\0';
 
     for (i = 0; identity->name[i] != '\0'; i++)
-        identity->name[i] = toupper(identity->name[i]);
+        identity->name[i] = toupper((unsigned char)identity->name[i]);
 }
 
 static long dniv_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
@@ -153,6 +157,13 @@ static struct packet_type dniv_packet_type __read_mostly = {
 static int __init dniv_init(void)
 {
     int err;
+
+    if (default_area < 1 || default_area > 63 ||
+        default_node < 1 || default_node > 1023 ||
+        !dniv_name_valid(default_name)) {
+        pr_err("decnet_iv: invalid default identity parameters\n");
+        return -EINVAL;
+    }
 
     memset(&dniv_identity, 0, sizeof(dniv_identity));
     dniv_identity.uapi_version = DNIV_UAPI_VERSION;

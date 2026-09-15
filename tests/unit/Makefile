@@ -11,6 +11,8 @@ test_uapi: test_uapi.c
 
 test: test_uapi
 	./test_uapi
+	python3 test_paranoid_review_gate.py
+	python3 test_project_state_gate.py
 
 clean:
 	rm -f test_uapi

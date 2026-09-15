@@ -1,3 +1,4 @@
 #!/bin/sh
 python3 tools/repo_policy.py --staged || exit $?
-exec python3 tools/project_state_gate.py --staged
+python3 tools/project_state_gate.py --staged || exit $?
+exec python3 tools/paranoid_review_gate.py --staged

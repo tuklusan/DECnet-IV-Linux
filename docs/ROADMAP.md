@@ -8,6 +8,7 @@ Exit criteria:
 
 - repository policy gate is active;
 - every substantive commit refreshes `docs/PROJECT_STATE.md`;
+- every substantive commit carries an exact-snapshot independent paranoid-review receipt after the required dual manual read and triple clean SoP pass;
 - Route20 and PyDECnet are documented as external conformance peers;
 - no legacy Linux DECnet kernel implementation is used as the implementation base;
 - protocol/reference licensing boundaries are documented before source reuse is considered.
