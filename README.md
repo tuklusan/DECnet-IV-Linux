@@ -11,9 +11,11 @@ A minimal modern Linux distribution with native DECnet Phase IV networking.
 
 ## Current baseline
 
-Phase 1 provides UAPI version 1, configurable node identity (default 31.70 / DN70), DECnet Routing Layer EtherType receive registration/counters and `dnctl`.
+Phase 1 provides the retained bootstrap: configurable node identity (default 31.70 / DN70), DECnet Routing Layer EtherType registration/counters, `dnctl`, and native x86_64/aarch64 build gates.
 
 Phase 2 uses Ubuntu Base 26.04.1 LTS. The official amd64 and arm64 rootfs tarballs are 33 MiB and are pinned by SHA-256. The VM lab builds the root disk before boot and direct-boots its exact kernel/initrd, so there is no installer, cloud provisioning layer, firmware dependency or management NIC in the acceptance path.
+
+Phase 3 is in progress. UAPI version 2 adds DECnet Ethernet address handling, router/endnode hello parsing and generation, adjacency state/expiry, extended counters, and `dnctl adjacencies`. Independent wire vectors are checked against the pinned Route20 and PyDECnet forks before live interoperability gates.
 
 ## Layout
 

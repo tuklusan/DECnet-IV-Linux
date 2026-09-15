@@ -101,7 +101,7 @@ The wire implementation is independent and was cross-checked against pinned Rout
 
 Local development evidence for this slice: userspace and unit tests build with both GCC and Clang; the Phase 3 vectors pass; the module builds cleanly with `W=1` against Linux 6.12.96 headers. That build also exposed and fixed a pre-existing portability gap by explicitly including the header that defines `MODULE_ALIAS_NETPROTO`.
 
-No native VM or live independent-peer runtime claim is made yet for this slice.
+No native VM or live independent-peer runtime claim is made yet for this slice. The root README current-baseline summary is synchronized with UAPI version 2 and the Phase 3 in-progress state.
 
 ## Resume point
 
