@@ -1,6 +1,6 @@
 # External reference baselines
 
-The project prefers the maintained `tuklusan` forks for automated gates. Upstream repositories are comparison/provenance sources only.
+The project prefers the maintained `tuklusan` forks for automated gates and protocol comparison. Upstream repositories are comparison/provenance sources only.
 
 ## Route20
 
@@ -11,5 +11,13 @@ The project prefers the maintained `tuklusan` forks for automated gates. Upstrea
 `PYDECNET_REF` pins the current fork revision used for documentation, packet behavior and live interoperability.
 
 The current reference contains a pre-existing self-test contradiction in `Macaddr("1.24")`: the test requires DECnet `area.node` parsing while the code takes the hexadecimal path first. `PYDECNET_TEST_REF` therefore pins the immediately preceding internally consistent fork revision and its complete unit suite is run unmodified. No test is skipped or rewritten. Move the test pin forward when the contradiction is fixed.
+
+## LinuxDECnet
+
+`LINUXDECNET_REF` pins the preferred historical Linux DECnet fork for userspace behavior and compatibility comparison only. It is not the implementation base for the new kernel stack.
+
+## SIMH
+
+`SIMH_REF` pins the preferred simulator fork for later interoperability with real DEC operating-system images and mixed-system testing.
 
 The exact revisions live in `refs.env`. Any direct source reuse remains subject to the source repository's license and project licensing policy.

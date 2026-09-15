@@ -22,7 +22,7 @@ Preferred project references are `tuklusan/Route20`, `tuklusan/pydecnet`, `tuklu
 
 Every reference is independently licensed. Verify compatibility before copying or adapting source and preserve required notices. If reuse is unclear or incompatible, use observable protocol behavior and implement independently.
 
-Pinned automated references live in `tests/reference/refs.env`. Current pins are Route20 `b94115b2615c6463d1f006924ceeadde8e2d4367`, PyDECnet behavior/live reference `a7194be8d72dea6f9eb4f77083f056f53e80df58`, and PyDECnet test reference `9a844987bf3a1450632dee8d37e60a23a453bad3`. Self-to-self success is never sufficient for final interoperability claims.
+Pinned reference revisions live in `tests/reference/refs.env`. Current pins are Route20 `b94115b2615c6463d1f006924ceeadde8e2d4367`, PyDECnet behavior/live reference `a7194be8d72dea6f9eb4f77083f056f53e80df58`, PyDECnet test reference `9a844987bf3a1450632dee8d37e60a23a453bad3`, LinuxDECnet comparison reference `ff39eef045d1e4b7b72a3d40111e89c07a473398`, and SIMH reference `5b73b1032b52d19bf80752ea4d9cbbdc92e7b5e0`. Self-to-self success is never sufficient for final interoperability claims.
 
 ## Execution order
 
@@ -108,9 +108,11 @@ With equal priority, DN71 must win designated-router election over DN70. To make
 
 The E1 code history through commit `ea5f8727518926bc113d1d462843b5be9730ebf1` was fast-forwarded intact onto `main` when the project switched to direct-current-HEAD development. No runtime claim is implied by that fast-forward. Hosted build/reference/native E1 evidence is still required.
 
+A restarted SoP review after the direct-main policy change found that `tests/reference/refs.env` had lost the preferred LinuxDECnet and SIMH fork pins. The exact current fork revisions are restored, the reference README documents their roles, and this correction resets the SoP sequence.
+
 ## Resume point
 
-`main` is the only active development line and contains the complete E1 two-router adjacency acceptance harness, including expiry/restart, designated-router, protocol-source-MAC and DECnet-unicast-filter evidence. No pull request workflow is used. The previous E1 development ref is historical only. The latest repository-discipline edit changes documentation only and therefore resets the SoP sequence.
+`main` is the only active development line and contains the complete E1 two-router adjacency acceptance harness, including expiry/restart, designated-router, protocol-source-MAC and DECnet-unicast-filter evidence. No pull request workflow is used. The previous E1 development ref is historical only. The latest reference-pin correction restores all four preferred fork references and resets the SoP sequence.
 
 ## Next action
 
