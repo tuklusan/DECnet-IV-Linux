@@ -12,6 +12,8 @@ The basic VM gate uses the pinned Ubuntu Base rootfs and direct QEMU kernel/init
 
 Each node is a separate VM with its own kernel. Network namespaces are not sufficient for acceptance tests because they share kernel/module state.
 
+The two-node workflow keeps the retained Phase 2 raw-EtherType smoke gate as `phase2` mode and adds the Phase 3 E1 adjacency gate as `e1` mode. A legacy checkpoint without a recorded mode is accepted only by `phase2`; new checkpoints record the selected mode and may be resumed only by the same mode.
+
 ## Virtual lab
 
 - Build x86_64 and aarch64 images natively where possible.
@@ -29,7 +31,7 @@ Every repository workflow is manual-dispatch only. Every runner job also enters 
 
 The two-node VM workflow persists guest disk state explicitly. After QEMU is stopped, the lab stores the exact base QCOW2, portable per-node QCOW2 deltas backed by that base, the exact kernel and initrd, checksums, a session manifest, serial logs and packet capture in a per-architecture workflow artifact. Artifacts are retained for 14 days.
 
-A manual `resume_run_id` may restore a prior artifact only when its architecture and source commit match the current workflow. The restored node disks are copied before use, rebound to the restored base, and checkpointed again after the run. This is disk-state continuation across fresh hosts, not live CPU/RAM suspend-and-resume.
+A manual `resume_run_id` may restore a prior artifact only when its architecture and source commit match the current workflow. New-format checkpoints also require the acceptance mode to match. The restored node disks are copied before use, rebound to the restored base, and checkpointed again after the run. This is disk-state continuation across fresh hosts, not live CPU/RAM suspend-and-resume.
 
 ## Physical architecture lab
 
@@ -47,7 +49,9 @@ Check address encoding, DECnet MAC derivation, routing header forms, checksums a
 
 ### E1 - two nodes on one LAN
 
-Start with 31.70 and 31.71. Prove hello transmission/reception, adjacency creation/expiry, correct multicast/unicast addresses, routing-layer delivery and clean restart. Repeat with independent peers where supported.
+Start with 31.70 and 31.71. Prove generated/parsed router hellos, an observable INIT-to-UP transition, adjacency creation/expiry, all-routers and designated-router all-endnodes multicast behavior, correct DECnet source MACs and clean module restart/recovery. Repeat with independent peers where supported.
+
+The automated E1 self-to-self gate deliberately silences one router long enough to exceed the 3.1x listen timer, requires the peer adjacency to disappear, reloads the silent router, and requires both sides to return through INIT to UP before accepting the run. This is a prerequisite for, not a substitute for, independent-peer interoperability.
 
 ### E2 - router on two LANs
 

@@ -3,6 +3,14 @@ name: Two-Node VM Lab
 on:
   workflow_dispatch:
     inputs:
+      lab_mode:
+        description: Acceptance mode to run
+        required: true
+        default: phase2
+        type: choice
+        options:
+          - phase2
+          - e1
       resume_run_id:
         description: Prior Two-Node VM Lab run ID to resume; blank starts fresh
         required: false
@@ -37,9 +45,10 @@ jobs:
       queue: max
     timeout-minutes: 40
     env:
+      DNIV_LAB_MODE: ${{ inputs.lab_mode }}
       DNIV_LAB_TIMEOUT_SECONDS: 300
       DNIV_LAB_ARTIFACTS: ${{ github.workspace }}/tests/lab/artifacts
-      DNIV_LAB_SESSION_ID: run-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.arch }}
+      DNIV_LAB_SESSION_ID: run-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.arch }}-${{ inputs.lab_mode }}
       DNIV_LAB_ARCH: ${{ matrix.arch }}
       DNIV_LAB_SOURCE_SHA: ${{ github.sha }}
       DNIV_LAB_SOURCE_RUN_ID: ${{ github.run_id }}
@@ -75,6 +84,11 @@ jobs:
           grep -Fx 'FORMAT=1' "$state/session.env"
           grep -Fx 'ARCH=${{ matrix.arch }}' "$state/session.env"
           grep -Fx "SOURCE_SHA=$GITHUB_SHA" "$state/session.env"
+          if grep -q '^MODE=' "$state/session.env"; then
+            grep -Fx 'MODE=${{ inputs.lab_mode }}' "$state/session.env"
+          else
+            test '${{ inputs.lab_mode }}' = phase2
+          fi
           (cd "$state" && sha256sum -c SHA256SUMS)
           qemu-img check -q -f qcow2 "$state/node-a.qcow2"
           qemu-img check -q -f qcow2 "$state/node-b.qcow2"
@@ -110,7 +124,7 @@ jobs:
           echo "DNIV_LAB_KERNEL=$RUNNER_TEMP/boot-${{ matrix.arch }}/vmlinuz" >> "$GITHUB_ENV"
           echo "DNIV_LAB_INITRD=$RUNNER_TEMP/boot-${{ matrix.arch }}/initrd.img" >> "$GITHUB_ENV"
 
-      - name: Boot two independent nodes and exchange native DECnet frames
+      - name: Boot two independent nodes and run selected DECnet gate
         run: |
           tests/lab/run-two-node.sh "$DNIV_LAB_BASE" "$DNIV_LAB_KERNEL" "$DNIV_LAB_INITRD"
 

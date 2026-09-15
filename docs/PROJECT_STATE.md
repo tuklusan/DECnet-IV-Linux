@@ -61,7 +61,7 @@ A later phase never removes an earlier acceptance gate.
 
 ## Repository discipline
 
-- One developer works directly on the maintained `main` line; do not create development branches.
+- Work on feature branches based on the exact maintained `main` commit. Promote only an exact green reviewed commit to `main`; do not develop directly on the integration line.
 - Historical working refs were reconciled into `main` at commit `b51618cbf49ae43b223d3dcd15f156086fea41dc`; they are aliases only and must not carry divergent work.
 - Every substantive commit updates this file in the same commit.
 - `tools/project_state_gate.py` enforces continuity requirements.
@@ -91,6 +91,8 @@ All workflows are manual-dispatch. Jobs share the repository-wide x64/arm64 conc
 
 The Phase 2 smoke test deliberately remains a low-level EtherType receive gate. It sends arbitrary unicast payloads and is not a Phase 3 adjacency acceptance test. Since Phase 3 router mode now emits hellos automatically, the smoke service explicitly loads both test nodes as endnodes; endnodes do not subscribe to the all-routers multicast group, so automatic Phase 3 hello traffic cannot satisfy the retained receive-counter gate.
 
+The active E1 feature branch preserves that gate as `phase2` mode. New checkpoints record the selected lab mode; old checkpoints without a mode remain valid for `phase2` only.
+
 ## Phase 3 status
 
 Phase 3 implementation is in progress. The current slice adds independent DECnet Ethernet wire helpers and UAPI version 2, including standard Phase IV node MAC derivation, router and endnode hello parsing/generation, periodic hello emission, per-interface adjacency state, 3.1x LAN listen-time expiry, and `dnctl adjacencies`/extended counters.
@@ -105,14 +107,16 @@ The first restarted complete SoP review found two additional Phase 3 defects: th
 
 The following restarted review found a cross-phase regression: the retained Phase 2 VM smoke test could pass from automatically generated Phase 3 router hellos even if its deliberate raw-frame exchange failed. The smoke nodes now load explicitly as endnodes, isolating the old EtherType receive gate from Phase 3 multicast hello traffic.
 
-The next adversarial review found that correcting the serialized router-list bound alone was insufficient: the kernel could still retain more than 33 router adjacencies on one interface and silently omit the excess from its hello, creating asymmetric adjacency state. Router admission is now capped per interface at 33. When the set is full, a new router replaces only the lowest `(priority, node address)` entry, matching the pinned reference selection rule; otherwise it is ignored. This fix resets the SoP sequence again.
+The next adversarial review found that correcting the serialized router-list bound alone was insufficient: the kernel could still retain more than 33 router adjacencies on one interface and silently omit the excess from its hello, creating asymmetric adjacency state. Router admission is now capped per interface at 33. When the set is full, a new router replaces only the lowest `(priority, node address)` entry, matching the pinned reference selection rule; otherwise it is ignored. That correction is the reviewed `main` baseline at `7070768397230b990bad7703a8c29a9501e5433b`.
 
-No native VM or live independent-peer runtime claim is made yet for this slice. The root README current-baseline summary is synchronized with UAPI version 2 and the Phase 3 in-progress state.
+The active `phase3-e1-adjacency` feature branch adds the E1 self-to-self acceptance harness without claiming a runtime pass. It makes the two-node workflow select either the retained `phase2` gate or the new `e1` gate. E1 requires both routers to be observed in INIT before UP, nonzero hello TX/RX, one router to unload and remain silent beyond the listen timer, the peer adjacency to disappear, the silent router to reload and pass through INIT again, both routers to recover UP, and packet-capture evidence for all-routers traffic, designated-router all-endnodes traffic and both DECnet source MACs. Checkpoint mode compatibility is explicit and legacy Phase 2 checkpoints remain resumable only in `phase2` mode.
+
+No native VM or live independent-peer runtime claim is made yet for the E1 branch. The E1 commit must complete the SoP gate before hosted execution, then pass the required cheap build/reference checks and native x86_64/aarch64 E1 runs before promotion.
 
 ## Resume point
 
-Phase 2 infrastructure is stable except for explicitly selecting endnode mode in its retained smoke service so Phase 3 automatic router hellos cannot weaken the older acceptance gate. Phase 3 Ethernet initialization and adjacency code is the active protocol work. The latest reviews corrected the router-list wire bound and admission policy, null-output handling in hello builders, stale kernel-module documentation and the cross-phase smoke-test ambiguity. The next runtime proof must exercise actual generated/parsed hellos and adjacency state, not just arbitrary EtherType frames.
+`main` remains at reviewed Phase 3 baseline `7070768397230b990bad7703a8c29a9501e5433b`. Active work is on feature branch `phase3-e1-adjacency`, adding the E1 two-router adjacency acceptance harness while preserving the Phase 2 smoke gate and legacy checkpoint behavior. The harness is designed to prove observable INIT-to-UP formation, hello traffic, listener expiry, module restart/recovery, multicast behavior and DECnet source addressing; it has not yet been promoted or given a hosted runtime pass.
 
 ## Next action
 
-Restart the SoP sequence from the complete latest repository copy and require three consecutive clean passes. Do not launch runners during review. After the reviewed Phase 3 commit is stable, run only the exact cheap build/reference gates needed, then an E1 two-node native VM adjacency gate that proves hello exchange, INIT-to-UP formation, expiry and clean restart on x86_64 and aarch64. Add live interoperability against the pinned Route20 and PyDECnet forks as the next independent gate. Keep mixed-CPU VM work behind the native cases and do not return to CI redesign unless protocol testing demonstrates a real blocker.
+Commit the E1 harness and branch-discipline documentation atomically on `phase3-e1-adjacency`, then restart the SoP sequence from that exact complete repository copy and require three consecutive clean passes. Any defect found resets the sequence. After the exact branch commit is SoP-clean, run only the needed build/reference gates and the E1 two-node native VM mode on x86_64 and aarch64. Promote that exact commit to `main` only if all required checks are green. Then add live interoperability against the pinned Route20 and PyDECnet forks before beginning Phase 4 routing work.

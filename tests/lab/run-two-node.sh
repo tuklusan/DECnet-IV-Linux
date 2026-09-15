@@ -12,6 +12,12 @@ for file in "$base" "$kernel" "$initrd"; do
     [[ -r "$file" ]] || { echo "two-node: missing $file" >&2; exit 2; }
 done
 
+mode=${DNIV_LAB_MODE:-phase2}
+case "$mode" in
+    phase2|e1) ;;
+    *) echo "two-node: invalid DNIV_LAB_MODE: $mode" >&2; exit 2 ;;
+esac
+
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck disable=SC1091
 . "$script_dir/test-addresses.env"
@@ -71,6 +77,14 @@ if [[ -n "$resume_dir" ]]; then
                 "$resume_dir/SHA256SUMS"; do
         [[ -r "$file" ]] || { echo "two-node: incomplete resume state: $file" >&2; exit 2; }
     done
+    if grep -q '^MODE=' "$resume_dir/session.env"; then
+        grep -Fx "MODE=$mode" "$resume_dir/session.env" >/dev/null || {
+            echo "two-node: resume mode does not match $mode" >&2; exit 2;
+        }
+    elif [[ "$mode" != phase2 ]]; then
+        echo "two-node: legacy checkpoint is valid only for phase2 mode" >&2
+        exit 2
+    fi
     qemu-img check -q -f qcow2 "$resume_dir/node-a.qcow2"
     qemu-img check -q -f qcow2 "$resume_dir/node-b.qcow2"
     cp --reflink=auto "$resume_dir/node-a.qcow2" "$disk_a"
@@ -141,8 +155,8 @@ accel=tcg
 if [[ -e /dev/kvm && -r /dev/kvm && -w /dev/kvm ]]; then accel=kvm; fi
 
 start_node() {
-    local name=$1 node=$2 peer=$3 mac=$4 tap=$5 disk=$6 log=$7
-    local common="root=LABEL=dniv-root rootfstype=ext4 rw dniv.smoke=1 dniv.area=$area dniv.node=$node dniv.name=$name dniv.peer=$peer dniv.session=$session"
+    local name=$1 node=$2 peer_mac=$3 peer_node=$4 role=$5 mac=$6 tap=$7 disk=$8 log=$9
+    local common="root=LABEL=dniv-root rootfstype=ext4 rw dniv.smoke=1 dniv.mode=$mode dniv.area=$area dniv.node=$node dniv.name=$name dniv.peer=$peer_mac dniv.peer_node=$area.$peer_node dniv.role=$role dniv.session=$session"
     case "$host_arch" in
         x86_64)
             exec qemu-system-x86_64 -name "$name" -accel "$accel" -m 512 -smp 1 \
@@ -168,29 +182,32 @@ start_node() {
     esac
 }
 
-start_node "$name_a" "$node_a" "$mac_b" "$mac_a" "$tap_a" "$disk_a" "$log_a" & QA_PID=$!
-start_node "$name_b" "$node_b" "$mac_a" "$mac_b" "$tap_b" "$disk_b" "$log_b" & QB_PID=$!
+start_node "$name_a" "$node_a" "$mac_b" "$node_b" A "$mac_a" "$tap_a" "$disk_a" "$log_a" & QA_PID=$!
+start_node "$name_b" "$node_b" "$mac_a" "$node_a" B "$mac_b" "$tap_b" "$disk_b" "$log_b" & QB_PID=$!
 
+if [[ "$mode" == e1 ]]; then
+    marker=DNIV-E1-PASS
+else
+    marker=DNIV-LAB-PASS
+fi
 deadline=$((SECONDS + timeout_seconds))
 pass_a=0
 pass_b=0
 while (( SECONDS < deadline )); do
-    grep -Fq "DNIV-LAB-PASS session=$session node=$name_a" "$log_a" 2>/dev/null && pass_a=1
-    grep -Fq "DNIV-LAB-PASS session=$session node=$name_b" "$log_b" 2>/dev/null && pass_b=1
+    grep -Fq "$marker session=$session node=$name_a" "$log_a" 2>/dev/null && pass_a=1
+    grep -Fq "$marker session=$session node=$name_b" "$log_b" 2>/dev/null && pass_b=1
     if (( pass_a && pass_b )); then break; fi
     if ! kill -0 "$QA_PID" 2>/dev/null && (( ! pass_a )); then
-        grep -Fq "DNIV-LAB-PASS session=$session node=$name_a" "$log_a" 2>/dev/null && pass_a=1
+        grep -Fq "$marker session=$session node=$name_a" "$log_a" 2>/dev/null && pass_a=1
         (( pass_a )) || { echo "two-node: $name_a exited before pass" >&2; break; }
     fi
     if ! kill -0 "$QB_PID" 2>/dev/null && (( ! pass_b )); then
-        grep -Fq "DNIV-LAB-PASS session=$session node=$name_b" "$log_b" 2>/dev/null && pass_b=1
+        grep -Fq "$marker session=$session node=$name_b" "$log_b" 2>/dev/null && pass_b=1
         (( pass_b )) || { echo "two-node: $name_b exited before pass" >&2; break; }
     fi
     sleep 1
 done
 
-# Let successful guests flush their final reciprocal frames and normal shutdown,
-# but never let guest teardown turn a failed lab into an unbounded wait.
 if (( pass_a && pass_b )); then sleep 3; fi
 terminate_guest "$QA_PID"
 terminate_guest "$QB_PID"
@@ -199,8 +216,6 @@ sudo kill "$TCPDUMP_PID" 2>/dev/null || true
 wait "$TCPDUMP_PID" 2>/dev/null || true
 unset TCPDUMP_PID
 
-# Hosted runners are ephemeral. Package an exact bootable disk checkpoint so a
-# later job can resume the guest disks without depending on the destroyed host.
 checkpoint="$work/checkpoint"
 mkdir -p "$checkpoint"
 cp --reflink=auto "$base" "$checkpoint/base.qcow2"
@@ -220,6 +235,7 @@ qemu-img convert -q -f qcow2 -O qcow2 -B "$checkpoint/base.qcow2" -F qcow2 \
 )
 {
     printf 'FORMAT=1\n'
+    printf 'MODE=%s\n' "$mode"
     printf 'SESSION_ID=%s\n' "$session"
     printf 'ARCH=%s\n' "${DNIV_LAB_ARCH:-$host_arch}"
     printf 'SOURCE_SHA=%s\n' "${DNIV_LAB_SOURCE_SHA:-local}"
@@ -229,13 +245,48 @@ qemu-img convert -q -f qcow2 -O qcow2 -B "$checkpoint/base.qcow2" -F qcow2 \
 } > "$checkpoint/session.env"
 
 if (( ! pass_a || ! pass_b )); then
-    echo "--- $name_a ---" >&2; tail -120 "$log_a" >&2 || true
-    echo "--- $name_b ---" >&2; tail -120 "$log_b" >&2 || true
+    echo "--- $name_a ---" >&2; tail -160 "$log_a" >&2 || true
+    echo "--- $name_b ---" >&2; tail -160 "$log_b" >&2 || true
     exit 1
 fi
+
 frames=$(sudo tcpdump -nn -r "$pcap" 'ether proto 0x6003' 2>/dev/null | wc -l)
 if (( frames < 2 )); then
     echo "two-node: expected captured DECnet frames, saw $frames" >&2
     exit 1
 fi
-echo "two-node: pass on $host_arch for $area.$node_a/$area.$node_b, captured $frames DECnet routing frames"
+
+if [[ "$mode" == e1 ]]; then
+    all_routers=$(sudo tcpdump -nn -e -r "$pcap" \
+        'ether proto 0x6003 and ether dst ab:00:00:03:00:00' 2>/dev/null | wc -l)
+    all_endnodes=$(sudo tcpdump -nn -e -r "$pcap" \
+        'ether proto 0x6003 and ether dst ab:00:00:04:00:00' 2>/dev/null | wc -l)
+    from_a=$(sudo tcpdump -nn -e -r "$pcap" \
+        "ether proto 0x6003 and ether src $mac_a" 2>/dev/null | wc -l)
+    from_b=$(sudo tcpdump -nn -e -r "$pcap" \
+        "ether proto 0x6003 and ether src $mac_b" 2>/dev/null | wc -l)
+    if (( all_routers < 4 || all_endnodes < 1 || from_a < 2 || from_b < 2 )); then
+        echo "two-node: E1 wire evidence incomplete routers=$all_routers endnodes=$all_endnodes srcA=$from_a srcB=$from_b" >&2
+        exit 1
+    fi
+    for log_marker in \
+        "DNIV-E1-INIT session=$session node=$name_a" \
+        "DNIV-E1-INIT session=$session node=$name_b" \
+        "DNIV-E1-RESTART-INIT session=$session node=$name_a" \
+        "DNIV-E1-EXPIRED session=$session node=$name_b" \
+        "DNIV-E1-RECOVERED session=$session node=$name_a" \
+        "DNIV-E1-RECOVERED session=$session node=$name_b"; do
+        if [[ "$log_marker" == *"node=$name_b"* ]]; then
+            evidence_log=$log_b
+        else
+            evidence_log=$log_a
+        fi
+        grep -Fq "$log_marker" "$evidence_log" || {
+            echo "two-node: missing E1 evidence: $log_marker" >&2
+            exit 1
+        }
+    done
+    echo "two-node: E1 pass on $host_arch for $area.$node_a/$area.$node_b, captured $frames DECnet frames"
+else
+    echo "two-node: Phase 2 pass on $host_arch for $area.$node_a/$area.$node_b, captured $frames DECnet routing frames"
+fi
