@@ -115,6 +115,52 @@ def event_checks(event: dict, failures: list[str]) -> None:
                     )
 
 
+def scan_collaborators(failures: list[str]) -> None:
+    check_value(
+        "repository identity",
+        os.environ.get(ENV_PREFIX + "_REPOSITORY"),
+        failures,
+    )
+    check_value(
+        "workflow actor",
+        os.environ.get(ENV_PREFIX + "_ACTOR"),
+        failures,
+    )
+
+    if os.environ.get("CI", "").casefold() != "true":
+        return
+
+    repository = os.environ.get(ENV_PREFIX + "_REPOSITORY")
+    token = os.environ.get("GH_TOKEN")
+    if not repository or not token:
+        failures.append("collaborator inspection")
+        print(
+            "repository policy error: collaborator inspection unavailable",
+            file=sys.stderr,
+        )
+        return
+
+    result = run(
+        "gh",
+        "api",
+        f"repos/{repository}/collaborators",
+        "--paginate",
+        "--jq",
+        ".[].login",
+        check=False,
+    )
+    if result.returncode != 0:
+        failures.append("collaborator inspection")
+        print(
+            "repository policy error: collaborator inspection failed",
+            file=sys.stderr,
+        )
+        return
+
+    for login in result.stdout.decode("utf-8", errors="replace").splitlines():
+        check_value("collaborator login", login, failures)
+
+
 def resolve_target(event: dict) -> tuple[str, str | None]:
     pr = event.get("pull_request")
     if isinstance(pr, dict):
@@ -255,6 +301,7 @@ def main() -> int:
     else:
         event = load_event()
         event_checks(event, failures)
+        scan_collaborators(failures)
         head, base = resolve_target(event)
         ensure_object(head)
         scan_tree(head, failures)
