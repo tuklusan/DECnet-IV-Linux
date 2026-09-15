@@ -20,7 +20,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      # Generic headers are sufficient for a compile gate; image CI will later build against the exact Alpine kernel.
+      # Generic headers are sufficient for the bootstrap compile gate; image CI later builds against the exact selected image kernel.
       - name: Install build dependencies
         run: |
           sudo apt-get update

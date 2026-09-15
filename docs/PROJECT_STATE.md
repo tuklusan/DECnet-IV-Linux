@@ -89,7 +89,7 @@ The bootstrap does not claim adjacency, routing, NSP, Session Control, NICE/NML 
 
 ## Current status
 
-Phase 2 image/lab work has been reset. Stale distribution-specific image assumptions and dangling development histories are not part of the active tree. The kernel/userspace Phase 1 bootstrap and independent reference gates are the retained foundation.
+Phase 2 image/lab work has been reset. Stale distribution-specific image assumptions and dangling development histories are not part of the active tree. The active tree contains no distribution-specific image files or naming. The kernel/userspace Phase 1 bootstrap and independent reference gates are the retained foundation.
 
 ## Resume point
 
