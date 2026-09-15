@@ -37,6 +37,9 @@ static void test_router_vector(void)
         0x00, 0x00, 0x00
     };
 
+    assert(dniv_wire_build_router_hello(NULL, sizeof(buf), DNIV_ADDR(31, 70),
+                                         DNIV_NODE_TYPE_L1_ROUTER, 64, 10,
+                                         NULL, 0) == 0);
     len = dniv_wire_build_router_hello(buf, sizeof(buf), DNIV_ADDR(31, 70),
                                        DNIV_NODE_TYPE_L1_ROUTER, 64, 10,
                                        NULL, 0);
@@ -85,6 +88,37 @@ static void test_router_vector(void)
                                              31, &state) < 0);
 }
 
+static void test_router_list_limit(void)
+{
+    struct dniv_wire_rs_entry entries[DNIV_WIRE_MAX_RS_ENTRIES + 1U];
+    __u8 buf[DNIV_WIRE_ROUTER_MIN_LEN +
+             (DNIV_WIRE_MAX_RS_ENTRIES + 1U) * DNIV_WIRE_RS_ENTRY_LEN];
+    struct dniv_wire_hello hello;
+    unsigned int i;
+    int len;
+
+    assert(DNIV_WIRE_MAX_RS_ENTRIES == 33U);
+    for (i = 0; i < DNIV_WIRE_MAX_RS_ENTRIES + 1U; i++) {
+        entries[i].address = DNIV_ADDR(31, i + 1U);
+        entries[i].priority = (__u8)i;
+        entries[i].twoway = 1;
+    }
+
+    len = dniv_wire_build_router_hello(buf, sizeof(buf), DNIV_ADDR(31, 70),
+                                       DNIV_NODE_TYPE_L1_ROUTER, 64, 10,
+                                       entries, DNIV_WIRE_MAX_RS_ENTRIES);
+    assert(len == 258);
+    assert(buf[18] == 239);
+    assert(buf[26] == 231);
+    assert(dniv_wire_parse_hello(buf, (__u32)len, &hello) == DNIV_WIRE_OK);
+    assert(hello.rs_count == DNIV_WIRE_MAX_RS_ENTRIES);
+
+    assert(dniv_wire_build_router_hello(
+               buf, sizeof(buf), DNIV_ADDR(31, 70),
+               DNIV_NODE_TYPE_L1_ROUTER, 64, 10, entries,
+               DNIV_WIRE_MAX_RS_ENTRIES + 1U) == 0);
+}
+
 static void test_endnode_vector(void)
 {
     __u8 buf[128];
@@ -94,6 +128,8 @@ static void test_endnode_vector(void)
     unsigned int i;
 
     dniv_wire_mac_from_address(DNIV_ADDR(31, 70), neighbor);
+    assert(dniv_wire_build_endnode_hello(NULL, sizeof(buf), DNIV_ADDR(31, 71),
+                                          10, neighbor) == 0);
     len = dniv_wire_build_endnode_hello(buf, sizeof(buf), DNIV_ADDR(31, 71),
                                         10, neighbor);
     assert(len == 82);
@@ -148,6 +184,7 @@ int main(void)
 {
     test_mac();
     test_router_vector();
+    test_router_list_limit();
     test_endnode_vector();
     test_malformed_and_padding();
     puts("Phase 3 Ethernet vector tests passed");

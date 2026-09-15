@@ -101,11 +101,13 @@ The wire implementation is independent and was cross-checked against pinned Rout
 
 Local development evidence for this slice: userspace and unit tests build with both GCC and Clang; the Phase 3 vectors pass; the module builds cleanly with `W=1` against Linux 6.12.96 headers. That build also exposed and fixed a pre-existing portability gap by explicitly including the header that defines `MODULE_ALIAS_NETPROTO`.
 
+The first restarted complete SoP review found two additional Phase 3 defects: the router-list maximum was incorrectly 35 instead of the 33-entry architectural/reference limit (`NBRA=33` in the pinned Route20 fork, consistent with the pinned PyDECnet E-list bound), and the shared hello builders did not reject a null output buffer before writing. Both are corrected with unit coverage. The same pass found the kernel-module README still described only the bootstrap milestone; it is synchronized with UAPI version 2 and the active Phase 3 scope. These fixes reset the SoP sequence.
+
 No native VM or live independent-peer runtime claim is made yet for this slice. The root README current-baseline summary is synchronized with UAPI version 2 and the Phase 3 in-progress state.
 
 ## Resume point
 
-Phase 2 infrastructure is stable and intentionally unchanged. Phase 3 Ethernet initialization and adjacency code is now the active protocol work. The next runtime proof must exercise actual generated/parsed hellos and adjacency state, not just arbitrary EtherType frames.
+Phase 2 infrastructure is stable and intentionally unchanged. Phase 3 Ethernet initialization and adjacency code is now the active protocol work. The latest review corrected the router-list architectural bound, null-output handling in hello builders and stale kernel-module documentation. The next runtime proof must exercise actual generated/parsed hellos and adjacency state, not just arbitrary EtherType frames.
 
 ## Next action
 

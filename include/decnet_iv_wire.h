@@ -16,7 +16,7 @@
 #define DNIV_WIRE_ROUTER_MIN_ELIST_LEN 8U
 #define DNIV_WIRE_ROUTER_MIN_LEN 27U
 #define DNIV_WIRE_RS_ENTRY_LEN 7U
-#define DNIV_WIRE_MAX_RS_ENTRIES 35U
+#define DNIV_WIRE_MAX_RS_ENTRIES 33U
 #define DNIV_WIRE_ENDNODE_FIXED_LEN 32U
 #define DNIV_WIRE_ENDNODE_TEST_LEN 50U
 #define DNIV_WIRE_ENDNODE_LEN \
@@ -113,7 +113,7 @@ static inline int dniv_wire_build_router_hello(
     __u32 len;
     __u32 i;
 
-    if (!dniv_wire_address_valid(address) ||
+    if (!buf || !dniv_wire_address_valid(address) ||
         (node_type != DNIV_NODE_TYPE_L1_ROUTER &&
          node_type != DNIV_NODE_TYPE_L2_ROUTER) ||
         priority > 127U || entry_count > DNIV_WIRE_MAX_RS_ENTRIES ||
@@ -158,7 +158,8 @@ static inline int dniv_wire_build_endnode_hello(
 {
     __u32 i;
 
-    if (!dniv_wire_address_valid(address) || capacity < DNIV_WIRE_ENDNODE_LEN)
+    if (!buf || !dniv_wire_address_valid(address) ||
+        capacity < DNIV_WIRE_ENDNODE_LEN)
         return 0;
 
     dniv_wire_zero(buf, DNIV_WIRE_ENDNODE_LEN);
