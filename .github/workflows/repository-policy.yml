@@ -20,4 +20,6 @@ jobs:
         with:
           fetch-depth: 0
       - name: Enforce repository policy
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: python3 tools/repo_policy.py
