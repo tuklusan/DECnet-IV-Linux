@@ -10,6 +10,11 @@ The first lab boots DN70 (31.70) and DN71 (31.71) on one isolated Linux bridge.
 The official Alpine tiny image is not modified with libguestfs. Instead, each node
 receives a NoCloud `CIDATA` seed and provisions itself on first boot.
 
+The launcher sparse-grows each tiny QCOW2 guest disk to 4 GiB by default before
+first boot. Tiny Cloud then expands the root filesystem during initial bootstrap.
+Set `DNIV_LAB_DISK_BYTES` to an integer number of bytes to use a different size;
+values below 1 GiB are rejected.
+
 Each guest:
 
 1. uses a separate disposable management NIC only to reach Alpine package mirrors;
@@ -32,8 +37,8 @@ Phase IV hello, adjacency, routing or NSP behavior.
 Every run has a stable session ID and a separate attempt ID. Stateful files live under
 `tests/lab/artifacts/sessions/<session-id>/`:
 
-- `session.env` records the session ID, source revision, base-image checksum, MACs and
-  stateful disk/seed names;
+- `session.env` records the session ID, provisioned source revision, base-image
+  checksum, virtual disk size, MACs and stateful disk/seed names;
 - `dn70.qcow2` and `dn71.qcow2` are the resumable guest disks;
 - the NoCloud seeds carry the same session ID in their instance IDs;
 - `attempts/<attempt-id>/` contains that attempt's serial logs, pcap, PID files and
@@ -42,9 +47,20 @@ Every run has a stable session ID and a separate attempt ID. Stateful files live
 
 A fresh run creates the session. To continue preserved disks locally, set the same
 `DNIV_LAB_SESSION_ID`, choose a new `DNIV_LAB_ATTEMPT_ID`, set
-`DNIV_LAB_RESUME=1`, and run the launcher again.
+`DNIV_LAB_RESUME=1`, and run the launcher again. Resume never silently recreates a
+missing disk, seed or manifest.
 
-CI uploads the entire session directory, including the qcow2 disks. A manual workflow
+When a preserved disk is smaller than the requested virtual size, the launcher grows
+it without replacing it. If our `/var/lib/decnet-lab/provisioned` marker is absent,
+the launcher clears Tiny Cloud's completion marker so an interrupted first bootstrap
+can retry on the same known disk. A successfully provisioned disk keeps its Tiny
+Cloud completion state.
+
+Attempt metadata records both `SESSION_SOURCE_REV` and `RUNNER_SOURCE_REV` (and the
+corresponding base-image checksums), so a preserved image cannot be mistaken for an
+image freshly provisioned from the launcher revision that happens to resume it.
+
+CI uploads the entire session directory, including the QCOW2 disks. A manual workflow
 run can restore a prior session by supplying its workflow run ID. If no explicit
 session ID is supplied, the restored session defaults to `gha-<prior-run-id>`.
 

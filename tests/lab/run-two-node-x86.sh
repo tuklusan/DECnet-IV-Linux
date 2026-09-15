@@ -12,6 +12,7 @@ artifacts=${DNIV_LAB_ARTIFACTS:-"$repo_root/tests/lab/artifacts"}
 session_id=${DNIV_LAB_SESSION_ID:-"local-$(date -u +%Y%m%dT%H%M%SZ)-$$"}
 attempt_id=${DNIV_LAB_ATTEMPT_ID:-"attempt-$(date -u +%Y%m%dT%H%M%SZ)-$$"}
 resume=${DNIV_LAB_RESUME:-0}
+disk_bytes=${DNIV_LAB_DISK_BYTES:-4294967296}
 
 for value in "$session_id" "$attempt_id"; do
     if [[ ! "$value" =~ ^[A-Za-z0-9._-]+$ ]]; then
@@ -21,6 +22,10 @@ for value in "$session_id" "$attempt_id"; do
 done
 if [[ "$resume" != 0 && "$resume" != 1 ]]; then
     echo "two-node lab: DNIV_LAB_RESUME must be 0 or 1" >&2
+    exit 2
+fi
+if [[ ! "$disk_bytes" =~ ^[0-9]+$ ]] || (( disk_bytes < 1073741824 )); then
+    echo "two-node lab: DNIV_LAB_DISK_BYTES must be an integer >= 1073741824" >&2
     exit 2
 fi
 
@@ -41,6 +46,62 @@ lan71=aa:00:04:00:47:7c
 mgmt70=52:54:00:70:00:01
 mgmt71=52:54:00:71:00:01
 
+grow_qcow2() {
+    local image=$1 current
+    current=$(qemu-img info --output=json "$image" | python3 -c 'import json,sys; print(json.load(sys.stdin)["virtual-size"])')
+    if (( current < disk_bytes )); then
+        echo "two-node lab: growing $(basename "$image") from ${current} to ${disk_bytes} bytes"
+        qemu-img resize "$image" "$disk_bytes"
+    fi
+}
+
+set_manifest_value() {
+    local key=$1 value=$2 file=$3 tmp
+    tmp="${file}.tmp"
+    awk -F= -v key="$key" -v value="$value" '
+        BEGIN { found = 0 }
+        $1 == key { print key "=" value; found = 1; next }
+        { print }
+        END { if (!found) print key "=" value }
+    ' "$file" >"$tmp"
+    mv "$tmp" "$file"
+}
+
+reset_incomplete_bootstrap() (
+    set -euo pipefail
+    local image=$1 node_name=$2 nbd=/dev/nbd0 rootdev mnt
+    mnt=$(mktemp -d)
+    cleanup_nbd() {
+        set +e
+        mountpoint -q "$mnt" && sudo umount "$mnt"
+        sudo qemu-nbd --disconnect "$nbd" >/dev/null 2>&1
+        rmdir "$mnt" 2>/dev/null
+    }
+    trap cleanup_nbd EXIT
+
+    sudo modprobe nbd max_part=16
+    sudo qemu-nbd --disconnect "$nbd" >/dev/null 2>&1 || true
+    sudo qemu-nbd --connect="$nbd" "$image"
+    sudo udevadm settle || true
+
+    rootdev=$(lsblk -nrpo NAME,FSTYPE,LABEL "$nbd" | awk '$2 ~ /^ext[234]$/ && $3 == "/" { print $1; exit }')
+    if [[ -z "$rootdev" ]]; then
+        rootdev=$(lsblk -nrpo NAME,FSTYPE "$nbd" | awk '$2 ~ /^ext[234]$/ { print $1; exit }')
+    fi
+    if [[ -z "$rootdev" ]]; then
+        echo "two-node lab: cannot find ext root filesystem in $image" >&2
+        exit 1
+    fi
+
+    sudo mount "$rootdev" "$mnt"
+    if sudo test -f "$mnt/var/lib/decnet-lab/provisioned"; then
+        echo "two-node lab: ${node_name} already provisioned; preserving Tiny Cloud completion state"
+    else
+        sudo rm -f "$mnt/var/lib/cloud/.bootstrap-complete"
+        echo "two-node lab: ${node_name} incomplete; Tiny Cloud bootstrap reset for retry"
+    fi
+)
+
 mkdir -p "$artifacts/sessions"
 if [[ "$resume" == 0 && -e "$manifest" ]]; then
     echo "two-node lab: session $session_id already exists; set DNIV_LAB_RESUME=1 to reuse it" >&2
@@ -48,8 +109,10 @@ if [[ "$resume" == 0 && -e "$manifest" ]]; then
 fi
 mkdir -p "$session_dir" "$attempt_dir"
 
-source_rev=$(git -C "$repo_root" rev-parse HEAD 2>/dev/null || printf unknown)
-base_sha256=$(sha256sum "$base" | awk '{print $1}')
+runner_source_rev=$(git -C "$repo_root" rev-parse HEAD 2>/dev/null || printf unknown)
+runner_base_sha256=$(sha256sum "$base" | awk '{print $1}')
+session_source_rev=$runner_source_rev
+session_base_sha256=$runner_base_sha256
 
 if [[ "$resume" == 1 ]]; then
     for required in "$manifest" "$node70" "$node71" "$seed70" "$seed71"; do
@@ -64,10 +127,21 @@ if [[ "$resume" == 1 ]]; then
         echo "two-node lab: session manifest mismatch" >&2
         exit 1
     fi
-    echo "two-node lab: resuming session=${session_id} attempt=${attempt_id}"
+    session_source_rev=${SOURCE_REV:-unknown}
+    session_base_sha256=${BASE_IMAGE_SHA256:-unknown}
+
+    grow_qcow2 "$node70"
+    grow_qcow2 "$node71"
+    reset_incomplete_bootstrap "$node70" DN70
+    reset_incomplete_bootstrap "$node71" DN71
+    set_manifest_value DISK_VIRTUAL_SIZE_BYTES "$disk_bytes" "$manifest"
+
+    echo "two-node lab: resuming session=${session_id} attempt=${attempt_id} session-source=${session_source_rev} runner-source=${runner_source_rev}"
 else
     cp --reflink=auto "$base" "$node70"
     cp --reflink=auto "$base" "$node71"
+    grow_qcow2 "$node70"
+    grow_qcow2 "$node71"
 
     "$repo_root/tests/lab/make-nocloud-seed.sh" \
         "$seed70" "$session_id" 31.70 DN70 "$lan70" "$lan71" "$mgmt70"
@@ -77,8 +151,9 @@ else
     cat >"$manifest" <<EOF_SESSION
 LAB_SESSION_ID=$session_id
 CREATED_UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-SOURCE_REV=$source_rev
-BASE_IMAGE_SHA256=$base_sha256
+SOURCE_REV=$runner_source_rev
+BASE_IMAGE_SHA256=$runner_base_sha256
+DISK_VIRTUAL_SIZE_BYTES=$disk_bytes
 DN70_IMAGE=dn70.qcow2
 DN71_IMAGE=dn71.qcow2
 DN70_SEED=dn70.seed.iso
@@ -96,8 +171,13 @@ LAB_SESSION_ID=$session_id
 LAB_ATTEMPT_ID=$attempt_id
 RESUME=$resume
 STARTED_UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-SOURCE_REV=$source_rev
-BASE_IMAGE_SHA256=$base_sha256
+SOURCE_REV=$session_source_rev
+SESSION_SOURCE_REV=$session_source_rev
+RUNNER_SOURCE_REV=$runner_source_rev
+BASE_IMAGE_SHA256=$session_base_sha256
+SESSION_BASE_IMAGE_SHA256=$session_base_sha256
+RUNNER_BASE_IMAGE_SHA256=$runner_base_sha256
+DISK_VIRTUAL_SIZE_BYTES=$disk_bytes
 DN70_LOG=dn70.serial.log
 DN71_LOG=dn71.serial.log
 PCAP=lan.pcap
@@ -180,6 +260,10 @@ done
 
 if (( ! finished )); then
     echo "two-node lab: session=${session_id} attempt=${attempt_id} guests did not finish before timeout" >&2
+    kill "$Q70_PID" "$Q71_PID" 2>/dev/null || true
+    wait "$Q70_PID" 2>/dev/null || true
+    wait "$Q71_PID" 2>/dev/null || true
+    unset Q70_PID Q71_PID
     echo "--- DN70 serial tail ---" >&2
     tail -120 "$log70" 2>/dev/null >&2 || true
     echo "--- DN71 serial tail ---" >&2
