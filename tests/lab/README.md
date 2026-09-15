@@ -6,14 +6,29 @@ timers and interface state. The default address allocation comes from
 
 ## Phase 2 smoke test
 
-The first lab boots DN70 (31.70) and DN71 (31.71) on one Linux bridge. Each guest:
+The first lab boots DN70 (31.70) and DN71 (31.71) on one isolated Linux bridge.
+The official Alpine tiny image is not modified with libguestfs. Instead, each node
+receives a NoCloud `CIDATA` seed and provisions itself on first boot.
 
-1. loads `decnet_iv.ko` built against its installed Alpine `linux-virt` kernel;
-2. configures its node identity with `dnctl`;
-3. transmits raw DECnet Routing Layer EtherType `0x6003` frames to its peer;
-4. prints receive counters to the serial console and powers off.
+Each guest:
 
-The host captures the bridge to `lan.pcap`. The gate succeeds only when both guests
-report received routing frames and the capture contains DECnet EtherType traffic.
-This proves VM/image/module/Ethernet plumbing only; it does not yet claim Phase IV
-hello, adjacency, routing or NSP behavior.
+1. uses a separate disposable management NIC only to reach Alpine package mirrors;
+2. installs the module source under `/usr/src` and registers it with AKMS;
+3. reboots into the installed `linux-virt` kernel;
+4. proves the loaded `decnet_iv.ko` came from the AKMS-managed module path;
+5. configures its node identity with `dnctl`;
+6. transmits raw DECnet Routing Layer EtherType `0x6003` frames to its peer;
+7. prints receive counters to the serial console and powers off.
+
+The host captures only the isolated DECnet bridge to `lan.pcap`. The gate succeeds
+only when both guests report received routing frames and the capture contains native
+DECnet EtherType traffic. The management NIC is never part of the DECnet data path.
+
+This proves VM/image/module-lifecycle/Ethernet plumbing only; it does not yet claim
+Phase IV hello, adjacency, routing or NSP behavior.
+
+## Portability lab
+
+`DISTRO_MATRIX.md` defines the later smallest-image Alpine, Debian and RHEL-family
+matrix. Alpine uses AKMS; Debian/RHEL-family guests use DKMS. Every lifecycle test
+must include a real kernel package update and automatic module rebuild.
