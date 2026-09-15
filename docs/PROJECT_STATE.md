@@ -1,44 +1,48 @@
 # Project State
 
-This is the continuity record for DECnet-IV-Linux. A fresh session should read this file first, then execute `Next action` without reconstructing the project from chat history.
+This is the continuity record for DECnet-IV-Linux. Repository state is authoritative. Read this file and `docs/ROADMAP.md` completely before changing code.
 
 ## Goal
 
-Build a minimal maintained Linux distribution with a fresh native DECnet Phase IV implementation delivered primarily as an out-of-tree kernel module, familiar DECnet user-mode tools, and reproducible x86_64/aarch64 VM images.
+Build a complete native DECnet Phase IV stack for maintained Linux, delivered primarily as an out-of-tree kernel module plus the useful DECnet/Linux userspace environment, with reproducible x86_64/aarch64 VM images and independent interoperability.
 
 ## Non-negotiable architecture
 
-- Reference distribution: Alpine Linux 3.24 initially using `linux-virt`.
-- Kernel delivery: out-of-tree module; avoid a permanent kernel fork.
-- Implementation base: fresh code informed by DECnet specifications and independent interoperability behavior, not the removed/legacy Linux DECnet kernel stack.
-- Kernel scope as the project matures: Ethernet, Phase IV routing, NSP, DDCMP, socket/UAPI plumbing, timers, forwarding and management hooks.
-- Userspace target: familiar DECnet/Linux command experience for `ncp`, `sethost`, `dncopy`, `phone` and related tools.
+- Distribution base: deliberately unset until Phase 2 selects and pins a small maintained base.
+- Kernel delivery: fresh out-of-tree module; avoid a permanent kernel fork and do not revive the removed legacy Linux DECnet kernel stack.
+- Kernel scope: native Ethernet, endnode/Level 1/Level 2 routing, NSP, sockets/UAPI, Session Control support, NICE/NML hooks/state and DDCMP.
+- Core routing, NSP and DDCMP state machines remain in kernel space.
+- Userspace target: `ncp`, `sethost`/`dnlogin`, DAP/FAL/RMS tools, PHONE, mail, task/object access, daemons, libraries, diagnostics and administration tools.
 - Required CPU targets: x86_64 and aarch64.
 - Primary VM artifact: QCOW2, with RAW and conversion formats at release time.
 
+## Reference and licensing policy
+
+Preferred project references are `tuklusan/Route20`, `tuklusan/pydecnet`, `tuklusan/LinuxDECnet` and `tuklusan/simh`. Pin exact SHAs when a reference becomes a gate. Upstreams are comparison sources only.
+
+Every reference is independently licensed. Verify compatibility before copying or adapting source and preserve required notices. If reuse is unclear or incompatible, use observable protocol behavior and implement independently.
+
 ## External conformance
 
-The implementation must be exercised independently against Route20 and PyDECnet, using DECnet protocol documentation and useful supplementary protocol notes carried with PyDECnet. Later add SIMH-hosted DEC operating systems for application-level validation.
+Self-to-self success is never sufficient for final interoperability claims. Exercise the stack against the pinned Route20 and PyDECnet forks, and later against SIMH-hosted real DEC operating systems.
 
-Pinned revisions are stored in `tests/reference/refs.env`. Route20 is a behavioral/reference peer; its source license is not assumed suitable for direct incorporation into the kernel module.
-
-The current PyDECnet reference is pinned for documentation, vectors and live interoperability. Its present tree has a pre-existing self-test contradiction in `Macaddr("1.24")` introduced by a July 2024 change: the code takes the hexadecimal path before the DECnet `area.node` path while the upstream test still requires `area.node`. The hard full-suite pin is therefore the immediately preceding revision. The suite is run unmodified; no tests are skipped or rewritten. Move the test pin forward when upstream fixes the contradiction.
+Pinned automated references live in `tests/reference/refs.env`. Existing reference gates remain part of every later phase.
 
 ## Execution order
 
-`docs/ROADMAP.md` is the canonical ordered task list:
+`docs/ROADMAP.md` is canonical:
 
-0. continuity, repository policy and reference discipline;
+0. continuity, repository/reference/licensing/SoP discipline;
 1. buildable UAPI/module/control utility on x86_64 and aarch64;
-2. reproducible Alpine image and two-VM Ethernet lab;
+2. reproducible base image and two-VM native Ethernet lab;
 3. Ethernet initialization and adjacency;
 4. endnode, Level 1 and Level 2 routing;
 5. NSP and DECnet sockets;
 6. Session Control and NICE/NML;
-7. familiar user-mode tools as their protocols become ready;
+7. complete useful DECnet/Linux userspace as dependencies become ready;
 8. DDCMP;
 9. mixed Ethernet/DDCMP routing and applications;
-10. scale to 16 nodes, physical mixed-CPU testing and release images.
+10. scale, portability, real DEC peers, physical mixed-CPU testing and release images.
 
 A later phase never removes an earlier acceptance gate.
 
@@ -52,35 +56,45 @@ A later phase never removes an earlier acceptance gate.
 
 ## Test lab rules
 
-- Primary acceptance nodes are separate tiny VMs, not containers sharing one kernel.
-- Linux bridges provide raw Ethernet LANs.
-- Failure artifacts include topology, addressing, packet capture, kernel logs, DECnet counters and fault-injection seed where applicable.
-- Required CPU matrix: x86_64/x86_64, aarch64/aarch64 and mixed x86_64/aarch64.
-- Physical lab target: at least two x86_64 and two aarch64 nodes, managed switch, independent management path and mirror capture.
-- Required mixed-media path eventually includes Ethernet -> router -> DDCMP -> router -> Ethernet.
+- Primary acceptance nodes are separate VMs, not containers or namespaces sharing one kernel.
+- Linux bridges provide raw native Ethernet LANs.
+- DECnet acceptance traffic stays on isolated native DECnet media.
+- Scale deliberately from 2 to 4, 8 and 16 independent VMs with routed topologies.
+- Required CPU cases include x86_64/x86_64, aarch64/aarch64 and both mixed directions.
+- Fault and stress work includes deterministic loss, duplication, delay/reordering where meaningful, link/circuit failure, restart, convergence, connection churn, long-duration traffic and resource/lifetime failures.
+- Required mixed-media path eventually includes `Ethernet -> router -> DDCMP -> router -> Ethernet`.
 
-## Continuity and promotion gates
+## Repository discipline
 
-- Every substantive commit must update this file in the same commit.
-- `tools/project_state_gate.py` enforces that requirement per commit in CI and the local pre-commit hook.
-- This file must keep non-empty `Resume point` and `Next action` sections.
-- Workflows carry short comments describing what each gate proves.
-- Substantive automated work is prepared on a working branch, gates run there, and `main` is advanced only after the branch is green.
+- Do not create development branches. Keep one maintained `main` line.
+- Historical working refs were reconciled into `main` at commit `b51618cbf49ae43b223d3dcd15f156086fea41dc`; do not revive divergent work from them.
+- Every substantive commit updates this file in the same commit.
+- `tools/project_state_gate.py` enforces continuity requirements.
+- Keep commits atomic and run applicable static/unit/reference gates before advancing work.
+
+## SoP delivery rule
+
+1. Read the complete latest disk copy byte-for-byte, line-by-line, with no truncation; find and fix defects/gaps.
+2. Any fix resets the pass to Step 1 on the new latest disk copy.
+3. Delivery requires three consecutive clean complete Step-1 passes.
+4. Any later change resets Step 1.
+
+Automated tests, diffs, excerpts or prior reviews do not replace this rule.
 
 ## Phase 1 status
 
-Phase 1 is on `main` and green on both required CPU architectures. It contains UAPI version 1, `decnet_iv.ko`, default 31.70/DN70 identity, `/dev/decnet_iv`, DEC DNA Routing EtherType receive registration/counters, `dnctl`, centralized test addressing, unit address tests and native x86_64/ARM64 build gates.
+Phase 1 is on `main` and contains UAPI version 1, `decnet_iv.ko`, default 31.70/DN70 identity, `/dev/decnet_iv`, DEC DNA Routing EtherType receive registration/counters, `dnctl`, centralized test addressing, unit address tests and native x86_64/aarch64 build gates.
 
-The bootstrap does not yet claim adjacency, routing, NSP, Session Control or DDCMP functionality.
+The bootstrap does not claim adjacency, routing, NSP, Session Control, NICE/NML application behavior or DDCMP functionality.
 
-## External baseline status
+## Current status
 
-Route20's pinned build passed. The first current-PyDECnet run executed 988 tests: 983 passed, 4 skipped and one upstream `Macaddr("1.24")` test errored because current code contradicts that same test. The baseline has been corrected to keep the current PyDECnet revision for live/docs reference and run the entire unmodified suite at the immediately preceding revision before that upstream regression.
+Phase 2 image/lab work has been reset. Stale distribution-specific image assumptions and dangling development histories are not part of the active tree. The kernel/userspace Phase 1 bootstrap and independent reference gates are the retained foundation.
 
 ## Resume point
 
-Phase 1 is promoted and green. External baselines are on `work/reference-baselines`; Route20 passed, and the PyDECnet suite pin has just been corrected after diagnosing an upstream self-test regression. This corrected branch must pass all gates before promotion.
+Work resumes on `main` from the clean Phase 1 foundation. The distribution base is unset. No Phase 2 VM provisioning mechanism is considered authoritative.
 
 ## Next action
 
-Run the corrected external-reference gates. If green, fast-forward `main` to the tested commit. Then start Phase 2 on a fresh working branch: pin the official Alpine 3.24.1 tiny QCOW2 bases for x86_64 BIOS and aarch64 UEFI, build/install the exact `linux-virt` module plus `dnctl`, boot DN70 and DN71 as separate VMs on a raw Ethernet bridge, collect pcaps/logs, and prove bidirectional EtherType `0x6003` reception before implementing hello/adjacency logic.
+Select and verify the smallest practical maintained non-cloud Linux base that satisfies the project requirements, pin its exact release artifacts for x86_64 and aarch64, then rebuild Phase 2 from scratch with the simplest deterministic two-VM native-Ethernet path. Do not recreate old provisioning machinery unless a measured requirement proves it is necessary.
