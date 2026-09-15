@@ -111,6 +111,8 @@ The next adversarial review found that correcting the serialized router-list bou
 
 The active `phase3-e1-adjacency` feature branch adds the E1 self-to-self acceptance harness without claiming a runtime pass. It makes the two-node workflow select either the retained `phase2` gate or the new `e1` gate. E1 requires both routers to reach UP with nonzero hello TX/RX, observable INIT evidence from at least one side during initial convergence, one router to unload and remain silent beyond the listen timer, the peer adjacency to disappear, observable INIT evidence from at least one side during restart convergence, both routers to recover UP, and packet-capture evidence for all-routers traffic, designated-router all-endnodes traffic and both DECnet source MACs. Checkpoint mode compatibility is explicit and legacy Phase 2 checkpoints remain resumable only in `phase2` mode.
 
+An adversarial E1 harness review found that the observing router's expiry/recovery loop allowed only 40 seconds while the silent router's scripted silence plus maximum recovery wait could approach 39 seconds. The observation window is widened to 60 seconds so scheduler and boot jitter cannot create a false failure at the boundary.
+
 No native VM or live independent-peer runtime claim is made yet for the E1 branch. The E1 branch must complete the SoP gate before hosted execution, then pass the required cheap build/reference checks and native x86_64/aarch64 E1 runs before promotion.
 
 ## Resume point

@@ -170,7 +170,7 @@ e1)
     seen_expired=0
     restart_init_reported=0
     i=0
-    while [ "$i" -lt 160 ]; do
+    while [ "$i" -lt 240 ]; do
         output=$(/usr/local/sbin/dnctl adjacencies 2>/dev/null || true)
         printf '%s\n' "$output"
         if printf '%s\n' "$output" | grep -Fq "$peer_node via "; then
