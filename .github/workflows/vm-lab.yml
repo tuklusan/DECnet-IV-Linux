@@ -18,6 +18,7 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
+  queue: max
   cancel-in-progress: false
 
 permissions:
