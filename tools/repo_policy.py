@@ -87,6 +87,12 @@ def check_value(label: str, value: object, failures: list[str]) -> None:
         report(label)
 
 
+def check_bytes(label: str, value: bytes, failures: list[str]) -> None:
+    if has_blocked_bytes(value):
+        failures.append(label)
+        report(label)
+
+
 def load_event() -> dict:
     path = os.environ.get(ENV_PREFIX + "_EVENT_PATH")
     if not path:
@@ -253,6 +259,13 @@ def path_text(path: str) -> str:
     return path
 
 
+def tree_sha(rev: str) -> str:
+    result = run("git", "rev-parse", "--verify", rev + "^{tree}", check=False)
+    if result.returncode != 0:
+        return ""
+    return result.stdout.decode("ascii", errors="ignore").strip()
+
+
 def scan_tree(rev: str, failures: list[str]) -> None:
     raw = run("git", "ls-tree", "-r", "-z", rev).stdout
     for record in raw.split(b"\0"):
@@ -275,6 +288,20 @@ def scan_tree(rev: str, failures: list[str]) -> None:
             report(f"file content: {path}")
 
 
+def scan_tree_once(
+    rev: str, failures: list[str], scanned_trees: set[str]
+) -> None:
+    identity = tree_sha(rev)
+    if not identity:
+        failures.append("tree inspection")
+        print("repository policy error: tree inspection failed", file=sys.stderr)
+        return
+    if identity in scanned_trees:
+        return
+    scanned_trees.add(identity)
+    scan_tree(rev, failures)
+
+
 def commit_list(base: str | None, head: str) -> list[str]:
     if base:
         ensure_object(base)
@@ -284,25 +311,50 @@ def commit_list(base: str | None, head: str) -> list[str]:
     return [line for line in raw.decode().splitlines() if line]
 
 
-def scan_commits(base: str | None, head: str, failures: list[str]) -> None:
+def scan_commit_metadata(commit: str, failures: list[str]) -> None:
+    commit_object = run("git", "cat-file", "-p", commit, check=False)
+    if commit_object.returncode != 0:
+        failures.append("commit object inspection")
+        print("repository policy error: commit object inspection failed", file=sys.stderr)
+        return
+    check_bytes("commit object", commit_object.stdout, failures)
+
+    raw = run(
+        "git",
+        "show",
+        "-s",
+        "--format=%B%x00%an%x00%ae%x00%cn%x00%ce",
+        commit,
+    ).stdout
+    parts = raw.decode("utf-8", errors="replace").split("\0")
+    labels = (
+        "commit message",
+        "author name",
+        "author email",
+        "committer name",
+        "committer email",
+    )
+    for label, value in zip(labels, parts):
+        check_value(label, value, failures)
+
+
+def scan_commits(
+    base: str | None,
+    head: str,
+    failures: list[str],
+    scanned_commits: set[str] | None = None,
+    scanned_trees: set[str] | None = None,
+) -> None:
+    if scanned_commits is None:
+        scanned_commits = set()
+    if scanned_trees is None:
+        scanned_trees = set()
     for commit in commit_list(base, head):
-        raw = run(
-            "git",
-            "show",
-            "-s",
-            "--format=%B%x00%an%x00%ae%x00%cn%x00%ce",
-            commit,
-        ).stdout
-        parts = raw.decode("utf-8", errors="replace").split("\0")
-        labels = (
-            "commit message",
-            "author name",
-            "author email",
-            "committer name",
-            "committer email",
-        )
-        for label, value in zip(labels, parts):
-            check_value(label, value, failures)
+        if commit in scanned_commits:
+            continue
+        scanned_commits.add(commit)
+        scan_commit_metadata(commit, failures)
+        scan_tree_once(commit, failures, scanned_trees)
 
 
 def scan_refs_and_config(failures: list[str]) -> None:
@@ -313,6 +365,24 @@ def scan_refs_and_config(failures: list[str]) -> None:
     else:
         for ref in refs.stdout.decode("utf-8", errors="replace").splitlines():
             check_value("git ref", ref, failures)
+            object_id = run("git", "rev-parse", "--verify", ref, check=False)
+            if object_id.returncode != 0:
+                failures.append("ref target inspection")
+                print("repository policy error: ref target inspection failed", file=sys.stderr)
+                continue
+            object_name = object_id.stdout.decode("ascii", errors="ignore").strip()
+            object_type = run("git", "cat-file", "-t", object_name, check=False)
+            if object_type.returncode != 0:
+                failures.append("ref target inspection")
+                print("repository policy error: ref target inspection failed", file=sys.stderr)
+                continue
+            if object_type.stdout.strip() == b"tag":
+                tag_object = run("git", "cat-file", "-p", object_name, check=False)
+                if tag_object.returncode != 0:
+                    failures.append("tag inspection")
+                    print("repository policy error: tag inspection failed", file=sys.stderr)
+                else:
+                    check_bytes("tag object", tag_object.stdout, failures)
 
     config = run("git", "config", "--local", "--null", "--list", check=False)
     if config.returncode != 0:
@@ -345,11 +415,117 @@ def staged_checks(failures: list[str]) -> None:
             report(f"staged content: {path}")
 
 
+def zero_object_id(value: str) -> bool:
+    return bool(value) and set(value) == {"0"}
+
+
+def peel_commit(rev: str) -> str | None:
+    result = run("git", "rev-parse", "--verify", rev + "^{commit}", check=False)
+    if result.returncode != 0:
+        return None
+    value = result.stdout.decode("ascii", errors="ignore").strip()
+    return value or None
+
+
+def scan_ref_target_object(rev: str, failures: list[str]) -> str | None:
+    object_type = run("git", "cat-file", "-t", rev, check=False)
+    if object_type.returncode != 0:
+        failures.append("ref target inspection")
+        print("repository policy error: ref target is unavailable", file=sys.stderr)
+        return None
+
+    kind = object_type.stdout.decode("ascii", errors="ignore").strip()
+    if kind == "tag":
+        tag_object = run("git", "cat-file", "-p", rev, check=False)
+        if tag_object.returncode != 0:
+            failures.append("tag inspection")
+            print("repository policy error: tag inspection failed", file=sys.stderr)
+            return None
+        check_bytes("tag object", tag_object.stdout, failures)
+    elif kind != "commit":
+        failures.append("ref target type")
+        print(
+            "repository policy error: ref must resolve to a commit",
+            file=sys.stderr,
+        )
+        return None
+
+    commit = peel_commit(rev)
+    if not commit:
+        failures.append("ref target commit")
+        print(
+            "repository policy error: ref does not resolve to a commit",
+            file=sys.stderr,
+        )
+        return None
+    return commit
+
+
+def pre_push_checks(hook_context: list[str], failures: list[str]) -> None:
+    for index, value in enumerate(hook_context):
+        check_value(f"pre-push argument {index}", value, failures)
+
+    scan_refs_and_config(failures)
+    scanned_commits: set[str] = set()
+    scanned_trees: set[str] = set()
+    payload = sys.stdin.buffer.read()
+
+    for line_number, line in enumerate(payload.splitlines(), 1):
+        fields = line.split()
+        if len(fields) != 4:
+            failures.append("pre-push input")
+            print(
+                f"repository policy error: malformed pre-push input line {line_number}",
+                file=sys.stderr,
+            )
+            continue
+
+        local_ref_raw, local_sha_raw, remote_ref_raw, remote_sha_raw = fields
+        check_bytes("local push ref", local_ref_raw, failures)
+        check_bytes("remote push ref", remote_ref_raw, failures)
+        try:
+            local_sha = local_sha_raw.decode("ascii")
+            remote_sha = remote_sha_raw.decode("ascii")
+        except UnicodeDecodeError:
+            failures.append("pre-push object id")
+            print(
+                "repository policy error: non-ASCII object id in pre-push input",
+                file=sys.stderr,
+            )
+            continue
+
+        if zero_object_id(local_sha):
+            continue
+        local_commit = scan_ref_target_object(local_sha, failures)
+        if not local_commit:
+            continue
+
+        base: str | None = None
+        if not zero_object_id(remote_sha):
+            base = peel_commit(remote_sha)
+        scan_tree_once(local_commit, failures, scanned_trees)
+        scan_commits(
+            base,
+            local_commit,
+            failures,
+            scanned_commits=scanned_commits,
+            scanned_trees=scanned_trees,
+        )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Enforce repository policy.")
     parser.add_argument("--staged", action="store_true")
     parser.add_argument("--message-file")
+    parser.add_argument("--pre-push", action="store_true")
+    parser.add_argument("hook_context", nargs="*")
     args = parser.parse_args()
+
+    selected_modes = int(args.staged) + int(bool(args.message_file)) + int(args.pre_push)
+    if selected_modes > 1:
+        parser.error("policy modes are mutually exclusive")
+    if args.hook_context and not args.pre_push:
+        parser.error("hook context is valid only with --pre-push")
 
     failures = matcher_self_check()
     if failures:
@@ -367,14 +543,26 @@ def main() -> int:
     if args.staged:
         staged_checks(failures)
         scan_refs_and_config(failures)
+    elif args.pre_push:
+        pre_push_checks(args.hook_context, failures)
     else:
         event = load_event()
         event_checks(event, failures)
         scan_collaborators(failures)
         head, base = resolve_target(event)
         ensure_object(head)
-        scan_tree(head, failures)
-        scan_commits(base, head, failures)
+        head_commit = scan_ref_target_object(head, failures)
+        base_commit: str | None = None
+        if base:
+            ensure_object(base)
+            base_commit = peel_commit(base)
+            if not base_commit:
+                failures.append("base commit inspection")
+                print("repository policy error: base does not resolve to a commit", file=sys.stderr)
+        scanned_trees: set[str] = set()
+        if head_commit:
+            scan_tree_once(head_commit, failures, scanned_trees)
+            scan_commits(base_commit, head_commit, failures, scanned_trees=scanned_trees)
         scan_refs_and_config(failures)
 
     if failures:
