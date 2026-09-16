@@ -361,6 +361,21 @@ def scan_commits(
         scan_tree_once(commit, failures, scanned_trees)
 
 
+def scan_local_config(failures: list[str]) -> None:
+    config = run("git", "config", "--local", "--null", "--list", check=False)
+    if config.returncode != 0:
+        failures.append("local config inspection")
+        print(
+            "repository policy error: local config inspection failed",
+            file=sys.stderr,
+        )
+    else:
+        for record in config.stdout.split(b"\0"):
+            if record and has_blocked_bytes(record):
+                failures.append("local git config")
+                report("local git config")
+
+
 def scan_refs_and_config(failures: list[str]) -> None:
     refs = run("git", "for-each-ref", "--format=%(refname)", check=False)
     if refs.returncode != 0:
@@ -388,18 +403,7 @@ def scan_refs_and_config(failures: list[str]) -> None:
                 else:
                     check_bytes("tag object", tag_object.stdout, failures)
 
-    config = run("git", "config", "--local", "--null", "--list", check=False)
-    if config.returncode != 0:
-        failures.append("local config inspection")
-        print(
-            "repository policy error: local config inspection failed",
-            file=sys.stderr,
-        )
-    else:
-        for record in config.stdout.split(b"\0"):
-            if record and has_blocked_bytes(record):
-                failures.append("local git config")
-                report("local git config")
+    scan_local_config(failures)
 
 
 def staged_checks(failures: list[str]) -> None:
@@ -469,7 +473,11 @@ def pre_push_checks(hook_context: list[str], failures: list[str]) -> None:
     for index, value in enumerate(hook_context):
         check_value(f"pre-push argument {index}", value, failures)
 
-    scan_refs_and_config(failures)
+    # Do not scan every existing local ref here: a remote-tracking ref with an
+    # offending name may still exist precisely because this push is deleting
+    # that remote ref. Staged/default modes retain the full local-ref check;
+    # pre-push validates configuration plus every non-deletion ref in stdin.
+    scan_local_config(failures)
     scanned_commits: set[str] = set()
     scanned_trees: set[str] = set()
     payload = sys.stdin.buffer.read()
