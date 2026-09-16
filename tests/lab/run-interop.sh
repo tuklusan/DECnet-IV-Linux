@@ -125,7 +125,7 @@ start_vm() {
     local role=$1 disk=$2 tap=$3 hw=$4 log=$5 common=$6
     case "$host_arch" in
         x86_64)
-            qemu-system-x86_64 -name "$role" -accel "$accel" -m 512 -smp 1 \
+            exec qemu-system-x86_64 -name "$role" -accel "$accel" -m 512 -smp 1 \
                 -kernel "$kernel" -initrd "$initrd" -append "$common console=ttyS0" \
                 -drive "file=$disk,if=virtio,format=qcow2" \
                 -netdev tap,id=lan,ifname="$tap",script=no,downscript=no \
@@ -135,7 +135,7 @@ start_vm() {
         aarch64)
             local cpu=max
             [[ "$accel" == kvm ]] && cpu=host
-            qemu-system-aarch64 -name "$role" -machine virt -accel "$accel" -cpu "$cpu" -m 512 -smp 1 \
+            exec qemu-system-aarch64 -name "$role" -machine virt -accel "$accel" -cpu "$cpu" -m 512 -smp 1 \
                 -kernel "$kernel" -initrd "$initrd" -append "$common console=ttyAMA0" \
                 -drive "file=$disk,if=virtio,format=qcow2" \
                 -netdev tap,id=lan,ifname="$tap",script=no,downscript=no \
@@ -151,7 +151,7 @@ start_reference() {
     local common="root=LABEL=dniv-root rootfstype=ext4 rw dniv.reference=$reference dniv.ref_sha=$expected_sha dniv.area=$ref_area dniv.node=$ref_node dniv.name=$ref_name dniv.peer=$candidate_mac dniv.peer_node=$area.$node dniv.scenario=$scenario dniv.session=$session"
     case "$host_arch" in
         x86_64)
-            qemu-system-x86_64 -name "ref-$reference-$scenario" -accel "$accel" -m 512 -smp 1 \
+            exec qemu-system-x86_64 -name "ref-$reference-$scenario" -accel "$accel" -m 512 -smp 1 \
                 -kernel "$kernel" -initrd "$initrd" -append "$common console=ttyS0" \
                 -drive "file=$disk,if=virtio,format=qcow2" \
                 -drive "file=fat:ro:$bundle,if=virtio,format=raw" \
@@ -162,7 +162,7 @@ start_reference() {
         aarch64)
             local cpu=max
             [[ "$accel" == kvm ]] && cpu=host
-            qemu-system-aarch64 -name "ref-$reference-$scenario" -machine virt -accel "$accel" -cpu "$cpu" -m 512 -smp 1 \
+            exec qemu-system-aarch64 -name "ref-$reference-$scenario" -machine virt -accel "$accel" -cpu "$cpu" -m 512 -smp 1 \
                 -kernel "$kernel" -initrd "$initrd" -append "$common console=ttyAMA0" \
                 -drive "file=$disk,if=virtio,format=qcow2" \
                 -drive "file=fat:ro:$bundle,if=virtio,format=raw" \

@@ -14,7 +14,7 @@
 
 # Project State
 
-This is the authoritative continuity record for DECnet-IV-Linux. Read `docs/HANDOVER.md`, this file, `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, `docs/TEST_LAB.md` and `docs/PRE_PRODUCTION_TEST.md` before changing protocol, image or acceptance behavior.
+This is the authoritative continuity record for DECnet-IV-Linux. Read `docs/HANDOVER.md`, this file, `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, `docs/TEST_LAB.md` and `docs/PRE_PRODUCTION_TEST.md` before changing protocol, image or acceptance behavior. Commit history retains prior state records; this file intentionally describes the current tree rather than repeating the full historical diary.
 
 ## Goal
 
@@ -23,7 +23,7 @@ Build a complete native DECnet Phase IV stack for maintained Linux as a fresh ou
 ## Architecture
 
 - Base image: pinned Ubuntu Base 26.04.1 LTS for amd64 and arm64.
-- Kernel: native Ethernet, endnode/Level 1/Level 2 routing, NSP, sockets/UAPI, Session Control support, NICE/NML hooks/state and DDCMP.
+- Kernel target: native Ethernet; endnode/Level 1/Level 2 routing; NSP; sockets/UAPI; Session Control; NICE/NML state/hooks; DDCMP.
 - Routing, NSP and DDCMP state machines remain in kernel space.
 - Userspace target: `ncp`, `sethost`/`dnlogin`, DAP/FAL/RMS tools, PHONE, mail, task/object access, daemons, libraries, diagnostics and administration tools.
 - Primary VM artifact: QCOW2; RAW and conversion formats follow for release.
@@ -41,27 +41,21 @@ Pinned revisions in `tests/reference/refs.env`:
 - LinuxDECnet comparison: `ff39eef045d1e4b7b72a3d40111e89c07a473398`
 - SIMH: `5b73b1032b52d19bf80752ea4d9cbbdc92e7b5e0`
 
-The product license is the canonical root `LICENSE` for DECnet-IV-Linux, blob `c6dabab19a2d36bffddabe7584a932c72fa272c3`. It identifies the project as `DECnet-IV-Linux`, the developer and copyright holder as Supratim Sanyal, and the organization as SANYALnet Labs. Its project preamble applies the license to project-owned material only and explicitly leaves third-party material under its original license. `tools/license_monkey.py` pins that exact root license, requires the canonical DECnet-IV-Linux/SANYALnet Labs notice as the sole leading header on every tracked project text artifact, and rejects both spaced-name and hyphenated stale identities. The mandatory model-training phrase is accepted only when it is part of the exact canonical leading notice; existing blocked-token enforcement remains unchanged everywhere else. The kernel module identifies itself to Linux as `Proprietary`, matching the product license rather than claiming GPL status.
+The live PyDECnet pin has a pre-existing `Macaddr("1.24")` self-test contradiction, so its immediately preceding internally consistent revision is the unmodified unit-test baseline. Route20 is the independent oracle for dedicated All-Level-2-Routers multicast behavior; the live PyDECnet pin interoperates as an L2 router through All-Routers and is not required to emit that dedicated multicast.
+
+The product license is the canonical root `LICENSE`, blob `c6dabab19a2d36bffddabe7584a932c72fa272c3`. It applies to project-owned material only; third-party material remains under its original license. `tools/license_monkey.py` pins that exact license and canonical project header. The kernel module reports `MODULE_LICENSE("Proprietary")`, matching the product license.
 
 Self-to-self success is never sufficient for final interoperability claims.
 
 ## Repository discipline
 
-- Perform substantive work directly on `main`. Do not create or use feature branches for project work.
+- Perform substantive work directly on `main`; do not create or use feature branches for project work.
 - Every substantive commit updates this file in the same commit.
-- Acceptance applies only to the exact unchanged `main` commit that has satisfied the required SoP and acceptance gates; never amend or rebuild between green evidence and the acceptance claim.
-- Pull requests are not required for this single-developer repository unless deliberately used for review; the exact `main` commit remains the acceptance unit.
-- `tools/project_state_gate.py` enforces continuity.
-- `tools/license_monkey.py` enforces the exact root product license and canonical project-owned artifact header.
-- `tools/repo_policy.py` enforces the configured case-insensitive whole-token repository word policy across the current tree, relevant new commit objects, refs/configuration, selected repository event metadata and collaborators. Local pre-commit, commit-message and pre-push hooks are provided by `.githooks`.
-- Policy token boundaries treat Unicode letters/digits as word characters and punctuation or underscore as separators. This preserves the short-token false-positive protection inside ordinary words while rejecting identifier-style uses separated by underscores.
-- Ordinary `push`, branch/tag `create`, and `pull_request:synchronize` events do not start GitHub Actions. Merely editing or pushing source, documentation, policy or workflow files therefore consumes no hosted runner.
-- The Repository Policy workflow may run for explicit pull-request/review, issue/comment, discussion/comment metadata events or manual dispatch. Build, continuity, reference and VM workflows remain demand-driven.
-- Workflow-level and job-level concurrency groups use `queue: max` with cancellation disabled. This prevents an older pending policy or acceptance run from being silently replaced by a newer run while preserving the one-x64/one-arm64 execution ceiling; the platform queue limit still applies.
-- An owner-opened issue titled exactly `DNIV acceptance gates` is the controlled dispatcher for those manual acceptance workflows after policy succeeds and `main` still matches the event revision.
+- Acceptance applies only to the exact unchanged `main` commit that satisfies the required SoP and gates.
+- `tools/project_state_gate.py`, `tools/license_monkey.py` and `tools/repo_policy.py` enforce continuity, licensing/header and repository word policy.
+- Ordinary source/document pushes do not automatically consume hosted runners. Acceptance workflows are demand-driven; an owner-opened issue titled exactly `DNIV acceptance gates` is the controlled dispatcher after repository policy succeeds and the event revision still equals `main`.
+- Runner jobs share repository-wide x64 and arm64 concurrency slots and queue rather than replacing pending work.
 - Generated VM evidence remains under ignored `tests/lab/artifacts/` and workflow artifacts.
-- Runner jobs share repository-wide x64 and arm64 concurrency slots.
-- The repository currently has no server-side ruleset available through the connected management surface, so local hooks plus the metadata/manual Repository Policy workflow are the enforceable mechanisms available here.
 
 ## SoP delivery rule
 
@@ -76,66 +70,42 @@ Automated tests, diffs, excerpts and previous reviews do not replace this rule.
 
 ### Phase 1
 
-Foundation complete: versioned UAPI, `decnet_iv.ko`, configurable identity, `/dev/decnet_iv`, Routing Layer EtherType registration/counters, `dnctl`, centralized test addressing, unit tests, and native x86_64/aarch64 build gates.
+Foundation complete: versioned UAPI, `decnet_iv.ko`, configurable identity, `/dev/decnet_iv`, Routing Layer EtherType registration/counters, `dnctl`, centralized test addressing, unit tests and native x86_64/aarch64 build gates.
 
 ### Phase 2
 
-Foundation complete: pinned Ubuntu Base 26.04.1 amd64/arm64 rootfs files, pinned package snapshot `20260915T000000Z`, deterministic ext4/QCOW2 assembly, exact guest kernel/module build, direct kernel/initrd boot, two independent one-NIC VMs, packet capture and serial evidence. Ubuntu Base does not initially contain usable certificate trust for the snapshot service, so the image builder bootstraps only the signed `ca-certificates` package with TLS peer verification temporarily disabled, refreshes package-owned trust, and then requires an ordinary verified snapshot update before installing the remaining image packages. Repository signatures continue to authenticate snapshot metadata and packages during the bootstrap step.
+Foundation complete: pinned Ubuntu Base 26.04.1 amd64/arm64 rootfs files, pinned package snapshot `20260915T000000Z`, deterministic ext4/QCOW2 assembly, exact guest kernel/module build, direct kernel/initrd boot, two independent one-NIC VMs, packet capture and serial evidence.
 
-The image build requires a 4 GiB sparse root filesystem. The 2 GiB predecessor exhausted the ext4 filesystem while unpacking the arm64 virtual-kernel module package after downloading the pinned package set; the larger sparse backing size preserves the small QCOW2-on-disk behavior while providing sufficient installation workspace.
+Ubuntu Base initially lacks usable certificate trust for the snapshot service. Image construction bootstraps only signed `ca-certificates` with TLS peer verification temporarily disabled, refreshes package-owned trust, then requires ordinary verified snapshot access for all remaining packages. The sparse root filesystem floor is 4 GiB after the earlier 2 GiB arm64 build exhausted ext4 space while unpacking virtual-kernel modules.
 
-The retained `phase2` smoke gate sends deliberately generated DECnet Routing Layer Ethernet frames between two endnodes. VM checkpoints contain the base image, portable overlays, exact kernel/initrd, checksums, session metadata, logs and capture and may resume only against the matching architecture/source revision/mode.
+The retained `phase2` smoke gate exchanges deliberately generated standard DECnet Routing Layer Ethernet frames. VM checkpoints contain base image, portable overlays, exact kernel/initrd, checksums, session metadata, logs and packet capture and may resume only for matching architecture/source revision/mode.
 
 ### Phase 3
 
 Implementation is in progress. UAPI v2 provides standard Phase IV node MAC derivation, router/endnode hello generation and parsing, periodic hello transmission, per-interface adjacency state, 3.1x listen-time expiry, designated-router election, extended counters and `dnctl adjacencies`.
 
-Router-router adjacencies begin INIT and become UP when the peer router hello lists the local router with the expected priority. Loss of that listing returns an UP adjacency to INIT; listen expiry removes it. Router nodes accept valid endnode hellos as UP. Endnodes select one router adjacency. Same-area rules apply except that Level 2 routers may form Level 2 adjacencies across areas. Router admission is capped at 33 per interface and retains the highest `(priority, node address)` set.
+Implemented corrections include the two-byte little-endian Ethernet Routing Layer payload length, legal trailing Ethernet padding handling, dedicated All-Level-2-Routers membership/transmission for Linux L2 routers, transactional filter installation, runtime identity-change serialization with adjacency processing, software destination-class validation, and the 128-byte maximum accepted Phase IV endnode hello test-data image.
 
-The E1 self-to-self harness proves L1 router hello exchange, INIT/UP behavior, listener expiry, module restart/recovery, designated-router behavior, protocol source MACs, DECnet unicast receive-filter ownership, and survival of a post-install primary device-MAC change. DN71 wins the equal-priority designated-router election over DN70. The harness deliberately uses hardware MACs different from DECnet node MACs and verifies raw unicast delivery to the DECnet address after the hardware address changes.
+Router-router adjacencies begin INIT and become UP when the peer router hello lists the local router with the expected priority. Loss of that listing returns an UP adjacency to INIT; listen expiry removes it. Routers accept valid endnode hellos as UP. Endnodes select one router adjacency. Same-area rules apply except that L2 routers may form L2 adjacencies across areas. Router admission is capped at 33 per interface and retains the highest `(priority, node address)` set.
 
-The latest SoP review found two independent-peer interoperability gaps that the self-to-self harness had hidden. First, DECnet Ethernet carries a two-byte little-endian Routing Layer payload length immediately after EtherType `0x6003`; both pinned Route20 and PyDECnet use that field, while the Linux implementation and raw lab generator had emitted/consumed the Routing Layer payload directly. The implementation now emits, validates and strips that length field, ignores trailing Ethernet padding through the declared length, and unit coverage includes valid/truncated/oversized length cases. The raw lab frame generator now emits the same standard framing.
+The E1 self-to-self harness covers L1 hello exchange, observable INIT/UP behavior, listener expiry, module restart/recovery, designated-router behavior, protocol source MACs, DECnet unicast-filter ownership and survival of a post-install primary device-MAC change.
 
-Second, a Level 2 router must participate in the All-Level-2-Routers multicast group `09-00-2B-02-00-00`. The pinned Route20 reference both subscribes/sends for Level 2 operation. The Linux implementation now owns that multicast filter transactionally for Level 2 routers, rolls prior filters back if installation fails, removes it symmetrically at teardown, and sends periodic router hellos to both All-Routers and All-Level-2-Routers.
+The independent-peer harness boots candidate and reference in separate VMs and runs same-area L1, cross-area L2 and endnode scenarios against exact pinned Route20 and PyDECnet on both native architectures. It requires standard framing, protocol-derived source MACs, two-way router-list evidence where applicable, endnode hello test data, hardware-MAC change survival, protocol-unicast reception, hard peer loss/listen expiry, fresh-peer recovery and retained packet/serial evidence. The reference image never loads `decnet_iv`.
 
-A later full-tree review found a runtime identity-change race: hello validation could read the old local address before `DNIV_IOC_SET_IDENTITY`, then update adjacency state after the address transaction had cleared it. Hello validation and adjacency mutation now share the adjacency lock with local-address publication/clear, so every received hello is evaluated wholly against one identity.
-
-Repository review then found two policy/CI scheduling gaps. Whole-token matching originally treated underscore as a word character, permitting identifier-style configured tokens between underscores; the matcher now treats underscore as a separator while preserving Unicode-alphanumeric embedding protection. Workflow-level concurrency also originally used the platform's single-pending default, under which a newer pending run can replace an older one. All workflow-level concurrency groups now use `queue: max`, matching the already-queued job-level groups and preventing ordinary pending policy/acceptance runs from being silently replaced before execution.
-
-A subsequent full-tree review found that hello processing relied on hardware multicast filtering and did not verify the Ethernet destination in software. A broadened receive mode could therefore expose a valid hello addressed to a multicast class for a different node role. The receive path now validates the destination against the local DECnet unicast address and the role-appropriate multicast groups under the same adjacency lock as runtime identity changes. Unit vectors cover endnode, Level 1 and Level 2 destination acceptance and rejection.
-
-The licensing audit then found that the imported license machinery had propagated the prior project's identity into every tracked project header and left the continuity record describing the wrong project provenance. The current candidate scopes the root license explicitly to DECnet-IV-Linux project-owned material, names Supratim Sanyal and SANYALnet Labs, replaces the stale identity in all 44 tracked blobs, pins the corrected license blob, and hardens License-Monkey against both spaced and hyphenated stale identities. The same audit exposed a CI trigger defect: ordinary pushes, branch/tag creation and pull-request synchronize events could launch policy runners for source/document/policy-only edits. Those triggers are removed; executable acceptance workflows remain manual or controlled-dispatch only. A later full-tree pass found `docs/TEST_LAB.md` still describing Repository Policy as push-triggered; that stale continuity text is corrected to match the actual workflow.
-
-An adversarial full-tree pass then found an independent-reference boundary mismatch in Phase IV endnode hello parsing. Pinned PyDECnet defines the endnode `testdata` image with a 128-byte maximum, while the Linux decoder accepted any declared length up to 255 if enough bytes followed. The decoder now rejects lengths above 128 bytes, and focused unit vectors require 128 bytes to parse and 129 bytes to fail. This protocol correction reset the SoP sequence again.
-
-The current main candidate adds the missing live independent-peer gate. It boots the Linux implementation and the selected pinned reference in separate VMs and runs three scenarios on both native architectures: same-area Level 1 router adjacency, cross-area Level 2 router adjacency, and Linux endnode operation against a reference Level 1 router. The peer image never loads `decnet_iv`; Route20 is built from its exact pin and PyDECnet runs directly from its exact live pin. The gate requires standard two-byte Ethernet length framing, protocol-derived source MACs, two-way router-list evidence where applicable, endnode hello test data, post-install hardware-MAC change survival, DECnet unicast-filter delivery, hard peer loss/listen expiry and recovery from a fresh reference VM. Packet capture and both serial logs are retained. Route20 is the live independent oracle for dedicated All-Level-2-Routers multicast behavior; the exact live PyDECnet pin performs Level 2 Ethernet adjacency through All-Routers and is not expected to emit router hellos to the dedicated L2 multicast. This acceptance-harness change resets the SoP sequence; it is not evidence that the gate has passed.
-
-The first exact-main acceptance dispatch of that harness reached repository policy and exposed a false-start defect before any expensive VM work ran: the two image-preparation scripts embedded a second copy of the project notice inside generated systemd-unit here-documents. The repository policy correctly strips only the tracked file's leading canonical notice, so the embedded model-training wording was scanned as ordinary content and rejected. Generated unit files do not need a tracked-source header; the redundant embedded notices are removed while the tracked scripts keep their canonical leading notice. This correction reset the SoP sequence again.
-
-An adversarial review of the live packet-capture gate then found a reference-policy mismatch. The validator required every Level 2 reference to transmit router hellos to the dedicated All-Level-2-Routers multicast, but the exact live PyDECnet pin deliberately sends its Phase IV Ethernet router hellos to All-Routers while still supporting cross-area L2 adjacency. Requiring a packet the pinned reference does not generate would make the PyDECnet L2 case fail for the wrong reason. The validator now takes the reference identity, always requires the Linux candidate's dedicated L2 multicast, requires matching dedicated-L2 transmission from Route20, and accepts the pinned PyDECnet All-Routers behavior while still requiring cross-area two-way router-list evidence. This harness correction resets the SoP sequence again.
-
-Three consecutive clean complete SoP passes were reached on `e59afc1cdee594417137f21a5ea3f0ebb72807eb`, after which exact-head acceptance was dispatched. Repository policy, continuity, native x86_64/aarch64 build, Route20 build and the pinned PyDECnet unit baseline were green. The arm64 E1 image build verified the certificate bootstrap and verified snapshot access, then failed because the 2 GiB root filesystem filled while unpacking the arm64 virtual-kernel modules. The root image floor is now 4 GiB. Every subsequent image, protocol, policy, workflow, licensing and acceptance-harness correction reset the SoP sequence; no acceptance result from an earlier revision carries forward.
+The latest full-tree SoP pass found a harness process-lifetime defect in `tests/lab/run-interop.sh`: asynchronous shell functions launched QEMU without `exec`, so the recorded background PID could be the shell wrapper rather than QEMU itself. Hard-killing the recorded reference PID could therefore leave the actual VM alive and invalidate the listener-expiry/recovery test. Candidate and reference launch paths now `exec` QEMU on both architectures so recorded PIDs are the VM processes themselves. This fix resets the SoP sequence; no earlier acceptance result carries forward.
 
 ## Test addressing
 
-Ordinary lab addressing is centralized in `tests/lab/test-addresses.env`: area 31, nodes 70 through 79, names DN70 through DN79. Larger and inter-area tests must extend this deliberately through configuration. The live Level 2 interoperability case deliberately uses area 32 for its independent peer to prove the permitted cross-area Level 2 case.
+Ordinary lab addressing is centralized in `tests/lab/test-addresses.env`: area 31, nodes 70 through 79, names DN70 through DN79. Larger and inter-area tests extend this deliberately. The live L2 interoperability scenario deliberately places the independent peer in area 32.
 
-## Pre-production acceptance procedure
+## Pre-production acceptance
 
-`docs/PRE_PRODUCTION_TEST.md` is the single consolidated production acceptance procedure. It de-duplicates E0-E4/D0-D5 with applicable pinned-reference coverage and adds Linux-kernel lifecycle/concurrency, malformed-input, resource, evidence, security, performance, stress, soak, endurance, real-peer and upgrade/rollback coverage.
-
-The forensic consolidation review made explicit blockers out of gaps that simpler tests can hide: SMP/multi-vCPU races; 32-bit compatibility UAPI; namespace isolation/device movement; nonlinear/cloned/fragmented skb paths; exact adjacency/router saturation/replacement boundaries; filter transaction rollback and filter-reference coexistence; exact timer/DR/version/padding/endnode-test-data boundaries; boot/late-NIC ordering; false-green harness tests; image-build/storage/download/snapshot/conversion failures; second Ethernet driver/offload/MTU coverage; adversarial fairness; property/model/differential and mutation-generated tests; hard-power release-image recovery; 72-hour and 7-day endurance; long quiet periods; and N-1 upgrade/downgrade/rollback/mixed-version testing once an N-1 release exists.
-
-The same inventory maps LinuxDECnet `dnprogs/libvaxdata/src/test.c` into PP-00 reference health and PP-07 once VAX/RMS conversion is claimed. The pinned SIMH target is built with its applicable simulator tests enabled before it is trusted to host real DEC operating-system interoperability in PP-12.
-
-Documentation does not make a requirement green. Required tests must be executed with complete evidence, and missing evidence invalidates production acceptance.
-
-The current candidate includes the DECnet-IV-Linux license/header identity repair, source-edit runner-trigger correction, endnode hello test-data boundary correction, the live Route20/PyDECnet two-VM interoperability gate, the generated-unit policy correction, direct-main repository discipline, and the reference-aware Level 2 packet-capture correction. These latest changes reset the SoP sequence. No review or acceptance result from an earlier tree carries forward.
+`docs/PRE_PRODUCTION_TEST.md` is the single consolidated production acceptance procedure. It de-duplicates E0-E4/D0-D5 with applicable pinned-reference coverage and adds Linux-kernel lifecycle/concurrency, malformed-input, resource, evidence, security, performance, stress, soak, endurance, real-peer and upgrade/rollback coverage. Documentation alone is never green; required tests must execute with complete evidence.
 
 ## Resume point
 
-The current `main` candidate combines the Phase 1/2 foundation, Phase 3 E1 implementation and self-to-self harness, signed-snapshot certificate bootstrap, 4 GiB sparse image workspace, DECnet filter/framing/multicast/concurrency fixes, the 128-byte endnode test-data decoder bound, repository policy, the DECnet-IV-Linux-scoped license/header repair, hardened stale-identity detection, source-edit runner suppression, the consolidated pre-production procedure, and a live two-VM interoperability harness for the exact pinned Route20 and PyDECnet peers across Level 1, cross-area Level 2 and endnode cases. Project work proceeds directly on `main` only. The protocol phase remains Phase 3.
+The current `main` candidate combines the Phase 1/2 foundation, Phase 3 Ethernet initialization/adjacency implementation, self-to-self E1 harness, live Route20/PyDECnet two-VM interoperability harness, signed-snapshot certificate bootstrap, 4 GiB sparse image workspace, framing/filter/multicast/concurrency fixes, endnode test-data bound, repository policy, license/header enforcement and exact-QEMU-PID process control for independent-peer hard-stop testing. The protocol phase remains Phase 3.
 
 ## Next action
 
-Restart the SoP sequence on the exact current `main` commit and require three consecutive clean full-repository passes. Then run exact-head repository policy/continuity, native x86_64/aarch64 build, pinned reference baselines, E1 self-to-self and the live Route20/PyDECnet interoperability workflow on both architectures. Accept only that unchanged `main` commit after every required Phase 3 gate is green. Any defect, evidence gap or later edit resets SoP. Phase 4 routing begins only after the Phase 3 gates are green.
+Restart the SoP sequence on the exact current `main` commit and require three consecutive clean complete full-repository passes. Then run exact-head repository policy/continuity, native x86_64/aarch64 build, pinned reference baselines, E1 self-to-self and live Route20/PyDECnet interoperability on both architectures. Accept only that unchanged `main` commit after every required Phase 3 gate is green. Any defect, evidence gap or later edit resets SoP. Phase 4 routing begins only after the Phase 3 gates are green.
