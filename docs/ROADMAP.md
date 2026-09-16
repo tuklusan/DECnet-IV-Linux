@@ -18,7 +18,7 @@ This is the execution order for DECnet-IV-Linux. Later phases do not replace ear
 
 ## Phase 0 - repository continuity and reference discipline
 
-Exit criteria: repository policy/continuity gates are active; every substantive commit refreshes `docs/PROJECT_STATE.md`; preferred reference roles and license boundaries are documented; the removed legacy Linux DECnet stack is not the implementation base; substantive work uses feature branches from exact `main`, and only exact green commits are promoted.
+Exit criteria: repository policy/continuity gates are active; every substantive commit refreshes `docs/PROJECT_STATE.md`; preferred reference roles and license boundaries are documented; the removed legacy Linux DECnet stack is not the implementation base; substantive work is committed directly to `main`, and acceptance applies only to the exact unchanged green `main` commit.
 
 ## Phase 1 - buildable kernel and userspace bootstrap
 

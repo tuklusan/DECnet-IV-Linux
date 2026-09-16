@@ -38,20 +38,6 @@ sudo mount -o loop "$raw" "$mnt"
 mounted=1
 sudo install -m 0755 "$script_dir/dniv-interop-smoke.sh" "$mnt/usr/local/sbin/dniv-interop-smoke"
 sudo tee "$mnt/etc/systemd/system/dniv-interop-smoke.service" >/dev/null <<'EOF_SERVICE'
-# ============================================================================
-# Copyright (c) 2026 Supratim Sanyal of SANYALnet Labs.
-# Proprietary rights reserved except as expressly licensed herein.
-#
-# DECnet-IV-Linux
-# This file is governed by the SANYALnet Labs Non-Commercial License in the
-# root LICENSE file. Non-Commercial use is permitted; Commercial Use and use
-# for AI/ML model training are prohibited unless separately authorized.
-#
-# Attribution is required: "Based on original work by Supratim Sanyal of
-# SANYALnet Labs." See LICENSE for full terms, warranty disclaimer, termination,
-# patent, trademark, and governing-law provisions.
-# ============================================================================
-
 [Unit]
 Description=DECnet Phase IV independent-peer interoperability test
 After=systemd-udev-settle.service

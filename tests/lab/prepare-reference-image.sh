@@ -54,20 +54,6 @@ sudo mount -o loop "$raw" "$mnt"
 mounted=1
 sudo install -m 0755 "$script_dir/dniv-reference-peer.sh" "$mnt/usr/local/sbin/dniv-reference-peer"
 sudo tee "$mnt/etc/systemd/system/dniv-reference-peer.service" >/dev/null <<'EOF_SERVICE'
-# ============================================================================
-# Copyright (c) 2026 Supratim Sanyal of SANYALnet Labs.
-# Proprietary rights reserved except as expressly licensed herein.
-#
-# DECnet-IV-Linux
-# This file is governed by the SANYALnet Labs Non-Commercial License in the
-# root LICENSE file. Non-Commercial use is permitted; Commercial Use and use
-# for AI/ML model training are prohibited unless separately authorized.
-#
-# Attribution is required: "Based on original work by Supratim Sanyal of
-# SANYALnet Labs." See LICENSE for full terms, warranty disclaimer, termination,
-# patent, trademark, and governing-law provisions.
-# ============================================================================
-
 [Unit]
 Description=Independent DECnet reference peer
 After=systemd-udev-settle.service
