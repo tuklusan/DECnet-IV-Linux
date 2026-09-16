@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0
+// License: GPL-2.0
 #include <assert.h>
 #include <decnet_iv_wire.h>
 #include <stdio.h>

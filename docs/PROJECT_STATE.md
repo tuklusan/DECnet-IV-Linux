@@ -36,6 +36,7 @@ Self-to-self success is never sufficient for final interoperability claims.
 - `tools/project_state_gate.py` enforces continuity.
 - `tools/repo_policy.py` enforces the configured case-insensitive whole-token repository word policy across the current tree, relevant new commit objects, refs/configuration, selected repository event metadata and collaborators. Local pre-commit, commit-message and pre-push hooks are provided by `.githooks`.
 - Policy token boundaries treat Unicode letters/digits as word characters and punctuation or underscore as separators. This preserves the short-token false-positive protection inside ordinary words while rejecting identifier-style uses separated by underscores.
+- The configured blocked-token set also includes the requested four-letter license-tag marker. Source headers retain equivalent license declarations without spelling that marker, keeping the current tree compliant.
 - The repository-policy workflow is the sole automatic workflow exception. Build, continuity, reference and VM workflows are demand-driven.
 - Workflow-level and job-level concurrency groups use `queue: max` with cancellation disabled. This prevents an older pending policy or acceptance run from being silently replaced by a newer run while preserving the one-x64/one-arm64 execution ceiling; the platform queue limit still applies.
 - An owner-opened issue titled exactly `DNIV acceptance gates` is the controlled dispatcher for those manual acceptance workflows after policy succeeds and `main` still matches the event revision.
@@ -92,7 +93,7 @@ Ordinary lab addressing is centralized in `tests/lab/test-addresses.env`: area 3
 
 ## Resume point
 
-`main` contains the Phase 1/2 foundation, the Phase 3 E1 harness, signed-snapshot certificate bootstrap, a 4 GiB sparse image workspace, explicit DECnet unicast-filter ownership, `init_net` isolation, standard DECnet Ethernet payload-length framing, Level 2 multicast participation, serialized runtime identity-change/hello processing, role-aware hello destination validation, corrected whole-token policy boundaries, and non-replacing workflow/job concurrency queues. The SoP sequence is reset by the latest receive-path correction. No Phase 3 completion claim is valid until the exact latest tree completes three clean full reviews and the required acceptance/interoperability evidence is green.
+`main` contains the Phase 1/2 foundation, the Phase 3 E1 harness, signed-snapshot certificate bootstrap, a 4 GiB sparse image workspace, explicit DECnet unicast-filter ownership, `init_net` isolation, standard DECnet Ethernet payload-length framing, Level 2 multicast participation, serialized runtime identity-change/hello processing, role-aware hello destination validation, corrected whole-token policy boundaries, and non-replacing workflow/job concurrency queues. The requested repository-word policy extension and source-header cleanup reset the SoP sequence again. No Phase 3 completion claim is valid until the exact latest tree completes three clean full reviews and the required acceptance/interoperability evidence is green.
 
 ## Next action
 

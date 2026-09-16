@@ -19,6 +19,7 @@ BLOCKED = (
     "co" + "dex",
     "chat" + "gpt",
     "anth" + "ropic",
+    "sp" + "dx",
 )
 CONTROL_ROOT = "." + "git" + "hub"
 ENV_PREFIX = ("git" + "hub").upper()

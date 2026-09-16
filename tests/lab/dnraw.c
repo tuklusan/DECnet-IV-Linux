@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0
+// License: GPL-2.0
 #define _DEFAULT_SOURCE
 #include <arpa/inet.h>
 #include <errno.h>

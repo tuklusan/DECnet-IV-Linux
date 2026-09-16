@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0
+// License: GPL-2.0
 #include <linux/capability.h>
 #include <linux/ctype.h>
 #include <linux/fs.h>

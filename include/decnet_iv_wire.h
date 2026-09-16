@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0 */
+/* License: GPL-2.0 */
 #ifndef _DECNET_IV_WIRE_H
 #define _DECNET_IV_WIRE_H
 

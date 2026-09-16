@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
+/* License: GPL-2.0 WITH Linux-syscall-note */
 #ifndef _UAPI_LINUX_DECNET_IV_H
 #define _UAPI_LINUX_DECNET_IV_H
 

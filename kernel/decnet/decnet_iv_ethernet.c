@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0
+// License: GPL-2.0
 #include <linux/atomic.h>
 #include <linux/errno.h>
 #include <linux/etherdevice.h>
