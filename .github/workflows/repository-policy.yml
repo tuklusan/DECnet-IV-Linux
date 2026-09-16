@@ -65,7 +65,7 @@ jobs:
           set -eu
           head=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
           test "$head" = "$GITHUB_SHA"
-          gh workflow run build.yml --ref main
-          gh workflow run project-state.yml --ref main
-          gh workflow run reference-baselines.yml --ref main
-          gh workflow run vm-lab.yml --ref main -f lab_mode=e1
+          gh workflow run build.yml --repo "$GITHUB_REPOSITORY" --ref main
+          gh workflow run project-state.yml --repo "$GITHUB_REPOSITORY" --ref main
+          gh workflow run reference-baselines.yml --repo "$GITHUB_REPOSITORY" --ref main
+          gh workflow run vm-lab.yml --repo "$GITHUB_REPOSITORY" --ref main -f lab_mode=e1
