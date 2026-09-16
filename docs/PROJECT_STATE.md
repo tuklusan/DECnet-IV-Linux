@@ -94,7 +94,9 @@ The independent-peer harness boots candidate and reference in separate VMs and r
 
 The latest full-tree SoP pass found a harness process-lifetime defect in `tests/lab/run-interop.sh`: asynchronous shell functions launched QEMU without `exec`, so the recorded background PID could be the shell wrapper rather than QEMU itself. Hard-killing the recorded reference PID could therefore leave the actual VM alive and invalidate the listener-expiry/recovery test. Candidate and reference launch paths now `exec` QEMU on both architectures so recorded PIDs are the VM processes themselves.
 
-A subsequent full-tree review found that resumable VM checkpoint integrity covered the base image, overlays, kernel and initrd but not `session.env`. Because resume authorization trusts that metadata for architecture, source revision and mode, an altered metadata file could redirect a valid checkpoint to the wrong acceptance context. The VM workflow now converts successful checkpoints to format 2 and regenerates `SHA256SUMS` with `session.env` included before artifact retention; resume rejects older unsealed format-1 checkpoints. This change resets the SoP sequence; no earlier acceptance result carries forward.
+A subsequent full-tree review found that resumable VM checkpoint integrity covered the base image, overlays, kernel and initrd but not `session.env`. Because resume authorization trusts that metadata for architecture, source revision and mode, an altered metadata file could redirect a valid checkpoint to the wrong acceptance context. The VM workflow now converts successful checkpoints to format 2 and regenerates `SHA256SUMS` with `session.env` included before artifact retention; resume rejects older unsealed format-1 checkpoints.
+
+The following full-tree pass found `docs/TEST_LAB.md` still describing the superseded legacy format-1 resume behavior even though the workflow now requires sealed format-2 metadata. The lab documentation now states the actual format-2 checksum, architecture, exact-source and mode requirements and rejects legacy/unsealed checkpoints. This documentation correction resets the SoP sequence; no earlier acceptance result carries forward.
 
 ## Test addressing
 
@@ -106,7 +108,7 @@ Ordinary lab addressing is centralized in `tests/lab/test-addresses.env`: area 3
 
 ## Resume point
 
-The current `main` candidate combines the Phase 1/2 foundation, Phase 3 Ethernet initialization/adjacency implementation, self-to-self E1 harness, live Route20/PyDECnet two-VM interoperability harness, signed-snapshot certificate bootstrap, 4 GiB sparse image workspace, framing/filter/multicast/concurrency fixes, endnode test-data bound, repository policy, license/header enforcement, exact-QEMU-PID process control for independent-peer hard-stop testing, and sealed format-2 resumable checkpoint metadata. The protocol phase remains Phase 3.
+The current `main` candidate combines the Phase 1/2 foundation, Phase 3 Ethernet initialization/adjacency implementation, self-to-self E1 harness, live Route20/PyDECnet two-VM interoperability harness, signed-snapshot certificate bootstrap, 4 GiB sparse image workspace, framing/filter/multicast/concurrency fixes, endnode test-data bound, repository policy, license/header enforcement, exact-QEMU-PID process control for independent-peer hard-stop testing, sealed format-2 resumable checkpoint metadata, and matching lab documentation. The protocol phase remains Phase 3.
 
 ## Next action
 
