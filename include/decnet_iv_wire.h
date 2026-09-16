@@ -115,6 +115,50 @@ static inline int dniv_wire_node_type_valid(__u8 node_type)
            node_type == DNIV_NODE_TYPE_ENDNODE;
 }
 
+static inline int dniv_wire_mac_equal(const __u8 left[DNIV_WIRE_ETH_ALEN],
+                                      const __u8 right[DNIV_WIRE_ETH_ALEN])
+{
+    __u32 i;
+
+    if (!left || !right)
+        return 0;
+    for (i = 0; i < DNIV_WIRE_ETH_ALEN; i++) {
+        if (left[i] != right[i])
+            return 0;
+    }
+    return 1;
+}
+
+static inline int dniv_wire_destination_valid(
+    __u16 local_address, __u8 local_node_type,
+    const __u8 destination[DNIV_WIRE_ETH_ALEN])
+{
+    static const __u8 all_routers[DNIV_WIRE_ETH_ALEN] = {
+        0xabU, 0x00U, 0x00U, 0x03U, 0x00U, 0x00U
+    };
+    static const __u8 all_level2_routers[DNIV_WIRE_ETH_ALEN] = {
+        0x09U, 0x00U, 0x2bU, 0x02U, 0x00U, 0x00U
+    };
+    static const __u8 all_endnodes[DNIV_WIRE_ETH_ALEN] = {
+        0xabU, 0x00U, 0x00U, 0x04U, 0x00U, 0x00U
+    };
+    __u8 local_mac[DNIV_WIRE_ETH_ALEN];
+
+    if (!destination || !dniv_wire_address_valid(local_address) ||
+        !dniv_wire_node_type_valid(local_node_type))
+        return 0;
+
+    dniv_wire_mac_from_address(local_address, local_mac);
+    if (dniv_wire_mac_equal(destination, local_mac))
+        return 1;
+    if (local_node_type == DNIV_NODE_TYPE_ENDNODE)
+        return dniv_wire_mac_equal(destination, all_endnodes);
+    if (dniv_wire_mac_equal(destination, all_routers))
+        return 1;
+    return local_node_type == DNIV_NODE_TYPE_L2_ROUTER &&
+           dniv_wire_mac_equal(destination, all_level2_routers);
+}
+
 static inline void dniv_wire_zero(__u8 *buf, __u32 len)
 {
     __u32 i;

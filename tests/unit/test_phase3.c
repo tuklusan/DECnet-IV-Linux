@@ -50,6 +50,48 @@ static void test_mac(void)
     assert(dniv_wire_address_from_mac(mac, &address) < 0);
 }
 
+static void test_destination_filter(void)
+{
+    const __u8 all_routers[6] = {0xab, 0x00, 0x00, 0x03, 0x00, 0x00};
+    const __u8 all_level2_routers[6] = {0x09, 0x00, 0x2b, 0x02, 0x00, 0x00};
+    const __u8 all_endnodes[6] = {0xab, 0x00, 0x00, 0x04, 0x00, 0x00};
+    __u8 local[6];
+    __u16 address = DNIV_ADDR(31, 70);
+
+    dniv_wire_mac_from_address(address, local);
+    assert(dniv_wire_destination_valid(address, DNIV_NODE_TYPE_ENDNODE,
+                                       local));
+    assert(dniv_wire_destination_valid(address, DNIV_NODE_TYPE_ENDNODE,
+                                       all_endnodes));
+    assert(!dniv_wire_destination_valid(address, DNIV_NODE_TYPE_ENDNODE,
+                                        all_routers));
+    assert(!dniv_wire_destination_valid(address, DNIV_NODE_TYPE_ENDNODE,
+                                        all_level2_routers));
+
+    assert(dniv_wire_destination_valid(address, DNIV_NODE_TYPE_L1_ROUTER,
+                                       local));
+    assert(dniv_wire_destination_valid(address, DNIV_NODE_TYPE_L1_ROUTER,
+                                       all_routers));
+    assert(!dniv_wire_destination_valid(address, DNIV_NODE_TYPE_L1_ROUTER,
+                                        all_endnodes));
+    assert(!dniv_wire_destination_valid(address, DNIV_NODE_TYPE_L1_ROUTER,
+                                        all_level2_routers));
+
+    assert(dniv_wire_destination_valid(address, DNIV_NODE_TYPE_L2_ROUTER,
+                                       local));
+    assert(dniv_wire_destination_valid(address, DNIV_NODE_TYPE_L2_ROUTER,
+                                       all_routers));
+    assert(dniv_wire_destination_valid(address, DNIV_NODE_TYPE_L2_ROUTER,
+                                       all_level2_routers));
+    assert(!dniv_wire_destination_valid(address, DNIV_NODE_TYPE_L2_ROUTER,
+                                        all_endnodes));
+    assert(!dniv_wire_destination_valid(0, DNIV_NODE_TYPE_L1_ROUTER,
+                                        all_routers));
+    assert(!dniv_wire_destination_valid(address, 0, all_routers));
+    assert(!dniv_wire_destination_valid(address, DNIV_NODE_TYPE_L1_ROUTER,
+                                        NULL));
+}
+
 static void test_router_vector(void)
 {
     __u8 buf[128];
@@ -213,6 +255,7 @@ int main(void)
 {
     test_ethernet_length();
     test_mac();
+    test_destination_filter();
     test_router_vector();
     test_router_list_limit();
     test_endnode_vector();

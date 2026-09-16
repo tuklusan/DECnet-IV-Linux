@@ -452,6 +452,7 @@ static void dniv_remove_other_endnode_router_locked(int ifindex,
 }
 
 static void dniv_handle_valid_hello(int ifindex, const __u8 source[ETH_ALEN],
+                                    const __u8 destination[ETH_ALEN],
                                     const struct dniv_wire_hello *hello)
 {
     struct dniv_adj_entry *adj;
@@ -465,7 +466,11 @@ static void dniv_handle_valid_hello(int ifindex, const __u8 source[ETH_ALEN],
      * must not repopulate an old-identity adjacency after a runtime change.
      */
     spin_lock_irqsave(&dniv_adj_lock, flags);
-    if (hello->address == READ_ONCE(dniv_local_address) ||
+    if (!dniv_wire_destination_valid(dniv_local_address,
+                                     dniv_local_node_type, destination))
+        goto out_unlock;
+    atomic64_inc(&dniv_hello_rx);
+    if (hello->address == dniv_local_address ||
         !dniv_area_compatible(hello->address, hello->node_type))
         goto out_unlock;
 
@@ -483,7 +488,7 @@ static void dniv_handle_valid_hello(int ifindex, const __u8 source[ETH_ALEN],
         new_state = DNIV_ADJ_STATE_UP;
     } else {
         if (dniv_wire_router_adjacency_state(
-                hello, READ_ONCE(dniv_local_address), dniv_local_priority,
+                hello, dniv_local_address, dniv_local_priority,
                 &new_state) != 0) {
             atomic64_inc(&dniv_hello_errors);
             adj = dniv_find_adj_locked(ifindex, hello->address);
@@ -588,8 +593,7 @@ static int dniv_packet_rcv(struct sk_buff *skb, struct net_device *dev,
         goto out;
     }
 
-    atomic64_inc(&dniv_hello_rx);
-    dniv_handle_valid_hello(dev->ifindex, eth->h_source, &hello);
+    dniv_handle_valid_hello(dev->ifindex, eth->h_source, eth->h_dest, &hello);
 
 out:
     kfree_skb(skb);

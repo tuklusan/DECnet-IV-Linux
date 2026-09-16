@@ -82,6 +82,8 @@ A later full-tree review found a runtime identity-change race: hello validation 
 
 Repository review then found two policy/CI scheduling gaps. Whole-token matching originally treated underscore as a word character, permitting identifier-style configured tokens between underscores; the matcher now treats underscore as a separator while preserving Unicode-alphanumeric embedding protection. Workflow-level concurrency also originally used the platform's single-pending default, under which a newer pending run can replace an older one. All workflow-level concurrency groups now use `queue: max`, matching the already-queued job-level groups and preventing ordinary pending policy/acceptance runs from being silently replaced before execution.
 
+A subsequent full-tree review found that hello processing relied on hardware multicast filtering and did not verify the Ethernet destination in software. A broadened receive mode could therefore expose a valid hello addressed to a multicast class for a different node role. The receive path now validates the destination against the local DECnet unicast address and the role-appropriate multicast groups under the same adjacency lock as runtime identity changes. Unit vectors cover endnode, Level 1 and Level 2 destination acceptance and rejection.
+
 Three consecutive clean complete SoP passes were reached on `e59afc1cdee594417137f21a5ea3f0ebb72807eb`, after which exact-head acceptance was dispatched. Repository policy, continuity, native x86_64/aarch64 build, Route20 build and the pinned PyDECnet unit baseline were green. The arm64 E1 image build verified the certificate bootstrap and verified snapshot access, then failed because the 2 GiB root filesystem filled while unpacking the arm64 virtual-kernel modules. The root image floor is now 4 GiB. Every subsequent image, protocol, policy and workflow correction reset the SoP sequence; no acceptance result from an earlier revision carries forward.
 
 ## Test addressing
@@ -90,7 +92,7 @@ Ordinary lab addressing is centralized in `tests/lab/test-addresses.env`: area 3
 
 ## Resume point
 
-`main` contains the Phase 1/2 foundation, the Phase 3 E1 harness, signed-snapshot certificate bootstrap, a 4 GiB sparse image workspace, explicit DECnet unicast-filter ownership, `init_net` isolation, standard DECnet Ethernet payload-length framing, Level 2 multicast participation, serialized runtime identity-change/hello processing, corrected whole-token policy boundaries, and non-replacing workflow/job concurrency queues. The SoP sequence is reset by the latest workflow-queue correction. No Phase 3 completion claim is valid until the exact latest tree completes three clean full reviews and the required acceptance/interoperability evidence is green.
+`main` contains the Phase 1/2 foundation, the Phase 3 E1 harness, signed-snapshot certificate bootstrap, a 4 GiB sparse image workspace, explicit DECnet unicast-filter ownership, `init_net` isolation, standard DECnet Ethernet payload-length framing, Level 2 multicast participation, serialized runtime identity-change/hello processing, role-aware hello destination validation, corrected whole-token policy boundaries, and non-replacing workflow/job concurrency queues. The SoP sequence is reset by the latest receive-path correction. No Phase 3 completion claim is valid until the exact latest tree completes three clean full reviews and the required acceptance/interoperability evidence is green.
 
 ## Next action
 
