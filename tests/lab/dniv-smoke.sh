@@ -1,4 +1,18 @@
 #!/bin/sh
+# ============================================================================
+# Copyright (c) 2026 Supratim Sanyal of SANYALnet Labs.
+# Proprietary rights reserved except as expressly licensed herein.
+#
+# DO NOT PANIC PORTFOLIO VISUALIZER
+# This file is governed by the SANYALnet Labs Non-Commercial License in the
+# root LICENSE file. Non-Commercial use is permitted; Commercial Use and use
+# for AI/ML model training are prohibited unless separately authorized.
+#
+# Attribution is required: "Based on original work by Supratim Sanyal of
+# SANYALnet Labs." See LICENSE for full terms, warranty disclaimer, termination,
+# patent, trademark, and governing-law provisions.
+# ============================================================================
+
 set -eu
 
 get_arg() {
@@ -151,9 +165,6 @@ e1)
         *) echo "DNIV-E1-FAIL session=$session node=$name reason=bad-role"; exit 1 ;;
     esac
 
-    # DN70 must not be judged against the steady-state DR rule before DN71 is
-    # actually present. Bootstrap role A as an endnode until it receives the
-    # higher-address router's designated-router hello, then restart as L1.
     if [ "$role" = A ]; then
         modprobe decnet_iv default_area="$area" default_node="$node" default_name="$name" \
             default_node_type=3 hello_interval=2
@@ -178,11 +189,6 @@ e1)
         exit 1
     fi
 
-    # Change the device primary MAC while DECnet remains loaded. The DECnet
-    # unicast receive filter must be an independently owned reference, so the
-    # protocol address must remain reachable across NETDEV_CHANGEADDR. Bring
-    # the link down first because not every Ethernet driver permits a live
-    # primary-address change.
     change_hello_before=$(stat_value 'Hello frames received')
     case "$change_hello_before" in
         ''|*[!0-9]*) echo "DNIV-E1-FAIL session=$session node=$name reason=bad-changeaddr-stats"; exit 1 ;;
@@ -199,10 +205,6 @@ e1)
         exit 1
     fi
 
-    # Compare the non-hello receive count before and after a probe stream
-    # addressed to the DECnet node MAC. The probes now leave from the changed
-    # primary MAC, so this proves receive coverage survived the address change.
-    # The overlap also avoids a baseline race between peers.
     routing_before=$(stat_value 'Routing frames received')
     hello_before=$(stat_value 'Hello frames received')
     for value in "$routing_before" "$hello_before"; do

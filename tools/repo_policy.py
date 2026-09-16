@@ -1,4 +1,18 @@
 #!/usr/bin/env python3
+# ============================================================================
+# Copyright (c) 2026 Supratim Sanyal of SANYALnet Labs.
+# Proprietary rights reserved except as expressly licensed herein.
+#
+# DO NOT PANIC PORTFOLIO VISUALIZER
+# This file is governed by the SANYALnet Labs Non-Commercial License in the
+# root LICENSE file. Non-Commercial use is permitted; Commercial Use and use
+# for AI/ML model training are prohibited unless separately authorized.
+#
+# Attribution is required: "Based on original work by Supratim Sanyal of
+# SANYALnet Labs." See LICENSE for full terms, warranty disclaimer, termination,
+# patent, trademark, and governing-law provisions.
+# ============================================================================
+
 """Repository policy gate."""
 
 from __future__ import annotations
@@ -11,6 +25,8 @@ import subprocess
 import sys
 import unicodedata
 from pathlib import Path
+
+import license_monkey
 
 BLOCKED = (
     "cl" + "aude",
@@ -38,10 +54,6 @@ def fold(value: str) -> str:
     return unicodedata.normalize("NFKC", value).casefold()
 
 
-# Treat Unicode letters and digits as token characters, but punctuation and
-# underscore as separators. This keeps short configured terms from matching
-# inside ordinary words while still rejecting identifier-like token use such
-# as prefix_<term>_suffix.
 BLOCKED_PATTERNS = tuple(
     re.compile(rf"(?<![^\W_]){re.escape(fold(term))}(?![^\W_])")
     for term in BLOCKED
@@ -55,6 +67,7 @@ BLOCKED_BYTES_PATTERN = re.compile(
 
 
 def has_blocked_text(value: str) -> bool:
+    value = license_monkey.strip_canonical_header(value)
     value = fold(value)
     return any(pattern.search(value) for pattern in BLOCKED_PATTERNS)
 
@@ -69,7 +82,6 @@ def has_blocked_bytes(value: bytes) -> bool:
 def matcher_self_check() -> list[str]:
     errors: list[str] = []
     allowed = ("main", "mail", "detail", "maintained", "chair", "domain")
-
     for value in allowed:
         if has_blocked_text(value):
             errors.append(f"matcher false positive: {value}")
@@ -79,13 +91,14 @@ def matcher_self_check() -> list[str]:
         if not has_blocked_bytes(b" " + term.encode("ascii") + b" "):
             errors.append("byte matcher missed a configured term")
         separated = "_" + term + "_"
-        if not has_blocked_text(separated) or not has_blocked_bytes(
-            separated.encode("ascii")
-        ):
+        if not has_blocked_text(separated) or not has_blocked_bytes(separated.encode("ascii")):
             errors.append("matcher missed a configured token between underscores")
         embedded = "α" + term + "β"
         if has_blocked_text(embedded) or has_blocked_bytes(embedded.encode("utf-8")):
             errors.append("matcher false positive inside Unicode word")
+    required = license_monkey.render_header("hash") + "\n\npayload"
+    if has_blocked_text(required):
+        errors.append("matcher rejected the mandatory canonical project header")
     return errors
 
 
@@ -94,10 +107,7 @@ def report(label: str) -> None:
 
 
 def check_value(label: str, value: object, failures: list[str]) -> None:
-    if value is None:
-        return
-    text = str(value)
-    if has_blocked_text(text):
+    if value is not None and has_blocked_text(str(value)):
         failures.append(label)
         report(label)
 
@@ -159,7 +169,6 @@ def event_checks(event: dict, failures: list[str]) -> None:
     )
     for label, parts in fields:
         check_value(label, dig(event, *parts), failures)
-
     for index, commit in enumerate(event.get("commits", ())):
         if not isinstance(commit, dict):
             continue
@@ -168,100 +177,50 @@ def event_checks(event: dict, failures: list[str]) -> None:
             details = commit.get(who)
             if isinstance(details, dict):
                 for key in ("name", "email", "username"):
-                    check_value(
-                        f"event commit {index} {who} {key}",
-                        details.get(key),
-                        failures,
-                    )
+                    check_value(f"event commit {index} {who} {key}", details.get(key), failures)
 
 
 def scan_collaborators(failures: list[str]) -> None:
-    check_value(
-        "repository identity",
-        os.environ.get(ENV_PREFIX + "_REPOSITORY"),
-        failures,
-    )
-    check_value(
-        "workflow actor",
-        os.environ.get(ENV_PREFIX + "_ACTOR"),
-        failures,
-    )
-
+    check_value("repository identity", os.environ.get(ENV_PREFIX + "_REPOSITORY"), failures)
+    check_value("workflow actor", os.environ.get(ENV_PREFIX + "_ACTOR"), failures)
     if os.environ.get("CI", "").casefold() != "true":
         return
-
     repository = os.environ.get(ENV_PREFIX + "_REPOSITORY")
     token = os.environ.get("GH_TOKEN")
     if not repository or not token:
         failures.append("collaborator inspection")
-        print(
-            "repository policy error: collaborator inspection unavailable",
-            file=sys.stderr,
-        )
+        print("repository policy error: collaborator inspection unavailable", file=sys.stderr)
         return
-
-    result = run(
-        "gh",
-        "api",
-        f"repos/{repository}/collaborators",
-        "--paginate",
-        "--jq",
-        ".[].login",
-        check=False,
-    )
+    result = run("gh", "api", f"repos/{repository}/collaborators", "--paginate", "--jq", ".[].login", check=False)
     if result.returncode != 0:
         failures.append("collaborator inspection")
-        print(
-            "repository policy error: collaborator inspection failed",
-            file=sys.stderr,
-        )
+        print("repository policy error: collaborator inspection failed", file=sys.stderr)
         return
-
     for login in result.stdout.decode("utf-8", errors="replace").splitlines():
         check_value("collaborator login", login, failures)
 
 
 def resolve_target(event: dict) -> tuple[str, str | None]:
-    pr = event.get("pull_request")
-    if isinstance(pr, dict):
+    if isinstance(event.get("pull_request"), dict):
         head = dig(event, "pull_request", "head", "sha")
         base = dig(event, "pull_request", "base", "sha")
         if head:
             return str(head), str(base) if base else None
-
     group = event.get("merge_group")
-    if isinstance(group, dict):
-        head = group.get("head_sha")
-        base = group.get("base_sha")
-        if head:
-            return str(head), str(base) if base else None
-
+    if isinstance(group, dict) and group.get("head_sha"):
+        return str(group["head_sha"]), str(group.get("base_sha")) if group.get("base_sha") else None
     after = event.get("after")
     if after and str(after).strip("0"):
         before = event.get("before")
-        if before and str(before).strip("0"):
-            return str(after), str(before)
-        return str(after), None
-
+        return str(after), str(before) if before and str(before).strip("0") else None
     head = run("git", "rev-parse", "HEAD").stdout.decode().strip()
-    # Metadata and manual events carry no commit range. The current tree is
-    # checked below; prior commit ranges were already accepted by push gates.
     return head, head
 
 
 def ensure_object(rev: str) -> None:
-    probe = run("git", "cat-file", "-e", rev + "^{commit}", check=False)
-    if probe.returncode == 0:
+    if run("git", "cat-file", "-e", rev + "^{commit}", check=False).returncode == 0:
         return
-    fetched = run(
-        "git",
-        "fetch",
-        "--no-tags",
-        "--depth=256",
-        "origin",
-        rev,
-        check=False,
-    )
+    fetched = run("git", "fetch", "--no-tags", "--depth=256", "origin", rev, check=False)
     if fetched.returncode != 0:
         sys.stderr.write(fetched.stderr.decode("utf-8", errors="replace"))
         raise SystemExit("repository policy error: unable to fetch target revision")
@@ -271,16 +230,12 @@ def path_text(path: str) -> str:
     prefix = CONTROL_ROOT + "/"
     if path == CONTROL_ROOT:
         return ""
-    if path.startswith(prefix):
-        return path[len(prefix):]
-    return path
+    return path[len(prefix):] if path.startswith(prefix) else path
 
 
 def tree_sha(rev: str) -> str:
     result = run("git", "rev-parse", "--verify", rev + "^{tree}", check=False)
-    if result.returncode != 0:
-        return ""
-    return result.stdout.decode("ascii", errors="ignore").strip()
+    return result.stdout.decode("ascii", errors="ignore").strip() if result.returncode == 0 else ""
 
 
 def scan_tree(rev: str, failures: list[str]) -> None:
@@ -299,24 +254,26 @@ def scan_tree(rev: str, failures: list[str]) -> None:
             report("path")
         if obj_type != b"blob":
             continue
-        blob = run("git", "cat-file", "-p", obj_sha.decode()).stdout
+        sha = obj_sha.decode("ascii")
+        blob = run("git", "cat-file", "-p", sha).stdout
+        header_errors = license_monkey.validate_blob(path, blob, sha)
+        for error in header_errors:
+            failures.append("license header")
+            print(f"repository policy error: {error}", file=sys.stderr)
         if has_blocked_bytes(blob):
             failures.append("file content")
             report(f"file content: {path}")
 
 
-def scan_tree_once(
-    rev: str, failures: list[str], scanned_trees: set[str]
-) -> None:
+def scan_tree_once(rev: str, failures: list[str], scanned_trees: set[str]) -> None:
     identity = tree_sha(rev)
     if not identity:
         failures.append("tree inspection")
         print("repository policy error: tree inspection failed", file=sys.stderr)
         return
-    if identity in scanned_trees:
-        return
-    scanned_trees.add(identity)
-    scan_tree(rev, failures)
+    if identity not in scanned_trees:
+        scanned_trees.add(identity)
+        scan_tree(rev, failures)
 
 
 def commit_list(base: str | None, head: str) -> list[str]:
@@ -329,43 +286,22 @@ def commit_list(base: str | None, head: str) -> list[str]:
 
 
 def scan_commit_metadata(commit: str, failures: list[str]) -> None:
-    commit_object = run("git", "cat-file", "-p", commit, check=False)
-    if commit_object.returncode != 0:
+    obj = run("git", "cat-file", "-p", commit, check=False)
+    if obj.returncode != 0:
         failures.append("commit object inspection")
         print("repository policy error: commit object inspection failed", file=sys.stderr)
         return
-    check_bytes("commit object", commit_object.stdout, failures)
-
-    raw = run(
-        "git",
-        "show",
-        "-s",
-        "--format=%B%x00%an%x00%ae%x00%cn%x00%ce",
-        commit,
-    ).stdout
+    check_bytes("commit object", obj.stdout, failures)
+    raw = run("git", "show", "-s", "--format=%B%x00%an%x00%ae%x00%cn%x00%ce", commit).stdout
     parts = raw.decode("utf-8", errors="replace").split("\0")
-    labels = (
-        "commit message",
-        "author name",
-        "author email",
-        "committer name",
-        "committer email",
-    )
+    labels = ("commit message", "author name", "author email", "committer name", "committer email")
     for label, value in zip(labels, parts):
         check_value(label, value, failures)
 
 
-def scan_commits(
-    base: str | None,
-    head: str,
-    failures: list[str],
-    scanned_commits: set[str] | None = None,
-    scanned_trees: set[str] | None = None,
-) -> None:
-    if scanned_commits is None:
-        scanned_commits = set()
-    if scanned_trees is None:
-        scanned_trees = set()
+def scan_commits(base: str | None, head: str, failures: list[str], scanned_commits: set[str] | None = None, scanned_trees: set[str] | None = None) -> None:
+    scanned_commits = scanned_commits if scanned_commits is not None else set()
+    scanned_trees = scanned_trees if scanned_trees is not None else set()
     for commit in commit_list(base, head):
         if commit in scanned_commits:
             continue
@@ -378,15 +314,12 @@ def scan_local_config(failures: list[str]) -> None:
     config = run("git", "config", "--local", "--null", "--list", check=False)
     if config.returncode != 0:
         failures.append("local config inspection")
-        print(
-            "repository policy error: local config inspection failed",
-            file=sys.stderr,
-        )
-    else:
-        for record in config.stdout.split(b"\0"):
-            if record and has_blocked_bytes(record):
-                failures.append("local git config")
-                report("local git config")
+        print("repository policy error: local config inspection failed", file=sys.stderr)
+        return
+    for record in config.stdout.split(b"\0"):
+        if record and has_blocked_bytes(record):
+            failures.append("local git config")
+            report("local git config")
 
 
 def scan_refs_and_config(failures: list[str]) -> None:
@@ -397,32 +330,23 @@ def scan_refs_and_config(failures: list[str]) -> None:
     else:
         for ref in refs.stdout.decode("utf-8", errors="replace").splitlines():
             check_value("git ref", ref, failures)
-            object_id = run("git", "rev-parse", "--verify", ref, check=False)
-            if object_id.returncode != 0:
+            oid = run("git", "rev-parse", "--verify", ref, check=False)
+            if oid.returncode != 0:
                 failures.append("ref target inspection")
-                print("repository policy error: ref target inspection failed", file=sys.stderr)
                 continue
-            object_name = object_id.stdout.decode("ascii", errors="ignore").strip()
-            object_type = run("git", "cat-file", "-t", object_name, check=False)
-            if object_type.returncode != 0:
-                failures.append("ref target inspection")
-                print("repository policy error: ref target inspection failed", file=sys.stderr)
-                continue
-            if object_type.stdout.strip() == b"tag":
-                tag_object = run("git", "cat-file", "-p", object_name, check=False)
-                if tag_object.returncode != 0:
-                    failures.append("tag inspection")
-                    print("repository policy error: tag inspection failed", file=sys.stderr)
+            name = oid.stdout.decode("ascii", errors="ignore").strip()
+            kind = run("git", "cat-file", "-t", name, check=False)
+            if kind.returncode == 0 and kind.stdout.strip() == b"tag":
+                tag = run("git", "cat-file", "-p", name, check=False)
+                if tag.returncode == 0:
+                    check_bytes("tag object", tag.stdout, failures)
                 else:
-                    check_bytes("tag object", tag_object.stdout, failures)
-
+                    failures.append("tag inspection")
     scan_local_config(failures)
 
 
 def staged_checks(failures: list[str]) -> None:
-    raw = run(
-        "git", "diff", "--cached", "--name-only", "-z", "--diff-filter=ACMR"
-    ).stdout
+    raw = run("git", "diff", "--cached", "--name-only", "-z", "--diff-filter=ACMR").stdout
     for raw_path in raw.split(b"\0"):
         if not raw_path:
             continue
@@ -434,6 +358,9 @@ def staged_checks(failures: list[str]) -> None:
         if blob.returncode == 0 and has_blocked_bytes(blob.stdout):
             failures.append("staged content")
             report(f"staged content: {path}")
+    for error in license_monkey.validate_entries(license_monkey._index_entries()):
+        failures.append("license header")
+        print(f"repository policy error: {error}", file=sys.stderr)
 
 
 def zero_object_id(value: str) -> bool:
@@ -449,74 +376,47 @@ def peel_commit(rev: str) -> str | None:
 
 
 def scan_ref_target_object(rev: str, failures: list[str]) -> str | None:
-    object_type = run("git", "cat-file", "-t", rev, check=False)
-    if object_type.returncode != 0:
+    kind = run("git", "cat-file", "-t", rev, check=False)
+    if kind.returncode != 0:
         failures.append("ref target inspection")
         print("repository policy error: ref target is unavailable", file=sys.stderr)
         return None
-
-    kind = object_type.stdout.decode("ascii", errors="ignore").strip()
-    if kind == "tag":
-        tag_object = run("git", "cat-file", "-p", rev, check=False)
-        if tag_object.returncode != 0:
+    object_type = kind.stdout.decode("ascii", errors="ignore").strip()
+    if object_type == "tag":
+        tag = run("git", "cat-file", "-p", rev, check=False)
+        if tag.returncode != 0:
             failures.append("tag inspection")
-            print("repository policy error: tag inspection failed", file=sys.stderr)
             return None
-        check_bytes("tag object", tag_object.stdout, failures)
-    elif kind != "commit":
+        check_bytes("tag object", tag.stdout, failures)
+    elif object_type != "commit":
         failures.append("ref target type")
-        print(
-            "repository policy error: ref must resolve to a commit",
-            file=sys.stderr,
-        )
+        print("repository policy error: ref must resolve to a commit", file=sys.stderr)
         return None
-
     commit = peel_commit(rev)
     if not commit:
         failures.append("ref target commit")
-        print(
-            "repository policy error: ref does not resolve to a commit",
-            file=sys.stderr,
-        )
-        return None
     return commit
 
 
 def pre_push_checks(hook_context: list[str], failures: list[str]) -> None:
     for index, value in enumerate(hook_context):
         check_value(f"pre-push argument {index}", value, failures)
-
-    # Do not scan every existing local ref here: a remote-tracking ref with an
-    # offending name may still exist precisely because this push is deleting
-    # that remote ref. Staged/default modes retain the full local-ref check;
-    # pre-push validates configuration plus every non-deletion ref in stdin.
     scan_local_config(failures)
     scanned_commits: set[str] = set()
     scanned_trees: set[str] = set()
-    payload = sys.stdin.buffer.read()
-
-    for line_number, line in enumerate(payload.splitlines(), 1):
+    for line_number, line in enumerate(sys.stdin.buffer.read().splitlines(), 1):
         fields = line.split()
         if len(fields) != 4:
             failures.append("pre-push input")
-            print(
-                f"repository policy error: malformed pre-push input line {line_number}",
-                file=sys.stderr,
-            )
+            print(f"repository policy error: malformed pre-push input line {line_number}", file=sys.stderr)
             continue
-
         local_ref_raw, local_sha_raw, remote_ref_raw, remote_sha_raw = fields
         try:
             local_sha = local_sha_raw.decode("ascii")
             remote_sha = remote_sha_raw.decode("ascii")
         except UnicodeDecodeError:
             failures.append("pre-push object id")
-            print(
-                "repository policy error: non-ASCII object id in pre-push input",
-                file=sys.stderr,
-            )
             continue
-
         if zero_object_id(local_sha):
             continue
         check_bytes("local push ref", local_ref_raw, failures)
@@ -524,18 +424,9 @@ def pre_push_checks(hook_context: list[str], failures: list[str]) -> None:
         local_commit = scan_ref_target_object(local_sha, failures)
         if not local_commit:
             continue
-
-        base: str | None = None
-        if not zero_object_id(remote_sha):
-            base = peel_commit(remote_sha)
+        base = None if zero_object_id(remote_sha) else peel_commit(remote_sha)
         scan_tree_once(local_commit, failures, scanned_trees)
-        scan_commits(
-            base,
-            local_commit,
-            failures,
-            scanned_commits=scanned_commits,
-            scanned_trees=scanned_trees,
-        )
+        scan_commits(base, local_commit, failures, scanned_commits, scanned_trees)
 
 
 def main() -> int:
@@ -545,9 +436,8 @@ def main() -> int:
     parser.add_argument("--pre-push", action="store_true")
     parser.add_argument("hook_context", nargs="*")
     args = parser.parse_args()
-
-    selected_modes = int(args.staged) + int(bool(args.message_file)) + int(args.pre_push)
-    if selected_modes > 1:
+    selected = int(args.staged) + int(bool(args.message_file)) + int(args.pre_push)
+    if selected > 1:
         parser.error("policy modes are mutually exclusive")
     if args.hook_context and not args.pre_push:
         parser.error("hook context is valid only with --pre-push")
@@ -557,14 +447,12 @@ def main() -> int:
         for error in failures:
             print(f"repository policy error: {error}", file=sys.stderr)
         return 1
-
     if args.message_file:
         data = Path(args.message_file).read_bytes()
         if has_blocked_bytes(data):
             report("commit message")
             return 1
         return 0
-
     if args.staged:
         staged_checks(failures)
         scan_refs_and_config(failures)
@@ -577,26 +465,20 @@ def main() -> int:
         head, base = resolve_target(event)
         ensure_object(head)
         head_commit = scan_ref_target_object(head, failures)
-        base_commit: str | None = None
+        base_commit = None
         if base:
             ensure_object(base)
             base_commit = peel_commit(base)
             if not base_commit:
                 failures.append("base commit inspection")
-                print("repository policy error: base does not resolve to a commit", file=sys.stderr)
         scanned_trees: set[str] = set()
         if head_commit:
             scan_tree_once(head_commit, failures, scanned_trees)
             scan_commits(base_commit, head_commit, failures, scanned_trees=scanned_trees)
         scan_refs_and_config(failures)
-
     if failures:
-        print(
-            f"repository policy failed with {len(failures)} violation(s)",
-            file=sys.stderr,
-        )
+        print(f"repository policy failed with {len(failures)} violation(s)", file=sys.stderr)
         return 1
-
     print("repository policy passed")
     return 0
 

@@ -1,4 +1,17 @@
-// License: GPL-2.0
+// ============================================================================
+// Copyright (c) 2026 Supratim Sanyal of SANYALnet Labs.
+// Proprietary rights reserved except as expressly licensed herein.
+//
+// DO NOT PANIC PORTFOLIO VISUALIZER
+// This file is governed by the SANYALnet Labs Non-Commercial License in the
+// root LICENSE file. Non-Commercial use is permitted; Commercial Use and use
+// for AI/ML model training are prohibited unless separately authorized.
+//
+// Attribution is required: "Based on original work by Supratim Sanyal of
+// SANYALnet Labs." See LICENSE for full terms, warranty disclaimer, termination,
+// patent, trademark, and governing-law provisions.
+// ============================================================================
+
 #include <linux/atomic.h>
 #include <linux/errno.h>
 #include <linux/etherdevice.h>
@@ -651,7 +664,6 @@ int dniv_eth_set_address(__u16 address)
     dniv_wire_mac_from_address(old, old_mac);
     dniv_wire_mac_from_address(address, new_mac);
 
-    /* Install every new receive filter before publishing the new address. */
     rtnl_lock();
     for_each_netdev(&init_net, dev) {
         if (dev->type != ARPHRD_ETHER || (dev->flags & IFF_LOOPBACK))
@@ -663,7 +675,6 @@ int dniv_eth_set_address(__u16 address)
         }
     }
     if (err) {
-        /* Netdevice iteration order is stable while RTNL is held. */
         for_each_netdev(&init_net, dev) {
             if (dev == failed_dev)
                 break;

@@ -1,0 +1,184 @@
+#!/usr/bin/env python3
+# ============================================================================
+# Copyright (c) 2026 Supratim Sanyal of SANYALnet Labs.
+# Proprietary rights reserved except as expressly licensed herein.
+#
+# DO NOT PANIC PORTFOLIO VISUALIZER
+# This file is governed by the SANYALnet Labs Non-Commercial License in the
+# root LICENSE file. Non-Commercial use is permitted; Commercial Use and use
+# for AI/ML model training are prohibited unless separately authorized.
+#
+# Attribution is required: "Based on original work by Supratim Sanyal of
+# SANYALnet Labs." See LICENSE for full terms, warranty disclaimer, termination,
+# patent, trademark, and governing-law provisions.
+# ============================================================================
+
+"""Enforce the canonical SANYALnet Labs project header and root license."""
+
+from __future__ import annotations
+
+import argparse
+import subprocess
+import sys
+from pathlib import PurePosixPath
+
+LICENSE_PATH = "LICENSE"
+LICENSE_BLOB = "9b4b0109371838aa7ad0afe22ec99d960dc5deba"
+
+_CORE = (
+    "============================================================================",
+    "Copyright (c) 2026 Supratim Sanyal of SANYALnet Labs.",
+    "Proprietary rights reserved except as expressly licensed herein.",
+    "",
+    "DO NOT PANIC PORTFOLIO VISUALIZER",
+    "This file is governed by the SANYALnet Labs Non-Commercial License in the",
+    "root LICENSE file. Non-Commercial use is permitted; Commercial Use and use",
+    "for " + "A" + "I/ML model training are prohibited unless separately authorized.",
+    "",
+    'Attribution is required: "Based on original work by Supratim Sanyal of',
+    'SANYALnet Labs." See LICENSE for full terms, warranty disclaimer, termination,',
+    "patent, trademark, and governing-law provisions.",
+    "============================================================================",
+)
+
+_BINARY_SUFFIXES = {
+    ".7z", ".bz2", ".gif", ".gz", ".ico", ".img", ".iso", ".jpeg", ".jpg",
+    ".ko", ".o", ".pcap", ".pdf", ".png", ".qcow2", ".raw", ".tar", ".xz",
+    ".zip",
+}
+
+
+def _run(*args: str) -> bytes:
+    return subprocess.check_output(("git", *args))
+
+
+def style_for(path: str) -> str | None:
+    if path == LICENSE_PATH:
+        return None
+    suffix = PurePosixPath(path).suffix.casefold()
+    if suffix in _BINARY_SUFFIXES:
+        return None
+    if suffix in {".c", ".h"}:
+        return "slash"
+    if suffix == ".md":
+        return "html"
+    return "hash"
+
+
+def render_header(style: str) -> str:
+    if style == "slash":
+        return "\n".join("//" if not line else "// " + line for line in _CORE)
+    if style == "hash":
+        return "\n".join("#" if not line else "# " + line for line in _CORE)
+    if style == "html":
+        return "\n".join("<!-- -->" if not line else f"<!-- {line} -->" for line in _CORE)
+    raise ValueError(f"unsupported header style: {style}")
+
+
+def _split_shebang(text: str) -> tuple[str, str]:
+    if not text.startswith("#!"):
+        return "", text
+    end = text.find("\n")
+    if end < 0:
+        return text, ""
+    return text[: end + 1], text[end + 1 :]
+
+
+def strip_canonical_header(text: str) -> str:
+    """Remove one exact canonical leading header for other policy scanners."""
+    shebang, body = _split_shebang(text)
+    del shebang
+    for style in ("slash", "hash", "html"):
+        header = render_header(style)
+        if body.startswith(header):
+            body = body[len(header) :]
+            if body.startswith("\n"):
+                body = body[1:]
+            return body
+    return text
+
+
+def validate_blob(path: str, data: bytes, blob_sha: str | None = None) -> list[str]:
+    if path == LICENSE_PATH:
+        if blob_sha and blob_sha != LICENSE_BLOB:
+            return [f"{LICENSE_PATH} does not match the official imported license"]
+        return []
+
+    style = style_for(path)
+    if style is None:
+        return []
+
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        return [f"project-owned text artifact is not UTF-8: {path}"]
+
+    shebang, body = _split_shebang(text)
+    del shebang
+    header = render_header(style)
+    if not body.startswith(header + "\n\n"):
+        return [f"missing or non-canonical project header: {path}"]
+
+    remainder = body[len(header) + 2 :]
+    leading = "\n".join(remainder.splitlines()[:8]).casefold()
+    if "license-identifier:" in leading or "// license:" in leading or "# license:" in leading:
+        return [f"competing source header follows canonical header: {path}"]
+    return []
+
+
+def _tree_entries(rev: str):
+    raw = _run("ls-tree", "-r", "-z", rev)
+    for record in raw.split(b"\0"):
+        if not record:
+            continue
+        meta, raw_path = record.split(b"\t", 1)
+        fields = meta.split()
+        if len(fields) != 3 or fields[1] != b"blob":
+            continue
+        yield raw_path.decode("utf-8", errors="surrogateescape"), fields[2].decode("ascii")
+
+
+def _index_entries():
+    raw = _run("ls-files", "--stage", "-z")
+    for record in raw.split(b"\0"):
+        if not record:
+            continue
+        meta, raw_path = record.split(b"\t", 1)
+        mode, sha, stage = meta.split()
+        del mode
+        if stage != b"0":
+            continue
+        yield raw_path.decode("utf-8", errors="surrogateescape"), sha.decode("ascii")
+
+
+def validate_entries(entries) -> list[str]:
+    errors: list[str] = []
+    seen_license = False
+    for path, sha in entries:
+        if path == LICENSE_PATH:
+            seen_license = True
+        data = _run("cat-file", "-p", sha)
+        errors.extend(validate_blob(path, data, sha))
+    if not seen_license:
+        errors.append(f"missing {LICENSE_PATH}")
+    return errors
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Enforce canonical project licensing headers.")
+    parser.add_argument("--staged", action="store_true")
+    parser.add_argument("--tree", default="HEAD")
+    args = parser.parse_args()
+
+    entries = _index_entries() if args.staged else _tree_entries(args.tree)
+    errors = validate_entries(entries)
+    if errors:
+        for error in errors:
+            print(f"LICENSE-MONKEY: {error}", file=sys.stderr)
+        return 1
+    print("LICENSE-MONKEY: canonical license and headers verified")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,4 +1,17 @@
-// License: GPL-2.0
+// ============================================================================
+// Copyright (c) 2026 Supratim Sanyal of SANYALnet Labs.
+// Proprietary rights reserved except as expressly licensed herein.
+//
+// DO NOT PANIC PORTFOLIO VISUALIZER
+// This file is governed by the SANYALnet Labs Non-Commercial License in the
+// root LICENSE file. Non-Commercial use is permitted; Commercial Use and use
+// for AI/ML model training are prohibited unless separately authorized.
+//
+// Attribution is required: "Based on original work by Supratim Sanyal of
+// SANYALnet Labs." See LICENSE for full terms, warranty disclaimer, termination,
+// patent, trademark, and governing-law provisions.
+// ============================================================================
+
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -20,8 +33,17 @@ static void usage(FILE *stream, const char *prog)
             "  %s set AREA.NODE NAME\n"
             "  %s stats\n"
             "  %s adjacencies\n"
-            "  %s reset-stats\n",
-            prog, prog, prog, prog, prog);
+            "  %s reset-stats\n"
+            "  %s --about\n",
+            prog, prog, prog, prog, prog, prog);
+}
+
+static int show_about(void)
+{
+    puts("DECnet-IV-Linux");
+    puts("Based on original work by Supratim Sanyal of SANYALnet Labs.");
+    puts("See the root LICENSE file for governing terms.");
+    return 0;
 }
 
 static int parse_address(const char *text, __u16 *address)
@@ -260,6 +282,8 @@ int main(int argc, char **argv)
 {
     if (argc == 1 || (argc == 2 && strcmp(argv[1], "show") == 0))
         return show_identity();
+    if (argc == 2 && strcmp(argv[1], "--about") == 0)
+        return show_about();
     if (argc == 4 && strcmp(argv[1], "set") == 0)
         return set_identity(argv[2], argv[3]);
     if (argc == 2 && strcmp(argv[1], "stats") == 0)

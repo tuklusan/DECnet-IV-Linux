@@ -1,4 +1,17 @@
-// License: GPL-2.0
+// ============================================================================
+// Copyright (c) 2026 Supratim Sanyal of SANYALnet Labs.
+// Proprietary rights reserved except as expressly licensed herein.
+//
+// DO NOT PANIC PORTFOLIO VISUALIZER
+// This file is governed by the SANYALnet Labs Non-Commercial License in the
+// root LICENSE file. Non-Commercial use is permitted; Commercial Use and use
+// for AI/ML model training are prohibited unless separately authorized.
+//
+// Attribution is required: "Based on original work by Supratim Sanyal of
+// SANYALnet Labs." See LICENSE for full terms, warranty disclaimer, termination,
+// patent, trademark, and governing-law provisions.
+// ============================================================================
+
 #include <linux/capability.h>
 #include <linux/ctype.h>
 #include <linux/fs.h>
@@ -210,5 +223,5 @@ module_init(dniv_init);
 module_exit(dniv_exit);
 
 MODULE_DESCRIPTION("DECnet Phase IV native Ethernet initialization");
-MODULE_LICENSE("GPL");
+MODULE_LICENSE("Proprietary");
 MODULE_ALIAS_NETPROTO(PF_DECnet);

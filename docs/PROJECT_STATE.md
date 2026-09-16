@@ -1,3 +1,17 @@
+<!-- ============================================================================ -->
+<!-- Copyright (c) 2026 Supratim Sanyal of SANYALnet Labs. -->
+<!-- Proprietary rights reserved except as expressly licensed herein. -->
+<!-- -->
+<!-- DO NOT PANIC PORTFOLIO VISUALIZER -->
+<!-- This file is governed by the SANYALnet Labs Non-Commercial License in the -->
+<!-- root LICENSE file. Non-Commercial use is permitted; Commercial Use and use -->
+<!-- for AI/ML model training are prohibited unless separately authorized. -->
+<!-- -->
+<!-- Attribution is required: "Based on original work by Supratim Sanyal of -->
+<!-- SANYALnet Labs." See LICENSE for full terms, warranty disclaimer, termination, -->
+<!-- patent, trademark, and governing-law provisions. -->
+<!-- ============================================================================ -->
+
 # Project State
 
 This is the authoritative continuity record for DECnet-IV-Linux. Read `docs/HANDOVER.md`, this file, `docs/ROADMAP.md`, `docs/ARCHITECTURE.md` and `docs/TEST_LAB.md` before changing protocol, image or acceptance behavior.
@@ -27,6 +41,8 @@ Pinned revisions in `tests/reference/refs.env`:
 - LinuxDECnet comparison: `ff39eef045d1e4b7b72a3d40111e89c07a473398`
 - SIMH: `5b73b1032b52d19bf80752ea4d9cbbdc92e7b5e0`
 
+The product license is the exact `LICENSE` imported from `tuklusan/DO-NOT-PANIC-PORTFOLIO-VISUALIZER`, blob `9b4b0109371838aa7ad0afe22ec99d960dc5deba`. It is the SANYALnet Labs Non-Commercial License and is authoritative for project-owned work. `tools/license_monkey.py` verifies that exact root license and requires the canonical SANYALnet Labs notice as the sole leading header on every project-owned tracked text artifact, adapting only the comment syntax. The repository-policy workflow runs LICENSE-MONKEY before its existing word-policy checks. The mandatory model-training phrase is accepted only when it is part of the exact canonical leading notice; existing blocked-token enforcement remains unchanged everywhere else. The kernel module identifies itself to Linux as `Proprietary`, matching the product license rather than claiming GPL status.
+
 Self-to-self success is never sufficient for final interoperability claims.
 
 ## Repository discipline
@@ -34,9 +50,9 @@ Self-to-self success is never sufficient for final interoperability claims.
 - Work directly on current `main`; do not create pull requests or ordinary development branches.
 - Every substantive commit updates this file in the same commit.
 - `tools/project_state_gate.py` enforces continuity.
+- `tools/license_monkey.py` enforces the exact root product license and canonical project-owned artifact header.
 - `tools/repo_policy.py` enforces the configured case-insensitive whole-token repository word policy across the current tree, relevant new commit objects, refs/configuration, selected repository event metadata and collaborators. Local pre-commit, commit-message and pre-push hooks are provided by `.githooks`.
 - Policy token boundaries treat Unicode letters/digits as word characters and punctuation or underscore as separators. This preserves the short-token false-positive protection inside ordinary words while rejecting identifier-style uses separated by underscores.
-- The configured blocked-token set also includes the requested four-letter license-tag marker. Source headers retain equivalent license declarations without spelling that marker, keeping the current tree compliant.
 - The repository-policy workflow is the sole automatic workflow exception. Build, continuity, reference and VM workflows are demand-driven.
 - Workflow-level and job-level concurrency groups use `queue: max` with cancellation disabled. This prevents an older pending policy or acceptance run from being silently replaced by a newer run while preserving the one-x64/one-arm64 execution ceiling; the platform queue limit still applies.
 - An owner-opened issue titled exactly `DNIV acceptance gates` is the controlled dispatcher for those manual acceptance workflows after policy succeeds and `main` still matches the event revision.
@@ -85,7 +101,7 @@ Repository review then found two policy/CI scheduling gaps. Whole-token matching
 
 A subsequent full-tree review found that hello processing relied on hardware multicast filtering and did not verify the Ethernet destination in software. A broadened receive mode could therefore expose a valid hello addressed to a multicast class for a different node role. The receive path now validates the destination against the local DECnet unicast address and the role-appropriate multicast groups under the same adjacency lock as runtime identity changes. Unit vectors cover endnode, Level 1 and Level 2 destination acceptance and rejection.
 
-Three consecutive clean complete SoP passes were reached on `e59afc1cdee594417137f21a5ea3f0ebb72807eb`, after which exact-head acceptance was dispatched. Repository policy, continuity, native x86_64/aarch64 build, Route20 build and the pinned PyDECnet unit baseline were green. The arm64 E1 image build verified the certificate bootstrap and verified snapshot access, then failed because the 2 GiB root filesystem filled while unpacking the arm64 virtual-kernel modules. The root image floor is now 4 GiB. Every subsequent image, protocol, policy and workflow correction reset the SoP sequence; no acceptance result from an earlier revision carries forward.
+Three consecutive clean complete SoP passes were reached on `e59afc1cdee594417137f21a5ea3f0ebb72807eb`, after which exact-head acceptance was dispatched. Repository policy, continuity, native x86_64/aarch64 build, Route20 build and the pinned PyDECnet unit baseline were green. The arm64 E1 image build verified the certificate bootstrap and verified snapshot access, then failed because the 2 GiB root filesystem filled while unpacking the arm64 virtual-kernel modules. The root image floor is now 4 GiB. Every subsequent image, protocol, policy, workflow and licensing correction reset the SoP sequence; no acceptance result from an earlier revision carries forward.
 
 ## Test addressing
 
@@ -93,7 +109,7 @@ Ordinary lab addressing is centralized in `tests/lab/test-addresses.env`: area 3
 
 ## Resume point
 
-`main` contains the Phase 1/2 foundation, the Phase 3 E1 harness, signed-snapshot certificate bootstrap, a 4 GiB sparse image workspace, explicit DECnet unicast-filter ownership, `init_net` isolation, standard DECnet Ethernet payload-length framing, Level 2 multicast participation, serialized runtime identity-change/hello processing, role-aware hello destination validation, corrected whole-token policy boundaries, and non-replacing workflow/job concurrency queues. The requested repository-word policy extension and source-header cleanup reset the SoP sequence again. No Phase 3 completion claim is valid until the exact latest tree completes three clean full reviews and the required acceptance/interoperability evidence is green.
+`main` contains the Phase 1/2 foundation, the Phase 3 E1 harness, signed-snapshot certificate bootstrap, a 4 GiB sparse image workspace, explicit DECnet unicast-filter ownership, `init_net` isolation, standard DECnet Ethernet payload-length framing, Level 2 multicast participation, serialized runtime identity-change/hello processing, role-aware hello destination validation, corrected whole-token policy boundaries, and non-replacing workflow/job concurrency queues. The official product license is now imported verbatim at the root, the canonical project-owned notice is applied across tracked text artifacts, LICENSE-MONKEY enforces both at local and automatic policy gates, and `dnctl --about` provides the required user-facing attribution. These changes reset the SoP sequence. No Phase 3 completion claim is valid until the exact latest tree completes three clean full reviews and the required acceptance/interoperability evidence is green.
 
 ## Next action
 
