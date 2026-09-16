@@ -64,6 +64,12 @@ sudo tar -C "$repo_root" --exclude=.git --exclude=out -cf - . | \
 
 sudo rm -f "$mnt/etc/resolv.conf"
 sudo cp -L /etc/resolv.conf "$mnt/etc/resolv.conf"
+# Ubuntu Base does not include the certificate bundle used by HTTPS APT
+# transports. Seed only the runner's trust bundle so the pinned snapshot can
+# be reached; installing ca-certificates below replaces it with package-owned
+# trust data inside the finished guest image.
+sudo mkdir -p "$mnt/etc/ssl/certs"
+sudo cp -L /etc/ssl/certs/ca-certificates.crt "$mnt/etc/ssl/certs/ca-certificates.crt"
 printf 'LABEL=dniv-root / ext4 defaults 0 1\n' | sudo tee "$mnt/etc/fstab" >/dev/null
 printf 'dniv\n' | sudo tee "$mnt/etc/hostname" >/dev/null
 
@@ -85,6 +91,7 @@ apt-get --snapshot "$UBUNTU_APT_SNAPSHOT" update
 apt-get --snapshot "$UBUNTU_APT_SNAPSHOT" install -y --no-install-recommends \
     systemd-sysv kmod iproute2 ca-certificates build-essential \
     linux-image-virtual-hwe-26.04 linux-headers-virtual-hwe-26.04
+update-ca-certificates --fresh
 krel=$(ls -1 /lib/modules | sort -V | tail -1)
 test -n "$krel"
 make -C /usr/src/decnet-iv-linux/userspace/dnctl clean all
