@@ -14,7 +14,7 @@
 
 # Project State
 
-This is the authoritative continuity record for DECnet-IV-Linux. Read `docs/HANDOVER.md`, this file, `docs/ROADMAP.md`, `docs/ARCHITECTURE.md` and `docs/TEST_LAB.md` before changing protocol, image or acceptance behavior.
+This is the authoritative continuity record for DECnet-IV-Linux. Read `docs/HANDOVER.md`, this file, `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, `docs/TEST_LAB.md` and `docs/PRE_PRODUCTION_TEST.md` before changing protocol, image or acceptance behavior.
 
 ## Goal
 
@@ -47,8 +47,10 @@ Self-to-self success is never sufficient for final interoperability claims.
 
 ## Repository discipline
 
-- Work directly on current `main`; do not create pull requests or ordinary development branches.
+- Perform substantive work on a feature branch from the exact current `main` commit. Do not promote a branch tip merely because it is newer.
 - Every substantive commit updates this file in the same commit.
+- Promotion is only the exact commit that has satisfied the required SoP and acceptance gates; never rebuild or amend between green evidence and promotion.
+- Pull requests are not required for this single-developer repository unless deliberately used for review; the branch/commit identity remains the release unit.
 - `tools/project_state_gate.py` enforces continuity.
 - `tools/license_monkey.py` enforces the exact root product license and canonical project-owned artifact header.
 - `tools/repo_policy.py` enforces the configured case-insensitive whole-token repository word policy across the current tree, relevant new commit objects, refs/configuration, selected repository event metadata and collaborators. Local pre-commit, commit-message and pre-push hooks are provided by `.githooks`.
@@ -107,10 +109,22 @@ Three consecutive clean complete SoP passes were reached on `e59afc1cdee59441713
 
 Ordinary lab addressing is centralized in `tests/lab/test-addresses.env`: area 31, nodes 70 through 79, names DN70 through DN79. Larger and inter-area tests must extend this deliberately through configuration.
 
+## Pre-production acceptance procedure
+
+`docs/PRE_PRODUCTION_TEST.md` is the single consolidated production acceptance procedure. It de-duplicates E0-E4/D0-D5 with applicable pinned-reference coverage and adds Linux-kernel lifecycle/concurrency, malformed-input, resource, evidence, security, performance, stress, soak, endurance, real-peer and upgrade/rollback coverage.
+
+The forensic consolidation review made explicit blockers out of gaps that simpler tests can hide: SMP/multi-vCPU races; 32-bit compatibility UAPI; namespace isolation/device movement; nonlinear/cloned/fragmented skb paths; exact adjacency/router saturation/replacement boundaries; filter transaction rollback and filter-reference coexistence; exact timer/DR/version/padding/endnode-test-data boundaries; boot/late-NIC ordering; false-green harness tests; image-build/storage/download/snapshot/conversion failures; second Ethernet driver/offload/MTU coverage; adversarial fairness; property/model/differential and mutation-generated tests; hard-power release-image recovery; 72-hour and 7-day endurance; long quiet periods; and N-1 upgrade/downgrade/rollback/mixed-version testing once an N-1 release exists.
+
+The same inventory maps LinuxDECnet `dnprogs/libvaxdata/src/test.c` into PP-00 reference health and PP-07 once VAX/RMS conversion is claimed. The pinned SIMH target is built with its applicable simulator tests enabled before it is trusted to host real DEC operating-system interoperability in PP-12.
+
+Documentation does not make a requirement green. Required tests must be executed with complete evidence, and missing evidence invalidates production acceptance.
+
+The pre-production procedure merge incorporates the current `main` licensing/header work and resets the SoP sequence. No review or acceptance result from an earlier tree carries forward.
+
 ## Resume point
 
-`main` contains the Phase 1/2 foundation, the Phase 3 E1 harness, signed-snapshot certificate bootstrap, a 4 GiB sparse image workspace, explicit DECnet unicast-filter ownership, `init_net` isolation, standard DECnet Ethernet payload-length framing, Level 2 multicast participation, serialized runtime identity-change/hello processing, role-aware hello destination validation, corrected whole-token policy boundaries, and non-replacing workflow/job concurrency queues. The official product license is now imported verbatim at the root, the canonical project-owned notice is applied across tracked text artifacts, LICENSE-MONKEY enforces both at local and automatic policy gates, and `dnctl --about` provides the required user-facing attribution. These changes reset the SoP sequence. No Phase 3 completion claim is valid until the exact latest tree completes three clean full reviews and the required acceptance/interoperability evidence is green.
+`main` currently contains the Phase 1/2 foundation, the Phase 3 E1 harness, signed-snapshot certificate bootstrap, a 4 GiB sparse image workspace, explicit DECnet unicast-filter ownership, `init_net` isolation, standard DECnet Ethernet payload-length framing, Level 2 multicast participation, serialized runtime identity-change/hello processing, role-aware hello destination validation, corrected whole-token policy boundaries, non-replacing workflow/job concurrency queues, and the official product license/header enforcement. The consolidated pre-production procedure is being integrated on a feature branch without advancing the protocol phase.
 
 ## Next action
 
-Run three consecutive clean complete SoP passes on the exact latest `main` tree. Any defect or edit restarts the sequence. Then invoke the owner-only acceptance dispatcher and require green repository policy, continuity, reference, native x86_64/aarch64 build and E1 VM gates at that exact revision. Add and run live Phase 3 interoperability against the pinned Route20 and PyDECnet forks, including standard two-byte Ethernet length framing and Level 2 multicast behavior. Only after those gates are green may Phase 4 routing work begin. Continue directly on current `main`.
+On the exact combined pre-production candidate, complete three consecutive clean full-repository SoP passes. Any defect or edit restarts the sequence. Promote only that exact green commit to `main`; do not amend or rebuild it after the evidence is tied to it. After promotion, continue Phase 3 exact-head acceptance and live interoperability against the pinned Route20 and PyDECnet forks, including two-byte Ethernet length framing and Level 2 multicast behavior. Phase 4 routing begins only after the Phase 3 gates are green.
