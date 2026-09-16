@@ -54,9 +54,10 @@ def has_blocked_text(value: str) -> bool:
 
 
 def has_blocked_bytes(value: bytes) -> bool:
-    if BLOCKED_BYTES_PATTERN.search(value):
-        return True
-    return has_blocked_text(value.decode("utf-8", errors="ignore"))
+    try:
+        return has_blocked_text(value.decode("utf-8"))
+    except UnicodeDecodeError:
+        return bool(BLOCKED_BYTES_PATTERN.search(value))
 
 
 def matcher_self_check() -> list[str]:
@@ -71,6 +72,9 @@ def matcher_self_check() -> list[str]:
             errors.append("matcher missed a configured term")
         if not has_blocked_bytes(b" " + term.encode("ascii") + b" "):
             errors.append("byte matcher missed a configured term")
+        embedded = "α" + term + "β"
+        if has_blocked_text(embedded) or has_blocked_bytes(embedded.encode("utf-8")):
+            errors.append("matcher false positive inside Unicode word")
     return errors
 
 
@@ -481,8 +485,6 @@ def pre_push_checks(hook_context: list[str], failures: list[str]) -> None:
             continue
 
         local_ref_raw, local_sha_raw, remote_ref_raw, remote_sha_raw = fields
-        check_bytes("local push ref", local_ref_raw, failures)
-        check_bytes("remote push ref", remote_ref_raw, failures)
         try:
             local_sha = local_sha_raw.decode("ascii")
             remote_sha = remote_sha_raw.decode("ascii")
@@ -496,6 +498,8 @@ def pre_push_checks(hook_context: list[str], failures: list[str]) -> None:
 
         if zero_object_id(local_sha):
             continue
+        check_bytes("local push ref", local_ref_raw, failures)
+        check_bytes("remote push ref", remote_ref_raw, failures)
         local_commit = scan_ref_target_object(local_sha, failures)
         if not local_commit:
             continue
