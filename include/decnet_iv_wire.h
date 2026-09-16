@@ -6,6 +6,7 @@
 #include <linux/decnet_iv.h>
 
 #define DNIV_WIRE_ETH_ALEN 6U
+#define DNIV_WIRE_ETH_LENGTH_LEN 2U
 #define DNIV_WIRE_ROUTER_HELLO 0x0bU
 #define DNIV_WIRE_ENDNODE_HELLO 0x0dU
 #define DNIV_WIRE_VERSION_MAJOR 2U
@@ -54,6 +55,23 @@ static inline void dniv_wire_put_le16(__u8 *p, __u16 value)
 {
     p[0] = (__u8)(value & 0xffU);
     p[1] = (__u8)(value >> 8);
+}
+
+static inline int dniv_wire_eth_payload(const __u8 *buf, __u32 len,
+                                        const __u8 **payload,
+                                        __u16 *payload_len)
+{
+    __u16 value;
+
+    if (!buf || !payload || !payload_len || len < DNIV_WIRE_ETH_LENGTH_LEN)
+        return -1;
+    value = dniv_wire_get_le16(buf);
+    if (value == 0U || value > DNIV_WIRE_BLOCK_SIZE ||
+        len < DNIV_WIRE_ETH_LENGTH_LEN + (__u32)value)
+        return -1;
+    *payload = buf + DNIV_WIRE_ETH_LENGTH_LEN;
+    *payload_len = value;
+    return 0;
 }
 
 static inline int dniv_wire_address_valid(__u16 address)

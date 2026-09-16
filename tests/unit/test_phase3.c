@@ -4,6 +4,35 @@
 #include <stdio.h>
 #include <string.h>
 
+static void test_ethernet_length(void)
+{
+    __u8 frame[DNIV_WIRE_ETH_LENGTH_LEN + DNIV_WIRE_ROUTER_MIN_LEN + 8U];
+    const __u8 *payload = NULL;
+    __u16 payload_len = 0;
+    int len;
+
+    len = dniv_wire_build_router_hello(frame + DNIV_WIRE_ETH_LENGTH_LEN,
+                                       sizeof(frame) - DNIV_WIRE_ETH_LENGTH_LEN,
+                                       DNIV_ADDR(31, 70),
+                                       DNIV_NODE_TYPE_L1_ROUTER, 64, 10,
+                                       NULL, 0);
+    assert(len == (int)DNIV_WIRE_ROUTER_MIN_LEN);
+    dniv_wire_put_le16(frame, (__u16)len);
+    assert(frame[0] == 0x1b && frame[1] == 0x00);
+    assert(dniv_wire_eth_payload(frame,
+                                 DNIV_WIRE_ETH_LENGTH_LEN + (__u32)len,
+                                 &payload, &payload_len) == 0);
+    assert(payload == frame + DNIV_WIRE_ETH_LENGTH_LEN);
+    assert(payload_len == DNIV_WIRE_ROUTER_MIN_LEN);
+    assert(payload[0] == DNIV_WIRE_ROUTER_HELLO);
+    assert(dniv_wire_eth_payload(frame, DNIV_WIRE_ETH_LENGTH_LEN,
+                                 &payload, &payload_len) < 0);
+    frame[0] = 0xff;
+    frame[1] = 0xff;
+    assert(dniv_wire_eth_payload(frame, sizeof(frame),
+                                 &payload, &payload_len) < 0);
+}
+
 static void test_mac(void)
 {
     __u8 mac[6];
@@ -182,6 +211,7 @@ static void test_malformed_and_padding(void)
 
 int main(void)
 {
+    test_ethernet_length();
     test_mac();
     test_router_vector();
     test_router_list_limit();

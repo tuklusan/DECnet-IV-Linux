@@ -13,6 +13,7 @@
 #include <unistd.h>
 
 #define DNIV_ETHERTYPE 0x6003
+#define DNIV_LENGTH_LEN 2
 #define DNIV_PAYLOAD_MAX 256
 
 static int parse_mac(const char *text, unsigned char mac[ETH_ALEN])
@@ -35,12 +36,13 @@ static int parse_mac(const char *text, unsigned char mac[ETH_ALEN])
 int main(int argc, char **argv)
 {
     unsigned char dst[ETH_ALEN];
-    unsigned char frame[ETH_HLEN + DNIV_PAYLOAD_MAX];
+    unsigned char frame[ETH_HLEN + DNIV_LENGTH_LEN + DNIV_PAYLOAD_MAX];
     struct sockaddr_ll sa;
     struct ifreq ifr;
     const char *iface;
     const char *payload;
     size_t payload_len;
+    size_t frame_len;
     int fd;
     int ifindex;
     ssize_t sent;
@@ -90,7 +92,10 @@ int main(int argc, char **argv)
     memcpy(frame + ETH_ALEN, ifr.ifr_hwaddr.sa_data, ETH_ALEN);
     frame[12] = (unsigned char)(DNIV_ETHERTYPE >> 8);
     frame[13] = (unsigned char)(DNIV_ETHERTYPE & 0xff);
-    memcpy(frame + ETH_HLEN, payload, payload_len);
+    frame[14] = (unsigned char)(payload_len & 0xffU);
+    frame[15] = (unsigned char)(payload_len >> 8);
+    memcpy(frame + ETH_HLEN + DNIV_LENGTH_LEN, payload, payload_len);
+    frame_len = ETH_HLEN + DNIV_LENGTH_LEN + payload_len;
 
     memset(&sa, 0, sizeof(sa));
     sa.sll_family = AF_PACKET;
@@ -99,7 +104,7 @@ int main(int argc, char **argv)
     sa.sll_halen = ETH_ALEN;
     memcpy(sa.sll_addr, dst, ETH_ALEN);
 
-    sent = sendto(fd, frame, ETH_HLEN + payload_len, 0,
+    sent = sendto(fd, frame, frame_len, 0,
                   (struct sockaddr *)&sa, sizeof(sa));
     if (sent < 0) {
         perror("sendto");
@@ -107,5 +112,5 @@ int main(int argc, char **argv)
         return 1;
     }
     close(fd);
-    return sent == (ssize_t)(ETH_HLEN + payload_len) ? 0 : 1;
+    return sent == (ssize_t)frame_len ? 0 : 1;
 }

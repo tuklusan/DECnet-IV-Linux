@@ -18,9 +18,10 @@
 
 #define DNIV_MAX_ADJACENCIES 64U
 #define DNIV_DR_DELAY_SECONDS 5U
-#define DNIV_MAX_ROUTING_PAYLOAD 1500U
+#define DNIV_ETH_LENGTH_LEN 2U
 
 static const __u8 dniv_all_routers[ETH_ALEN] = {0xab, 0x00, 0x00, 0x03, 0x00, 0x00};
+static const __u8 dniv_all_level2_routers[ETH_ALEN] = {0x09, 0x00, 0x2b, 0x02, 0x00, 0x00};
 static const __u8 dniv_all_endnodes[ETH_ALEN] = {0xab, 0x00, 0x00, 0x04, 0x00, 0x00};
 
 struct dniv_adj_entry {
@@ -163,7 +164,6 @@ static bool dniv_area_compatible(__u16 peer, __u8 peer_type)
 static int dniv_add_dev_filters(struct net_device *dev)
 {
     __u8 local_mac[ETH_ALEN];
-    const __u8 *group;
     int err;
 
     if (dev->type != ARPHRD_ETHER || (dev->flags & IFF_LOOPBACK))
@@ -179,27 +179,47 @@ static int dniv_add_dev_filters(struct net_device *dev)
     if (err)
         return err;
 
-    group = dniv_local_node_type == DNIV_NODE_TYPE_ENDNODE ?
-            dniv_all_endnodes : dniv_all_routers;
-    err = dev_mc_add(dev, group);
-    if (err)
+    if (dniv_local_node_type == DNIV_NODE_TYPE_ENDNODE) {
+        err = dev_mc_add(dev, dniv_all_endnodes);
+        if (err)
+            dev_uc_del(dev, local_mac);
+        return err;
+    }
+
+    err = dev_mc_add(dev, dniv_all_routers);
+    if (err) {
         dev_uc_del(dev, local_mac);
-    return err;
+        return err;
+    }
+
+    if (dniv_local_node_type == DNIV_NODE_TYPE_L2_ROUTER) {
+        err = dev_mc_add(dev, dniv_all_level2_routers);
+        if (err) {
+            dev_mc_del(dev, dniv_all_routers);
+            dev_uc_del(dev, local_mac);
+            return err;
+        }
+    }
+    return 0;
 }
 
 static void dniv_remove_dev_filters(struct net_device *dev, __u16 address)
 {
     __u8 local_mac[ETH_ALEN];
-    const __u8 *group;
 
     if (dev->type != ARPHRD_ETHER || (dev->flags & IFF_LOOPBACK))
         return;
 
     dniv_wire_mac_from_address(address, local_mac);
     dev_uc_del(dev, local_mac);
-    group = dniv_local_node_type == DNIV_NODE_TYPE_ENDNODE ?
-            dniv_all_endnodes : dniv_all_routers;
-    dev_mc_del(dev, group);
+    if (dniv_local_node_type == DNIV_NODE_TYPE_ENDNODE) {
+        dev_mc_del(dev, dniv_all_endnodes);
+        return;
+    }
+
+    dev_mc_del(dev, dniv_all_routers);
+    if (dniv_local_node_type == DNIV_NODE_TYPE_L2_ROUTER)
+        dev_mc_del(dev, dniv_all_level2_routers);
 }
 
 static int dniv_netdev_event(struct notifier_block *nb, unsigned long event,
@@ -238,10 +258,14 @@ static int dniv_xmit_hello(struct net_device *dev, const __u8 dst[ETH_ALEN],
     struct sk_buff *skb;
     struct ethhdr *eth;
     __u8 src[ETH_ALEN];
+    __u8 *length;
     int ret;
 
-    skb = alloc_skb(LL_RESERVED_SPACE(dev) + ETH_HLEN + payload_len,
-                    GFP_KERNEL);
+    if (payload_len > DNIV_WIRE_BLOCK_SIZE)
+        return -EMSGSIZE;
+
+    skb = alloc_skb(LL_RESERVED_SPACE(dev) + ETH_HLEN +
+                    DNIV_ETH_LENGTH_LEN + payload_len, GFP_KERNEL);
     if (!skb)
         return -ENOMEM;
 
@@ -252,10 +276,12 @@ static int dniv_xmit_hello(struct net_device *dev, const __u8 dst[ETH_ALEN],
     ether_addr_copy(eth->h_dest, dst);
     ether_addr_copy(eth->h_source, src);
     eth->h_proto = cpu_to_be16(ETH_P_DNA_RT);
+    length = skb_put(skb, DNIV_ETH_LENGTH_LEN);
+    dniv_wire_put_le16(length, (__u16)payload_len);
     memcpy(skb_put(skb, payload_len), payload, payload_len);
     skb->dev = dev;
     skb->protocol = eth->h_proto;
-    skb_set_network_header(skb, ETH_HLEN);
+    skb_set_network_header(skb, ETH_HLEN + DNIV_ETH_LENGTH_LEN);
 
     ret = dev_queue_xmit(skb);
     if (ret == NET_XMIT_SUCCESS || ret == NET_XMIT_CN) {
@@ -373,6 +399,8 @@ static void dniv_send_hello_on_dev(struct net_device *dev)
     if (len <= 0)
         return;
     dniv_xmit_hello(dev, dniv_all_routers, payload, len);
+    if (dniv_local_node_type == DNIV_NODE_TYPE_L2_ROUTER)
+        dniv_xmit_hello(dev, dniv_all_level2_routers, payload, len);
     if (dniv_local_is_dr(dev->ifindex))
         dniv_xmit_hello(dev, dniv_all_endnodes, payload, len);
 }
@@ -513,7 +541,9 @@ static int dniv_packet_rcv(struct sk_buff *skb, struct net_device *dev,
     struct dniv_wire_hello hello;
     struct ethhdr *eth;
     __u8 expected_source[ETH_ALEN];
+    __u8 length[DNIV_ETH_LENGTH_LEN];
     __u8 first;
+    __u16 payload_len;
     int parsed;
 
     (void)pt;
@@ -523,17 +553,25 @@ static int dniv_packet_rcv(struct sk_buff *skb, struct net_device *dev,
     atomic64_inc(&dniv_rx_frames);
     atomic64_add(skb->len, &dniv_rx_bytes);
 
-    if (skb->len == 0 || skb_copy_bits(skb, 0, &first, 1) != 0)
+    if (skb->len < DNIV_ETH_LENGTH_LEN ||
+        skb_copy_bits(skb, 0, length, DNIV_ETH_LENGTH_LEN) != 0)
+        goto out;
+    payload_len = dniv_wire_get_le16(length);
+    if (payload_len == 0 || payload_len > DNIV_WIRE_BLOCK_SIZE ||
+        skb->len < (unsigned int)payload_len + DNIV_ETH_LENGTH_LEN)
+        goto out;
+    if (skb_copy_bits(skb, DNIV_ETH_LENGTH_LEN, &first, 1) != 0)
         goto out;
     if (first != DNIV_WIRE_ROUTER_HELLO &&
         first != DNIV_WIRE_ENDNODE_HELLO && !(first & 0x80U))
         goto out;
-    if (skb->len > DNIV_MAX_ROUTING_PAYLOAD || !pskb_may_pull(skb, skb->len)) {
+    if (!pskb_may_pull(skb, (unsigned int)payload_len + DNIV_ETH_LENGTH_LEN)) {
         atomic64_inc(&dniv_hello_errors);
         goto out;
     }
 
-    parsed = dniv_wire_parse_hello(skb->data, skb->len, &hello);
+    parsed = dniv_wire_parse_hello(skb->data + DNIV_ETH_LENGTH_LEN,
+                                   payload_len, &hello);
     if (parsed == DNIV_WIRE_NOT_HELLO)
         goto out;
     if (parsed != DNIV_WIRE_OK) {
