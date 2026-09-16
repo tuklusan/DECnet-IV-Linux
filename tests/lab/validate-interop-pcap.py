@@ -92,6 +92,7 @@ def router_entries(payload: bytes) -> list[tuple[bytes, int, bool]]:
 def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("pcap", type=Path)
+    p.add_argument("reference", choices=("route20", "pydecnet"))
     p.add_argument("scenario", choices=("l1", "l2", "endnode"))
     p.add_argument("candidate_mac", type=mac)
     p.add_argument("candidate_hw", type=mac)
@@ -169,8 +170,15 @@ def main() -> int:
             raise SystemExit("interop pcap: insufficient candidate router hellos")
         if counts["candidate_lists_reference"] < 1 or counts["reference_lists_candidate"] < 1:
             raise SystemExit("interop pcap: missing two-way router-list evidence")
-    if args.scenario == "l2" and (counts["candidate_l2"] < 1 or counts["reference_l2"] < 1):
-        raise SystemExit("interop pcap: missing All-Level-2-Routers multicast evidence")
+    if args.scenario == "l2":
+        if counts["candidate_l2"] < 1:
+            raise SystemExit("interop pcap: candidate missed All-Level-2-Routers multicast transmission")
+        # Route20 implements the dedicated Phase IV L2-router multicast and is
+        # the independent oracle for that behavior.  This exact PyDECnet pin
+        # interoperates as an L2 router through All-Routers and does not emit
+        # router hellos to ALL_L2, so requiring it here would be a false gate.
+        if args.reference == "route20" and counts["reference_l2"] < 1:
+            raise SystemExit("interop pcap: Route20 missed All-Level-2-Routers multicast transmission")
     print("interop pcap: evidence passed " + " ".join(f"{k}={v}" for k, v in sorted(counts.items())))
     return 0
 

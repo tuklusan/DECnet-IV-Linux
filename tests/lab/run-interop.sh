@@ -227,7 +227,7 @@ sudo kill "$TCPDUMP_PID" 2>/dev/null || true
 wait "$TCPDUMP_PID" 2>/dev/null || true
 unset TCPDUMP_PID
 
-python3 "$script_dir/validate-interop-pcap.py" "$pcap" "$scenario" \
+python3 "$script_dir/validate-interop-pcap.py" "$pcap" "$reference" "$scenario" \
     "$candidate_mac" "$candidate_hw" "$candidate_changed_hw" \
     "$reference_mac" "$reference_hw"
 
