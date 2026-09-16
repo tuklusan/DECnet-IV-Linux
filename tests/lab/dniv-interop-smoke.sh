@@ -145,6 +145,7 @@ case "$scenario" in
     l1) local_type=2; peer_kind='L1 router' ;;
     l2) local_type=1; peer_kind='L2 router' ;;
     endnode) local_type=3; peer_kind='L1 router' ;;
+    router-endnode) local_type=2; peer_kind='endnode' ;;
     *) echo "DNIV-INTEROP-FAIL session=$session reason=bad-scenario"; exit 1 ;;
 esac
 [ -n "$peer_node" ] || { echo "DNIV-INTEROP-FAIL session=$session reason=missing-peer"; exit 1; }

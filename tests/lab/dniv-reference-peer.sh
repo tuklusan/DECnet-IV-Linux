@@ -52,7 +52,11 @@ scenario=$(get_arg dniv.scenario || true)
 session=$(get_arg dniv.session || printf 'local')
 
 case "$reference" in route20|pydecnet) ;; *) echo "DNIV-REF-FAIL session=$session reason=bad-reference"; exit 1 ;; esac
-case "$scenario" in l1|l2|endnode) ;; *) echo "DNIV-REF-FAIL session=$session reason=bad-scenario"; exit 1 ;; esac
+case "$scenario" in l1|l2|endnode|router-endnode) ;; *) echo "DNIV-REF-FAIL session=$session reason=bad-scenario"; exit 1 ;; esac
+if [ "$scenario" = router-endnode ] && [ "$reference" != pydecnet ]; then
+    echo "DNIV-REF-FAIL session=$session reason=unsupported-reference-role"
+    exit 1
+fi
 for value in "$expected_sha" "$area" "$node" "$peer_mac" "$peer_node"; do
     [ -n "$value" ] || { echo "DNIV-REF-FAIL session=$session reason=missing-argument"; exit 1; }
 done
@@ -103,13 +107,11 @@ probe_loop() {
     done
 }
 
-if [ "$scenario" = l2 ]; then
-    ref_level=2
-    py_type=l2router
-else
-    ref_level=1
-    py_type=l1router
-fi
+case "$scenario" in
+    l2) ref_level=2; py_type=l2router ;;
+    router-endnode) ref_level=1; py_type=endnode ;;
+    *) ref_level=1; py_type=l1router ;;
+esac
 
 case "$reference" in
 route20)

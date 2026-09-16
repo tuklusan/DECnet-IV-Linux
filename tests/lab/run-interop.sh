@@ -27,7 +27,11 @@ reference=$5
 bundle=$6
 scenario=$7
 case "$reference" in route20|pydecnet) ;; *) echo "interop: bad reference: $reference" >&2; exit 2 ;; esac
-case "$scenario" in l1|l2|endnode) ;; *) echo "interop: bad scenario: $scenario" >&2; exit 2 ;; esac
+case "$scenario" in l1|l2|endnode|router-endnode) ;; *) echo "interop: bad scenario: $scenario" >&2; exit 2 ;; esac
+if [[ "$scenario" == router-endnode && "$reference" != pydecnet ]]; then
+    echo "interop: router-endnode requires pydecnet" >&2
+    exit 2
+fi
 for file in "$base" "$ref_base" "$kernel" "$initrd" "$bundle/manifest.env" "$bundle/SHA256SUMS"; do
     [[ -r "$file" ]] || { echo "interop: missing $file" >&2; exit 2; }
 done

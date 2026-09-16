@@ -14,11 +14,11 @@
 
 # Project State
 
-This is the authoritative continuity record for DECnet-IV-Linux. Read `docs/HANDOVER.md`, this file, `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, `docs/TEST_LAB.md` and `docs/PRE_PRODUCTION_TEST.md` before changing protocol, image or acceptance behavior. Commit history retains prior state records; this file intentionally describes the current tree rather than repeating the full historical diary.
+This is the authoritative continuity record for DECnet-IV-Linux. Read `docs/HANDOVER.md`, this file, `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, `docs/TEST_LAB.md` and `docs/PRE_PRODUCTION_TEST.md` before changing protocol, image or acceptance behavior. Commit history retains prior state records; this file describes the current tree.
 
 ## Goal
 
-Build a complete native DECnet Phase IV stack for maintained Linux as a fresh out-of-tree kernel module plus useful DECnet/Linux userspace. Deliver reproducible x86_64/aarch64 VM images and prove behavior against independent implementations and, later, real DEC systems.
+Build a complete native DECnet Phase IV stack for maintained Linux as a fresh out-of-tree kernel module plus useful DECnet/Linux userspace. Deliver reproducible x86_64/aarch64 VM images and prove behavior against independent implementations and later real DEC systems.
 
 ## Architecture
 
@@ -41,7 +41,7 @@ Pinned revisions in `tests/reference/refs.env`:
 - LinuxDECnet comparison: `ff39eef045d1e4b7b72a3d40111e89c07a473398`
 - SIMH: `5b73b1032b52d19bf80752ea4d9cbbdc92e7b5e0`
 
-The live PyDECnet pin has a pre-existing `Macaddr("1.24")` self-test contradiction, so its immediately preceding internally consistent revision is the unmodified unit-test baseline. Route20 is the independent oracle for dedicated All-Level-2-Routers multicast behavior; the live PyDECnet pin interoperates as an L2 router through All-Routers and is not required to emit that dedicated multicast.
+The live PyDECnet pin has a pre-existing `Macaddr("1.24")` self-test contradiction, so its immediately preceding internally consistent revision remains the unmodified unit-test baseline. Route20 is the independent oracle for dedicated All-Level-2-Routers multicast behavior; the live PyDECnet pin interoperates as an L2 router through All-Routers and is not required to emit that dedicated multicast.
 
 The product license is the canonical root `LICENSE`, blob `c6dabab19a2d36bffddabe7584a932c72fa272c3`. It applies to project-owned material only; third-party material remains under its original license. `tools/license_monkey.py` pins that exact license and canonical project header. The kernel module reports `MODULE_LICENSE("Proprietary")`, matching the product license.
 
@@ -76,27 +76,23 @@ Foundation complete: versioned UAPI, `decnet_iv.ko`, configurable identity, `/de
 
 Foundation complete: pinned Ubuntu Base 26.04.1 amd64/arm64 rootfs files, pinned package snapshot `20260915T000000Z`, deterministic ext4/QCOW2 assembly, exact guest kernel/module build, direct kernel/initrd boot, two independent one-NIC VMs, packet capture and serial evidence.
 
-Ubuntu Base initially lacks usable certificate trust for the snapshot service. Image construction bootstraps only signed `ca-certificates` with TLS peer verification temporarily disabled, refreshes package-owned trust, then requires ordinary verified snapshot access for all remaining packages. The sparse root filesystem floor is 4 GiB after the earlier 2 GiB arm64 build exhausted ext4 space while unpacking virtual-kernel modules.
+Ubuntu Base initially lacks usable certificate trust for the snapshot service. Image construction bootstraps only signed `ca-certificates` with TLS peer verification temporarily disabled, refreshes package-owned trust, then requires ordinary verified snapshot access for all remaining packages. The sparse root filesystem floor is 4 GiB.
 
-The retained `phase2` smoke gate exchanges deliberately generated standard DECnet Routing Layer Ethernet frames. VM checkpoints contain base image, portable overlays, exact kernel/initrd, checksums, session metadata, logs and packet capture and may resume only for matching architecture/source revision/mode. Successful resumable checkpoints are sealed as format 2; `session.env` is included in `SHA256SUMS`, so source revision, architecture, mode and session metadata cannot be altered without invalidating the checkpoint. Older unsealed format-1 checkpoints are not accepted for resume.
+The retained `phase2` smoke gate exchanges deliberately generated standard DECnet Routing Layer Ethernet frames. Successful resumable checkpoints are sealed as format 2 and include `session.env` in `SHA256SUMS`; resume requires matching architecture, exact source revision and mode. Older unsealed format-1 checkpoints are rejected.
 
 ### Phase 3
 
 Implementation is in progress. UAPI v2 provides standard Phase IV node MAC derivation, router/endnode hello generation and parsing, periodic hello transmission, per-interface adjacency state, 3.1x listen-time expiry, designated-router election, extended counters and `dnctl adjacencies`.
 
-Implemented corrections include the two-byte little-endian Ethernet Routing Layer payload length, legal trailing Ethernet padding handling, dedicated All-Level-2-Routers membership/transmission for Linux L2 routers, transactional filter installation, runtime identity-change serialization with adjacency processing, software destination-class validation, and the 128-byte maximum accepted Phase IV endnode hello test-data image.
+Implemented corrections include the two-byte little-endian Ethernet Routing Layer payload length, legal trailing Ethernet padding, dedicated All-Level-2-Routers membership/transmission for Linux L2 routers, transactional filter installation, runtime identity-change serialization with adjacency processing, software destination-class validation, and the 128-byte maximum accepted Phase IV endnode hello test-data image.
 
-Router-router adjacencies begin INIT and become UP when the peer router hello lists the local router with the expected priority. Loss of that listing returns an UP adjacency to INIT; listen expiry removes it. Routers accept valid endnode hellos as UP. Endnodes select one router adjacency. Same-area rules apply except that L2 routers may form L2 adjacencies across areas. Router admission is capped at 33 per interface and retains the highest `(priority, node address)` set.
+Router-router adjacencies begin INIT and become UP when the peer router hello lists the local router with expected priority. Loss of that listing returns an UP adjacency to INIT; listen expiry removes it. Routers accept valid endnode hellos as UP. Endnodes select one router adjacency. Same-area rules apply except that L2 routers may form L2 adjacencies across areas. Router admission is capped at 33 per interface and retains the highest `(priority, node address)` set.
 
 The E1 self-to-self harness covers L1 hello exchange, observable INIT/UP behavior, listener expiry, module restart/recovery, designated-router behavior, protocol source MACs, DECnet unicast-filter ownership and survival of a post-install primary device-MAC change.
 
-The independent-peer harness boots candidate and reference in separate VMs and runs same-area L1, cross-area L2 and endnode scenarios against exact pinned Route20 and PyDECnet on both native architectures. It requires standard framing, protocol-derived source MACs, two-way router-list evidence where applicable, endnode hello test data, hardware-MAC change survival, protocol-unicast reception, hard peer loss/listen expiry, fresh-peer recovery and retained packet/serial evidence. The reference image never loads `decnet_iv`.
+The independent-peer harness boots candidate and reference in separate VMs on both native architectures. Route20 and PyDECnet cover Linux L1 router, L2 router and endnode roles against independent routers. PyDECnet additionally runs as an independent endnode against a Linux L1 router, closing the previously missing independent proof that Linux router-side endnode-hello parsing/admission works. The gate requires standard framing, protocol-derived source MACs, two-way router-list evidence where applicable, endnode hello test data, hardware-MAC change survival, protocol-unicast reception, hard peer loss/listen expiry, fresh-peer recovery and retained packet/serial evidence. The reference image never loads `decnet_iv`.
 
-The latest full-tree SoP pass found a harness process-lifetime defect in `tests/lab/run-interop.sh`: asynchronous shell functions launched QEMU without `exec`, so the recorded background PID could be the shell wrapper rather than QEMU itself. Hard-killing the recorded reference PID could therefore leave the actual VM alive and invalidate the listener-expiry/recovery test. Candidate and reference launch paths now `exec` QEMU on both architectures so recorded PIDs are the VM processes themselves.
-
-A subsequent full-tree review found that resumable VM checkpoint integrity covered the base image, overlays, kernel and initrd but not `session.env`. Because resume authorization trusts that metadata for architecture, source revision and mode, an altered metadata file could redirect a valid checkpoint to the wrong acceptance context. The VM workflow now converts successful checkpoints to format 2 and regenerates `SHA256SUMS` with `session.env` included before artifact retention; resume rejects older unsealed format-1 checkpoints.
-
-The following full-tree pass found `docs/TEST_LAB.md` still describing the superseded legacy format-1 resume behavior even though the workflow now requires sealed format-2 metadata. The lab documentation now states the actual format-2 checksum, architecture, exact-source and mode requirements and rejects legacy/unsealed checkpoints. This documentation correction resets the SoP sequence; no earlier acceptance result carries forward.
+Previous full-tree reviews fixed QEMU process-lifetime handling in the interop harness, sealed checkpoint metadata integrity, and stale format-1 lab documentation. The latest full-tree review then found that independent interoperability exercised Linux as an endnode but never exercised Linux as a router receiving an independent endnode hello. The live matrix now adds `router-endnode`, using the exact pinned PyDECnet endnode role; Route20 has no endnode role. Packet evidence validates the independent endnode hello source, destination and AA test-data image, while candidate state evidence requires UP, expiry and fresh-peer recovery. This acceptance-harness correction resets SoP; no earlier clean pass or acceptance evidence carries forward.
 
 ## Test addressing
 
@@ -108,7 +104,7 @@ Ordinary lab addressing is centralized in `tests/lab/test-addresses.env`: area 3
 
 ## Resume point
 
-The current `main` candidate combines the Phase 1/2 foundation, Phase 3 Ethernet initialization/adjacency implementation, self-to-self E1 harness, live Route20/PyDECnet two-VM interoperability harness, signed-snapshot certificate bootstrap, 4 GiB sparse image workspace, framing/filter/multicast/concurrency fixes, endnode test-data bound, repository policy, license/header enforcement, exact-QEMU-PID process control for independent-peer hard-stop testing, sealed format-2 resumable checkpoint metadata, and matching lab documentation. The protocol phase remains Phase 3.
+The current `main` candidate combines the Phase 1/2 foundation, Phase 3 Ethernet initialization/adjacency implementation, self-to-self E1 harness, live two-VM Route20/PyDECnet interoperability in both router directions that their roles support, signed-snapshot certificate bootstrap, 4 GiB sparse image workspace, framing/filter/multicast/concurrency fixes, endnode test-data bound, repository policy, license/header enforcement, exact-QEMU-PID hard-stop testing and sealed format-2 resumable checkpoint metadata. The protocol phase remains Phase 3.
 
 ## Next action
 

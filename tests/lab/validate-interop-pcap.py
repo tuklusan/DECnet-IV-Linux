@@ -89,11 +89,21 @@ def router_entries(payload: bytes) -> list[tuple[bytes, int, bool]]:
     return entries
 
 
+def validate_endnode(payload: bytes, source: bytes, destination: bytes, who: str) -> None:
+    if len(payload) < 32 or payload[4:10] != source:
+        raise ValueError(f"malformed {who} endnode hello")
+    test_len = payload[31]
+    if test_len != 50 or len(payload) < 32 + test_len or any(b != 0xAA for b in payload[32 : 32 + test_len]):
+        raise ValueError(f"{who} endnode test-data image mismatch")
+    if destination != ALL_ROUTERS:
+        raise ValueError(f"{who} endnode hello used wrong multicast destination")
+
+
 def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("pcap", type=Path)
     p.add_argument("reference", choices=("route20", "pydecnet"))
-    p.add_argument("scenario", choices=("l1", "l2", "endnode"))
+    p.add_argument("scenario", choices=("l1", "l2", "endnode", "router-endnode"))
     p.add_argument("candidate_mac", type=mac)
     p.add_argument("candidate_hw", type=mac)
     p.add_argument("candidate_changed_hw", type=mac)
@@ -105,6 +115,7 @@ def main() -> int:
         "candidate_router": 0,
         "candidate_endnode": 0,
         "reference_router": 0,
+        "reference_endnode": 0,
         "candidate_lists_reference": 0,
         "reference_lists_candidate": 0,
         "candidate_l2": 0,
@@ -148,33 +159,38 @@ def main() -> int:
                         counts["reference_lists_candidate"] += 1
         elif src == args.candidate_mac:
             counts["candidate_endnode"] += 1
-            if len(payload) < 32 or payload[4:10] != args.candidate_mac:
-                raise ValueError("malformed candidate endnode hello")
-            test_len = payload[31]
-            if test_len != 50 or len(payload) < 32 + test_len or any(b != 0xAA for b in payload[32 : 32 + test_len]):
-                raise ValueError("candidate endnode test-data image mismatch")
-            if dst != ALL_ROUTERS:
-                raise ValueError("candidate endnode hello used wrong multicast destination")
+            validate_endnode(payload, args.candidate_mac, dst, "candidate")
+        elif src == args.reference_mac:
+            counts["reference_endnode"] += 1
+            validate_endnode(payload, args.reference_mac, dst, "reference")
 
     if bad_hello_hw:
         raise SystemExit(f"interop pcap: {bad_hello_hw} hello frame(s) used hardware source MAC")
-    if counts["reference_router"] < 2:
-        raise SystemExit("interop pcap: insufficient reference router hellos")
     if counts["probes"] < 3:
         raise SystemExit("interop pcap: insufficient post-boot raw unicast probes")
-    if args.scenario == "endnode":
-        if counts["candidate_endnode"] < 2:
-            raise SystemExit("interop pcap: insufficient candidate endnode hellos")
-    else:
+    if args.scenario == "router-endnode":
+        if args.reference != "pydecnet":
+            raise SystemExit("interop pcap: router-endnode requires PyDECnet")
         if counts["candidate_router"] < 2:
             raise SystemExit("interop pcap: insufficient candidate router hellos")
-        if counts["candidate_lists_reference"] < 1 or counts["reference_lists_candidate"] < 1:
-            raise SystemExit("interop pcap: missing two-way router-list evidence")
+        if counts["reference_endnode"] < 2:
+            raise SystemExit("interop pcap: insufficient independent endnode hellos")
+    else:
+        if counts["reference_router"] < 2:
+            raise SystemExit("interop pcap: insufficient reference router hellos")
+        if args.scenario == "endnode":
+            if counts["candidate_endnode"] < 2:
+                raise SystemExit("interop pcap: insufficient candidate endnode hellos")
+        else:
+            if counts["candidate_router"] < 2:
+                raise SystemExit("interop pcap: insufficient candidate router hellos")
+            if counts["candidate_lists_reference"] < 1 or counts["reference_lists_candidate"] < 1:
+                raise SystemExit("interop pcap: missing two-way router-list evidence")
     if args.scenario == "l2":
         if counts["candidate_l2"] < 1:
             raise SystemExit("interop pcap: candidate missed All-Level-2-Routers multicast transmission")
         # Route20 implements the dedicated Phase IV L2-router multicast and is
-        # the independent oracle for that behavior.  This exact PyDECnet pin
+        # the independent oracle for that behavior. This exact PyDECnet pin
         # interoperates as an L2 router through All-Routers and does not emit
         # router hellos to ALL_L2, so requiring it here would be a false gate.
         if args.reference == "route20" and counts["reference_l2"] < 1:

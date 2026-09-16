@@ -123,8 +123,12 @@ jobs:
         run: |
           set -euo pipefail
           for reference in route20 pydecnet; do
+            scenarios='l1 l2 endnode'
+            if [[ "$reference" == pydecnet ]]; then
+              scenarios="$scenarios router-endnode"
+            fi
             bundle="$RUNNER_TEMP/bundle-$reference"
-            for scenario in l1 l2 endnode; do
+            for scenario in $scenarios; do
               DNIV_INTEROP_SESSION_ID="run-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${{ matrix.arch }}-${reference}-${scenario}" \
                 tests/lab/run-interop.sh \
                   "$DNIV_CANDIDATE_IMAGE" "$DNIV_REFERENCE_IMAGE" \
