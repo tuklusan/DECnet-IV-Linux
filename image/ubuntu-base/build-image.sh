@@ -64,12 +64,6 @@ sudo tar -C "$repo_root" --exclude=.git --exclude=out -cf - . | \
 
 sudo rm -f "$mnt/etc/resolv.conf"
 sudo cp -L /etc/resolv.conf "$mnt/etc/resolv.conf"
-# Ubuntu Base does not include the certificate bundle used by HTTPS APT
-# transports. Seed only the runner's trust bundle so the pinned snapshot can
-# be reached; installing ca-certificates below replaces it with package-owned
-# trust data inside the finished guest image.
-sudo mkdir -p "$mnt/etc/ssl/certs"
-sudo cp -L /etc/ssl/certs/ca-certificates.crt "$mnt/etc/ssl/certs/ca-certificates.crt"
 printf 'LABEL=dniv-root / ext4 defaults 0 1\n' | sudo tee "$mnt/etc/fstab" >/dev/null
 printf 'dniv\n' | sudo tee "$mnt/etc/hostname" >/dev/null
 
@@ -87,11 +81,18 @@ sudo chmod 0755 "$mnt/usr/sbin/policy-rc.d"
 
 sudo chroot "$mnt" /usr/bin/env UBUNTU_APT_SNAPSHOT="$snapshot" /bin/bash -euxc '
 export DEBIAN_FRONTEND=noninteractive
+# Ubuntu Base has no usable certificate bundle yet.  Bootstrap only the
+# certificate package with TLS peer verification disabled; repository
+# signatures still authenticate snapshot metadata and packages.  Immediately
+# refresh package-owned trust and prove ordinary verified snapshot access
+# before installing anything else.
+apt-get -o Acquire::https::Verify-Peer=false --snapshot "$UBUNTU_APT_SNAPSHOT" update
+apt-get -o Acquire::https::Verify-Peer=false --snapshot "$UBUNTU_APT_SNAPSHOT" install -y --no-install-recommends ca-certificates
+update-ca-certificates --fresh
 apt-get --snapshot "$UBUNTU_APT_SNAPSHOT" update
 apt-get --snapshot "$UBUNTU_APT_SNAPSHOT" install -y --no-install-recommends \
-    systemd-sysv kmod iproute2 ca-certificates build-essential \
+    systemd-sysv kmod iproute2 build-essential \
     linux-image-virtual-hwe-26.04 linux-headers-virtual-hwe-26.04
-update-ca-certificates --fresh
 krel=$(ls -1 /lib/modules | sort -V | tail -1)
 test -n "$krel"
 make -C /usr/src/decnet-iv-linux/userspace/dnctl clean all
