@@ -233,7 +233,9 @@ def resolve_target(event: dict) -> tuple[str, str | None]:
         return str(after), None
 
     head = run("git", "rev-parse", "HEAD").stdout.decode().strip()
-    return head, None
+    # Metadata and manual events carry no commit range. The current tree is
+    # checked below; prior commit ranges were already accepted by push gates.
+    return head, head
 
 
 def ensure_object(rev: str) -> None:
