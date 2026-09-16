@@ -78,7 +78,7 @@ Foundation complete: pinned Ubuntu Base 26.04.1 amd64/arm64 rootfs files, pinned
 
 Ubuntu Base initially lacks usable certificate trust for the snapshot service. Image construction bootstraps only signed `ca-certificates` with TLS peer verification temporarily disabled, refreshes package-owned trust, then requires ordinary verified snapshot access for all remaining packages. The sparse root filesystem floor is 4 GiB after the earlier 2 GiB arm64 build exhausted ext4 space while unpacking virtual-kernel modules.
 
-The retained `phase2` smoke gate exchanges deliberately generated standard DECnet Routing Layer Ethernet frames. VM checkpoints contain base image, portable overlays, exact kernel/initrd, checksums, session metadata, logs and packet capture and may resume only for matching architecture/source revision/mode.
+The retained `phase2` smoke gate exchanges deliberately generated standard DECnet Routing Layer Ethernet frames. VM checkpoints contain base image, portable overlays, exact kernel/initrd, checksums, session metadata, logs and packet capture and may resume only for matching architecture/source revision/mode. Successful resumable checkpoints are sealed as format 2; `session.env` is included in `SHA256SUMS`, so source revision, architecture, mode and session metadata cannot be altered without invalidating the checkpoint. Older unsealed format-1 checkpoints are not accepted for resume.
 
 ### Phase 3
 
@@ -92,7 +92,9 @@ The E1 self-to-self harness covers L1 hello exchange, observable INIT/UP behavio
 
 The independent-peer harness boots candidate and reference in separate VMs and runs same-area L1, cross-area L2 and endnode scenarios against exact pinned Route20 and PyDECnet on both native architectures. It requires standard framing, protocol-derived source MACs, two-way router-list evidence where applicable, endnode hello test data, hardware-MAC change survival, protocol-unicast reception, hard peer loss/listen expiry, fresh-peer recovery and retained packet/serial evidence. The reference image never loads `decnet_iv`.
 
-The latest full-tree SoP pass found a harness process-lifetime defect in `tests/lab/run-interop.sh`: asynchronous shell functions launched QEMU without `exec`, so the recorded background PID could be the shell wrapper rather than QEMU itself. Hard-killing the recorded reference PID could therefore leave the actual VM alive and invalidate the listener-expiry/recovery test. Candidate and reference launch paths now `exec` QEMU on both architectures so recorded PIDs are the VM processes themselves. This fix resets the SoP sequence; no earlier acceptance result carries forward.
+The latest full-tree SoP pass found a harness process-lifetime defect in `tests/lab/run-interop.sh`: asynchronous shell functions launched QEMU without `exec`, so the recorded background PID could be the shell wrapper rather than QEMU itself. Hard-killing the recorded reference PID could therefore leave the actual VM alive and invalidate the listener-expiry/recovery test. Candidate and reference launch paths now `exec` QEMU on both architectures so recorded PIDs are the VM processes themselves.
+
+A subsequent full-tree review found that resumable VM checkpoint integrity covered the base image, overlays, kernel and initrd but not `session.env`. Because resume authorization trusts that metadata for architecture, source revision and mode, an altered metadata file could redirect a valid checkpoint to the wrong acceptance context. The VM workflow now converts successful checkpoints to format 2 and regenerates `SHA256SUMS` with `session.env` included before artifact retention; resume rejects older unsealed format-1 checkpoints. This change resets the SoP sequence; no earlier acceptance result carries forward.
 
 ## Test addressing
 
@@ -104,7 +106,7 @@ Ordinary lab addressing is centralized in `tests/lab/test-addresses.env`: area 3
 
 ## Resume point
 
-The current `main` candidate combines the Phase 1/2 foundation, Phase 3 Ethernet initialization/adjacency implementation, self-to-self E1 harness, live Route20/PyDECnet two-VM interoperability harness, signed-snapshot certificate bootstrap, 4 GiB sparse image workspace, framing/filter/multicast/concurrency fixes, endnode test-data bound, repository policy, license/header enforcement and exact-QEMU-PID process control for independent-peer hard-stop testing. The protocol phase remains Phase 3.
+The current `main` candidate combines the Phase 1/2 foundation, Phase 3 Ethernet initialization/adjacency implementation, self-to-self E1 harness, live Route20/PyDECnet two-VM interoperability harness, signed-snapshot certificate bootstrap, 4 GiB sparse image workspace, framing/filter/multicast/concurrency fixes, endnode test-data bound, repository policy, license/header enforcement, exact-QEMU-PID process control for independent-peer hard-stop testing, and sealed format-2 resumable checkpoint metadata. The protocol phase remains Phase 3.
 
 ## Next action
 

@@ -96,14 +96,11 @@ jobs:
           state="$RUNNER_TEMP/resume-${{ matrix.arch }}/checkpoint"
           test -f "$state/session.env"
           test -f "$state/SHA256SUMS"
-          grep -Fx 'FORMAT=1' "$state/session.env"
+          grep -Fx 'FORMAT=2' "$state/session.env"
           grep -Fx 'ARCH=${{ matrix.arch }}' "$state/session.env"
           grep -Fx "SOURCE_SHA=$GITHUB_SHA" "$state/session.env"
-          if grep -q '^MODE=' "$state/session.env"; then
-            grep -Fx 'MODE=${{ inputs.lab_mode }}' "$state/session.env"
-          else
-            test '${{ inputs.lab_mode }}' = phase2
-          fi
+          grep -Fx 'MODE=${{ inputs.lab_mode }}' "$state/session.env"
+          grep -Eq '^[0-9a-f]{64}  session\.env$' "$state/SHA256SUMS"
           (cd "$state" && sha256sum -c SHA256SUMS)
           qemu-img check -q -f qcow2 "$state/node-a.qcow2"
           qemu-img check -q -f qcow2 "$state/node-b.qcow2"
@@ -142,6 +139,21 @@ jobs:
       - name: Boot two independent nodes and run selected DECnet gate
         run: |
           tests/lab/run-two-node.sh "$DNIV_LAB_BASE" "$DNIV_LAB_KERNEL" "$DNIV_LAB_INITRD"
+
+      - name: Seal resumable checkpoint metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          checkpoint="$DNIV_LAB_ARTIFACTS/$DNIV_LAB_SESSION_ID/checkpoint"
+          test -f "$checkpoint/session.env"
+          grep -Fx 'FORMAT=1' "$checkpoint/session.env"
+          sed -i 's/^FORMAT=1$/FORMAT=2/' "$checkpoint/session.env"
+          grep -Fx 'FORMAT=2' "$checkpoint/session.env"
+          (
+            cd "$checkpoint"
+            sha256sum base.qcow2 node-a.qcow2 node-b.qcow2 vmlinuz initrd.img session.env > SHA256SUMS
+            sha256sum -c SHA256SUMS
+          )
 
       - name: Retain resumable VM state and evidence
         if: ${{ always() }}
