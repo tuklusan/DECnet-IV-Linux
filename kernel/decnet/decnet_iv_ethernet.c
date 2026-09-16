@@ -459,22 +459,26 @@ static void dniv_handle_valid_hello(int ifindex, const __u8 source[ETH_ALEN],
     bool rejected = false;
     __u8 new_state;
 
+    /* Serialize validation that depends on the local DECnet address with the
+     * address publish/adjacency-clear transaction. An in-flight hello must be
+     * evaluated wholly against either the old identity or the new one; it
+     * must not repopulate an old-identity adjacency after a runtime change.
+     */
+    spin_lock_irqsave(&dniv_adj_lock, flags);
     if (hello->address == READ_ONCE(dniv_local_address) ||
         !dniv_area_compatible(hello->address, hello->node_type))
-        return;
+        goto out_unlock;
 
     if (dniv_local_node_type == DNIV_NODE_TYPE_ENDNODE) {
         if (!hello->is_router)
-            return;
+            goto out_unlock;
         new_state = DNIV_ADJ_STATE_UP;
     } else if (!hello->is_router) {
         if (!dniv_wire_endnode_test_valid(hello)) {
             atomic64_inc(&dniv_hello_errors);
-            spin_lock_irqsave(&dniv_adj_lock, flags);
             adj = dniv_find_adj_locked(ifindex, hello->address);
             dniv_drop_adj_locked(adj);
-            spin_unlock_irqrestore(&dniv_adj_lock, flags);
-            return;
+            goto out_unlock;
         }
         new_state = DNIV_ADJ_STATE_UP;
     } else {
@@ -482,15 +486,12 @@ static void dniv_handle_valid_hello(int ifindex, const __u8 source[ETH_ALEN],
                 hello, READ_ONCE(dniv_local_address), dniv_local_priority,
                 &new_state) != 0) {
             atomic64_inc(&dniv_hello_errors);
-            spin_lock_irqsave(&dniv_adj_lock, flags);
             adj = dniv_find_adj_locked(ifindex, hello->address);
             dniv_drop_adj_locked(adj);
-            spin_unlock_irqrestore(&dniv_adj_lock, flags);
-            return;
+            goto out_unlock;
         }
     }
 
-    spin_lock_irqsave(&dniv_adj_lock, flags);
     if (dniv_local_node_type == DNIV_NODE_TYPE_ENDNODE)
         dniv_remove_other_endnode_router_locked(ifindex, hello->address);
 
@@ -507,10 +508,9 @@ static void dniv_handle_valid_hello(int ifindex, const __u8 source[ETH_ALEN],
         else
             adj = dniv_alloc_adj_locked();
         if (!adj) {
-            spin_unlock_irqrestore(&dniv_adj_lock, flags);
             if (!rejected)
                 atomic64_inc(&dniv_hello_errors);
-            return;
+            goto out_unlock;
         }
         memset(adj, 0, sizeof(*adj));
         adj->used = true;
@@ -532,6 +532,8 @@ static void dniv_handle_valid_hello(int ifindex, const __u8 source[ETH_ALEN],
     adj->hello_timer = hello->timer ? hello->timer : dniv_hello_interval;
     adj->expires = dniv_listen_expires(hello->timer);
     ether_addr_copy(adj->mac, source);
+
+out_unlock:
     spin_unlock_irqrestore(&dniv_adj_lock, flags);
 }
 
