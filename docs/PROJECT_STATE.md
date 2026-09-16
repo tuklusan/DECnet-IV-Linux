@@ -35,6 +35,7 @@ Self-to-self success is never sufficient for final interoperability claims.
 - Every substantive commit updates this file in the same commit.
 - `tools/project_state_gate.py` enforces continuity.
 - `tools/repo_policy.py` enforces the configured case-insensitive whole-token repository word policy across the current tree, relevant new commit objects, refs/configuration, selected repository event metadata and collaborators. Local pre-commit, commit-message and pre-push hooks are provided by `.githooks`.
+- Policy token boundaries treat Unicode letters/digits as word characters and punctuation or underscore as separators. This preserves the short-token false-positive protection inside ordinary words while rejecting identifier-style uses separated by underscores.
 - The repository-policy workflow is the sole automatic workflow exception. Build, continuity, reference and VM workflows are demand-driven.
 - An owner-opened issue titled exactly `DNIV acceptance gates` is the controlled dispatcher for those manual acceptance workflows after policy succeeds and `main` still matches the event revision.
 - Generated VM evidence remains under ignored `tests/lab/artifacts/` and workflow artifacts.
@@ -78,7 +79,7 @@ Second, a Level 2 router must participate in the All-Level-2-Routers multicast g
 
 The latest full-tree review also found a runtime identity-change race: hello validation could read the old local address before `DNIV_IOC_SET_IDENTITY`, then update adjacency state after the address transaction had cleared it. Hello validation and adjacency mutation now share the adjacency lock with local-address publication/clear, so every received hello is evaluated wholly against one identity.
 
-Three consecutive clean complete SoP passes were reached on `e59afc1cdee594417137f21a5ea3f0ebb72807eb`, after which exact-head acceptance was dispatched. Repository policy, continuity, native x86_64/aarch64 build, Route20 build and the pinned PyDECnet unit baseline were green. The arm64 E1 image build verified the certificate bootstrap and verified snapshot access, then failed because the 2 GiB root filesystem filled while unpacking the arm64 virtual-kernel modules. The root image floor is now 4 GiB. The image-capacity change and the later identity-change synchronization correction each reset the SoP sequence; no acceptance result from an earlier revision carries forward.
+Three consecutive clean complete SoP passes were reached on `e59afc1cdee594417137f21a5ea3f0ebb72807eb`, after which exact-head acceptance was dispatched. Repository policy, continuity, native x86_64/aarch64 build, Route20 build and the pinned PyDECnet unit baseline were green. The arm64 E1 image build verified the certificate bootstrap and verified snapshot access, then failed because the 2 GiB root filesystem filled while unpacking the arm64 virtual-kernel modules. The root image floor is now 4 GiB. The image-capacity change, the identity-change synchronization correction, and the later policy-boundary correction each reset the SoP sequence; no acceptance result from an earlier revision carries forward.
 
 ## Test addressing
 
@@ -86,7 +87,7 @@ Ordinary lab addressing is centralized in `tests/lab/test-addresses.env`: area 3
 
 ## Resume point
 
-`main` contains the Phase 1/2 foundation, the Phase 3 E1 harness, signed-snapshot certificate bootstrap, a 4 GiB sparse image workspace, explicit DECnet unicast-filter ownership, `init_net` isolation, standard DECnet Ethernet payload-length framing, Level 2 multicast participation, and serialized runtime identity-change/hello processing. The SoP sequence is reset by the latest concurrency correction. No Phase 3 completion claim is valid until the exact latest tree completes three clean full reviews and the required acceptance/interoperability evidence is green.
+`main` contains the Phase 1/2 foundation, the Phase 3 E1 harness, signed-snapshot certificate bootstrap, a 4 GiB sparse image workspace, explicit DECnet unicast-filter ownership, `init_net` isolation, standard DECnet Ethernet payload-length framing, Level 2 multicast participation, serialized runtime identity-change/hello processing, and corrected whole-token policy boundaries for identifier-style separators. The SoP sequence is reset by the latest policy correction. No Phase 3 completion claim is valid until the exact latest tree completes three clean full reviews and the required acceptance/interoperability evidence is green.
 
 ## Next action
 

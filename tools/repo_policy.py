@@ -37,13 +37,18 @@ def fold(value: str) -> str:
     return unicodedata.normalize("NFKC", value).casefold()
 
 
+# Treat Unicode letters and digits as token characters, but punctuation and
+# underscore as separators. This keeps short configured terms from matching
+# inside ordinary words while still rejecting identifier-like token use such
+# as prefix_<term>_suffix.
 BLOCKED_PATTERNS = tuple(
-    re.compile(rf"(?<!\w){re.escape(fold(term))}(?!\w)") for term in BLOCKED
+    re.compile(rf"(?<![^\W_]){re.escape(fold(term))}(?![^\W_])")
+    for term in BLOCKED
 )
 BLOCKED_BYTES_PATTERN = re.compile(
-    rb"(?<![A-Za-z0-9_])(?:"
+    rb"(?<![A-Za-z0-9])(?:"
     + rb"|".join(re.escape(term.encode("ascii")) for term in BLOCKED)
-    + rb")(?![A-Za-z0-9_])",
+    + rb")(?![A-Za-z0-9])",
     re.IGNORECASE,
 )
 
@@ -72,6 +77,11 @@ def matcher_self_check() -> list[str]:
             errors.append("matcher missed a configured term")
         if not has_blocked_bytes(b" " + term.encode("ascii") + b" "):
             errors.append("byte matcher missed a configured term")
+        separated = "_" + term + "_"
+        if not has_blocked_text(separated) or not has_blocked_bytes(
+            separated.encode("ascii")
+        ):
+            errors.append("matcher missed a configured token between underscores")
         embedded = "α" + term + "β"
         if has_blocked_text(embedded) or has_blocked_bytes(embedded.encode("utf-8")):
             errors.append("matcher false positive inside Unicode word")
