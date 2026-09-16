@@ -2,7 +2,7 @@
 <!-- Copyright (c) 2026 Supratim Sanyal of SANYALnet Labs. -->
 <!-- Proprietary rights reserved except as expressly licensed herein. -->
 <!-- -->
-<!-- DO NOT PANIC PORTFOLIO VISUALIZER -->
+<!-- DECnet-IV-Linux -->
 <!-- This file is governed by the SANYALnet Labs Non-Commercial License in the -->
 <!-- root LICENSE file. Non-Commercial use is permitted; Commercial Use and use -->
 <!-- for AI/ML model training are prohibited unless separately authorized. -->
@@ -41,7 +41,7 @@ Pinned revisions in `tests/reference/refs.env`:
 - LinuxDECnet comparison: `ff39eef045d1e4b7b72a3d40111e89c07a473398`
 - SIMH: `5b73b1032b52d19bf80752ea4d9cbbdc92e7b5e0`
 
-The product license is the exact `LICENSE` imported from `tuklusan/DO-NOT-PANIC-PORTFOLIO-VISUALIZER`, blob `9b4b0109371838aa7ad0afe22ec99d960dc5deba`. It is the SANYALnet Labs Non-Commercial License and is authoritative for project-owned work. `tools/license_monkey.py` verifies that exact root license and requires the canonical SANYALnet Labs notice as the sole leading header on every project-owned tracked text artifact, adapting only the comment syntax. The repository-policy workflow runs LICENSE-MONKEY before its existing word-policy checks. The mandatory model-training phrase is accepted only when it is part of the exact canonical leading notice; existing blocked-token enforcement remains unchanged everywhere else. The kernel module identifies itself to Linux as `Proprietary`, matching the product license rather than claiming GPL status.
+The product license is the canonical root `LICENSE` for DECnet-IV-Linux, blob `c6dabab19a2d36bffddabe7584a932c72fa272c3`. It identifies the project as `DECnet-IV-Linux`, the developer and copyright holder as Supratim Sanyal, and the organization as SANYALnet Labs. Its project preamble applies the license to project-owned material only and explicitly leaves third-party material under its original license. `tools/license_monkey.py` pins that exact root license, requires the canonical DECnet-IV-Linux/SANYALnet Labs notice as the sole leading header on every tracked project text artifact, and rejects both spaced-name and repository-slug forms of the stale prior-project identity case-insensitively. The mandatory model-training phrase is accepted only when it is part of the exact canonical leading notice; existing blocked-token enforcement remains unchanged everywhere else. The kernel module identifies itself to Linux as `Proprietary`, matching the product license rather than claiming GPL status.
 
 Self-to-self success is never sufficient for final interoperability claims.
 
@@ -55,12 +55,13 @@ Self-to-self success is never sufficient for final interoperability claims.
 - `tools/license_monkey.py` enforces the exact root product license and canonical project-owned artifact header.
 - `tools/repo_policy.py` enforces the configured case-insensitive whole-token repository word policy across the current tree, relevant new commit objects, refs/configuration, selected repository event metadata and collaborators. Local pre-commit, commit-message and pre-push hooks are provided by `.githooks`.
 - Policy token boundaries treat Unicode letters/digits as word characters and punctuation or underscore as separators. This preserves the short-token false-positive protection inside ordinary words while rejecting identifier-style uses separated by underscores.
-- The repository-policy workflow is the sole automatic workflow exception. Build, continuity, reference and VM workflows are demand-driven.
+- Ordinary `push`, branch/tag `create`, and `pull_request:synchronize` events do not start GitHub Actions. Merely editing or pushing source, documentation, policy or workflow files therefore consumes no hosted runner.
+- The Repository Policy workflow may run for explicit pull-request/review, issue/comment, discussion/comment metadata events or manual dispatch. Build, continuity, reference and VM workflows remain demand-driven.
 - Workflow-level and job-level concurrency groups use `queue: max` with cancellation disabled. This prevents an older pending policy or acceptance run from being silently replaced by a newer run while preserving the one-x64/one-arm64 execution ceiling; the platform queue limit still applies.
 - An owner-opened issue titled exactly `DNIV acceptance gates` is the controlled dispatcher for those manual acceptance workflows after policy succeeds and `main` still matches the event revision.
 - Generated VM evidence remains under ignored `tests/lab/artifacts/` and workflow artifacts.
 - Runner jobs share repository-wide x64 and arm64 concurrency slots.
-- The repository currently has no server-side ruleset available through the connected management surface, so local hooks plus the automatic policy workflow are the enforceable mechanisms available here.
+- The repository currently has no server-side ruleset available through the connected management surface, so local hooks plus the metadata/manual Repository Policy workflow are the enforceable mechanisms available here.
 
 ## SoP delivery rule
 
@@ -103,6 +104,10 @@ Repository review then found two policy/CI scheduling gaps. Whole-token matching
 
 A subsequent full-tree review found that hello processing relied on hardware multicast filtering and did not verify the Ethernet destination in software. A broadened receive mode could therefore expose a valid hello addressed to a multicast class for a different node role. The receive path now validates the destination against the local DECnet unicast address and the role-appropriate multicast groups under the same adjacency lock as runtime identity changes. Unit vectors cover endnode, Level 1 and Level 2 destination acceptance and rejection.
 
+The licensing audit then found that the imported license machinery had propagated the prior project's identity into every tracked project header and left the continuity record describing the wrong project provenance. The current candidate scopes the root license explicitly to DECnet-IV-Linux project-owned material, names Supratim Sanyal and SANYALnet Labs, replaces the stale identity in all 44 tracked blobs, pins the corrected license blob, and hardens License-Monkey against both spaced and hyphenated stale identities. The same audit exposed a CI trigger defect: ordinary pushes, branch/tag creation and pull-request synchronize events could launch policy runners for source/document/policy-only edits. Those triggers are removed; executable acceptance workflows remain manual or controlled-dispatch only. A later full-tree pass found `docs/TEST_LAB.md` still describing Repository Policy as push-triggered; that stale continuity text is corrected to match the actual workflow.
+
+An adversarial full-tree pass then found an independent-reference boundary mismatch in Phase IV endnode hello parsing. Pinned PyDECnet defines the endnode `testdata` image with a 128-byte maximum, while the Linux decoder accepted any declared length up to 255 if enough bytes followed. The decoder now rejects lengths above 128 bytes, and focused unit vectors require 128 bytes to parse and 129 bytes to fail. This protocol correction resets the SoP sequence again.
+
 Three consecutive clean complete SoP passes were reached on `e59afc1cdee594417137f21a5ea3f0ebb72807eb`, after which exact-head acceptance was dispatched. Repository policy, continuity, native x86_64/aarch64 build, Route20 build and the pinned PyDECnet unit baseline were green. The arm64 E1 image build verified the certificate bootstrap and verified snapshot access, then failed because the 2 GiB root filesystem filled while unpacking the arm64 virtual-kernel modules. The root image floor is now 4 GiB. Every subsequent image, protocol, policy, workflow and licensing correction reset the SoP sequence; no acceptance result from an earlier revision carries forward.
 
 ## Test addressing
@@ -119,12 +124,12 @@ The same inventory maps LinuxDECnet `dnprogs/libvaxdata/src/test.c` into PP-00 r
 
 Documentation does not make a requirement green. Required tests must be executed with complete evidence, and missing evidence invalidates production acceptance.
 
-The pre-production procedure merge incorporates the current `main` licensing/header work and resets the SoP sequence. No review or acceptance result from an earlier tree carries forward.
+The current candidate includes the DECnet-IV-Linux license/header identity repair, source-edit runner-trigger correction, and endnode hello test-data boundary correction described above. Those maintenance and protocol changes reset the SoP sequence. No review or acceptance result from an earlier tree carries forward.
 
 ## Resume point
 
-The current candidate combines the Phase 1/2 foundation, Phase 3 E1 implementation and harness, signed-snapshot certificate bootstrap, 4 GiB sparse image workspace, DECnet filter/framing/multicast/concurrency fixes, repository policy and licensing/header enforcement, and the consolidated pre-production procedure. This documentation is deliberately promotion-stable: before promotion the exact tree resides on its feature branch; after exact fast-forward promotion the same tree is `main`. The protocol phase remains Phase 3 either way.
+The current candidate combines the Phase 1/2 foundation, Phase 3 E1 implementation and harness, signed-snapshot certificate bootstrap, 4 GiB sparse image workspace, DECnet filter/framing/multicast/concurrency fixes, the 128-byte endnode test-data decoder bound, repository policy, the DECnet-IV-Linux-scoped license/header repair, hardened stale-identity detection, source-edit runner suppression, corrected runner documentation, and the consolidated pre-production procedure. This documentation is deliberately promotion-stable: before promotion the exact tree resides on its feature branch; after exact fast-forward promotion the same tree is `main`. The protocol phase remains Phase 3 either way.
 
 ## Next action
 
-The next action depends only on the exact ref state. If this candidate is not yet `main`, complete three consecutive clean full-repository SoP passes on it and, provided `main` has not diverged, fast-forward `main` to that exact green commit. If this exact candidate is already `main`, do not create a follow-up documentation commit merely to record promotion; continue Phase 3 exact-head acceptance and live interoperability against the pinned Route20 and PyDECnet forks, including two-byte Ethernet length framing and Level 2 multicast behavior. Any divergence or later edit resets SoP. Phase 4 routing begins only after the Phase 3 gates are green.
+The next action depends only on the exact ref state. If this candidate is not yet `main`, complete three consecutive clean full-repository SoP passes on it and, provided `main` has not diverged, fast-forward `main` to that exact green commit. If this exact candidate is already `main`, do not create a follow-up documentation commit merely to record promotion; continue Phase 3 exact-head acceptance and live interoperability against the pinned Route20 and PyDECnet forks, including two-byte Ethernet length framing, endnode test-data boundary behavior and Level 2 multicast behavior. Acceptance workflows are dispatched only deliberately; ordinary source, documentation, policy and workflow edits must not start hosted runners. Any divergence or later edit resets SoP. Phase 4 routing begins only after the Phase 3 gates are green.

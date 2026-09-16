@@ -2,7 +2,7 @@
 <!-- Copyright (c) 2026 Supratim Sanyal of SANYALnet Labs. -->
 <!-- Proprietary rights reserved except as expressly licensed herein. -->
 <!-- -->
-<!-- DO NOT PANIC PORTFOLIO VISUALIZER -->
+<!-- DECnet-IV-Linux -->
 <!-- This file is governed by the SANYALnet Labs Non-Commercial License in the -->
 <!-- root LICENSE file. Non-Commercial use is permitted; Commercial Use and use -->
 <!-- for AI/ML model training are prohibited unless separately authorized. -->
@@ -41,7 +41,7 @@ The two-node workflow keeps the retained Phase 2 raw-EtherType smoke gate as `ph
 
 GitHub-hosted runner machines are ephemeral: a later job starts on a fresh host and cannot resume the prior host process, RAM or local filesystem. The project therefore never treats runner-local storage as persistent state.
 
-All non-policy repository workflows are manual-dispatch only. The repository-policy workflow is the automatic exception and runs on pushes and selected GitHub metadata events as well as manual dispatch. Every runner job also enters one of two repository-wide job concurrency groups: `dniv-runner-x64` or `dniv-runner-arm64`. The groups queue rather than replace waiting jobs. This makes the hard repository ceiling one x64 runner job plus one arm64 runner job at a time; x64-only policy, continuity and reference gates all share the x64 slot. Matrix workflows additionally cap themselves at two parallel jobs.
+Build, continuity, reference and VM workflows are manual-dispatch only. The Repository Policy workflow does not run on ordinary `push`, branch/tag `create`, or `pull_request:synchronize` events; it may run only for the selected repository metadata events listed in its workflow or by manual dispatch. Merely editing or pushing source, documentation, policy or workflow files therefore does not consume a hosted runner. Every runner job enters one of two repository-wide job concurrency groups: `dniv-runner-x64` or `dniv-runner-arm64`. The groups queue rather than replace waiting jobs. This makes the hard repository ceiling one x64 runner job plus one arm64 runner job at a time; x64-only policy, continuity and reference gates all share the x64 slot. Matrix workflows additionally cap themselves at two parallel jobs.
 
 The two-node VM workflow persists guest disk state explicitly. After QEMU is stopped, the lab stores the exact base QCOW2, portable per-node QCOW2 deltas backed by that base, the exact kernel and initrd, checksums, a session manifest, serial logs and packet capture in a per-architecture workflow artifact. Artifacts are retained for 14 days.
 

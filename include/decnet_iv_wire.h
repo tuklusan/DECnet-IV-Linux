@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Supratim Sanyal of SANYALnet Labs.
 // Proprietary rights reserved except as expressly licensed herein.
 //
-// DO NOT PANIC PORTFOLIO VISUALIZER
+// DECnet-IV-Linux
 // This file is governed by the SANYALnet Labs Non-Commercial License in the
 // root LICENSE file. Non-Commercial use is permitted; Commercial Use and use
 // for AI/ML model training are prohibited unless separately authorized.
@@ -33,6 +33,7 @@
 #define DNIV_WIRE_MAX_RS_ENTRIES 33U
 #define DNIV_WIRE_ENDNODE_FIXED_LEN 32U
 #define DNIV_WIRE_ENDNODE_TEST_LEN 50U
+#define DNIV_WIRE_ENDNODE_TEST_MAX 128U
 #define DNIV_WIRE_ENDNODE_LEN \
     (DNIV_WIRE_ENDNODE_FIXED_LEN + DNIV_WIRE_ENDNODE_TEST_LEN)
 
@@ -338,7 +339,8 @@ static inline int dniv_wire_parse_hello(const __u8 *buf, __u32 len,
     hello->block_size = dniv_wire_get_le16(buf + 11);
     hello->timer = dniv_wire_get_le16(buf + 28);
     hello->testdata_len = buf[31];
-    if ((__u32)DNIV_WIRE_ENDNODE_FIXED_LEN + hello->testdata_len > len)
+    if (hello->testdata_len > DNIV_WIRE_ENDNODE_TEST_MAX ||
+        (__u32)DNIV_WIRE_ENDNODE_FIXED_LEN + hello->testdata_len > len)
         return DNIV_WIRE_MALFORMED;
     hello->testdata = buf + DNIV_WIRE_ENDNODE_FIXED_LEN;
     return DNIV_WIRE_OK;

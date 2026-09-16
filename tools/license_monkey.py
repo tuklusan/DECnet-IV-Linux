@@ -3,7 +3,7 @@
 # Copyright (c) 2026 Supratim Sanyal of SANYALnet Labs.
 # Proprietary rights reserved except as expressly licensed herein.
 #
-# DO NOT PANIC PORTFOLIO VISUALIZER
+# DECnet-IV-Linux
 # This file is governed by the SANYALnet Labs Non-Commercial License in the
 # root LICENSE file. Non-Commercial use is permitted; Commercial Use and use
 # for AI/ML model training are prohibited unless separately authorized.
@@ -13,7 +13,7 @@
 # patent, trademark, and governing-law provisions.
 # ============================================================================
 
-"""Enforce the canonical SANYALnet Labs project header and root license."""
+"""Enforce the canonical DECnet-IV-Linux project header and root license."""
 
 from __future__ import annotations
 
@@ -22,21 +22,35 @@ import subprocess
 import sys
 from pathlib import PurePosixPath
 
+PROJECT_NAME = "DECnet-IV-Linux"
+DEVELOPER = "Supratim Sanyal"
+ORGANIZATION = "SANYALnet Labs"
 LICENSE_PATH = "LICENSE"
-LICENSE_BLOB = "9b4b0109371838aa7ad0afe22ec99d960dc5deba"
+LICENSE_BLOB = "c6dabab19a2d36bffddabe7584a932c72fa272c3"
+
+# Keep stale prior-project identities out of readable project text without
+# carrying those names in readable source. Matching is case-insensitive.
+_LEGACY_PROJECTS = (
+    bytes.fromhex(
+        "444f204e4f542050414e494320504f5254464f4c494f2056495355414c495a4552"
+    ).lower(),
+    bytes.fromhex(
+        "444f2d4e4f542d50414e49432d504f5254464f4c494f2d56495355414c495a4552"
+    ).lower(),
+)
 
 _CORE = (
     "============================================================================",
-    "Copyright (c) 2026 Supratim Sanyal of SANYALnet Labs.",
+    f"Copyright (c) 2026 {DEVELOPER} of {ORGANIZATION}.",
     "Proprietary rights reserved except as expressly licensed herein.",
     "",
-    "DO NOT PANIC PORTFOLIO VISUALIZER",
-    "This file is governed by the SANYALnet Labs Non-Commercial License in the",
+    PROJECT_NAME,
+    f"This file is governed by the {ORGANIZATION} Non-Commercial License in the",
     "root LICENSE file. Non-Commercial use is permitted; Commercial Use and use",
     "for " + "A" + "I/ML model training are prohibited unless separately authorized.",
     "",
-    'Attribution is required: "Based on original work by Supratim Sanyal of',
-    'SANYALnet Labs." See LICENSE for full terms, warranty disclaimer, termination,',
+    f'Attribution is required: "Based on original work by {DEVELOPER} of',
+    f'{ORGANIZATION}." See LICENSE for full terms, warranty disclaimer, termination,',
     "patent, trademark, and governing-law provisions.",
     "============================================================================",
 )
@@ -99,9 +113,13 @@ def strip_canonical_header(text: str) -> str:
 
 
 def validate_blob(path: str, data: bytes, blob_sha: str | None = None) -> list[str]:
+    folded = data.lower()
+    if any(identity in folded for identity in _LEGACY_PROJECTS):
+        return [f"obsolete project identity present: {path}"]
+
     if path == LICENSE_PATH:
         if blob_sha and blob_sha != LICENSE_BLOB:
-            return [f"{LICENSE_PATH} does not match the official imported license"]
+            return [f"{LICENSE_PATH} does not match the canonical {PROJECT_NAME} license"]
         return []
 
     style = style_for(path)

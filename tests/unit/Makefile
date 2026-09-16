@@ -2,7 +2,7 @@
 # Copyright (c) 2026 Supratim Sanyal of SANYALnet Labs.
 # Proprietary rights reserved except as expressly licensed herein.
 #
-# DO NOT PANIC PORTFOLIO VISUALIZER
+# DECnet-IV-Linux
 # This file is governed by the SANYALnet Labs Non-Commercial License in the
 # root LICENSE file. Non-Commercial use is permitted; Commercial Use and use
 # for AI/ML model training are prohibited unless separately authorized.
@@ -18,7 +18,7 @@ CFLAGS ?= -O2 -g
 CFLAGS += -std=c11 -Wall -Wextra -Werror
 
 .PHONY: all test clean
-all: test_uapi test_phase3
+all: test_uapi test_phase3 test_endnode_bounds
 
 test_uapi: test_uapi.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ $<
@@ -26,9 +26,13 @@ test_uapi: test_uapi.c
 test_phase3: test_phase3.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ $<
 
+test_endnode_bounds: test_endnode_bounds.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ $<
+
 test: all
 	./test_uapi
 	./test_phase3
+	./test_endnode_bounds
 
 clean:
-	rm -f test_uapi test_phase3
+	rm -f test_uapi test_phase3 test_endnode_bounds
