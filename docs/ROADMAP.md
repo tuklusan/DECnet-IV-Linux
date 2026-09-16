@@ -4,7 +4,7 @@ This is the execution order for DECnet-IV-Linux. Later phases do not replace ear
 
 ## Phase 0 - repository continuity and reference discipline
 
-Exit criteria: repository policy/continuity gates are active; every substantive commit refreshes `docs/PROJECT_STATE.md`; preferred reference roles and license boundaries are documented; the removed legacy Linux DECnet stack is not the implementation base; this single-developer project works directly on the current `main` HEAD without pull requests or development branches.
+Exit criteria: repository policy/continuity gates are active; every substantive commit refreshes `docs/PROJECT_STATE.md`; preferred reference roles and license boundaries are documented; the removed legacy Linux DECnet stack is not the implementation base; substantive work uses feature branches from exact `main`, and only exact green commits are promoted.
 
 ## Phase 1 - buildable kernel and userspace bootstrap
 
@@ -74,4 +74,4 @@ Required topology includes `Ethernet -> DECnet router -> DDCMP -> DECnet router 
 
 Deliver 4/8/16-node routed topologies, both CPU architectures and mixed directions, maintained distro portability, real DEC peers, physical mixed-CPU testing, self-booting QCOW2/RAW images, checksums and reproducible manifests.
 
-Exit criteria: the release candidate passes all applicable external conformance, virtual topology, mixed-media, fault/stress and physical-hardware gates.
+Exit criteria: the release candidate passes `docs/PRE_PRODUCTION_TEST.md`, including all applicable external conformance, virtual topology, mixed-media, positive/negative, stress/endurance, false-green, real-peer and upgrade/rollback gates.
