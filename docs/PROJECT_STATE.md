@@ -97,3 +97,9 @@ Ordinary lab addressing is centralized in `tests/lab/test-addresses.env`: area 3
 ## Next action
 
 Run three consecutive clean complete SoP passes on the exact latest `main` tree. Any defect or edit restarts the sequence. Then invoke the owner-only acceptance dispatcher and require green repository policy, continuity, reference, native x86_64/aarch64 build and E1 VM gates at that exact revision. Add and run live Phase 3 interoperability against the pinned Route20 and PyDECnet forks, including standard two-byte Ethernet length framing and Level 2 multicast behavior. Only after those gates are green may Phase 4 routing work begin. Continue directly on current `main`.
+
+## Pre-production acceptance procedure
+
+`docs/PRE_PRODUCTION_TEST.md` is the consolidated release-gate procedure. It de-duplicates project E0-E4/D0-D5 coverage with protocol-relevant tests and behaviors from the pinned Route20, PyDECnet, LinuxDECnet and SIMH references, adds Linux-kernel-specific lifecycle/fault tests, orders execution from deterministic vectors through 16-VM soak testing, and makes applicable negative-test families mandatory. Upstream-native suites still run once as reference-source health checks so de-duplication cannot hide upstream regressions.
+
+The procedure is feature-gated: an unimplemented feature may remain outside the current release claim, but once claimed its positive and applicable negative cases become blocking. This documentation change resets the SoP sequence; no earlier acceptance evidence carries forward to a commit containing it.
