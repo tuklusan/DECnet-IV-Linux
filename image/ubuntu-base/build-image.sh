@@ -20,9 +20,9 @@ repo_root=$(cd "$script_dir/../.." && pwd)
 # shellcheck disable=SC1091
 . "$script_dir/images.env"
 snapshot=${UBUNTU_APT_SNAPSHOT:?images.env must pin UBUNTU_APT_SNAPSHOT}
-disk_bytes=${DNIV_DISK_BYTES:-2147483648}
-if [[ ! "$disk_bytes" =~ ^[0-9]+$ ]] || (( disk_bytes < 1073741824 )); then
-    echo "build-image: DNIV_DISK_BYTES must be an integer >= 1073741824" >&2
+disk_bytes=${DNIV_DISK_BYTES:-4294967296}
+if [[ ! "$disk_bytes" =~ ^[0-9]+$ ]] || (( disk_bytes < 4294967296 )); then
+    echo "build-image: DNIV_DISK_BYTES must be an integer >= 4294967296" >&2
     exit 2
 fi
 if [[ ! -f "$base_tar" ]]; then
@@ -81,9 +81,9 @@ sudo chmod 0755 "$mnt/usr/sbin/policy-rc.d"
 
 sudo chroot "$mnt" /usr/bin/env UBUNTU_APT_SNAPSHOT="$snapshot" /bin/bash -euxc '
 export DEBIAN_FRONTEND=noninteractive
-# Ubuntu Base has no usable certificate bundle yet.  Bootstrap only the
+# Ubuntu Base has no usable certificate bundle yet. Bootstrap only the
 # certificate package with TLS peer verification disabled; repository
-# signatures still authenticate snapshot metadata and packages.  Immediately
+# signatures still authenticate snapshot metadata and packages. Immediately
 # refresh package-owned trust and prove ordinary verified snapshot access
 # before installing anything else.
 apt-get -o Acquire::https::Verify-Peer=false --snapshot "$UBUNTU_APT_SNAPSHOT" update

@@ -60,6 +60,8 @@ Foundation complete: versioned UAPI, `decnet_iv.ko`, configurable identity, `/de
 
 Foundation complete: pinned Ubuntu Base 26.04.1 amd64/arm64 rootfs files, pinned package snapshot `20260915T000000Z`, deterministic ext4/QCOW2 assembly, exact guest kernel/module build, direct kernel/initrd boot, two independent one-NIC VMs, packet capture and serial evidence. Ubuntu Base does not initially contain usable certificate trust for the snapshot service, so the image builder bootstraps only the signed `ca-certificates` package with TLS peer verification temporarily disabled, refreshes package-owned trust, and then requires an ordinary verified snapshot update before installing the remaining image packages. Repository signatures continue to authenticate snapshot metadata and packages during the bootstrap step.
 
+The image build requires a 4 GiB sparse root filesystem. The 2 GiB predecessor exhausted the ext4 filesystem while unpacking the arm64 virtual-kernel module package after downloading the pinned package set; the larger sparse backing size preserves the small QCOW2-on-disk behavior while providing sufficient installation workspace.
+
 The retained `phase2` smoke gate sends deliberately generated DECnet Routing Layer Ethernet frames between two endnodes. VM checkpoints contain the base image, portable overlays, exact kernel/initrd, checksums, session metadata, logs and capture and may resume only against the matching architecture/source revision/mode.
 
 ### Phase 3
@@ -74,7 +76,7 @@ The latest SoP review found two independent-peer interoperability gaps that the 
 
 Second, a Level 2 router must participate in the All-Level-2-Routers multicast group `09-00-2B-02-00-00`. The pinned Route20 reference both subscribes/sends for Level 2 operation. The Linux implementation now owns that multicast filter transactionally for Level 2 routers, rolls prior filters back if installation fails, removes it symmetrically at teardown, and sends periodic router hellos to both All-Routers and All-Level-2-Routers.
 
-Three consecutive clean complete SoP passes were reached on `68860d063b67503b6d118274f759fef234f43769`, after which exact-head acceptance was dispatched. Native x86_64/aarch64 build and continuity gates were green. The arm64 E1 image build then proved that copying the runner certificate bundle into Ubuntu Base did not establish usable snapshot-service trust: the verified snapshot update failed before `ca-certificates` could be installed. The image bootstrap now uses signed repository metadata to install only `ca-certificates` with TLS peer verification disabled, refreshes package trust, and immediately requires verified snapshot access. This image change resets the SoP sequence; no acceptance result from the prior revision carries forward.
+Three consecutive clean complete SoP passes were reached on `e59afc1cdee594417137f21a5ea3f0ebb72807eb`, after which exact-head acceptance was dispatched. Repository policy, continuity, native x86_64/aarch64 build, Route20 build and the pinned PyDECnet unit baseline were green. The arm64 E1 image build verified the certificate bootstrap and verified snapshot access, then failed because the 2 GiB root filesystem filled while unpacking the arm64 virtual-kernel modules. The root image floor is now 4 GiB. This image change resets the SoP sequence; no acceptance result from the prior revision carries forward.
 
 ## Test addressing
 
@@ -82,7 +84,7 @@ Ordinary lab addressing is centralized in `tests/lab/test-addresses.env`: area 3
 
 ## Resume point
 
-`main` contains the Phase 1/2 foundation, the Phase 3 E1 harness, signed-snapshot certificate bootstrap, explicit DECnet unicast-filter ownership, `init_net` isolation, standard DECnet Ethernet payload-length framing, and Level 2 multicast participation. The SoP sequence is reset by the latest image-bootstrap correction. No Phase 3 completion claim is valid until the new exact tree completes three clean full reviews and the required acceptance/interoperability evidence is green.
+`main` contains the Phase 1/2 foundation, the Phase 3 E1 harness, signed-snapshot certificate bootstrap, a 4 GiB sparse image workspace, explicit DECnet unicast-filter ownership, `init_net` isolation, standard DECnet Ethernet payload-length framing, and Level 2 multicast participation. The SoP sequence is reset by the latest image-capacity correction. No Phase 3 completion claim is valid until the new exact tree completes three clean full reviews and the required acceptance/interoperability evidence is green.
 
 ## Next action
 
