@@ -31,6 +31,10 @@ esac
 
 script_dir=$(cd "$(dirname "$0")" && pwd)
 repo_root=$(cd "$script_dir/../.." && pwd)
+arm64_normalizer="$script_dir/normalize-arm64-kernel.sh"
+arm64_normalizer_sha256=f38f5dd54fdb922ca72404ee054827bacb4037f97df472728445efff596d656d
+test -x "$arm64_normalizer"
+echo "$arm64_normalizer_sha256  $arm64_normalizer" | sha256sum -c - >/dev/null
 # shellcheck disable=SC1091
 . "$script_dir/images.env"
 snapshot=${UBUNTU_APT_SNAPSHOT:?images.env must pin UBUNTU_APT_SNAPSHOT}
@@ -175,70 +179,10 @@ if [[ -z "$kernel" || -z "$initrd" ]]; then
     exit 1
 fi
 
-# QEMU's AArch64 direct loader first peels one outer gzip layer. For a
-# non-gzip file it recognizes EFI-zboot and otherwise treats the bytes as a raw
-# kernel image. Normalize an exact validated EFI-zboot wrapper to its raw Image
-# payload before direct boot; preserve unknown nonempty artifacts for QEMU's raw
-# fallback, with VM boot remaining the executable proof.
+# The AArch64 direct-boot artifact must be the decompressed Linux Image, not an
+# EFI-zboot wrapper that depends on the host QEMU version's decompressor set.
 if [[ "$arch" == arm64 ]]; then
-    kernel_magic=$(sudo dd if="$kernel" bs=1 count=2 status=none | od -An -tx1 | tr -d ' \n')
-    if [[ "$kernel_magic" == 1f8b ]]; then
-        sudo gzip -dc "$kernel" > "$boot_dir/vmlinuz"
-    else
-        sudo cp "$kernel" "$boot_dir/vmlinuz"
-    fi
-    sudo chown "$(id -u):$(id -g)" "$boot_dir/vmlinuz"
-    test -s "$boot_dir/vmlinuz"
-
-    arm64_magic=$(dd if="$boot_dir/vmlinuz" bs=1 skip=56 count=4 status=none | \
-        od -An -tx1 | tr -d ' \n')
-    if [[ "$arm64_magic" == 41524d64 ]]; then
-        : # current AArch64 Image: "ARM\x64" at offset 56
-    else
-        zboot_msdos=$(dd if="$boot_dir/vmlinuz" bs=1 count=2 status=none | \
-            od -An -tx1 | tr -d ' \n')
-        zboot_tag=$(dd if="$boot_dir/vmlinuz" bs=1 skip=4 count=4 status=none | \
-            od -An -tx1 | tr -d ' \n')
-        zboot_linux_magic=$(dd if="$boot_dir/vmlinuz" bs=1 skip=56 count=4 status=none | \
-            od -An -tx1 | tr -d ' \n')
-
-        if [[ "$zboot_msdos" == 4d5a && "$zboot_tag" == 7a696d67 && \
-              "$zboot_linux_magic" == cd238281 ]]; then
-            zboot_compression=$(dd if="$boot_dir/vmlinuz" bs=1 skip=24 count=32 status=none | \
-                tr -d '\000')
-            zboot_payload_offset=$(dd if="$boot_dir/vmlinuz" bs=1 skip=8 count=4 status=none | \
-                od -An -tu4 | tr -d ' \n')
-            zboot_payload_size=$(dd if="$boot_dir/vmlinuz" bs=1 skip=12 count=4 status=none | \
-                od -An -tu4 | tr -d ' \n')
-            zboot_file_size=$(stat -c '%s' "$boot_dir/vmlinuz")
-
-            if [[ "$zboot_compression" != gzip ]]; then
-                echo "build-image: unsupported arm64 EFI-zboot compression: $zboot_compression" >&2
-                exit 1
-            fi
-            if [[ ! "$zboot_payload_offset" =~ ^[0-9]+$ || \
-                  ! "$zboot_payload_size" =~ ^[0-9]+$ ]] || \
-               (( zboot_payload_offset <= 0 || zboot_payload_size <= 0 || \
-                  zboot_payload_offset + zboot_payload_size > zboot_file_size )); then
-                echo "build-image: invalid arm64 EFI-zboot payload bounds" >&2
-                exit 1
-            fi
-
-            zboot_raw="$boot_dir/vmlinuz.raw"
-            dd if="$boot_dir/vmlinuz" bs=1 skip="$zboot_payload_offset" \
-                count="$zboot_payload_size" status=none | gzip -dc > "$zboot_raw"
-            test -s "$zboot_raw"
-            zboot_raw_magic=$(dd if="$zboot_raw" bs=1 skip=56 count=4 status=none | \
-                od -An -tx1 | tr -d ' \n')
-            if [[ "$zboot_raw_magic" != 41524d64 ]]; then
-                echo "build-image: arm64 EFI-zboot payload is not a raw Image" >&2
-                exit 1
-            fi
-            mv "$zboot_raw" "$boot_dir/vmlinuz"
-        else
-            : # QEMU raw-image fallback; boot acceptance is the executable proof.
-        fi
-    fi
+    "$arm64_normalizer" "$kernel" "$boot_dir/vmlinuz" "build-image"
 else
     sudo cp "$kernel" "$boot_dir/vmlinuz"
 fi

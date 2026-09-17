@@ -18,12 +18,14 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 RELEASE_BUILDER = "image/ubuntu-base/build-image.sh"
 FOUNDATION_BUILDER = "image/ubuntu-base/build-foundation.sh"
+ARM64_NORMALIZER = "image/ubuntu-base/normalize-arm64-kernel.sh"
 CANDIDATE_BUILDER = "tests/lab/prepare-candidate-image.sh"
 REFERENCE_BUILDER = "tests/lab/prepare-reference-image.sh"
 INSTALL_PREFIX = 'apt-get --snapshot "$UBUNTU_APT_SNAPSHOT" install -y --no-install-recommends'
@@ -48,13 +50,20 @@ FOUNDATION_REQUIRED = {
     **COMMON_IMAGE_REQUIRED,
     "eager ext4 metadata initialization": 'mkfs.ext4 -q -F -E lazy_itable_init=0,lazy_journal_init=0 -L dniv-root "$raw"',
     "generated initrd validation": INITRD_CHECK,
-    "arm64 outer gzip decompression": 'sudo gzip -dc "$kernel" > "$boot_dir/vmlinuz"',
-    "arm64 Image magic probe": 'arm64_magic=$(dd if="$boot_dir/vmlinuz" bs=1 skip=56 count=4 status=none |',
-    "arm64 EFI-zboot recognition": 'if [[ "$zboot_msdos" == 4d5a && "$zboot_tag" == 7a696d67 &&',
-    "arm64 QEMU raw fallback": ': # QEMU raw-image fallback; boot acceptance is the executable proof.',
+    "arm64 normalizer checksum binding": 'arm64_normalizer_sha256=',
+    "arm64 raw Image normalization": '"$arm64_normalizer" "$kernel" "$boot_dir/vmlinuz" "build-foundation"',
     "qcow2 structural validation": 'qemu-img check -f qcow2 "$output"',
     "logical raw/qcow2 comparison": 'qemu-img compare -f raw -F qcow2 "$raw" "$output"',
     "candidate source purge": 'sudo rm -rf "$mnt/usr/src/decnet-iv-linux"',
+}
+NORMALIZER_REQUIRED = {
+    "raw arm64 Image magic": 'raw_magic() {',
+    "EFI-zboot recognition": 'zboot_tag=$(hex_bytes "$candidate" 4 4)',
+    "EFI-zboot payload bounds": 'zboot_payload_offset + zboot_payload_size > zboot_file_size',
+    "gzip EFI-zboot decompression": 'gzip -dc "$payload" > "$raw"',
+    "zstd EFI-zboot decompression": 'zstd -q -d -c "$payload" > "$raw"',
+    "unknown arm64 format rejection": 'unsupported arm64 kernel format; refusing non-Image fallback',
+    "final raw Image validation": 'normalized arm64 kernel is not a raw Linux Image',
 }
 CANDIDATE_REQUIRED = {
     **DERIVED_REQUIRED,
@@ -72,7 +81,7 @@ REFERENCE_REQUIRED = {
     **DERIVED_REQUIRED,
     "exact harness commit": "source_commit=$(git -C \"$repo_root\" rev-parse --verify 'HEAD^{commit}')",
     "reference peer install": 'dniv-reference-peer.sh',
-    "reference dnraw build": '-o "$mnt/usr/local/sbin/dnraw" "$repo_root/tests/lab/dnraw.c"',
+    "reference dnraw build": '-o "$mnt/usr/local/sbin/dnraw" "$repo_root/tests/lab/dnraw.c',
     "harness SHA marker": '/etc/dniv-reference-harness-sha',
 }
 
@@ -146,6 +155,14 @@ def reject_bad_image_compare(label: str, text: str) -> None:
         raise SystemExit(f"image-builder gate: {label} qcow2 conversion must remain uncompressed")
 
 
+def require_normalizer_binding(label: str, builder: str, normalizer: str) -> None:
+    digest = hashlib.sha256(normalizer.encode("utf-8")).hexdigest()
+    if f"arm64_normalizer_sha256={digest}" not in builder:
+        raise SystemExit(f"image-builder gate: {label} is not bound to the exact arm64 normalizer bytes")
+    if 'echo "$arm64_normalizer_sha256  $arm64_normalizer" | sha256sum -c -' not in builder:
+        raise SystemExit(f"image-builder gate: {label} does not verify the arm64 normalizer digest")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     source = parser.add_mutually_exclusive_group()
@@ -156,6 +173,7 @@ def main() -> int:
     try:
         release, source_label = read_path(RELEASE_BUILDER, args.staged, args.tree)
         foundation = read_path(FOUNDATION_BUILDER, args.staged, args.tree)[0]
+        normalizer = read_path(ARM64_NORMALIZER, args.staged, args.tree)[0]
         candidate = read_path(CANDIDATE_BUILDER, args.staged, args.tree)[0]
         reference = read_path(REFERENCE_BUILDER, args.staged, args.tree)[0]
     except (OSError, subprocess.CalledProcessError) as exc:
@@ -171,6 +189,7 @@ def main() -> int:
     for marker in (
         'sudo cmp -s "$smoke_script_source" "$smoke_script_dest"',
         'systemd-analyze verify /etc/systemd/system/dniv-smoke.service',
+        '"$arm64_normalizer" "$kernel" "$boot_dir/vmlinuz" "build-image"',
         'qemu-img check -f qcow2 "$output"',
         'qemu-img compare -f raw -F qcow2 "$raw" "$output"',
     ):
@@ -181,7 +200,7 @@ def main() -> int:
     foundation_packages = install_tokens(foundation)
     foundation_required_packages = {
         "build-essential", "initramfs-tools", "linux-image-virtual-hwe-26.04",
-        "linux-headers-virtual-hwe-26.04", "python3", "libpcap0.8t64",
+        "linux-headers-virtual-hwe-26.04", "python3", "libpcap0.8t64", "git",
     }
     missing = sorted(foundation_required_packages - foundation_packages)
     if missing:
@@ -190,10 +209,15 @@ def main() -> int:
     for forbidden in (
         "source_commit=", 'git -C "$repo_root" archive',
         "make -C /usr/src/decnet-iv-linux", "dniv-smoke.service",
+        "QEMU raw-image fallback",
     ):
         if forbidden in foundation:
-            raise SystemExit(f"image-builder gate: source-dependent content leaked into foundation: {forbidden}")
+            raise SystemExit(f"image-builder gate: source-dependent or unsafe content in foundation: {forbidden}")
     reject_bad_image_compare("architecture foundation", foundation)
+
+    require_snippets("arm64 kernel normalizer", normalizer, NORMALIZER_REQUIRED)
+    require_normalizer_binding("release image", release, normalizer)
+    require_normalizer_binding("architecture foundation", foundation, normalizer)
 
     require_snippets("disposable candidate", candidate, CANDIDATE_REQUIRED)
     if "apt-get" in candidate:
@@ -207,7 +231,7 @@ def main() -> int:
 
     print(
         "image-builder gate: source=" + source_label
-        + " release image, source-independent architecture foundation, and exact-candidate disposable layers verified"
+        + " release image, source-independent architecture foundation, raw arm64 kernel, and exact-candidate disposable layers verified"
     )
     return 0
 

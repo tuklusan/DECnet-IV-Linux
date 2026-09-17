@@ -123,8 +123,9 @@ esac
 
 case "$reference" in
 route20)
-    cp /mnt/reference/route20 /run/reference/route20
-    chmod 0755 /run/reference/route20
+    route20_bin=/usr/local/libexec/dniv-route20-reference
+    mkdir -p /usr/local/libexec
+    install -m 0755 /mnt/reference/route20 "$route20_bin"
     cat > /run/reference/route20.ini <<EOF_ROUTE20
 [node]
 name=$name
@@ -137,7 +138,7 @@ interface=$iface
 cost=3
 EOF_ROUTE20
     rm -f /var/run/route20.pid
-    /run/reference/route20 /run/reference/route20.ini
+    "$route20_bin" /run/reference/route20.ini
     i=0
     while [ "$i" -lt 100 ] && [ ! -s /var/run/route20.pid ]; do
         i=$((i + 1))
