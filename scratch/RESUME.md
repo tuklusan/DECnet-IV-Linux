@@ -28,7 +28,7 @@ The image failures moved deeper after the preceding image correction. amd64 prod
 
 Candidate `c33241a984b6f1c61c0a7aa83b89945dd60a4fb6` switches base and derived acceptance images to `qemu-img compare` for RAW/QCOW2 logical-content equality and explicitly rejects host RAW `cmp` or strict allocation-sensitive compare. It also keeps one outer-gzip peel for arm64, then accepts either raw AArch64 Image magic or a validated gzip EFI-zboot header with sane payload bounds. `tests/policy/test_image_builder_gate.py` requires every read, signature check and logical comparison safeguard.
 
-Commit `f18465c08fd5c6fe2fb72a12875781a3c874bff3` accidentally created an empty top-level `NONEXISTENT` path during repository tooling; candidate `c33241a984b6f1c61c0a7aa83b89945dd60a4fb6` deleted it. A later unintended non-main ref triggered repository cleanup run `35219630482`. The cleanup step successfully deleted every non-main ref and confirmed only `refs/heads/main` remained, but its verification step failed because `workflow_sop.sh ... main` rejected the create-event `GITHUB_REF` even though the job had checked out exact current `main`. Candidate `57f123d43760554a333772755da9d196c6444614` added a dedicated `maintenance` scope, changed cleanup to use it, and added regression coverage so maintenance still verifies exact remote main while acceptance-only ref checks remain confined to `main` scope.
+Commit `f18465c08fd5c6fe2fb72a12875781a3c874bff3` accidentally created an empty top-level `NONEXISTENT` path during repository tooling; candidate `c33241a984b6f1c61c0a7aa83b89945dd60a4fb6` deleted it. A later unintended non-main ref triggered repository cleanup run `35219630482`. The cleanup step successfully deleted every non-main ref and confirmed only `refs/heads/main` remained, but its verification step failed because `workflow_sop.sh ... main` rejected the create-event `GITHUB_REF` even though the job had checked out exact current `main`. Candidate `57f123d43760554a333772755da9d196c6444614` added a dedicated maintenance scope, changed cleanup to use it, and added regression coverage so maintenance still verifies exact remote main while acceptance-only ref checks remain confined to `main` scope.
 
 The first complete-tree review of `57f123d43760554a333772755da9d196c6444614` found stale continuity and SoP text. `docs/TEST_LAB.md` still claimed three automatic pre-work exact-tree scans, while current workflows record one bounded baseline plus a matching final manifest. It also claimed the Repository Policy workflow did not run on `create`, although non-main branch creation intentionally triggers automatic cleanup. `docs/HANDOVER.md` and `docs/PROJECT_STATE.md` still described the semantic/manual SoP as diff-scoped rather than complete-tree. Candidate `c71bc79a176bbac367a910567160e8809283c051` corrected those records.
 
@@ -40,7 +40,11 @@ The E1 regression is strengthened at the wire level rather than relying only on 
 
 Commit `f2147d83c4063a461bc732f3e017608bd5ba675c` accidentally created tracked `scratch/SHOULD_NOT_CREATE` during repository tooling. It has no acceptance evidence. Candidate `2e23adcacad4945b2495c3704d07cb1a2860a04a` deletes it together with the DRDELAY change. Candidate `6f4baf02029c3ac9e0c44885a85add79564017df` removed pending SoP-pass actions from tracked next-action markers while retaining the pass/progress fields.
 
-Branch-cleanup maintenance run `35224985329` on `6f4baf02029c3ac9e0c44885a85add79564017df` confirmed the one-branch invariant and exact tree, then failed because `test_repo_policy_branch.py` used substring matching for the stale `main` invocation and therefore treated the valid `maintenance` invocation as stale. The current candidate makes that check line-exact.
+Branch-cleanup maintenance run `35224985329` on `6f4baf02029c3ac9e0c44885a85add79564017df` confirmed the one-branch invariant and exact tree, then failed because `test_repo_policy_branch.py` used substring matching for the stale `main` invocation and therefore treated the valid `maintenance` invocation as stale. Candidate `b47b11dd513c4bcb4acb66594c1d96aa6c071a4a` makes that check line-exact. Maintenance verification `35225226843` is green on that exact candidate.
+
+Fresh Phase 3 acceptance on `b47b11dd513c4bcb4acb66594c1d96aa6c071a4a` produced green native build `35225302832` and project-state `35225305452`. E1 run `35225310434` then failed on arm64 before protocol assertions in `Build minimal DECnet test image`: the builder rejected the installed kernel because it matched neither `ARM\x64` nor the exact EFI-zboot signature. This was a validator bug. QEMU's AArch64 loader first tries gzip, then exact EFI-zboot unpacking, and otherwise deliberately treats the file as a raw image; `ARM\x64` is optional metadata, not a mandatory admission signature.
+
+The current correction mirrors that QEMU contract. It keeps the outer-gzip peel, current Image recognition and exact EFI-zboot structural/bounds validation, but any other nonempty kernel artifact is preserved for QEMU's raw-image fallback and must pass the actual VM boot gate. The image-builder policy regression now rejects reintroduction of the obsolete hard magic rejection. This is a substantive image/acceptance correction, so the complete semantic/manual SoP count is reset to zero and the prior acceptance lineage is not promotable.
 
 Repository branch policy is active and the live remote branch invariant is only `refs/heads/main`. GitHub-owned actions remain pinned to immutable full SHAs.
 
@@ -59,14 +63,14 @@ Repository branch policy is active and the live remote branch invariant is only 
 | Clean complete semantic/manual passes on this candidate | 0 |
 | Routine workflow scan requirement | one bounded baseline diff manifest plus matching final diff manifest |
 | Explicit machine full-tree scan | `tools/sop_scan.py --full-tree` |
-| Phase 3 acceptance | image/maintenance corrections plus DR handoff correction applied; pending exact-head gates |
-| Latest acceptance parent | `35195064164` |
-| Latest E1 VM run | `35195101815`, failure during base-image build |
-| Latest interoperability run | `35195103898`, failure during base-image build |
-| Latest reference baseline run | `35195100046`, success |
-| Latest native build run | `35195096243`, success |
-| Latest project-state run | `35195098169`, success |
-| Latest branch-cleanup run | `35224985329`, branch invariant/exact tree green; regression false positive in maintenance-scope check |
+| Phase 3 acceptance | prior exact-head acceptance blocked by arm64 image validator; corrected candidate requires fresh SoP and gates |
+| Latest acceptance candidate | `b47b11dd513c4bcb4acb66594c1d96aa6c071a4a`, not promotable |
+| Latest E1 VM run | `35225310434`, arm64 failure during base-image format validation before protocol assertions |
+| Latest interoperability run | `35225313118`, dispatched on prior candidate; not promotable after image validator defect |
+| Latest reference baseline run | `35225308164`, dispatched on prior candidate; not promotable after image validator defect |
+| Latest native build run | `35225302832`, success on prior candidate |
+| Latest project-state run | `35225305452`, success on prior candidate |
+| Latest branch-cleanup run | `35225226843`, success |
 
 ## Persistent run index
 
@@ -76,4 +80,4 @@ The tracked table above is the durable human index. Runtime evidence belongs onl
 
 ## Next action
 
-Retry branch-cleanup maintenance verification on the exact current head. If green, dispatch fresh exact-head Phase 3 x86_64/aarch64 native build, pinned reference, E1, Route20 and PyDECnet interoperability gates. Phase 4 starts only after that unchanged candidate is green.
+Run the complete-tree semantic/manual SoP from zero on the corrected exact `main` candidate. After three consecutive clean passes, dispatch fresh exact-head native x86_64/aarch64 build, project-state/continuity, pinned reference, E1, Route20 and PyDECnet interoperability gates. Phase 4 starts only after that unchanged candidate is green.

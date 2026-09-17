@@ -159,11 +159,11 @@ if [[ -z "$kernel" || -z "$initrd" ]]; then
     exit 1
 fi
 
-# QEMU direct boot for AArch64 accepts a raw Image and EFI-zboot images. It also
-# accepts a plain gzip-compressed Image, but it cannot chain an outer gzip layer
-# into the EFI-zboot decoder. Strip one outer gzip layer when present, then
-# validate that the resulting artifact is either a raw Image or a gzip EFI-zboot
-# image that QEMU 8.x can unpack directly.
+# QEMU's AArch64 direct loader first peels one outer gzip layer. For a
+# non-gzip file it recognizes EFI-zboot and otherwise deliberately falls back
+# to treating the bytes as a raw kernel image; ARM\x64 magic is optional and is
+# used only for load-offset/image-size metadata. Mirror those loader semantics
+# here instead of rejecting QEMU's documented raw fallback.
 if [[ "$arch" == arm64 ]]; then
     kernel_magic=$(sudo dd if="$kernel" bs=1 count=2 status=none | od -An -tx1 | tr -d ' \n')
     if [[ "$kernel_magic" == 1f8b ]]; then
@@ -172,11 +172,12 @@ if [[ "$arch" == arm64 ]]; then
         sudo cp "$kernel" "$boot_dir/vmlinuz"
     fi
     sudo chown "$(id -u):$(id -g)" "$boot_dir/vmlinuz"
+    test -s "$boot_dir/vmlinuz"
 
     arm64_magic=$(dd if="$boot_dir/vmlinuz" bs=1 skip=56 count=4 status=none | \
         od -An -tx1 | tr -d ' \n')
     if [[ "$arm64_magic" == 41524d64 ]]; then
-        : # raw AArch64 Image: "ARM\x64" at offset 56
+        : # current AArch64 Image: "ARM\x64" at offset 56
     else
         zboot_msdos=$(dd if="$boot_dir/vmlinuz" bs=1 count=2 status=none | \
             od -An -tx1 | tr -d ' \n')
@@ -184,29 +185,30 @@ if [[ "$arch" == arm64 ]]; then
             od -An -tx1 | tr -d ' \n')
         zboot_linux_magic=$(dd if="$boot_dir/vmlinuz" bs=1 skip=56 count=4 status=none | \
             od -An -tx1 | tr -d ' \n')
-        zboot_compression=$(dd if="$boot_dir/vmlinuz" bs=1 skip=24 count=32 status=none | \
-            tr -d '\000')
-        zboot_payload_offset=$(dd if="$boot_dir/vmlinuz" bs=1 skip=8 count=4 status=none | \
-            od -An -tu4 | tr -d ' \n')
-        zboot_payload_size=$(dd if="$boot_dir/vmlinuz" bs=1 skip=12 count=4 status=none | \
-            od -An -tu4 | tr -d ' \n')
-        zboot_file_size=$(stat -c '%s' "$boot_dir/vmlinuz")
 
-        if [[ "$zboot_msdos" != 4d5a || "$zboot_tag" != 7a696d67 || \
-              "$zboot_linux_magic" != cd238281 ]]; then
-            echo "build-image: arm64 direct-boot kernel is neither raw Image nor EFI zboot" >&2
-            exit 1
-        fi
-        if [[ "$zboot_compression" != gzip ]]; then
-            echo "build-image: unsupported arm64 EFI-zboot compression: $zboot_compression" >&2
-            exit 1
-        fi
-        if [[ ! "$zboot_payload_offset" =~ ^[0-9]+$ || \
-              ! "$zboot_payload_size" =~ ^[0-9]+$ ]] || \
-           (( zboot_payload_offset <= 0 || zboot_payload_size <= 0 || \
-              zboot_payload_offset + zboot_payload_size > zboot_file_size )); then
-            echo "build-image: invalid arm64 EFI-zboot payload bounds" >&2
-            exit 1
+        if [[ "$zboot_msdos" == 4d5a && "$zboot_tag" == 7a696d67 && \
+              "$zboot_linux_magic" == cd238281 ]]; then
+            zboot_compression=$(dd if="$boot_dir/vmlinuz" bs=1 skip=24 count=32 status=none | \
+                tr -d '\000')
+            zboot_payload_offset=$(dd if="$boot_dir/vmlinuz" bs=1 skip=8 count=4 status=none | \
+                od -An -tu4 | tr -d ' \n')
+            zboot_payload_size=$(dd if="$boot_dir/vmlinuz" bs=1 skip=12 count=4 status=none | \
+                od -An -tu4 | tr -d ' \n')
+            zboot_file_size=$(stat -c '%s' "$boot_dir/vmlinuz")
+
+            if [[ "$zboot_compression" != gzip ]]; then
+                echo "build-image: unsupported arm64 EFI-zboot compression: $zboot_compression" >&2
+                exit 1
+            fi
+            if [[ ! "$zboot_payload_offset" =~ ^[0-9]+$ || \
+                  ! "$zboot_payload_size" =~ ^[0-9]+$ ]] || \
+               (( zboot_payload_offset <= 0 || zboot_payload_size <= 0 || \
+                  zboot_payload_offset + zboot_payload_size > zboot_file_size )); then
+                echo "build-image: invalid arm64 EFI-zboot payload bounds" >&2
+                exit 1
+            fi
+        else
+            : # QEMU raw-image fallback; boot acceptance is the executable proof.
         fi
     fi
 else

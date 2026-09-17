@@ -65,7 +65,7 @@ Foundation complete: UAPI v2, `decnet_iv.ko`, configurable identity, Routing Lay
 
 ### Phase 2
 
-Foundation complete: pinned Ubuntu Base 26.04.1 amd64/arm64 rootfs files and package snapshot `20260915T000000Z`, deterministic ext4/QCOW2 construction, exact guest kernel/module/userspace build, direct kernel/initrd boot, two independent one-NIC VMs, packet capture and serial evidence. The image builder explicitly installs `initramfs-tools`, verifies its generated initrd, archives the exact tracked source commit into the guest, validates the installed smoke unit/script, leaves acceptance QCOW2 uncompressed, and verifies guest-visible RAW/QCOW2 logical equality with `qemu-img compare`. The arm64 direct-boot path strips one outer gzip layer when present and accepts either a raw AArch64 Image or a validated gzip EFI-zboot wrapper supported by QEMU 8.x.
+Foundation complete: pinned Ubuntu Base 26.04.1 amd64/arm64 rootfs files and package snapshot `20260915T000000Z`, deterministic ext4/QCOW2 construction, exact guest kernel/module/userspace build, direct kernel/initrd boot, two independent one-NIC VMs, packet capture and serial evidence. The image builder explicitly installs `initramfs-tools`, verifies its generated initrd, archives the exact tracked source commit into the guest, validates the installed smoke unit/script, leaves acceptance QCOW2 uncompressed, and verifies guest-visible RAW/QCOW2 logical equality with `qemu-img compare`. The arm64 direct-boot path strips one outer gzip layer when present and follows QEMU AArch64 loader semantics: current `ARM\x64` images are recognized for metadata, exact EFI-zboot headers receive structural validation, and other nonempty images remain eligible for QEMU's raw-image fallback and must prove themselves by actually booting.
 
 ### Phase 3
 
@@ -87,7 +87,9 @@ The complete-tree pass on `f2bab342389ce8da8c8696c222c37c35326ceefe` found a Pha
 
 During repository tooling for that correction, commit `f2147d83c4063a461bc732f3e017608bd5ba675c` accidentally created tracked `scratch/SHOULD_NOT_CREATE`. No acceptance evidence is associated with that state. Candidate `2e23adcacad4945b2495c3704d07cb1a2860a04a` deletes that path in the same forward correction that contains the DRDELAY fix and refreshed continuity records. Candidate `6f4baf02029c3ac9e0c44885a85add79564017df` then removed the pending SoP-pass action from the tracked next-action markers while retaining the recorded pass/progress fields.
 
-Branch-cleanup maintenance run `35224985329` on `6f4baf02029c3ac9e0c44885a85add79564017df` confirmed the one-branch invariant and exact tree, then failed in `test_repo_policy_branch.py`: its stale `main`-scope detector used substring matching, so the valid `maintenance` invocation was misclassified because `maintenance` begins with `main`. The current candidate makes that detector line-exact.
+Branch-cleanup maintenance run `35224985329` on `6f4baf02029c3ac9e0c44885a85add79564017df` confirmed the one-branch invariant and exact tree, then failed in `test_repo_policy_branch.py`: its stale `main`-scope detector used substring matching, so the valid `maintenance` invocation was misclassified because `maintenance` begins with `main`. Candidate `b47b11dd513c4bcb4acb66594c1d96aa6c071a4a` makes that detector line-exact. Maintenance verification `35225226843` completed green on that exact candidate.
+
+Fresh Phase 3 acceptance was then dispatched on `b47b11dd513c4bcb4acb66594c1d96aa6c071a4a`. Native build `35225302832` and project-state `35225305452` completed green. E1 run `35225310434` exposed a further arm64 image-gate false rejection before protocol assertions: Ubuntu's installed arm64 kernel did not match either magic pattern required by the builder, although QEMU's AArch64 loader intentionally accepts non-zboot images through a raw-image fallback and treats `ARM\x64` magic as optional metadata. The current correction mirrors QEMU's actual loader contract: retain outer-gzip handling, recognize and structurally validate exact zboot headers, but preserve any other nonempty artifact for QEMU raw loading and require the VM boot gate to be the executable proof. The image-builder policy gate now rejects reintroduction of the obsolete hard magic requirement. This substantive correction resets the delivery SoP count to zero; no result from `b47b11dd513c4bcb4acb66594c1d96aa6c071a4a` can promote Phase 3.
 
 ## Test addressing
 
@@ -99,8 +101,8 @@ Ordinary lab addressing remains area 31, nodes 70 through 79, names DN70 through
 
 ## Resume point
 
-Phase 3 remains active. Image-path and branch-cleanup maintenance corrections are on `main`; the latest protocol correction fixes per-interface designated-router DRDELAY/handoff behavior and E1 proves the handoff suppression. The branch-cleanup maintenance regression false positive is corrected in the current candidate. The tracked SoP pass/progress marker remains unchanged.
+Phase 3 remains active. Maintenance verification is green, but fresh acceptance found an arm64 base-image validator stricter than QEMU's actual AArch64 direct-loader semantics. The current candidate removes that false rejection while keeping exact EFI-zboot structural checks and logical QCOW2 integrity checks. The protocol correction for per-interface designated-router DRDELAY/handoff remains unchanged and still awaits executable E1/independent-peer proof on the corrected image path.
 
 ## Next action
 
-Retry branch-cleanup maintenance verification on the exact current head. If green, dispatch fresh exact-head native x86_64/aarch64 build, pinned reference, E1 and bounded Route20/PyDECnet interoperability gates. Phase 4 begins only after the unchanged Phase 3 candidate is green.
+Run the complete-tree delivery SoP from zero on the exact current candidate. After three consecutive clean complete semantic/manual passes, dispatch fresh exact-head native x86_64/aarch64 build, project-state/continuity, pinned reference, E1 and bounded Route20/PyDECnet interoperability gates. Phase 4 begins only after that unchanged Phase 3 candidate is green.

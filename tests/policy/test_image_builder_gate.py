@@ -31,6 +31,7 @@ INSTALL_PREFIX = 'apt-get --snapshot "$UBUNTU_APT_SNAPSHOT" install -y --no-inst
 INITRD_CHECK = 'test -s "/boot/initrd.img-$krel"'
 ARM64_OWNER_FIX = 'sudo chown "$(id -u):$(id -g)" "$boot_dir/vmlinuz"'
 ARM64_MAGIC_READ = 'arm64_magic=$(dd if="$boot_dir/vmlinuz" bs=1 skip=56 count=4 status=none |'
+ARM64_HARD_REJECT = 'arm64 direct-boot kernel is neither raw Image nor EFI zboot'
 HOST_RAW_CMP = 'cmp -s "$raw"'
 BASE_REQUIRED_SNIPPETS = {
     "installed smoke script byte comparison": 'sudo cmp -s "$smoke_script_source" "$smoke_script_dest"',
@@ -38,20 +39,20 @@ BASE_REQUIRED_SNIPPETS = {
     "systemd unit validation": 'systemd-analyze verify /etc/systemd/system/dniv-smoke.service',
     "arm64 outer gzip decompression": 'sudo gzip -dc "$kernel" > "$boot_dir/vmlinuz"',
     "arm64 boot artifact ownership": ARM64_OWNER_FIX,
+    "arm64 boot artifact nonempty check": 'test -s "$boot_dir/vmlinuz"',
     "arm64 Image magic read": ARM64_MAGIC_READ,
-    "arm64 raw Image acceptance": 'if [[ "$arm64_magic" == 41524d64 ]]; then',
+    "arm64 current Image recognition": 'if [[ "$arm64_magic" == 41524d64 ]]; then',
     "arm64 EFI-zboot MZ read": 'zboot_msdos=$(dd if="$boot_dir/vmlinuz" bs=1 count=2 status=none |',
     "arm64 EFI-zboot tag read": 'zboot_tag=$(dd if="$boot_dir/vmlinuz" bs=1 skip=4 count=4 status=none |',
     "arm64 EFI-zboot Linux magic read": 'zboot_linux_magic=$(dd if="$boot_dir/vmlinuz" bs=1 skip=56 count=4 status=none |',
+    "arm64 EFI-zboot recognition": 'if [[ "$zboot_msdos" == 4d5a && "$zboot_tag" == 7a696d67 &&',
     "arm64 EFI-zboot compression read": 'zboot_compression=$(dd if="$boot_dir/vmlinuz" bs=1 skip=24 count=32 status=none |',
     "arm64 EFI-zboot payload offset read": 'zboot_payload_offset=$(dd if="$boot_dir/vmlinuz" bs=1 skip=8 count=4 status=none |',
     "arm64 EFI-zboot payload size read": 'zboot_payload_size=$(dd if="$boot_dir/vmlinuz" bs=1 skip=12 count=4 status=none |',
     "arm64 EFI-zboot file size read": 'zboot_file_size=$(stat -c \'%s\' "$boot_dir/vmlinuz")',
-    "arm64 EFI-zboot MZ validation": '"$zboot_msdos" != 4d5a',
-    "arm64 EFI-zboot tag validation": '"$zboot_tag" != 7a696d67',
-    "arm64 EFI-zboot Linux magic validation": '"$zboot_linux_magic" != cd238281',
     "arm64 EFI-zboot compression validation": 'if [[ "$zboot_compression" != gzip ]]; then',
     "arm64 EFI-zboot payload bounds": 'zboot_payload_offset + zboot_payload_size > zboot_file_size',
+    "arm64 QEMU raw fallback": ': # QEMU raw-image fallback; boot acceptance is the executable proof.',
     "qcow2 structural validation": 'qemu-img check -f qcow2 "$output"',
     "logical raw/qcow2 comparison": 'qemu-img compare -f raw -F qcow2 "$raw" "$output"',
 }
@@ -172,6 +173,11 @@ def main() -> int:
             "image-builder gate: generated initrd is not checked before build cleanup"
         )
     require_snippets("base image", base_text, BASE_REQUIRED_SNIPPETS)
+    if ARM64_HARD_REJECT in base_text:
+        raise SystemExit(
+            "image-builder gate: arm64 builder must preserve QEMU raw-image fallback "
+            "instead of requiring ARM64 or EFI-zboot magic"
+        )
     if base_text.index(ARM64_OWNER_FIX) > base_text.index(ARM64_MAGIC_READ):
         raise SystemExit(
             "image-builder gate: arm64 direct-boot kernel must become runner-readable "
@@ -194,7 +200,7 @@ def main() -> int:
 
     print(
         "image-builder gate: source=" + source_label
-        + " initrd, arm64 raw/EFI-zboot direct boot and logical image-integrity safeguards verified"
+        + " initrd, arm64 QEMU-compatible direct boot and logical image-integrity safeguards verified"
     )
     return 0
 
