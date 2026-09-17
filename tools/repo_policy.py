@@ -471,10 +471,14 @@ def main() -> int:
             base_commit = peel_commit(base)
             if not base_commit:
                 failures.append("base commit inspection")
+        scanned_commits: set[str] = set()
         scanned_trees: set[str] = set()
         if head_commit:
+            scan_commit_metadata(head_commit, failures)
+            scanned_commits.add(head_commit)
             scan_tree_once(head_commit, failures, scanned_trees)
-            scan_commits(base_commit, head_commit, failures, scanned_trees=scanned_trees)
+            scan_commits(base_commit, head_commit, failures,
+                         scanned_commits, scanned_trees)
         scan_refs_and_config(failures)
     if failures:
         print(f"repository policy failed with {len(failures)} violation(s)", file=sys.stderr)
