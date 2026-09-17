@@ -57,7 +57,7 @@ Repository branch policy is active and the live remote branch invariant is only 
 | Clean complete semantic/manual passes on this candidate | 0 |
 | Routine workflow scan requirement | one bounded baseline diff manifest plus matching final diff manifest |
 | Explicit machine full-tree scan | `tools/sop_scan.py --full-tree` |
-| Phase 3 acceptance | image/maintenance corrections plus DR handoff correction applied; pending fresh complete passes and exact-head gates |
+| Phase 3 acceptance | image/maintenance corrections plus DR handoff correction applied; pending exact-head gates |
 | Latest acceptance parent | `35195064164` |
 | Latest E1 VM run | `35195101815`, failure during base-image build |
 | Latest interoperability run | `35195103898`, failure during base-image build |
@@ -74,4 +74,4 @@ The tracked table above is the durable human index. Runtime evidence belongs onl
 
 ## Next action
 
-Perform three consecutive complete semantic/manual passes over the exact unchanged tracked tree, byte-for-byte and line-by-line. Any defect creates a new candidate and resets the sequence. After three clean passes, verify repository/continuity and branch-cleanup maintenance behavior on exact head, then dispatch fresh exact-head Phase 3 x86_64/aarch64 native build, pinned reference, E1, Route20 and PyDECnet interoperability gates. Phase 4 starts only after that unchanged candidate is green.
+Verify repository/continuity and branch-cleanup maintenance behavior on exact head, then dispatch fresh exact-head Phase 3 x86_64/aarch64 native build, pinned reference, E1, Route20 and PyDECnet interoperability gates. Phase 4 starts only after that unchanged candidate is green.

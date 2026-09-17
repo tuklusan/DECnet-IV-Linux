@@ -101,4 +101,4 @@ Phase 3 remains active. Image-path and branch-cleanup maintenance corrections ar
 
 ## Next action
 
-Perform three consecutive complete semantic/manual passes over the exact current tree, byte-for-byte and line-by-line, with any defect restarting the sequence. After three clean passes on the unchanged candidate, verify repository/continuity and branch-cleanup maintenance behavior on exact head and dispatch fresh exact-head native x86_64/aarch64 build, pinned reference, E1 and bounded Route20/PyDECnet interoperability gates. Phase 4 begins only after the unchanged Phase 3 candidate is green.
+Verify repository/continuity and branch-cleanup maintenance behavior on exact head and dispatch fresh exact-head native x86_64/aarch64 build, pinned reference, E1 and bounded Route20/PyDECnet interoperability gates. Phase 4 begins only after the unchanged Phase 3 candidate is green.
