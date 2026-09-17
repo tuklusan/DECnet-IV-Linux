@@ -53,10 +53,12 @@ jobs:
             slot: x64
             arch: amd64
             qemu: qemu-system-x86
+            lab_timeout: 300
           - runner: ubuntu-24.04-arm
             slot: arm64
             arch: arm64
             qemu: qemu-system-arm
+            lab_timeout: 360
     runs-on: ${{ matrix.runner }}
     concurrency:
       group: dniv-runner-${{ matrix.slot }}
@@ -66,7 +68,7 @@ jobs:
     env:
       DNIV_SCRATCH_DIR: ${{ github.workspace }}/scratch/runtime/${{ github.run_id }}/${{ github.run_attempt }}/${{ github.job }}-${{ matrix.arch }}
       DNIV_LAB_MODE: ${{ inputs.lab_mode }}
-      DNIV_LAB_TIMEOUT_SECONDS: 300
+      DNIV_LAB_TIMEOUT_SECONDS: ${{ matrix.lab_timeout }}
       DNIV_LAB_SESSION_ID: run-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.arch }}-${{ inputs.lab_mode }}
       DNIV_LAB_ARCH: ${{ matrix.arch }}
       DNIV_LAB_SOURCE_SHA: ${{ github.sha }}

@@ -30,11 +30,13 @@ Exact-head candidate `317deebe5a916ca28e576074fab7e310b15b5d37` passed repositor
 
 ARM64 direct boot normalization now accepts only a bounded chain of recognized formats: raw Linux Image, whole-file gzip/Zstd, EFI-zboot gzip/Zstd, or a structurally valid PE/COFF wrapper containing exactly one bounded `.linux` section. Every path ends by requiring the raw `ARM\x64` Linux Image magic at offset 56. Unknown/malformed formats fail closed. Both image builders are bound to the helper's exact SHA-256, so this change intentionally generates a new foundation fingerprint and one new foundation build per architecture.
 
-The Route20 launcher still runs the exact pinned binary from `/usr/local/libexec`, but now emits the Route20 syslog tail and matching kernel crash lines if the daemon dies. This is diagnostic only: no Route20 source, configuration semantics or protocol behavior is changed. The next interop evidence must identify the real runtime cause before candidate DECnet code is altered.
+The Route20 launcher still runs the exact pinned binary from `/usr/local/libexec`, but now emits the Route20 syslog tail and matching kernel crash lines if the daemon dies. The retained amd64 L1 evidence from run `35262772964`, job `105342341317`, identifies the failure as a Route20 userspace crash after circuit startup: `segfault at 0 ip 0000000000000000 ... error 14`. This is reference-runtime evidence; candidate DECnet behavior must not be changed to mask it.
 
 Exact-head candidate `a04d2a4ec8687f21fafce1950d339b983f15c973` proved ARM64 direct boot is now functional. VM run `35262769735` normalized the real Ubuntu kernel through `pe-linux+efi-zboot:zstd+raw`, built and cached the foundation, injected the exact candidate, formed router adjacency and survived the primary-MAC change. The amd64 E1 job passed. ARM64 stopped only because the harness sampled total routing and hello counters in separate commands, allowing a concurrent hello to create a false `bad-stats`; DN70 therefore exited before transmitting the 40 unicast probes and DN71 subsequently reported zero receive delta.
 
-The current candidate replaces those independent reads with one logical counter snapshot plus a bounded retry when the kernel's independently read atomics momentarily report `rx_frames < hello_rx`. A host-side regression deliberately injects one inconsistent sample and requires the next coherent sample to succeed, while permanently inconsistent samples must exhaust the retry bound and fail. Kernel and protocol behavior are untouched.
+Exact-head candidate `38c5b49e53c648f6514f52ebff84a93331a4732a` closed that sampling defect. Repository-policy/dispatcher run `35265712742`, the new host regression and ARM64 native build were green. VM run `35265759834` reached `DNIV-E1-UCAST ... delta=40` on both nodes, then DN71 entered the prescribed silent interval and DN70 emitted `DNIV-E1-EXPIRED`. The controller's 300-second deadline fired before recovery only because DN71's intended restart began at guest uptime about 302 seconds. No protocol failure marker occurred before host termination.
+
+The VM controller budget is therefore architecture-specific: amd64 stays at 300 seconds and ARM64 receives 360 seconds. The latter covers the observed ~302-second restart point plus the already-bounded 30-second adjacency recovery wait, five-second post-recovery observation and shutdown margin. The surrounding job remains limited to 40 minutes; kernel and protocol timing are unchanged.
 
 | Field | Current value |
 | --- | --- |
@@ -52,7 +54,8 @@ The current candidate replaces those independent reads with one logical counter 
 | Interop prior-run evidence restore | retired |
 | Compact evidence retention | 30 days maximum |
 | Acceptance child binding | parent run ID + exact expected SHA |
-| Infrastructure status | architecture and ARM64 direct boot closed; E1 harness sampling fix awaiting exact acceptance |
+| VM controller budget | amd64 300s; ARM64 360s |
+| Infrastructure status | architecture/direct boot/stats sampling closed; ARM64 recovery completion awaiting bounded-time rerun |
 
 ## Persistent run index
 
@@ -62,8 +65,10 @@ Acceptance lineage for `5f4fdc5b3d1bcef87e56ac64b8c3b287f504eddb`: repository-po
 
 Acceptance lineage for `317deebe5a916ca28e576074fab7e310b15b5d37`: repository policy, project state, native build and reference baselines were green; VM lab run `35259650843` failed while normalizing the ARM64 foundation kernel; interop run `35259653065` produced the amd64 Route20 L1 `reference-exited` evidence while ARM64 modes remained blocked at foundation construction.
 
-Acceptance lineage for `a04d2a4ec8687f21fafce1950d339b983f15c973`: repository-policy/dispatcher `35262720736`, native build `35262761176` and project-state `35262763814` were green. VM lab `35262769735` passed amd64 E1 and proved ARM64 foundation/direct boot, adjacency and MAC-change operation before the counter-sampling race produced `bad-stats` on DN70 and the consequent zero unicast delta on DN71.
+Acceptance lineage for `a04d2a4ec8687f21fafce1950d339b983f15c973`: repository-policy/dispatcher `35262720736`, native build `35262761176` and project-state `35262763814` were green. VM lab `35262769735` passed amd64 E1 and proved ARM64 foundation/direct boot, adjacency and MAC-change operation before the counter-sampling race produced `bad-stats` on DN70 and the consequent zero unicast delta on DN71. Interop run `35262772964`, amd64 Route20 L1 job `105342341317`, later captured a null-IP Route20 userspace segfault after circuit startup.
+
+Acceptance lineage for `38c5b49e53c648f6514f52ebff84a93331a4732a`: repository-policy/dispatcher `35265712742` was green and ARM64 native build in `35265752902` passed. VM lab `35265759834` proved the sampling fix with bidirectional unicast `delta=40`, DN71 silence and DN70 expiry; its ARM64 job failed only because the 300-second host controller deadline preceded the planned DN71 restart/recovery completion.
 
 ## Next action
 
-Run exact-head acceptance for the current `main`, taking ARM64 E1 first. Require the counter-snapshot regression and mechanical/build/state gates to pass. If ARM64 E1 is green, confirm amd64 remains green and continue the full exact-SHA reference/interoperability set. Treat Route20 runtime diagnostics as authoritative for any renewed `reference-exited` result and change DECnet protocol code only for a demonstrated protocol defect.
+Run exact-head acceptance for the current `main`, taking ARM64 E1 first under its 360-second controller budget. Require bidirectional unicast, expiry, restart, recovery and PASS markers. Confirm amd64 remains green at 300 seconds and then continue the full exact-SHA mechanical/build/state/reference/interoperability set. Diagnose the pinned Route20 null-IP crash separately and alter candidate protocol code only for independently demonstrated protocol defects.
