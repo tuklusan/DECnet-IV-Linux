@@ -29,6 +29,7 @@ VM_CHECKPOINT_DAYS = 3
 JOB_RE = re.compile(r"^  ([A-Za-z0-9_-]+):\s*$")
 TIMEOUT_RE = re.compile(r"^    timeout-minutes:\s*([0-9]+)\s*$")
 RETENTION_RE = re.compile(r"^\s+retention-days:\s*([0-9]+)\s*$")
+STEP_RE = re.compile(r"^      - name:\s+")
 
 
 def job_ranges(lines: list[str]) -> list[tuple[str, int, int]]:
@@ -49,6 +50,15 @@ def job_ranges(lines: list[str]) -> list[tuple[str, int, int]]:
         end = starts[pos + 1][1] if pos + 1 < len(starts) else len(lines)
         result.append((name, start, end))
     return result
+
+
+def upload_block(lines: list[str], uses_index: int) -> list[str]:
+    end = len(lines)
+    for index in range(uses_index + 1, len(lines)):
+        if STEP_RE.match(lines[index]):
+            end = index
+            break
+    return lines[uses_index:end]
 
 
 def check_workflow(path: Path) -> list[str]:
@@ -74,10 +84,10 @@ def check_workflow(path: Path) -> list[str]:
 
     upload_lines = [i for i, line in enumerate(lines) if "uses: actions/upload-artifact@" in line]
     for index in upload_lines:
-        block = lines[index : min(len(lines), index + 20)]
+        block = upload_block(lines, index)
         retention = [int(match.group(1)) for line in block if (match := RETENTION_RE.match(line))]
         if len(retention) != 1:
-            errors.append(f"{path}: upload-artifact block near line {index + 1} must declare retention-days")
+            errors.append(f"{path}: upload-artifact block near line {index + 1} must declare exactly one retention-days")
         elif retention[0] < 1 or retention[0] > MAX_EVIDENCE_DAYS:
             errors.append(
                 f"{path}: artifact retention {retention[0]} days exceeds {MAX_EVIDENCE_DAYS}-day evidence ceiling"
