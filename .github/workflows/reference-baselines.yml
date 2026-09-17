@@ -37,6 +37,7 @@ permissions:
 jobs:
   route20-build:
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     concurrency:
       group: dniv-runner-x64
       cancel-in-progress: false
@@ -116,12 +117,13 @@ jobs:
           name: scratch-reference-route20-${{ github.run_id }}
           path: ${{ env.DNIV_SCRATCH_DIR }}/
           if-no-files-found: warn
-          retention-days: 90
-          compression-level: 0
+          retention-days: 30
+          compression-level: 6
           overwrite: true
 
   pydecnet-tests:
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     concurrency:
       group: dniv-runner-x64
       cancel-in-progress: false
@@ -210,6 +212,6 @@ jobs:
           name: scratch-reference-pydecnet-${{ github.run_id }}
           path: ${{ env.DNIV_SCRATCH_DIR }}/
           if-no-files-found: warn
-          retention-days: 90
-          compression-level: 0
+          retention-days: 30
+          compression-level: 6
           overwrite: true

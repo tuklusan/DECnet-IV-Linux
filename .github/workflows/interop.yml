@@ -22,7 +22,7 @@ on:
         required: false
         type: string
       resume_run_id:
-        description: Prior interoperability run ID whose scratch artifacts should be restored
+        description: Prior interoperability run ID whose scratch evidence should be restored for lineage; VMs start fresh
         required: false
         type: string
 
@@ -202,13 +202,15 @@ jobs:
               --status '${{ job.status }}' --note 'interoperability workflow completed'
           fi
 
-      - name: Preserve scratch state and interoperability evidence
+      - name: Preserve compact interoperability evidence
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: scratch-interop-${{ matrix.arch }}-${{ github.run_id }}
-          path: ${{ env.DNIV_SCRATCH_DIR }}/
+          path: |
+            ${{ env.DNIV_SCRATCH_DIR }}/
+            !${{ env.DNIV_SCRATCH_DIR }}/interop/**/*.qcow2
           if-no-files-found: error
-          retention-days: 90
-          compression-level: 0
+          retention-days: 30
+          compression-level: 6
           overwrite: true

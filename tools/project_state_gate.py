@@ -20,7 +20,7 @@ from __future__ import annotations
 import argparse
 import subprocess
 import sys
-from pathlib import Path
+from collections.abc import Callable
 
 PROJECT_STATE = "docs/PROJECT_STATE.md"
 SCRATCH_RESUME = "scratch/RESUME.md"
@@ -35,11 +35,11 @@ def git(*args: str) -> str:
     return subprocess.check_output(("git", *args), text=True).strip()
 
 
-def validate_record(path_text: str) -> list[str]:
-    path = Path(path_text)
-    if not path.exists():
-        return [f"missing {path_text}"]
-    text = path.read_text(encoding="utf-8")
+def git_file(spec: str) -> str:
+    return subprocess.check_output(("git", "show", spec), text=True)
+
+
+def validate_record_text(path_text: str, text: str) -> list[str]:
     errors: list[str] = []
     for heading in REQUIRED_HEADINGS[path_text]:
         pos = text.find(heading)
@@ -55,10 +55,15 @@ def validate_record(path_text: str) -> list[str]:
     return errors
 
 
-def validate_state() -> list[str]:
+def validate_state(reader: Callable[[str], str]) -> list[str]:
     errors: list[str] = []
     for path in CONTINUITY:
-        errors.extend(validate_record(path))
+        try:
+            text = reader(path)
+        except subprocess.CalledProcessError:
+            errors.append(f"missing {path}")
+            continue
+        errors.extend(validate_record_text(path, text))
     return errors
 
 
@@ -77,13 +82,15 @@ def require_state_for_paths(paths: list[str], label: str) -> list[str]:
 
 def staged_check() -> list[str]:
     paths = git("diff", "--cached", "--name-only").splitlines()
-    return require_state_for_paths(paths, "staged commit") + validate_state()
+    return require_state_for_paths(paths, "staged commit") + validate_state(
+        lambda path: git_file(":" + path)
+    )
 
 
 def commits_in_range(base: str | None, head: str) -> list[str]:
     if base and set(base) != {"0"}:
         return git("rev-list", "--reverse", f"{base}..{head}").splitlines()
-    return [head]
+    return [git("rev-parse", "--verify", head + "^{commit}")]
 
 
 def commit_paths(commit: str) -> list[str]:
@@ -94,10 +101,11 @@ def commit_paths(commit: str) -> list[str]:
 
 def range_check(base: str | None, head: str) -> list[str]:
     errors: list[str] = []
-    for commit in commits_in_range(base, head):
+    commits = commits_in_range(base, head)
+    for commit in commits:
         short = commit[:12]
         errors.extend(require_state_for_paths(commit_paths(commit), f"commit {short}"))
-    errors.extend(validate_state())
+        errors.extend(validate_state(lambda path, commit=commit: git_file(f"{commit}:{path}")))
     return errors
 
 

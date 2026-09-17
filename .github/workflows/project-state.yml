@@ -37,6 +37,7 @@ permissions:
 jobs:
   project-state:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     concurrency:
       group: dniv-runner-x64
       cancel-in-progress: false
@@ -100,6 +101,6 @@ jobs:
           name: scratch-project-state-${{ github.run_id }}
           path: ${{ env.DNIV_SCRATCH_DIR }}/
           if-no-files-found: warn
-          retention-days: 90
-          compression-level: 0
+          retention-days: 30
+          compression-level: 6
           overwrite: true

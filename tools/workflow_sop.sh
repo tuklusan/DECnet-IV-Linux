@@ -46,6 +46,8 @@ fi
 mkdir -p "$state_dir/sop"
 python3 tools/scratch_state.py verify --dir "$state_dir"
 python3 tools/license_monkey.py --tree "$expected" | tee "$state_dir/sop/license.log"
+python3 tools/workflow_budget_gate.py | tee "$state_dir/sop/workflow-budget.log"
+python3 tests/policy/test_project_state_gate.py | tee "$state_dir/sop/project-state-regression.log"
 if [[ "$scope" == main ]]; then
     python3 tools/project_state_gate.py --head "$expected" | tee "$state_dir/sop/project-state.log"
     CI=false python3 tools/repo_policy.py | tee "$state_dir/sop/repository-policy.log"

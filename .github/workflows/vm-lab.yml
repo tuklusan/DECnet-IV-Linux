@@ -39,7 +39,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  actions: read
+  actions: write
   contents: read
 
 jobs:
@@ -115,11 +115,15 @@ jobs:
           restore_root="$GITHUB_WORKSPACE/scratch/restored/${{ inputs.resume_run_id }}"
           session_file=
           while IFS= read -r candidate; do
+            state=$(dirname "$candidate")
+            test -f "$state/node-a.qcow2" || continue
+            test -f "$state/node-b.qcow2" || continue
+            test -f "$state/base.qcow2" || continue
             if grep -Fxq 'ARCH=${{ matrix.arch }}' "$candidate"; then
               session_file=$candidate
               break
             fi
-          done < <(find "$restore_root" -type f -path '*/checkpoint/session.env' -print)
+          done < <(find "$restore_root" -type f -name 'session.env' -print)
           test -n "$session_file"
           state=$(dirname "$session_file")
           test -f "$state/SHA256SUMS"
@@ -216,13 +220,45 @@ jobs:
               --status '${{ job.status }}' --note 'two-node VM workflow completed'
           fi
 
-      - name: Preserve scratch state and resumable evidence
+      - name: Preserve compact VM evidence
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: scratch-vm-lab-${{ matrix.arch }}-${{ github.run_id }}
-          path: ${{ env.DNIV_SCRATCH_DIR }}/
+          name: scratch-vm-lab-evidence-${{ matrix.arch }}-${{ github.run_id }}
+          path: |
+            ${{ env.DNIV_SCRATCH_DIR }}/
+            !${{ env.DNIV_SCRATCH_DIR }}/lab/**/*.qcow2
           if-no-files-found: warn
-          retention-days: 90
+          retention-days: 30
+          compression-level: 6
+          overwrite: true
+
+      - name: Preserve resumable VM checkpoint
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: scratch-vm-lab-checkpoint-${{ matrix.arch }}-${{ github.run_id }}
+          path: ${{ env.DNIV_SCRATCH_DIR }}/lab/**/checkpoint/
+          if-no-files-found: warn
+          retention-days: 3
           compression-level: 0
           overwrite: true
+
+      - name: Prune superseded successful VM checkpoints
+        if: ${{ success() }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          prefix='scratch-vm-lab-checkpoint-${{ matrix.arch }}-'
+          current="${prefix}${GITHUB_RUN_ID}"
+          mapfile -t stale < <(
+            gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100" \
+              --jq '.artifacts[] | [.name, (.id|tostring)] | @tsv' | \
+              awk -F '\t' -v prefix="$prefix" -v current="$current" \
+                'index($1, prefix) == 1 && $1 != current {print $2}'
+          )
+          for artifact_id in "${stale[@]}"; do
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$artifact_id"
+          done

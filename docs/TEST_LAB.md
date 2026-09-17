@@ -37,17 +37,21 @@ The two-node workflow keeps the retained Phase 2 raw-EtherType smoke gate as `ph
 - Capture traffic on every bridge and retain per-node serial/kernel/application evidence on failure.
 - Use KVM when available and QEMU software emulation only as fallback.
 
-## Runner concurrency and resumable state
+## Runner concurrency, duration and resumable state
 
-GitHub-hosted runner machines are ephemeral: a later job starts on a fresh host and cannot resume the prior host process, RAM or local filesystem. The repository-root `scratch/` namespace is therefore the standard staging area for all workflow state. Jobs write mutable state below ignored `scratch/runtime/<run-id>/<run-attempt>/<job>/`, upload that directory as a workflow artifact, and restore prior artifacts below ignored `scratch/restored/<run-id>/` when a resume input is supplied. This preserves explicit files and evidence across runner sessions without pretending that runner-local processes survive.
+GitHub-hosted runner machines are ephemeral: a later job starts on a fresh host and cannot resume the prior host process, RAM or local filesystem. A run or session ID is therefore lineage only. The repository-root `scratch/` namespace is the standard staging area for explicit persisted files. Jobs write mutable state below ignored `scratch/runtime/<run-id>/<run-attempt>/<job>/` and restore prior artifacts below ignored `scratch/restored/<run-id>/` when a restore input is supplied.
 
-Every scratch state records exact source commit/tree identity, workflow/job, run ID/attempt, runner identity, architecture/mode, parent/resume lineage, milestones and status. Acceptance jobs also retain three byte-complete exact-tree scan manifests before substantive work and a matching final scan afterward. These machine scans prove byte completeness and immutability of the tracked candidate; they do not replace the required semantic/manual SoP review.
+Every hosted job declares an explicit timeout no greater than 75 minutes. Short build and policy jobs use lower caps. Long-duration campaigns are split into bounded jobs with verified checkpoint/evidence handoff. Segmented hosted-runner execution is not called uninterrupted soak; any test that truly requires uninterrupted execution beyond the hosted-job ceiling must use a persistent controller.
+
+Every scratch state records exact source commit/tree identity, workflow/job, run ID/attempt, runner identity, architecture/mode, parent/restore lineage, milestones and status. Acceptance jobs also retain three byte-complete exact-tree scan manifests before substantive work and a matching final scan afterward. These machine scans prove byte completeness and immutability of the tracked candidate; they do not replace the required semantic/manual SoP review. `tools/workflow_budget_gate.py`, invoked from `tools/workflow_sop.sh`, also rejects missing/over-limit job timeouts and over-retained artifacts before the three scans proceed.
 
 Build, continuity, reference and VM workflows are manual-dispatch only. The Repository Policy workflow does not run on ordinary `push`, branch/tag `create`, or `pull_request:synchronize` events; it may run only for the selected repository metadata events listed in its workflow or by manual dispatch. Merely editing or pushing source, documentation, policy or workflow files therefore does not consume a hosted runner. Every runner job enters one of two repository-wide job concurrency groups: `dniv-runner-x64` or `dniv-runner-arm64`. The groups queue rather than replace waiting jobs. This makes the hard repository ceiling one x64 runner job plus one arm64 runner job at a time; x64-only policy, continuity and reference gates all share the x64 slot. Matrix workflows additionally cap themselves at two parallel jobs.
 
-The two-node VM workflow persists guest disk state inside its scratch run directory. After QEMU is stopped, the lab stores the exact base QCOW2, portable per-node QCOW2 deltas backed by that base, the exact kernel and initrd, checksums, a session manifest, serial logs and packet capture. The complete scratch run directory is uploaded as a per-architecture artifact retained for 90 days.
+The two-node VM workflow persists guest disk state explicitly. After QEMU is stopped, the lab stores the exact base QCOW2, portable per-node QCOW2 deltas backed by that base, the exact kernel and initrd, checksums, a session manifest, serial logs and packet capture. Compact evidence is uploaded separately and retained for 30 days. The heavy sealed format-2 checkpoint is retained for 3 days; once a newer successful checkpoint for that architecture uploads, older successful checkpoint artifacts are deleted automatically. Failed-run checkpoints age out under the short retention window.
 
-A manual `resume_run_id` restores the selected prior run's scratch artifacts under `scratch/restored/`. The VM job locates a sealed format-2 checkpoint for its architecture, verifies that `session.env` is covered by `SHA256SUMS`, verifies all recorded hashes, checks both overlays with `qemu-img`, and requires the architecture, exact source commit and acceptance mode to match. The restored node disks are copied before use, rebound to the restored base, and checkpointed again after the run. This is disk-state continuation across fresh hosts, not live CPU/RAM suspend-and-resume.
+A manual `resume_run_id` for the two-node VM workflow restores the selected prior run's artifacts under `scratch/restored/`. The VM job locates a sealed format-2 checkpoint for its architecture, verifies that `session.env` is covered by `SHA256SUMS`, verifies all recorded hashes, checks both overlays with `qemu-img`, and requires the architecture, exact source commit and acceptance mode to match. The restored node disks are copied before use, rebound to the restored base, and checkpointed again after the run. This is disk-state continuation across fresh hosts, not live CPU/RAM suspend-and-resume.
+
+The Phase 3 interoperability workflow always starts fresh candidate/reference VMs. Its uploaded evidence retains logs, packet captures, scan manifests and state but excludes transient QCOW2 overlays. Its `resume_run_id` restores earlier evidence for lineage only and does not resume a prior VM disk or process.
 
 ## Physical architecture lab
 
@@ -98,7 +102,7 @@ Required end state includes `Ethernet -> router -> DDCMP -> router -> Ethernet`,
 
 ## Evidence retained for every failed test
 
-Keep per-node console/kernel/application logs, DECnet counters/state, packet captures, DDCMP traces when enabled, topology/address allocation, exact source/kernel/module/reference revisions and fault seed.
+Keep per-node console/kernel/application logs, DECnet counters/state, packet captures, DDCMP traces when enabled, topology/address allocation, exact source/kernel/module/reference revisions and fault seed. Heavy resumable disk artifacts use the short rolling checkpoint policy; compact failure evidence follows the ordinary evidence retention policy.
 
 ## Scale plan
 
