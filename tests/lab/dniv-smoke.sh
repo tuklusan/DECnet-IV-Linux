@@ -277,7 +277,7 @@ e1)
         sleep 1
         modprobe -r decnet_iv
         echo "DNIV-E1-SILENT session=$session node=$name"
-        sleep 12
+        sleep 7
         modprobe decnet_iv default_area="$area" default_node="$node" default_name="$name" \
             default_node_type=2 router_priority=64 hello_interval=2
         /usr/local/sbin/dnctl set "$area.$node" "$name"

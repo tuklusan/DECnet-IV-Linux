@@ -38,6 +38,10 @@ Exact-head candidate `38c5b49e53c648f6514f52ebff84a93331a4732a` closed that samp
 
 The VM controller budget is therefore architecture-specific: amd64 stays at 300 seconds and ARM64 receives 360 seconds. The latter covers the observed ~302-second restart point plus the already-bounded 30-second adjacency recovery wait, five-second post-recovery observation and shutdown margin. The surrounding job remains limited to 40 minutes; kernel and protocol timing are unchanged.
 
+Acceptance run `35266940092` on `31fc8e00d1c46ffd5cc74c6663c287753a0b7e5d` proved the ARM64 guests themselves are green: both delivered unicast `delta=40`, DN70 expired DN71, restart INIT and recovery occurred, and both emitted `DNIV-E1-PASS`; amd64 E1 passed. ARM64 failed only because host PCAP saw one DN70 All-End-Nodes hello. The test intended DN71 silence to exceed listener expiry but remain below DR eligibility; with hello interval 2s, 3.1x listen expiry is 6.2s and the 5s DR delay makes eligibility 11.2s, so the old 12s silence violated the test's own negative assertion.
+
+The silence window is corrected to 7s and a workflow-guard regression reads the actual hello interval, 3.1x multiplier and DR-delay constant and enforces `expiry < silence < DR eligibility`. The old 12s value fails this regression.
+
 Repository license validation now excludes `__pycache__` and `.git` directories in the Git enumeration command itself for both exact-tree and staged scans, at any depth, so generated caches and repository metadata never reach the validator.
 
 | Field | Current value |
@@ -57,7 +61,7 @@ Repository license validation now excludes `__pycache__` and `.git` directories 
 | Compact evidence retention | 30 days maximum |
 | Acceptance child binding | parent run ID + exact expected SHA |
 | VM controller budget | amd64 300s; ARM64 360s |
-| Infrastructure status | architecture/direct boot/stats sampling closed; ARM64 recovery completion awaiting bounded-time rerun |
+| Infrastructure status | architecture/direct boot/stats sampling/controller budget closed; E1 silence-window correction awaiting exact acceptance |
 
 ## Persistent run index
 
@@ -73,4 +77,4 @@ Acceptance lineage for `38c5b49e53c648f6514f52ebff84a93331a4732a`: repository-po
 
 ## Next action
 
-Run exact-head acceptance for the current `main`, taking ARM64 E1 first under its 360-second controller budget. Require bidirectional unicast, expiry, restart, recovery and PASS markers. Confirm amd64 remains green at 300 seconds and then continue the full exact-SHA mechanical/build/state/reference/interoperability set. Diagnose the pinned Route20 null-IP crash separately and alter candidate protocol code only for independently demonstrated protocol defects.
+Run exact-head acceptance for current `main`, taking ARM64 E1 first. Require the timing regression, bidirectional unicast, expiry, restart INIT, recovery, both PASS markers and the negative `endnodesA == 0` PCAP assertion. Confirm amd64 remains green, then continue the full exact-SHA mechanical/build/state/reference/interoperability set. Keep Route20 runtime diagnosis separate.

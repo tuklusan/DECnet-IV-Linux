@@ -65,6 +65,10 @@ Exact-head candidate `38c5b49e53c648f6514f52ebff84a93331a4732a` proved the coher
 
 The VM lab therefore keeps amd64 at a 300-second controller budget and gives ARM64 360 seconds. The observed restart point plus the existing 30-second bounded adjacency wait, five-second recovery observation and shutdown margin fit inside 360 seconds while the enclosing job remains capped at 40 minutes. No guest behavior, kernel code or protocol timing is relaxed.
 
+Exact-head `31fc8e00d1c46ffd5cc74c6663c287753a0b7e5d` then completed the guest-side ARM64 E1 sequence in VM run `35266940092`: both nodes reached bidirectional unicast `delta=40`, DN70 expired DN71, restart INIT was observed, adjacency recovered and both guests emitted `DNIV-E1-PASS`. amd64 E1 was green. The ARM64 job failed only in host PCAP validation because DN70 emitted one All-End-Nodes hello during DN71 silence. The harness comment required DN71 to return after listener expiry but before DR eligibility, yet its 12-second silence exceeded the implemented 2-second hello × 3.1 listener multiplier plus 5-second DR delay = 11.2 seconds. The negative DR assertion was therefore self-contradictory on slower ARM execution.
+
+The E1 silence interval is now 7 seconds. A host regression derives listener expiry and DR delay from the actual wire/kernel constants and requires `expiry < silence < expiry + DR delay`; it rejects the former 12-second interval. No kernel or DECnet protocol behavior is changed.
+
 Repository policy and acceptance dispatch remain isolated from protocol-lab runner concurrency. Release-image construction remains a separate exact-source gate and is not inferred from the cached protocol foundation.
 
 The license scanner prunes `__pycache__` and `.git` directories at Git enumeration time for both exact-tree and staged scans, at any depth. Their contents never enter header/license validation; ordinary tracked files and symlink blobs remain in scope.
@@ -79,10 +83,10 @@ Ordinary lab addressing remains area 31, nodes 70 through 79, names DN70 through
 
 ## Resume point
 
-Phase 3 is the active workstream. Infrastructure architecture, ARM64 direct boot and coherent E1 counter sampling are closed. The current candidate changes only the VM-controller budget by architecture: amd64 remains 300 seconds and ARM64 becomes 360 seconds so the already-observed expire/restart/recovery sequence can complete. No kernel, UAPI, routing, hello, adjacency, guest protocol timing or reference implementation behavior changes.
+Phase 3 is the active workstream. Infrastructure architecture, ARM64 direct boot, coherent E1 counter sampling and the controller budget are closed. The current candidate corrects only the E1 negative-DR silence window so it satisfies its documented timing contract and adds an automated regression for that bound. No kernel, UAPI, routing, hello, adjacency or reference implementation behavior changes.
 
 The next independent blocker is Route20 stability: the retained diagnostics now show a null-instruction-pointer userspace segfault immediately after Route20 circuit startup. That reference-runtime crash must be diagnosed in the exact pinned Route20 fork before any candidate DECnet protocol change is considered for those failed interop cases.
 
 ## Next action
 
-Run exact-head acceptance on `main`, taking ARM64 E1 first. Require it to preserve the proven `delta=40` unicast traffic and expire event and now reach restart/recovery/PASS within the 360-second controller bound. Confirm amd64 E1 remains green at 300 seconds, then continue the same exact SHA through mechanical/build/state/reference gates. For Route20 interoperability failures, diagnose the pinned Route20 null-IP crash path and change candidate protocol code only if subsequent evidence demonstrates an independent protocol defect.
+Run exact-head acceptance on `main`, taking ARM64 E1 first. Require the new silence-window regression to pass, preserve bidirectional `delta=40`, expiry, restart INIT, recovery and both PASS markers, and require host PCAP to retain `endnodesA == 0`. Confirm amd64 E1 remains green, then continue the same exact SHA through mechanical/build/state/reference/interoperability gates. Diagnose Route20 runtime crashes separately from candidate protocol behavior.
