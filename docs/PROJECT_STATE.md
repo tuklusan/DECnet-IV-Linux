@@ -73,7 +73,7 @@ Implementation remains active. UAPI v2 provides standard Phase IV node MAC deriv
 
 Candidate `a122e8e82541a9499b9b514568b70e77de97ca4b` completed the former full-tree review sequence and exact-head acceptance parent `35184898090` dispatched bound children. Repository/continuity, native builds and pinned reference baselines were green. E1 child run `35184925391` failed before protocol assertions: amd64 exposed corruption/misinstallation of the guest smoke service and arm64 produced no serial output because the packaged kernel image was unsuitable for direct QEMU boot. Commit `d3416e1ad9d2a5e057c6c49e9407cec92683dc86` hardened the base-image path against both failure classes.
 
-A subsequent targeted review found the remaining derived-image gap: `tests/lab/prepare-interop-candidate.sh` and `tests/lab/prepare-reference-image.sh` still use compressed RAW-to-QCOW2 conversion and do not prove post-conversion guest content integrity. That defect remains open and is the next implementation correction. No prior acceptance result is promotable after the image changes.
+The current candidate closes the remaining derived-image gap. `tests/lab/prepare-interop-candidate.sh` and `tests/lab/prepare-reference-image.sh` now keep acceptance QCOW2 uncompressed, run structural `qemu-img check`, convert the final QCOW2 back to RAW, and compare the complete intended/final RAW disk byte-for-byte. Both builders also retain and validate the archived `.source-commit` provenance. `tests/policy/test_image_builder_gate.py` now enforces those safeguards for both derived builders, and `docs/HANDOVER.md` is aligned with the current diff-scoped SoP. No prior acceptance result is promotable after these image changes.
 
 ## Test addressing
 
@@ -85,8 +85,8 @@ Ordinary lab addressing remains area 31, nodes 70 through 79, names DN70 through
 
 ## Resume point
 
-Phase 3 remains active. The routine automatic full-repository SoP has been replaced by bounded first-parent-to-candidate diff review and matching diff manifests. The SoP policy change itself creates a new candidate, so no scoped semantic/manual pass is carried forward.
+Phase 3 remains active. The derived interoperability image integrity correction is now in the current candidate. No scoped semantic/manual pass is carried forward from an earlier candidate; the pass count starts at zero on this exact parent-to-candidate diff.
 
 ## Next action
 
-Correct the two derived interoperability image builders so candidate/reference images have the same fail-fast integrity guarantees as the base image, add the smallest regression coverage needed for that correction, and update both continuity records in the same commit. Review only that exact bounded diff. After the eventual Phase 3 candidate receives three consecutive clean scoped semantic/manual passes, dispatch fresh exact-head repository/continuity, native x86_64/aarch64 build, pinned reference, E1 and bounded Route20/PyDECnet interoperability gates. Phase 4 begins only after the unchanged Phase 3 candidate is green.
+Perform three consecutive clean semantic/manual passes over the exact first-parent-to-candidate diff with three context lines, using only directly necessary local/dependency context. Any fix restarts the sequence on the new candidate. After three clean passes on the unchanged candidate, dispatch fresh exact-head repository/continuity, native x86_64/aarch64 build, pinned reference, E1 and bounded Route20/PyDECnet interoperability gates. Phase 4 begins only after the unchanged Phase 3 candidate is green.

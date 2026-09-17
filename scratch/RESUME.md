@@ -26,7 +26,7 @@ Hosted-runner policy is unchanged: at most 75 minutes per job, `queue: max`, `ca
 
 Exact-head acceptance parent `35184898090` on candidate `a122e8e82541a9499b9b514568b70e77de97ca4b` reached green repository/continuity, native build and pinned reference gates, but E1 child `35184925391` failed before DECnet protocol assertions. amd64 exposed a bad installed smoke-service image and arm64 did not boot to serial output because the packaged kernel image required direct-boot handling. Commit `d3416e1ad9d2a5e057c6c49e9407cec92683dc86` hardened the base-image path with smoke byte/unit checks, uncompressed acceptance QCOW2, post-conversion verification and arm64 kernel decompression/header validation.
 
-A later focused review identified one remaining image-integrity gap: both derived interoperability builders still use compressed RAW-to-QCOW2 conversion and lack post-conversion guest-content proof. That correction remains the next code change.
+The current candidate closes the remaining derived-image gap. Both interoperability image builders now use uncompressed RAW-to-QCOW2 conversion, structural `qemu-img check`, a QCOW2-to-RAW round trip and a full byte-for-byte RAW comparison. They validate and report the archived `.source-commit`, so the proof covers the complete intended filesystem/content and its provenance. The image-builder policy regression now requires those exact safeguards for both derived paths. `docs/HANDOVER.md` has also been corrected to describe the current diff-scoped SoP instead of the superseded full-tree rule.
 
 Repository branch policy remains active with only `refs/heads/main`. Cleanup run `35179252422` is the last successful branch-cleanup run. GitHub-owned actions remain pinned to immutable full SHAs.
 
@@ -45,7 +45,7 @@ Repository branch policy remains active with only `refs/heads/main`. Cleanup run
 | Clean scoped semantic/manual passes on this candidate | 0 |
 | Routine workflow scan requirement | one bounded baseline diff manifest plus matching final diff manifest |
 | Explicit full-tree scan | opt-in only via `tools/sop_scan.py --full-tree` |
-| Phase 3 acceptance | prior candidate failed E1 image/direct-boot gates; fresh acceptance required after corrections |
+| Phase 3 acceptance | derived image-integrity correction applied; fresh exact-head acceptance required |
 | Latest acceptance parent | `35184898090` |
 | Latest E1 VM run | `35184925391` |
 | Latest branch-cleanup run | `35179252422`, success |
@@ -58,4 +58,4 @@ The tracked table above is the durable human index. Runtime evidence belongs onl
 
 ## Next action
 
-Fix `tests/lab/prepare-interop-candidate.sh` and `tests/lab/prepare-reference-image.sh` so their derived QCOW2 images receive fail-fast structural/content verification equivalent to the base-image path, add the smallest regression needed to prevent recurrence, and update this file plus `docs/PROJECT_STATE.md` in that same commit. Perform the three semantic/manual passes only on that resulting bounded diff. Then run fresh exact-head Phase 3 acceptance gates. Phase 4 starts only after the unchanged Phase 3 candidate is green.
+Perform three consecutive semantic/manual passes over the exact first-parent-to-candidate diff with three context lines, using only directly necessary local/dependency context. Any fix creates a new candidate and resets the pass sequence. After three clean passes on the unchanged candidate, run fresh exact-head Phase 3 repository/continuity, x86_64/aarch64 native build, pinned reference, E1, Route20 and PyDECnet interoperability gates. Phase 4 starts only after that unchanged candidate is green.

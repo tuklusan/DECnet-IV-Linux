@@ -22,6 +22,6 @@ This is the stable resume entry point for DECnet-IV-Linux.
 4. Read `docs/ARCHITECTURE.md`, `docs/TEST_LAB.md` and `docs/PRE_PRODUCTION_TEST.md` before changing architecture, image construction or acceptance tests.
 5. Perform substantive work directly on `main`. Every substantive commit must refresh both `docs/PROJECT_STATE.md` and `scratch/RESUME.md` in the same commit. Acceptance applies only to the exact unchanged `main` commit that passed the required SoP and gates.
 6. Mutable workflow state belongs below ignored `scratch/runtime/` and is preserved as workflow artifacts. Restored prior-run artifacts belong below ignored `scratch/restored/`; they never substitute for exact source/tree verification.
-7. After any change, restart the SoP sequence from the complete latest repository copy. Delivery requires three consecutive clean full semantic/manual passes. Workflow byte-scan manifests verify completeness and immutability but do not replace those passes.
+7. After any substantive change, restart the SoP sequence on the exact first-parent-to-candidate unified diff with three context lines. Delivery requires three consecutive clean semantic/manual passes over that bounded diff plus only directly necessary local/dependency context. Full-tree scanning is explicit opt-in only; workflow diff manifests verify candidate immutability but do not replace the semantic passes.
 
 Repository files are authoritative. Do not reconstruct current state from chat history or stale workflow runs.

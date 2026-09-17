@@ -25,6 +25,7 @@ output=$2
 
 work=$(mktemp -d)
 raw="$work/reference.raw"
+verify_raw="$work/verify.raw"
 mnt="$work/root"
 mkdir -p "$mnt" "$(dirname "$output")"
 mounted=0
@@ -48,6 +49,11 @@ sudo mount -o loop "$raw" "$mnt"
 mounted=1
 archived_source="$mnt/usr/src/decnet-iv-linux"
 test -r "$archived_source/.source-commit"
+source_commit=$(sudo cat "$archived_source/.source-commit")
+[[ "$source_commit" =~ ^[0-9a-f]{40}$ ]] || {
+    echo "prepare-reference-image: invalid archived source commit" >&2
+    exit 1
+}
 test -r "$archived_source/tests/lab/dniv-reference-peer.sh"
 test -r "$archived_source/image/ubuntu-base/images.env"
 # shellcheck disable=SC1090
@@ -92,6 +98,16 @@ sudo umount "$mnt/proc"
 chroot_mounted=0
 sudo umount "$mnt"
 mounted=0
-qemu-img convert -q -f raw -O qcow2 -c "$raw" "$output"
+
+# Acceptance correctness wins over file-size optimization. Keep the derived
+# image uncompressed, validate its qcow2 structure, then prove that converting
+# it back to RAW reproduces the complete intended disk byte-for-byte.
+qemu-img convert -q -f raw -O qcow2 "$raw" "$output"
 qemu-img check -q -f qcow2 "$output"
-echo "prepare-reference-image: created $output from archived candidate source"
+qemu-img convert -q -f qcow2 -O raw "$output" "$verify_raw"
+if ! cmp -s "$raw" "$verify_raw"; then
+    echo "prepare-reference-image: full RAW content changed during image conversion" >&2
+    exit 1
+fi
+rm -f "$verify_raw"
+echo "prepare-reference-image: created $output from archived source $source_commit"
