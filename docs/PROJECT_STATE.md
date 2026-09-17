@@ -67,6 +67,8 @@ The VM lab therefore keeps amd64 at a 300-second controller budget and gives ARM
 
 Repository policy and acceptance dispatch remain isolated from protocol-lab runner concurrency. Release-image construction remains a separate exact-source gate and is not inferred from the cached protocol foundation.
 
+The license scanner prunes `__pycache__` and `.git` directories at Git enumeration time for both exact-tree and staged scans, at any depth. Their contents never enter header/license validation; ordinary tracked files and symlink blobs remain in scope.
+
 ## Test addressing
 
 Ordinary lab addressing remains area 31, nodes 70 through 79, names DN70 through DN79. The live L2 interoperability case deliberately uses an independent peer in area 32.

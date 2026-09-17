@@ -18,8 +18,10 @@
 from __future__ import annotations
 
 import argparse
+import io
 import subprocess
 import sys
+import tarfile
 from pathlib import PurePosixPath
 
 PROJECT_NAME = "DECnet-IV-Linux"
@@ -60,6 +62,13 @@ _BINARY_SUFFIXES = {
     ".ko", ".o", ".pcap", ".pdf", ".png", ".qcow2", ".raw", ".tar", ".xz",
     ".zip",
 }
+
+# Exclude generated/cache and repository-metadata directories at the Git
+# enumeration command itself so their contents never reach validation.
+_PRUNED_PATHS = (
+    ":(exclude,glob)**/__pycache__/**",
+    ":(exclude,glob)**/.git/**",
+)
 
 
 def _run(*args: str) -> bytes:
@@ -145,19 +154,21 @@ def validate_blob(path: str, data: bytes, blob_sha: str | None = None) -> list[s
 
 
 def _tree_entries(rev: str):
-    raw = _run("ls-tree", "-r", "-z", rev)
-    for record in raw.split(b"\0"):
-        if not record:
-            continue
-        meta, raw_path = record.split(b"\t", 1)
-        fields = meta.split()
-        if len(fields) != 3 or fields[1] != b"blob":
-            continue
-        yield raw_path.decode("utf-8", errors="surrogateescape"), fields[2].decode("ascii")
+    # git ls-tree does not support exclude pathspec magic. git archive does,
+    # so use it strictly for pruned path enumeration, then resolve each
+    # retained path back to its exact blob object for validation.
+    raw = _run("archive", "--format=tar", rev, "--", ".", *_PRUNED_PATHS)
+    with tarfile.open(fileobj=io.BytesIO(raw), mode="r:") as archive:
+        for member in archive.getmembers():
+            if not (member.isfile() or member.issym()):
+                continue
+            path = member.name.removeprefix("./")
+            sha = _run("rev-parse", f"{rev}:{path}").strip().decode("ascii")
+            yield path, sha
 
 
 def _index_entries():
-    raw = _run("ls-files", "--stage", "-z")
+    raw = _run("ls-files", "--stage", "-z", "--", ".", *_PRUNED_PATHS)
     for record in raw.split(b"\0"):
         if not record:
             continue

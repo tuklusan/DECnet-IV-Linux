@@ -38,6 +38,8 @@ Exact-head candidate `38c5b49e53c648f6514f52ebff84a93331a4732a` closed that samp
 
 The VM controller budget is therefore architecture-specific: amd64 stays at 300 seconds and ARM64 receives 360 seconds. The latter covers the observed ~302-second restart point plus the already-bounded 30-second adjacency recovery wait, five-second post-recovery observation and shutdown margin. The surrounding job remains limited to 40 minutes; kernel and protocol timing are unchanged.
 
+Repository license validation now excludes `__pycache__` and `.git` directories in the Git enumeration command itself for both exact-tree and staged scans, at any depth, so generated caches and repository metadata never reach the validator.
+
 | Field | Current value |
 | --- | --- |
 | Protocol phase | Phase 3 |
