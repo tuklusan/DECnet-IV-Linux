@@ -45,7 +45,7 @@ Every hosted job declares an explicit timeout no greater than 75 minutes. Short 
 
 Every scratch state records exact source commit/tree identity, workflow/job, run ID/attempt, runner identity, architecture/mode, parent/restore lineage, milestones and status. Ordinary workflow integrity checking records one bounded parent-to-candidate baseline diff manifest before substantive work and a matching final manifest afterward. These machine manifests prove candidate identity and checkout immutability for the bounded scope. A byte-complete tracked-tree machine scan remains explicit opt-in through `tools/integrity_scan.py --full-tree`. `tools/workflow_budget_gate.py`, invoked from `tools/workflow_guard.sh`, rejects missing/over-limit job timeouts and over-retained artifacts before the baseline scan proceeds.
 
-There is no manual delivery-pass counter or multi-pass review prerequisite. Acceptance is based on the documented exact-SHA mechanical and protocol gates.
+Acceptance is based on the documented exact-SHA mechanical, build, VM, reference, protocol and interoperability gates.
 
 Build, continuity, reference and VM workflows are manual-dispatch only. The Repository Policy workflow does not run on ordinary `push` or `pull_request:synchronize` events. It does listen for `create` events so any non-main branch creation immediately enters the cleanup job; other selected repository metadata events and manual dispatch run the applicable policy jobs. Every runner job enters one of two repository-wide job concurrency groups: `dniv-runner-x64` or `dniv-runner-arm64`; the groups queue rather than replace waiting jobs.
 

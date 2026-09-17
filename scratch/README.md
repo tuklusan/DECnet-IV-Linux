@@ -14,7 +14,7 @@
 
 # Scratch workspace
 
-`scratch/` is the repository-root persistence workspace for workflow and review state. The directory itself, this contract, and `RESUME.md` are tracked. Mutable runner state is deliberately not committed because acceptance is tied to one exact source commit.
+`scratch/` is the repository-root persistence workspace for workflow state. The directory itself, this contract, and `RESUME.md` are tracked. Mutable runner state is deliberately not committed because acceptance is tied to one exact source commit.
 
 Every workflow creates a unique directory under `scratch/runtime/<run-id>/<run-attempt>/<job>/`. It records `state.json`, exact source commit/tree identity, workflow/run/job/runner identifiers, parent or resumed run identifiers, status milestones, and workflow integrity manifests. VM and interoperability workflows place packet captures, serial logs, hashes, and other evidence below the same run directory.
 
@@ -26,4 +26,4 @@ Every hosted job declares an explicit timeout no greater than 75 minutes. `tools
 
 `tools/integrity_scan.py` can verify every tracked blob completely with explicit `--full-tree`, and its default bounded mode records the exact parent-to-candidate diff plus changed-file blob hashes while checking checkout bytes and modes. `tools/workflow_guard.sh` runs ordinary policy/regression gates and records one bounded baseline diff manifest; workflows perform a matching final scan before preserving state. These machine checks prove candidate identity and checkout immutability for their recorded scope.
 
-There is no manual delivery-pass counter or multi-pass review prerequisite. `scratch/RESUME.md` is the durable human resume index. `docs/PROJECT_STATE.md` remains the authoritative protocol/project state. Every substantive commit must refresh both files in the same commit.
+`scratch/RESUME.md` is the durable human resume index. `docs/PROJECT_STATE.md` remains the authoritative protocol/project state. Every substantive commit must refresh both files in the same commit. Candidate promotion is determined by the documented exact-SHA gates.

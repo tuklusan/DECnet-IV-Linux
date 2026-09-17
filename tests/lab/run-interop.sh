@@ -158,7 +158,7 @@ start_reference() {
             exec qemu-system-x86_64 -name "ref-$reference-$scenario" -accel "$accel" -m 512 -smp 1 \
                 -kernel "$kernel" -initrd "$initrd" -append "$common console=ttyS0" \
                 -drive "file=$disk,if=virtio,format=qcow2" \
-                -drive "file=fat:ro:$bundle,if=virtio,format=raw" \
+                -drive "file=fat:ro:$bundle,if=virtio,format=raw,readonly=on" \
                 -netdev tap,id=lan,ifname="$tap_reference",script=no,downscript=no \
                 -device virtio-net-pci,netdev=lan,mac="$reference_hw" \
                 -display none -monitor none -serial "file:$log" -no-reboot
@@ -169,7 +169,7 @@ start_reference() {
             exec qemu-system-aarch64 -name "ref-$reference-$scenario" -machine virt -accel "$accel" -cpu "$cpu" -m 512 -smp 1 \
                 -kernel "$kernel" -initrd "$initrd" -append "$common console=ttyAMA0" \
                 -drive "file=$disk,if=virtio,format=qcow2" \
-                -drive "file=fat:ro:$bundle,if=virtio,format=raw" \
+                -drive "file=fat:ro:$bundle,if=virtio,format=raw,readonly=on" \
                 -netdev tap,id=lan,ifname="$tap_reference",script=no,downscript=no \
                 -device virtio-net-pci,netdev=lan,mac="$reference_hw" \
                 -display none -monitor none -serial "file:$log" -no-reboot

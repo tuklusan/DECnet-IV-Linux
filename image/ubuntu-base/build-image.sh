@@ -142,8 +142,11 @@ smoke_script_dest="$mnt/usr/local/sbin/dniv-smoke"
 smoke_unit_dest="$mnt/etc/systemd/system/dniv-smoke.service"
 sudo install -m 0755 "$smoke_script_source" "$smoke_script_dest"
 sudo install -m 0644 "$smoke_unit_source" "$smoke_unit_dest"
-sudo ln -sf ../dniv-smoke.service \
-    "$mnt/etc/systemd/system/multi-user.target.wants/dniv-smoke.service"
+# Use systemd's own offline enable operation and verify the resulting dependency.
+# This makes the smoke entry-point dependency an explicit image-build invariant.
+sudo systemctl --root="$mnt" enable dniv-smoke.service >/dev/null
+[[ "$(sudo systemctl --root="$mnt" is-enabled dniv-smoke.service)" == enabled ]]
+sudo test -L "$mnt/etc/systemd/system/multi-user.target.wants/dniv-smoke.service"
 
 # The guest acceptance entry point is part of the image contract. Prove that
 # installation preserved the exact archived bytes and that systemd accepts the
@@ -160,10 +163,10 @@ if [[ -z "$kernel" || -z "$initrd" ]]; then
 fi
 
 # QEMU's AArch64 direct loader first peels one outer gzip layer. For a
-# non-gzip file it recognizes EFI-zboot and otherwise deliberately falls back
-# to treating the bytes as a raw kernel image; ARM\x64 magic is optional and is
-# used only for load-offset/image-size metadata. Mirror those loader semantics
-# here instead of rejecting QEMU's documented raw fallback.
+# non-gzip file it recognizes EFI-zboot and otherwise treats the bytes as a raw
+# kernel image. Normalize an exact validated EFI-zboot wrapper to its raw Image
+# payload before direct boot; preserve unknown nonempty artifacts for QEMU's raw
+# fallback, with VM boot remaining the executable proof.
 if [[ "$arch" == arm64 ]]; then
     kernel_magic=$(sudo dd if="$kernel" bs=1 count=2 status=none | od -An -tx1 | tr -d ' \n')
     if [[ "$kernel_magic" == 1f8b ]]; then
@@ -207,6 +210,18 @@ if [[ "$arch" == arm64 ]]; then
                 echo "build-image: invalid arm64 EFI-zboot payload bounds" >&2
                 exit 1
             fi
+
+            zboot_raw="$boot_dir/vmlinuz.raw"
+            dd if="$boot_dir/vmlinuz" bs=1 skip="$zboot_payload_offset" \
+                count="$zboot_payload_size" status=none | gzip -dc > "$zboot_raw"
+            test -s "$zboot_raw"
+            zboot_raw_magic=$(dd if="$zboot_raw" bs=1 skip=56 count=4 status=none | \
+                od -An -tx1 | tr -d ' \n')
+            if [[ "$zboot_raw_magic" != 41524d64 ]]; then
+                echo "build-image: arm64 EFI-zboot payload is not a raw Image" >&2
+                exit 1
+            fi
+            mv "$zboot_raw" "$boot_dir/vmlinuz"
         else
             : # QEMU raw-image fallback; boot acceptance is the executable proof.
         fi

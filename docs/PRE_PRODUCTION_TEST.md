@@ -340,13 +340,12 @@ A failed test remains a failure of that exact candidate until explained/fixed or
 After any code, test, image, workflow or acceptance-document change:
 
 1. invalidate prior-candidate acceptance evidence;
-2. restart the repository SoP sequence on the exact new tree;
-3. require three consecutive clean complete SoP passes;
-4. rerun affected acceptance stages and every downstream dependent stage;
-5. promote only the exact commit whose required matrix/evidence is green.
+2. run the required exact-SHA mechanical, build, VM, reference, protocol and interoperability gates on the new unchanged tree;
+3. rerun every affected acceptance stage and downstream dependent stage;
+4. promote only the exact commit whose required matrix and retained evidence are green.
 
 ## Final pre-production gate
 
-A candidate is releasable only when every claimed feature has executed positive canonical tests; every applicable negative family has a real executed case; every upstream test has a disposition; required x86_64/aarch64, SMP, kernel/toolchain and driver entries are green; independent-peer, routed and mixed-media requirements are green; false-green harness tests are green; the required stress/endurance tier is green; PP-13 is green when an N-1 release exists; diagnostics have no blocking finding; all evidence belongs to the exact candidate; and three consecutive complete clean SoP passes were performed on that exact final tree with no later change.
+A candidate is releasable only when every claimed feature has executed positive canonical tests; every applicable negative family has a real executed case; every upstream test has a disposition; required x86_64/aarch64, SMP, kernel/toolchain and driver entries are green; independent-peer, routed and mixed-media requirements are green; false-green harness tests are green; the required stress/endurance tier is green; PP-13 is green when an N-1 release exists; diagnostics have no blocking finding; all evidence belongs to the exact unchanged candidate; and every required exact-SHA acceptance gate is green.
 
 Anything less is development evidence, not pre-production acceptance.

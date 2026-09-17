@@ -15,10 +15,10 @@
 [Unit]
 Description=DECnet Phase IV two-node smoke test
 After=systemd-udev-settle.service
-ConditionKernelCommandLine=dniv.smoke=1
 
 [Service]
 Type=oneshot
+ExecCondition=/usr/bin/grep -Fqw dniv.smoke=1 /proc/cmdline
 ExecStart=/usr/local/sbin/dniv-smoke
 StandardOutput=journal+console
 StandardError=journal+console
