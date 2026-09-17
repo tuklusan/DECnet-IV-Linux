@@ -70,7 +70,6 @@ jobs:
       DNIV_LAB_SESSION_ID: run-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.arch }}-${{ inputs.lab_mode }}
       DNIV_LAB_ARCH: ${{ matrix.arch }}
       DNIV_LAB_SOURCE_SHA: ${{ github.sha }}
-      DNIV_OUTER_SESSION_ID: outer-v1-${{ matrix.arch }}-${{ github.sha }}
       DNIV_OUTER_BASE_DIR: ${{ github.workspace }}/scratch/outer/${{ matrix.arch }}
     steps:
       - name: Check out exact repository
@@ -88,7 +87,7 @@ jobs:
             --parent-run-id '${{ inputs.parent_run_id }}' \
             --expected-sha '${{ inputs.expected_sha }}'
           tools/workflow_guard.sh "$DNIV_SCRATCH_DIR" "$GITHUB_SHA" main
-          echo "DNIV_LAB_ARTIFACTS=$DNIV_SCRATCH_DIR/lab" >> "$GITHUB_ENV"
+          echo "DNIV_LAB_ARTIFACTS=/tmp/dniv-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${{ matrix.arch }}" >> "$GITHUB_ENV"
 
       - name: Install host tools
         shell: bash
@@ -98,14 +97,26 @@ jobs:
           sudo apt-get install -y ${{ matrix.qemu }} qemu-utils e2fsprogs tcpdump curl 2>&1 | \
             tee "$DNIV_SCRATCH_DIR/apt-install.log"
 
-      - name: Restore immutable outer architecture session
+      - name: Compute stable architecture foundation identity
+        id: foundation-id
+        shell: bash
+        run: |
+          set -euo pipefail
+          fingerprint=$(cat image/ubuntu-base/images.env image/ubuntu-base/build-foundation.sh | \
+            sha256sum | cut -c1-16)
+          session="outer-v2-${{ matrix.arch }}-$fingerprint"
+          echo "DNIV_FOUNDATION_FINGERPRINT=$fingerprint" >> "$GITHUB_ENV"
+          echo "DNIV_OUTER_SESSION_ID=$session" >> "$GITHUB_ENV"
+          echo "session_id=$session" >> "$GITHUB_OUTPUT"
+
+      - name: Restore immutable outer architecture foundation
         id: outer-base
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: ${{ env.DNIV_OUTER_BASE_DIR }}
-          key: ${{ env.DNIV_OUTER_SESSION_ID }}
+          key: ${{ steps.foundation-id.outputs.session_id }}
 
-      - name: Download pinned Ubuntu Base rootfs on outer-session miss
+      - name: Download pinned Ubuntu Base rootfs on foundation miss
         if: ${{ steps.outer-base.outputs.cache-hit != 'true' }}
         shell: bash
         run: |
@@ -122,7 +133,7 @@ jobs:
           echo "$sha  $RUNNER_TEMP/$file" | sha256sum -c -
           echo "UBUNTU_BASE_TARBALL=$RUNNER_TEMP/$file" >> "$GITHUB_ENV"
 
-      - name: Build immutable outer architecture session on cache miss
+      - name: Build immutable outer architecture foundation on cache miss
         if: ${{ steps.outer-base.outputs.cache-hit != 'true' }}
         shell: bash
         run: |
@@ -130,15 +141,18 @@ jobs:
           sudo -v
           rm -rf "$DNIV_OUTER_BASE_DIR"
           mkdir -p "$DNIV_OUTER_BASE_DIR/boot"
-          image/ubuntu-base/build-image.sh '${{ matrix.arch }}' "$UBUNTU_BASE_TARBALL" \
+          image/ubuntu-base/build-foundation.sh '${{ matrix.arch }}' "$UBUNTU_BASE_TARBALL" \
             "$DNIV_OUTER_BASE_DIR/base.qcow2" "$DNIV_OUTER_BASE_DIR/boot" 2>&1 | \
-            tee "$DNIV_SCRATCH_DIR/build-image.log"
-          cat > "$DNIV_OUTER_BASE_DIR/session.env" <<EOF
-          FORMAT=1
+            tee "$DNIV_SCRATCH_DIR/build-foundation.log"
+          . image/ubuntu-base/images.env
+          cat > "$DNIV_OUTER_BASE_DIR/session.env" <<EOF_SESSION
+          FORMAT=2
           SESSION_ID=$DNIV_OUTER_SESSION_ID
           ARCH=${{ matrix.arch }}
-          SOURCE_SHA=$GITHUB_SHA
-          EOF
+          FOUNDATION_FINGERPRINT=$DNIV_FOUNDATION_FINGERPRINT
+          UBUNTU_BASE_RELEASE=$UBUNTU_BASE_RELEASE
+          UBUNTU_APT_SNAPSHOT=$UBUNTU_APT_SNAPSHOT
+          EOF_SESSION
           (
             cd "$DNIV_OUTER_BASE_DIR"
             sha256sum base.qcow2 boot/vmlinuz boot/initrd.img session.env > SHA256SUMS
@@ -146,23 +160,27 @@ jobs:
           )
           qemu-img check -q -f qcow2 "$DNIV_OUTER_BASE_DIR/base.qcow2"
 
-      - name: Save immutable outer architecture session
+      - name: Save immutable outer architecture foundation
         if: ${{ steps.outer-base.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: ${{ env.DNIV_OUTER_BASE_DIR }}
-          key: ${{ env.DNIV_OUTER_SESSION_ID }}
+          key: ${{ steps.foundation-id.outputs.session_id }}
 
-      - name: Verify pinned outer architecture session
+      - name: Verify source-independent architecture foundation
         shell: bash
         run: |
           set -euo pipefail
+          . image/ubuntu-base/images.env
           test -f "$DNIV_OUTER_BASE_DIR/session.env"
           test -f "$DNIV_OUTER_BASE_DIR/SHA256SUMS"
-          grep -Fx 'FORMAT=1' "$DNIV_OUTER_BASE_DIR/session.env"
+          grep -Fx 'FORMAT=2' "$DNIV_OUTER_BASE_DIR/session.env"
           grep -Fx "SESSION_ID=$DNIV_OUTER_SESSION_ID" "$DNIV_OUTER_BASE_DIR/session.env"
           grep -Fx 'ARCH=${{ matrix.arch }}' "$DNIV_OUTER_BASE_DIR/session.env"
-          grep -Fx "SOURCE_SHA=$GITHUB_SHA" "$DNIV_OUTER_BASE_DIR/session.env"
+          grep -Fx "FOUNDATION_FINGERPRINT=$DNIV_FOUNDATION_FINGERPRINT" "$DNIV_OUTER_BASE_DIR/session.env"
+          grep -Fx "UBUNTU_BASE_RELEASE=$UBUNTU_BASE_RELEASE" "$DNIV_OUTER_BASE_DIR/session.env"
+          grep -Fx "UBUNTU_APT_SNAPSHOT=$UBUNTU_APT_SNAPSHOT" "$DNIV_OUTER_BASE_DIR/session.env"
+          ! grep -q '^SOURCE_SHA=' "$DNIV_OUTER_BASE_DIR/session.env"
           (
             cd "$DNIV_OUTER_BASE_DIR"
             sha256sum -c SHA256SUMS
@@ -171,16 +189,36 @@ jobs:
           cp "$DNIV_OUTER_BASE_DIR/session.env" "$DNIV_SCRATCH_DIR/outer-session.env"
           printf 'CACHE_HIT=%s\n' '${{ steps.outer-base.outputs.cache-hit }}' >> \
             "$DNIV_SCRATCH_DIR/outer-session.env"
-          echo "DNIV_LAB_BASE=$DNIV_OUTER_BASE_DIR/base.qcow2" >> "$GITHUB_ENV"
+          echo "DNIV_OUTER_BASE=$DNIV_OUTER_BASE_DIR/base.qcow2" >> "$GITHUB_ENV"
           echo "DNIV_LAB_KERNEL=$DNIV_OUTER_BASE_DIR/boot/vmlinuz" >> "$GITHUB_ENV"
           echo "DNIV_LAB_INITRD=$DNIV_OUTER_BASE_DIR/boot/initrd.img" >> "$GITHUB_ENV"
+
+      - name: Inject exact candidate into disposable image
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="$RUNNER_TEMP/candidate-${{ matrix.arch }}.qcow2"
+          tests/lab/prepare-candidate-image.sh "$DNIV_OUTER_BASE" "$candidate" 2>&1 | \
+            tee "$DNIV_SCRATCH_DIR/prepare-candidate.log"
+          echo "DNIV_LAB_BASE=$candidate" >> "$GITHUB_ENV"
 
       - name: Run Python QEMU overlay lab
         shell: bash
         run: |
-          set -euo pipefail
+          set -uo pipefail
+          rm -rf "$DNIV_LAB_ARTIFACTS"
+          set +e
           python3 tests/lab/dniv_lab.py "$DNIV_LAB_BASE" "$DNIV_LAB_KERNEL" "$DNIV_LAB_INITRD" 2>&1 | \
             tee "$DNIV_SCRATCH_DIR/two-node.log"
+          rc=${PIPESTATUS[0]}
+          set -e
+          if [[ -d "$DNIV_LAB_ARTIFACTS" ]]; then
+            mkdir -p "$DNIV_SCRATCH_DIR/lab"
+            cp -a "$DNIV_LAB_ARTIFACTS/." "$DNIV_SCRATCH_DIR/lab/"
+            find "$DNIV_SCRATCH_DIR/lab" -type f \( -name '*.qcow2' -o -name '*.qmp' \) -delete
+          fi
+          rm -rf "$DNIV_LAB_ARTIFACTS"
+          exit "$rc"
 
       - name: Verify exact tree after VM gate
         shell: bash

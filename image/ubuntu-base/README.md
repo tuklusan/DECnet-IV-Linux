@@ -12,10 +12,12 @@
 <!-- patent, trademark, and governing-law provisions. -->
 <!-- ============================================================================ -->
 
-# Ubuntu Base image
+# Ubuntu Base images
 
-Phase 2 uses Ubuntu Base 26.04.1 LTS as the smallest official non-cloud Ubuntu root filesystem suitable for constructing a custom image. Both amd64 and arm64 release tarballs are 33 MiB and are pinned by SHA-256 in `images.env`.
+Ubuntu Base 26.04.1 is pinned for amd64 and arm64 by SHA-256 in `images.env`.
 
-The lab deliberately avoids an installer, cloud-init, NoCloud media, firmware boot dependencies and a second management NIC. CI expands the pinned rootfs into an ext4 disk, installs the virtual kernel plus the DECnet module/tools, copies out that exact kernel/initrd, and boots QEMU with `-kernel`/`-initrd` directly.
+There are deliberately two construction paths. `build-image.sh` builds the complete exact-source image and remains the release/image-integrity path. `build-foundation.sh` builds a source-independent protocol-lab foundation containing Ubuntu, the pinned guest kernel/initrd, compiler/headers and reference-runtime dependencies. The foundation contains no DECnet-IV-Linux source, module, tools, smoke services or candidate SHA.
 
-This is a Phase 2 test-image path, not the final release boot scheme. A self-booting release image can add a bootloader after the protocol stack is useful; the lab does not need one to prove native Ethernet behavior.
+Acceptance workflows cache one verified foundation per architecture/foundation fingerprint. Each candidate then uses `tests/lab/prepare-candidate-image.sh` to inject and build the exact checked-out source into a disposable derived image. This avoids reinstalling packages for ordinary source commits while retaining exact-SHA protocol testing.
+
+Both paths avoid firmware and installer dependencies by copying out the guest kernel/initrd and booting QEMU directly with `-kernel`/`-initrd`. A self-booting release image can add a bootloader later without coupling protocol acceptance to that work.

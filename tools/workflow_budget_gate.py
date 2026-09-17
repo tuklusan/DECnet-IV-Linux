@@ -168,47 +168,59 @@ def check_workflow(path: str, text: str) -> list[str]:
     if name == "vm-lab.yml":
         required = (
             "python3 tests/lab/dniv_lab.py",
-            "DNIV_OUTER_SESSION_ID: outer-v1-${{ matrix.arch }}-${{ github.sha }}",
+            "build-foundation.sh",
+            'session="outer-v2-${{ matrix.arch }}-$fingerprint"',
+            "prepare-candidate-image.sh",
+            "! grep -q '^SOURCE_SHA='",
+            "DNIV_LAB_ARTIFACTS=/tmp/dniv-",
             "actions/cache/restore@",
             "actions/cache/save@",
-            "Verify pinned outer architecture session",
+            "Verify source-independent architecture foundation",
             "!${{ env.DNIV_SCRATCH_DIR }}/lab/**/*.qcow2",
             "!${{ env.DNIV_SCRATCH_DIR }}/lab/**/*.qmp",
         )
         forbidden = (
+            "outer-v1-${{ matrix.arch }}-${{ github.sha }}",
             "resume_run_id:",
             "scratch-vm-lab-checkpoint-",
             "Prune superseded successful VM checkpoints",
             "actions/artifacts?per_page=100",
+            "prepare-interop-candidate.sh",
         )
         for marker in required:
             if marker not in text:
-                errors.append(f"{path}: missing persistent-outer/disposable-inner safeguard: {marker}")
+                errors.append(f"{path}: missing persistent-foundation/disposable-candidate safeguard: {marker}")
         for marker in forbidden:
             if marker in text:
-                errors.append(f"{path}: obsolete resumable-inner-VM machinery remains: {marker}")
+                errors.append(f"{path}: obsolete infrastructure machinery remains: {marker}")
 
     if name == "interop.yml":
         required = (
-            "DNIV_OUTER_SESSION_ID: outer-v1-${{ matrix.arch }}-${{ github.sha }}",
+            "build-foundation.sh",
+            'session="outer-v2-${{ matrix.arch }}-$fingerprint"',
+            "prepare-candidate-image.sh",
+            "prepare-reference-image.sh",
+            "! grep -q '^SOURCE_SHA='",
             "actions/cache/restore@",
             "actions/cache/save@",
-            "Prepare disposable interoperability images",
+            "Prepare disposable exact-candidate and reference images",
             "!${{ env.DNIV_SCRATCH_DIR }}/interop/**/*.qcow2",
             "scratch-interop-${{ matrix.arch }}-${{ matrix.suite }}-${{ github.run_id }}",
             "${{ github.job }}-${{ matrix.arch }}-${{ matrix.suite }}",
         )
         forbidden = (
+            "outer-v1-${{ matrix.arch }}-${{ github.sha }}",
             "resume_run_id:",
             "Restore prior scratch artifacts",
             "--resume-run-id",
+            "prepare-interop-candidate.sh",
         )
         for marker in required:
             if marker not in text:
-                errors.append(f"{path}: missing interoperability storage/runtime safeguard: {marker}")
+                errors.append(f"{path}: missing interoperability foundation/runtime safeguard: {marker}")
         for marker in forbidden:
             if marker in text:
-                errors.append(f"{path}: obsolete interoperability resume plumbing remains: {marker}")
+                errors.append(f"{path}: obsolete interoperability infrastructure remains: {marker}")
         rows = []
         for line in lines:
             if match := SCENARIOS_RE.match(line):

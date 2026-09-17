@@ -20,15 +20,17 @@ Phase 3 remains active and all substantive work stays on `main`. Candidate promo
 
 The two-node lab uses `tests/lab/dniv_lab.py`, a Python direct-QEMU controller with QMP shutdown, Linux bridge/TAP networking, packet capture, serial marker assertions and disposable qcow2 node overlays. Writable inner-VM checkpoints remain retired.
 
-The two architecture slots now retain immutable outer base sessions across acceptance jobs. The session identifier is `outer-v1-<arch>-<source-sha>` and the persisted payload is `base.qcow2`, `boot/vmlinuz`, `boot/initrd.img`, `session.env` and `SHA256SUMS`. Because GitHub-hosted runner root filesystems are ephemeral, the payload is stored in the Actions cache and restored onto the matching amd64 or arm64 runner. Restores are accepted only when the manifest matches the exact architecture and source SHA, all checksums verify, and `qemu-img check` passes.
+The two architecture slots retain immutable source-independent foundations across acceptance sessions. The session identifier is `outer-v2-<arch>-<foundation-fingerprint>`. The fingerprint is derived from `image/ubuntu-base/images.env` and `build-foundation.sh`, not the project source SHA. The persisted payload is `base.qcow2`, `boot/vmlinuz`, `boot/initrd.img`, `session.env` and `SHA256SUMS`.
 
-The same outer session is consumed by `vm-lab.yml` and `interop.yml`. Architecture-specific `dniv-runner-*` serialization means the first job can create a missing session without a same-architecture race; later jobs for that exact candidate restore it. New source SHAs receive new session IDs and cannot reuse a prior candidate image.
+A foundation contains Ubuntu userspace, the pinned kernel/initrd, build headers/toolchain, Python and libpcap runtime. It explicitly contains no project source, module/tools, smoke services or candidate SHA. Restores verify architecture, fingerprint, Ubuntu release/snapshot, all SHA-256 sums and `qemu-img check`, and reject a manifest containing `SOURCE_SHA`.
 
-Interoperability no longer accepts or downloads prior-run scratch evidence. Those restored artifacts were lineage-only and did not participate in VM execution. Candidate/reference working images remain disposable and are rebuilt from the verified immutable outer base; they are not persisted as acceptance state.
+Each exact candidate is injected only into a disposable derived image by `tests/lab/prepare-candidate-image.sh`. That script archives exact `HEAD`, builds the module and userspace against the foundation's pinned guest headers, records the candidate SHA, and installs the test entry points without running `apt`. The reference image is also disposable and receives only the current harness/runtime helper; Route20/PyDECnet payloads remain independently pinned.
 
-Repository branch policy remains exactly one remote branch, `refs/heads/main`. Repository-policy/control jobs do not consume protocol-lab concurrency slots. GitHub-owned actions, including cache restore/save, are pinned to immutable full SHAs.
+The VM workflow places Python-lab runtime below a short `/tmp/dniv-*` path. This removes the Linux UNIX-domain socket pathname failure seen when QMP sockets were under the long Actions scratch path. Serial/pcap evidence is copied back to `scratch/runtime/`; qcow2 and QMP files are deleted and excluded from uploaded evidence.
 
-The first persistence candidate `22fa6771250b5f46b68ac822fd9af38d82baba23` is historical: GitHub rejected `vm-lab.yml` before job creation because `runner.temp` is not available in job-level `env`. The corrected definition stores the restored cache under `${{ github.workspace }}/scratch/outer/<arch>`, which is ignored by Git and valid at job scope.
+Repository branch policy remains exactly one remote branch, `refs/heads/main`. Repository-policy/control jobs do not consume protocol-lab concurrency slots. GitHub-owned actions, including cache restore/save, remain pinned to immutable full SHAs.
+
+The older `outer-v1-<arch>-<source-sha>` cache layout is obsolete because it rebuilt the expensive foundation for every source commit. The prior successful cache save/restore proved the mechanism, but not the desired persistence boundary. `outer-v2` is the final boundary.
 
 | Field | Current value |
 | --- | --- |
@@ -37,21 +39,21 @@ The first persistence candidate `22fa6771250b5f46b68ac822fd9af38d82baba23` is hi
 | Remote branch invariant | only `refs/heads/main` |
 | Hosted job ceiling | 75 minutes |
 | Protocol runner queue policy | architecture-specific `dniv-runner-*`, `queue: max` |
-| Repository-control queue policy | exact-SHA workflow concurrency; no protocol runner slot |
 | VM lifecycle | Python direct QEMU/QMP for two-node gate |
-| Outer architecture state | immutable exact-SHA base session cached per architecture |
-| Outer session ID | `outer-v1-<arch>-<source-sha>` |
-| Inner VM disk state | disposable qcow2 overlays/derived images |
+| Persistent outer state | source-independent architecture foundation |
+| Outer session ID | `outer-v2-<arch>-<foundation-fingerprint>` |
+| Exact candidate state | disposable derived qcow2 |
+| Inner VM disk state | disposable qcow2 overlays |
 | Writable inner VM checkpoint artifacts | retired |
 | Interop prior-run evidence restore | retired |
 | Compact evidence retention | 30 days maximum |
 | Acceptance child binding | parent run ID + exact expected SHA |
-| Current feasibility target | E1 and interoperability using restored architecture sessions |
+| Infrastructure status | finalization acceptance only; then return to protocol work |
 
 ## Persistent run index
 
-Run IDs remain lineage, not execution state. Persistent execution input is limited to the verified immutable architecture session cache. Mutable workflow state remains below ignored `scratch/runtime/`; compact evidence may be uploaded, but it never substitutes for exact source/tree verification or becomes writable guest state for a later run.
+Run IDs remain lineage, not execution state. Persistent execution input is limited to the verified source-independent architecture foundation cache. Mutable workflow state remains below ignored `scratch/runtime/`; compact evidence may be uploaded, but it never substitutes for exact source/tree verification or becomes writable guest state for a later run.
 
 ## Next action
 
-Dispatch fresh exact-head acceptance. Confirm each architecture creates at most one cache session for the exact candidate, later same-SHA jobs restore it, and no protocol job repeats full base-image construction after that session exists. Then continue Phase 3 protocol/interoperability debugging from the resulting evidence.
+Dispatch one fresh exact-head acceptance. Confirm the `outer-v2` foundation builds/restores, candidate injection runs without package installation, the Python lab no longer fails on QMP path length, and E1/interop reach protocol execution. Then stop infrastructure work and continue the Phase 3 implementation/debugging sequence from the first substantive protocol failure.

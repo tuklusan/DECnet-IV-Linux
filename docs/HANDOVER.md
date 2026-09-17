@@ -17,11 +17,11 @@
 This is the stable resume entry point for DECnet-IV-Linux.
 
 1. Read `docs/PROJECT_STATE.md` completely. Its `Resume point` and `Next action` describe the live protocol/repository state.
-2. Read `scratch/RESUME.md` completely. It records exact acceptance lineage and the persistent outer architecture-session model.
+2. Read `scratch/RESUME.md` completely. It records exact acceptance lineage and the persistent architecture-foundation model.
 3. Read `docs/ROADMAP.md` completely and confirm the next action follows the ordered dependency plan.
 4. Read `docs/ARCHITECTURE.md`, `docs/TEST_LAB.md` and `docs/PRE_PRODUCTION_TEST.md` before changing architecture, image construction or acceptance tests.
 5. Perform substantive work directly on `main`. Every substantive commit must refresh both `docs/PROJECT_STATE.md` and `scratch/RESUME.md` in the same commit. Acceptance applies only to the exact unchanged `main` commit that passes the documented exact-SHA gates.
-6. Mutable workflow state belongs below ignored `scratch/runtime/`. Persistent VM input is limited to verified immutable architecture sessions keyed by architecture plus exact source SHA; writable guest overlays remain disposable.
+6. Mutable workflow state belongs below ignored `scratch/runtime/`. Persistent VM input is limited to verified source-independent architecture foundations keyed by architecture plus foundation fingerprint; exact candidate images and writable node overlays remain disposable.
 7. Candidate promotion is determined only by the documented exact-SHA mechanical, build, VM, reference, protocol and interoperability gates.
 
 Repository files are authoritative. Do not reconstruct current state from chat history or stale workflow runs.

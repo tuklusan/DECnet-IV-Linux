@@ -16,46 +16,41 @@
 
 ## Purpose
 
-The lab proves DECnet protocol behavior independently of release-image production. Protocol tests should spend their time booting and exercising nodes, not repeatedly rebuilding or serializing mutable VM state.
+The lab proves DECnet protocol behavior independently of release-image production. Protocol tests spend their time booting and exercising nodes, not reinstalling Ubuntu packages or serializing mutable VM state.
 
-## Architecture sessions
+## Persistent architecture foundations
 
-There are two logical outer architecture sessions for each exact candidate: amd64 and arm64. Their stable session IDs are `outer-v1-<arch>-<source-sha>`. GitHub-hosted runners themselves are ephemeral, so their root disks are not relied upon; instead the immutable architecture disk payload is persisted in the Actions cache and restored onto the matching architecture runner.
+There are two logical outer foundations: amd64 and arm64. GitHub-hosted runner root filesystems are ephemeral, so the foundations are retained in the Actions cache and restored onto the matching architecture runner. The stable ID is `outer-v2-<arch>-<foundation-fingerprint>`. The fingerprint is derived from the pinned Ubuntu image metadata and `build-foundation.sh`; it deliberately excludes the candidate source SHA.
 
-An outer session contains only:
+A foundation contains only `base.qcow2`, `boot/vmlinuz`, `boot/initrd.img`, `session.env` and `SHA256SUMS`. It contains Ubuntu userspace, the pinned guest kernel/initrd, headers/compiler and independent-peer runtime dependencies. It must not contain project source, `decnet_iv.ko`, project tools, smoke services or any candidate SHA.
 
-- `base.qcow2`;
-- `boot/vmlinuz`;
-- `boot/initrd.img`;
-- `session.env`;
-- `SHA256SUMS`.
+A restore is usable only if architecture, foundation fingerprint, Ubuntu release/snapshot and stable session ID match, every checksum verifies, `qemu-img check` passes, and the manifest contains no `SOURCE_SHA`. A source-only project commit therefore reuses the same foundation. A foundation recipe, Ubuntu pin or architecture change produces a different cache key.
 
-A restore is usable only if `ARCH` and `SOURCE_SHA` match the running job, the stable session ID matches exactly, every checksum verifies, and `qemu-img check` succeeds. Cache keys contain both architecture and exact source SHA, so no cross-architecture or cross-candidate reuse is possible.
+The architecture-specific `dniv-runner-x64` and `dniv-runner-arm64` concurrency groups serialize creation and consumption. Cache eviction can require rebuilding a foundation, but ordinary candidate changes do not.
 
-The architecture-specific `dniv-runner-x64` and `dniv-runner-arm64` concurrency groups serialize creation/consumption. The first job for an architecture/SHA can populate a missing session; subsequent E1 or interoperability jobs restore it instead of rebuilding the Ubuntu Base image.
+## Disposable exact-candidate images
+
+`tests/lab/prepare-candidate-image.sh` clones the verified foundation into a disposable image, archives the exact checked-out `HEAD`, builds `decnet_iv.ko`, `dnctl` and `dnraw` against the foundation's pinned guest headers, records the exact source SHA, and installs the two-node and interoperability smoke entry points. It performs no package installation.
+
+The Python two-node controller receives that disposable candidate image as its immutable per-run base and creates fresh qcow2 node overlays. Interoperability creates a disposable exact-candidate image plus a disposable reference image from the same foundation. The reference image receives only the current harness plus runtime helpers; Route20/PyDECnet payloads remain independently pinned and attached separately.
 
 ## Two-node execution
 
-`tests/lab/dniv_lab.py` owns VM lifecycle for the Phase 2/E1 gate. It receives the verified immutable outer base plus kernel/initrd and creates fresh qcow2 node overlays, a Linux bridge, two TAP devices, DECnet packet capture and one QMP socket per guest. It launches QEMU directly, waits for guest acceptance markers, validates captured wire behavior, shuts guests down through QMP where possible, and removes host networking on every exit path.
+`tests/lab/dniv_lab.py` owns VM lifecycle for the Phase 2/E1 gate. It creates fresh qcow2 node overlays, a Linux bridge, two TAP devices, DECnet packet capture and one QMP socket per guest, launches QEMU directly, waits for guest acceptance markers, validates captured wire behavior and removes host networking on exit.
 
-Node overlays and QMP sockets are transient and excluded from uploaded evidence. Serial logs, packet captures, outer-session metadata and integrity manifests are durable acceptance evidence.
+VM runtime files live under a deliberately short `/tmp/dniv-*` path so QMP UNIX sockets remain below the Linux pathname limit. Compact serial/pcap evidence is copied into `scratch/runtime/`; qcow2 overlays and QMP sockets are discarded and never uploaded.
 
 ## Architectures
 
-The hosted matrix remains:
-
-- amd64 on `ubuntu-24.04`, using `qemu-system-x86_64` and KVM when `/dev/kvm` is usable;
-- arm64 on `ubuntu-24.04-arm`, using `qemu-system-aarch64` and KVM when `/dev/kvm` is usable.
-
-If KVM is unavailable the controller falls back to TCG. Native self-hosted KVM-capable x86_64 and arm64 machines remain the path to literal persistent runner root disks, but protocol acceptance no longer depends on runner-local disk survival.
+The hosted matrix remains amd64 on `ubuntu-24.04` with `qemu-system-x86_64`, and arm64 on `ubuntu-24.04-arm` with `qemu-system-aarch64`. KVM is used when `/dev/kvm` is usable; otherwise the controller falls back to TCG. Native self-hosted KVM machines remain an optimization, not an acceptance dependency.
 
 ## Addressing
 
-Ordinary test nodes use area 31, nodes 70 through 79, with names DN70 through DN79 as defined in `tests/lab/test-addresses.env`. DECnet Phase IV protocol MACs are derived from area/node. E1 deliberately gives the emulated NIC a different primary MAC so the test proves that protocol-originated frames use the DECnet-derived source MAC and that unicast filtering survives later primary-MAC changes.
+Ordinary test nodes use area 31, nodes 70 through 79, with names DN70 through DN79 as defined in `tests/lab/test-addresses.env`. DECnet Phase IV protocol MACs are derived from area/node. E1 deliberately gives the emulated NIC a different primary MAC so the test proves protocol-originated frames use the DECnet-derived source MAC and unicast filtering survives later primary-MAC changes.
 
 ## Interoperability
 
-Route20 and PyDECnet remain pinned independent peers. Interoperability consumes the same verified architecture session and derives disposable candidate/reference images from it. Prior-run evidence restore is not part of execution. Route20/PyDECnet payloads remain exact-SHA pinned and are injected only into disposable working images.
+Route20 and PyDECnet remain pinned independent peers. Interoperability consumes the same source-independent architecture foundation, derives disposable exact-candidate/reference images, builds the exact pinned peer, and executes bounded L1/L2/endnode scenarios. Prior-run evidence restore is not part of execution.
 
 ## Scale and faults
 
@@ -63,4 +58,4 @@ The Python controller is intentionally small enough to extend from two to 16 ind
 
 ## Release-image separation
 
-`image/ubuntu-base/build-image.sh` remains the canonical full image-construction path and is used to populate a missing architecture session. Its filesystem and RAW/QCOW2 checks remain valid release/image gates. Once a verified outer session exists for the exact candidate, ordinary protocol jobs restore it rather than repeating full construction.
+`image/ubuntu-base/build-image.sh` remains the canonical full exact-source release/test image path. `image/ubuntu-base/build-foundation.sh` exists only to amortize expensive package/kernel preparation for protocol acceptance. Release-image correctness remains an independent gate and is not inferred from a cached foundation.

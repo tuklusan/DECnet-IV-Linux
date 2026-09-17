@@ -1,0 +1,145 @@
+#!/usr/bin/env bash
+# ============================================================================
+# Copyright (c) 2026 Supratim Sanyal of SANYALnet Labs.
+# Proprietary rights reserved except as expressly licensed herein.
+#
+# DECnet-IV-Linux
+# This file is governed by the SANYALnet Labs Non-Commercial License in the
+# root LICENSE file. Non-Commercial use is permitted; Commercial Use and use
+# for AI/ML model training are prohibited unless separately authorized.
+#
+# Attribution is required: "Based on original work by Supratim Sanyal of
+# SANYALnet Labs." See LICENSE for full terms, warranty disclaimer, termination,
+# patent, trademark, and governing-law provisions.
+# ============================================================================
+
+set -euo pipefail
+
+if [[ $# -ne 2 ]]; then
+    echo "usage: $0 FOUNDATION-QCOW2 OUTPUT-QCOW2" >&2
+    exit 2
+fi
+foundation=$1
+output=$2
+[[ -r "$foundation" ]] || { echo "prepare-candidate-image: missing $foundation" >&2; exit 2; }
+
+script_dir=$(cd "$(dirname "$0")" && pwd)
+repo_root=$(cd "$script_dir/../.." && pwd)
+source_commit=$(git -C "$repo_root" rev-parse --verify 'HEAD^{commit}')
+[[ "$source_commit" =~ ^[0-9a-f]{40}$ ]] || {
+    echo "prepare-candidate-image: invalid source commit" >&2
+    exit 1
+}
+
+work=$(mktemp -d)
+raw="$work/candidate.raw"
+mnt="$work/root"
+mkdir -p "$mnt" "$(dirname "$output")"
+mounted=0
+chroot_mounted=0
+cleanup() {
+    set +e
+    if (( chroot_mounted )); then
+        sudo umount -R "$mnt/dev" 2>/dev/null || true
+        sudo umount "$mnt/sys" 2>/dev/null || true
+        sudo umount "$mnt/proc" 2>/dev/null || true
+    fi
+    if (( mounted )); then
+        sudo umount "$mnt" 2>/dev/null || true
+    fi
+    rm -rf "$work"
+}
+trap cleanup EXIT INT TERM
+
+normalize_ext4() {
+    local image=$1 rc
+    sync
+    set +e
+    sudo e2fsck -fy "$image"
+    rc=$?
+    set -e
+    if (( rc > 1 )); then
+        echo "prepare-candidate-image: ext4 normalization failed with status $rc" >&2
+        return "$rc"
+    fi
+}
+
+qemu-img convert -q -f qcow2 -O raw "$foundation" "$raw"
+sudo mount -o loop "$raw" "$mnt"
+mounted=1
+
+sudo rm -rf "$mnt/usr/src/decnet-iv-linux"
+sudo mkdir -p "$mnt/usr/src/decnet-iv-linux" "$mnt/usr/local/sbin" \
+    "$mnt/etc/systemd/system/multi-user.target.wants"
+git -C "$repo_root" archive --format=tar "$source_commit" | \
+    sudo tar -C "$mnt/usr/src/decnet-iv-linux" -xf -
+printf '%s\n' "$source_commit" | \
+    sudo tee "$mnt/usr/src/decnet-iv-linux/.source-commit" >/dev/null
+
+sudo mount -t proc proc "$mnt/proc"
+sudo mount -t sysfs sysfs "$mnt/sys"
+sudo mount --rbind /dev "$mnt/dev"
+sudo mount --make-rslave "$mnt/dev"
+chroot_mounted=1
+sudo chroot "$mnt" /bin/bash -euxc '
+source_commit=$(cat /usr/src/decnet-iv-linux/.source-commit)
+krel=$(ls -1 /lib/modules | sort -V | tail -1)
+test -n "$krel"
+test -d "/lib/modules/$krel/build"
+make -C /usr/src/decnet-iv-linux/userspace/dnctl clean all
+install -m 0755 /usr/src/decnet-iv-linux/userspace/dnctl/dnctl /usr/local/sbin/dnctl
+cc -O2 -std=c11 -Wall -Wextra -Werror \
+    -o /usr/local/sbin/dnraw /usr/src/decnet-iv-linux/tests/lab/dnraw.c
+make -C /usr/src/decnet-iv-linux/kernel/decnet KDIR="/lib/modules/$krel/build" clean all
+install -D -m 0644 /usr/src/decnet-iv-linux/kernel/decnet/decnet_iv.ko \
+    "/lib/modules/$krel/extra/decnet_iv.ko"
+depmod "$krel"
+printf "%s\n" "$source_commit" > /etc/dniv-candidate-sha
+'
+
+sudo install -m 0755 "$mnt/usr/src/decnet-iv-linux/tests/lab/dniv-smoke.sh" \
+    "$mnt/usr/local/sbin/dniv-smoke"
+sudo install -m 0644 "$mnt/usr/src/decnet-iv-linux/tests/lab/dniv-smoke.service" \
+    "$mnt/etc/systemd/system/dniv-smoke.service"
+sudo ln -sf ../dniv-smoke.service \
+    "$mnt/etc/systemd/system/multi-user.target.wants/dniv-smoke.service"
+
+sudo install -m 0755 "$mnt/usr/src/decnet-iv-linux/tests/lab/dniv-interop-smoke.sh" \
+    "$mnt/usr/local/sbin/dniv-interop-smoke"
+sudo tee "$mnt/etc/systemd/system/dniv-interop-smoke.service" >/dev/null <<'EOF_SERVICE'
+[Unit]
+Description=DECnet Phase IV independent-peer interoperability test
+After=systemd-udev-settle.service
+ConditionKernelCommandLine=dniv.interop=1
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/dniv-interop-smoke
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target
+EOF_SERVICE
+sudo ln -sf ../dniv-interop-smoke.service \
+    "$mnt/etc/systemd/system/multi-user.target.wants/dniv-interop-smoke.service"
+
+sudo test "$(sudo cat "$mnt/usr/src/decnet-iv-linux/.source-commit")" = "$source_commit"
+sudo test "$(sudo cat "$mnt/etc/dniv-candidate-sha")" = "$source_commit"
+sudo test -s "$mnt/usr/local/sbin/dnctl"
+sudo test -s "$mnt/usr/local/sbin/dnraw"
+sudo test -s "$mnt/usr/local/sbin/dniv-smoke"
+sudo test -s "$mnt/usr/local/sbin/dniv-interop-smoke"
+
+sudo umount -R "$mnt/dev"
+sudo umount "$mnt/sys"
+sudo umount "$mnt/proc"
+chroot_mounted=0
+sudo umount "$mnt"
+mounted=0
+normalize_ext4 "$raw"
+
+qemu-img convert -q -f raw -O qcow2 "$raw" "$output"
+qemu-img check -q -f qcow2 "$output"
+qemu-img compare -q -f raw -F qcow2 "$raw" "$output"
+echo "prepare-candidate-image: created $output from exact source $source_commit"

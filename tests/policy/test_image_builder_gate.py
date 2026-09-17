@@ -13,7 +13,7 @@
 # patent, trademark, and governing-law provisions.
 # ============================================================================
 
-"""Gate direct-boot and acceptance-image integrity safeguards."""
+"""Gate release images, persistent foundations and disposable candidate images."""
 
 from __future__ import annotations
 
@@ -22,62 +22,58 @@ import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-BASE_BUILDER = "image/ubuntu-base/build-image.sh"
-DERIVED_BUILDERS = (
-    "tests/lab/prepare-interop-candidate.sh",
-    "tests/lab/prepare-reference-image.sh",
-)
+RELEASE_BUILDER = "image/ubuntu-base/build-image.sh"
+FOUNDATION_BUILDER = "image/ubuntu-base/build-foundation.sh"
+CANDIDATE_BUILDER = "tests/lab/prepare-candidate-image.sh"
+REFERENCE_BUILDER = "tests/lab/prepare-reference-image.sh"
 INSTALL_PREFIX = 'apt-get --snapshot "$UBUNTU_APT_SNAPSHOT" install -y --no-install-recommends'
 INITRD_CHECK = 'test -s "/boot/initrd.img-$krel"'
-ARM64_OWNER_FIX = 'sudo chown "$(id -u):$(id -g)" "$boot_dir/vmlinuz"'
-ARM64_MAGIC_READ = 'arm64_magic=$(dd if="$boot_dir/vmlinuz" bs=1 skip=56 count=4 status=none |'
-ARM64_HARD_REJECT = 'arm64 direct-boot kernel is neither raw Image nor EFI zboot'
 HOST_RAW_CMP = 'cmp -s "$raw"'
 EXT4_NORMALIZE_CALL = 'normalize_ext4 "$raw"'
 EXT4_FSCK = 'sudo e2fsck -fy "$image"'
 EXT4_FSCK_FATAL = 'if (( rc > 1 )); then'
-BASE_REQUIRED_SNIPPETS = {
-    "eager ext4 metadata initialization": 'mkfs.ext4 -q -F -E lazy_itable_init=0,lazy_journal_init=0 -L dniv-root "$raw"',
+
+COMMON_IMAGE_REQUIRED = {
     "ext4 synchronization and repair probe": EXT4_FSCK,
     "ext4 repair status validation": EXT4_FSCK_FATAL,
     "post-unmount ext4 normalization": EXT4_NORMALIZE_CALL,
-    "installed smoke script byte comparison": 'sudo cmp -s "$smoke_script_source" "$smoke_script_dest"',
-    "installed smoke unit byte comparison": 'sudo cmp -s "$smoke_unit_source" "$smoke_unit_dest"',
-    "systemd unit validation": 'systemd-analyze verify /etc/systemd/system/dniv-smoke.service',
-    "systemd offline enable": 'systemctl --root="$mnt" enable dniv-smoke.service',
-    "systemd enabled-state validation": 'systemctl --root="$mnt" is-enabled dniv-smoke.service',
-    "systemd wants-link validation": 'sudo test -L "$mnt/etc/systemd/system/multi-user.target.wants/dniv-smoke.service"',
-    "arm64 outer gzip decompression": 'sudo gzip -dc "$kernel" > "$boot_dir/vmlinuz"',
-    "arm64 boot artifact ownership": ARM64_OWNER_FIX,
-    "arm64 boot artifact nonempty check": 'test -s "$boot_dir/vmlinuz"',
-    "arm64 Image magic read": ARM64_MAGIC_READ,
-    "arm64 current Image recognition": 'if [[ "$arm64_magic" == 41524d64 ]]; then',
-    "arm64 EFI-zboot MZ read": 'zboot_msdos=$(dd if="$boot_dir/vmlinuz" bs=1 count=2 status=none |',
-    "arm64 EFI-zboot tag read": 'zboot_tag=$(dd if="$boot_dir/vmlinuz" bs=1 skip=4 count=4 status=none |',
-    "arm64 EFI-zboot Linux magic read": 'zboot_linux_magic=$(dd if="$boot_dir/vmlinuz" bs=1 skip=56 count=4 status=none |',
-    "arm64 EFI-zboot recognition": 'if [[ "$zboot_msdos" == 4d5a && "$zboot_tag" == 7a696d67 &&',
-    "arm64 EFI-zboot compression read": 'zboot_compression=$(dd if="$boot_dir/vmlinuz" bs=1 skip=24 count=32 status=none |',
-    "arm64 EFI-zboot payload offset read": 'zboot_payload_offset=$(dd if="$boot_dir/vmlinuz" bs=1 skip=8 count=4 status=none |',
-    "arm64 EFI-zboot payload size read": 'zboot_payload_size=$(dd if="$boot_dir/vmlinuz" bs=1 skip=12 count=4 status=none |',
-    "arm64 EFI-zboot file size read": 'zboot_file_size=$(stat -c \'%s\' "$boot_dir/vmlinuz")',
-    "arm64 EFI-zboot compression validation": 'if [[ "$zboot_compression" != gzip ]]; then',
-    "arm64 EFI-zboot payload bounds": 'zboot_payload_offset + zboot_payload_size > zboot_file_size',
-    "arm64 EFI-zboot payload extraction": 'count="$zboot_payload_size" status=none | gzip -dc > "$zboot_raw"',
-    "arm64 EFI-zboot raw Image validation": 'if [[ "$zboot_raw_magic" != 41524d64 ]]; then',
-    "arm64 EFI-zboot replacement": 'mv "$zboot_raw" "$boot_dir/vmlinuz"',
-    "arm64 QEMU raw fallback": ': # QEMU raw-image fallback; boot acceptance is the executable proof.',
-    "qcow2 structural validation": 'qemu-img check -f qcow2 "$output"',
-    "logical raw/qcow2 comparison": 'qemu-img compare -f raw -F qcow2 "$raw" "$output"',
 }
-DERIVED_REQUIRED_SNIPPETS = {
-    "ext4 synchronization and repair probe": EXT4_FSCK,
-    "ext4 repair status validation": EXT4_FSCK_FATAL,
-    "post-unmount ext4 normalization": EXT4_NORMALIZE_CALL,
+DERIVED_REQUIRED = {
+    **COMMON_IMAGE_REQUIRED,
     "uncompressed qcow2 conversion": 'qemu-img convert -q -f raw -O qcow2 "$raw" "$output"',
     "qcow2 structural validation": 'qemu-img check -q -f qcow2 "$output"',
     "logical raw/qcow2 comparison": 'qemu-img compare -q -f raw -F qcow2 "$raw" "$output"',
-    "archived source provenance read": 'source_commit=$(sudo cat "$archived_source/.source-commit")',
-    "archived source provenance validation": '[[ "$source_commit" =~ ^[0-9a-f]{40}$ ]] || {',
+}
+FOUNDATION_REQUIRED = {
+    **COMMON_IMAGE_REQUIRED,
+    "eager ext4 metadata initialization": 'mkfs.ext4 -q -F -E lazy_itable_init=0,lazy_journal_init=0 -L dniv-root "$raw"',
+    "generated initrd validation": INITRD_CHECK,
+    "arm64 outer gzip decompression": 'sudo gzip -dc "$kernel" > "$boot_dir/vmlinuz"',
+    "arm64 Image magic probe": 'arm64_magic=$(dd if="$boot_dir/vmlinuz" bs=1 skip=56 count=4 status=none |',
+    "arm64 EFI-zboot recognition": 'if [[ "$zboot_msdos" == 4d5a && "$zboot_tag" == 7a696d67 &&',
+    "arm64 QEMU raw fallback": ': # QEMU raw-image fallback; boot acceptance is the executable proof.',
+    "qcow2 structural validation": 'qemu-img check -f qcow2 "$output"',
+    "logical raw/qcow2 comparison": 'qemu-img compare -f raw -F qcow2 "$raw" "$output"',
+    "candidate source purge": 'sudo rm -rf "$mnt/usr/src/decnet-iv-linux"',
+}
+CANDIDATE_REQUIRED = {
+    **DERIVED_REQUIRED,
+    "exact candidate commit": "source_commit=$(git -C \"$repo_root\" rev-parse --verify 'HEAD^{commit}')",
+    "exact candidate archive": 'git -C "$repo_root" archive --format=tar "$source_commit" |',
+    "candidate provenance marker": 'sudo tee "$mnt/usr/src/decnet-iv-linux/.source-commit"',
+    "kernel module build": 'make -C /usr/src/decnet-iv-linux/kernel/decnet KDIR="/lib/modules/$krel/build" clean all',
+    "dnctl build": 'make -C /usr/src/decnet-iv-linux/userspace/dnctl clean all',
+    "dnraw build": '-o /usr/local/sbin/dnraw /usr/src/decnet-iv-linux/tests/lab/dnraw.c',
+    "two-node smoke install": 'dniv-smoke.sh',
+    "interop smoke install": 'dniv-interop-smoke.sh',
+    "candidate SHA marker": '/etc/dniv-candidate-sha',
+}
+REFERENCE_REQUIRED = {
+    **DERIVED_REQUIRED,
+    "exact harness commit": "source_commit=$(git -C \"$repo_root\" rev-parse --verify 'HEAD^{commit}')",
+    "reference peer install": 'dniv-reference-peer.sh',
+    "reference dnraw build": '-o "$mnt/usr/local/sbin/dnraw" "$repo_root/tests/lab/dnraw.c"',
+    "harness SHA marker": '/etc/dniv-reference-harness-sha',
 }
 
 
@@ -138,22 +134,16 @@ def has_strict_qemu_img_compare(text: str) -> bool:
 def require_snippets(label: str, text: str, snippets: dict[str, str]) -> None:
     missing = [name for name, snippet in snippets.items() if snippet not in text]
     if missing:
-        raise SystemExit(
-            f"image-builder gate: {label} required safeguard(s) missing: "
-            + ", ".join(missing)
-        )
+        raise SystemExit(f"image-builder gate: {label} required safeguard(s) missing: " + ", ".join(missing))
 
 
 def reject_bad_image_compare(label: str, text: str) -> None:
     if HOST_RAW_CMP in text:
-        raise SystemExit(
-            f"image-builder gate: {label} must compare logical image content with qemu-img, "
-            "not host RAW file bytes"
-        )
+        raise SystemExit(f"image-builder gate: {label} must compare logical image content with qemu-img")
     if has_strict_qemu_img_compare(text):
-        raise SystemExit(
-            f"image-builder gate: {label} qemu-img compare must not use strict allocation mode"
-        )
+        raise SystemExit(f"image-builder gate: {label} qemu-img compare must not use strict allocation mode")
+    if has_compressed_qcow2_convert(text):
+        raise SystemExit(f"image-builder gate: {label} qcow2 conversion must remain uncompressed")
 
 
 def main() -> int:
@@ -164,59 +154,60 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
-        base_text, source_label = read_path(BASE_BUILDER, args.staged, args.tree)
-        derived = {
-            path: read_path(path, args.staged, args.tree)[0]
-            for path in DERIVED_BUILDERS
-        }
+        release, source_label = read_path(RELEASE_BUILDER, args.staged, args.tree)
+        foundation = read_path(FOUNDATION_BUILDER, args.staged, args.tree)[0]
+        candidate = read_path(CANDIDATE_BUILDER, args.staged, args.tree)[0]
+        reference = read_path(REFERENCE_BUILDER, args.staged, args.tree)[0]
     except (OSError, subprocess.CalledProcessError) as exc:
         raise SystemExit(f"image-builder gate: cannot read exact source: {exc}") from exc
 
-    packages = install_tokens(base_text)
-    required = {
-        "initramfs-tools",
-        "linux-image-virtual-hwe-26.04",
-        "linux-headers-virtual-hwe-26.04",
-    }
-    missing = sorted(required - packages)
+    release_packages = install_tokens(release)
+    release_required = {"initramfs-tools", "linux-image-virtual-hwe-26.04", "linux-headers-virtual-hwe-26.04"}
+    missing = sorted(release_required - release_packages)
     if missing:
-        raise SystemExit(
-            "image-builder gate: explicit direct-boot package(s) missing: "
-            + ", ".join(missing)
-        )
-    if INITRD_CHECK not in base_text:
-        raise SystemExit(
-            "image-builder gate: generated initrd is not checked before build cleanup"
-        )
-    require_snippets("base image", base_text, BASE_REQUIRED_SNIPPETS)
-    if ARM64_HARD_REJECT in base_text:
-        raise SystemExit(
-            "image-builder gate: arm64 builder must preserve QEMU raw-image fallback "
-            "instead of requiring ARM64 or EFI-zboot magic"
-        )
-    if base_text.index(ARM64_OWNER_FIX) > base_text.index(ARM64_MAGIC_READ):
-        raise SystemExit(
-            "image-builder gate: arm64 direct-boot kernel must become runner-readable "
-            "before the non-root format probe"
-        )
-    if has_compressed_qcow2_convert(base_text):
-        raise SystemExit(
-            "image-builder gate: acceptance base image conversion must not use qcow2 compression"
-        )
-    reject_bad_image_compare("base image", base_text)
+        raise SystemExit("image-builder gate: release direct-boot package(s) missing: " + ", ".join(missing))
+    if INITRD_CHECK not in release:
+        raise SystemExit("image-builder gate: release image does not validate generated initrd")
+    for marker in (
+        'sudo cmp -s "$smoke_script_source" "$smoke_script_dest"',
+        'systemd-analyze verify /etc/systemd/system/dniv-smoke.service',
+        'qemu-img check -f qcow2 "$output"',
+        'qemu-img compare -f raw -F qcow2 "$raw" "$output"',
+    ):
+        if marker not in release:
+            raise SystemExit(f"image-builder gate: release image safeguard missing: {marker}")
+    reject_bad_image_compare("release image", release)
 
-    for path, text in derived.items():
-        require_snippets(path, text, DERIVED_REQUIRED_SNIPPETS)
-        if has_compressed_qcow2_convert(text):
-            raise SystemExit(
-                f"image-builder gate: derived acceptance image conversion in {path} "
-                "must not use qcow2 compression"
-            )
-        reject_bad_image_compare(path, text)
+    foundation_packages = install_tokens(foundation)
+    foundation_required_packages = {
+        "build-essential", "initramfs-tools", "linux-image-virtual-hwe-26.04",
+        "linux-headers-virtual-hwe-26.04", "python3", "libpcap0.8t64",
+    }
+    missing = sorted(foundation_required_packages - foundation_packages)
+    if missing:
+        raise SystemExit("image-builder gate: foundation package(s) missing: " + ", ".join(missing))
+    require_snippets("architecture foundation", foundation, FOUNDATION_REQUIRED)
+    for forbidden in (
+        "source_commit=", 'git -C "$repo_root" archive',
+        "make -C /usr/src/decnet-iv-linux", "dniv-smoke.service",
+    ):
+        if forbidden in foundation:
+            raise SystemExit(f"image-builder gate: source-dependent content leaked into foundation: {forbidden}")
+    reject_bad_image_compare("architecture foundation", foundation)
+
+    require_snippets("disposable candidate", candidate, CANDIDATE_REQUIRED)
+    if "apt-get" in candidate:
+        raise SystemExit("image-builder gate: disposable candidate must not repeat package installation")
+    reject_bad_image_compare("disposable candidate", candidate)
+
+    require_snippets("disposable reference image", reference, REFERENCE_REQUIRED)
+    if "apt-get" in reference:
+        raise SystemExit("image-builder gate: disposable reference image must not repeat package installation")
+    reject_bad_image_compare("disposable reference image", reference)
 
     print(
         "image-builder gate: source=" + source_label
-        + " initrd, stable ext4 images, arm64 QEMU-compatible direct boot and logical image-integrity safeguards verified"
+        + " release image, source-independent architecture foundation, and exact-candidate disposable layers verified"
     )
     return 0
 

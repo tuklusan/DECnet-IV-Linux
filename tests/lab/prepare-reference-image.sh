@@ -16,26 +16,28 @@
 set -euo pipefail
 
 if [[ $# -ne 2 ]]; then
-    echo "usage: $0 BASE-QCOW2 OUTPUT-QCOW2" >&2
+    echo "usage: $0 FOUNDATION-QCOW2 OUTPUT-QCOW2" >&2
     exit 2
 fi
-base=$1
+foundation=$1
 output=$2
-[[ -r "$base" ]] || { echo "prepare-reference-image: missing $base" >&2; exit 2; }
+[[ -r "$foundation" ]] || { echo "prepare-reference-image: missing $foundation" >&2; exit 2; }
+
+script_dir=$(cd "$(dirname "$0")" && pwd)
+repo_root=$(cd "$script_dir/../.." && pwd)
+source_commit=$(git -C "$repo_root" rev-parse --verify 'HEAD^{commit}')
+[[ "$source_commit" =~ ^[0-9a-f]{40}$ ]] || {
+    echo "prepare-reference-image: invalid source commit" >&2
+    exit 1
+}
 
 work=$(mktemp -d)
 raw="$work/reference.raw"
 mnt="$work/root"
 mkdir -p "$mnt" "$(dirname "$output")"
 mounted=0
-chroot_mounted=0
 cleanup() {
     set +e
-    if (( chroot_mounted )); then
-        sudo umount -R "$mnt/dev" 2>/dev/null || true
-        sudo umount "$mnt/sys" 2>/dev/null || true
-        sudo umount "$mnt/proc" 2>/dev/null || true
-    fi
     if (( mounted )); then
         sudo umount "$mnt" 2>/dev/null || true
     fi
@@ -56,23 +58,14 @@ normalize_ext4() {
     fi
 }
 
-qemu-img convert -q -f qcow2 -O raw "$base" "$raw"
+qemu-img convert -q -f qcow2 -O raw "$foundation" "$raw"
 sudo mount -o loop "$raw" "$mnt"
 mounted=1
-archived_source="$mnt/usr/src/decnet-iv-linux"
-test -r "$archived_source/.source-commit"
-source_commit=$(sudo cat "$archived_source/.source-commit")
-[[ "$source_commit" =~ ^[0-9a-f]{40}$ ]] || {
-    echo "prepare-reference-image: invalid archived source commit" >&2
-    exit 1
-}
-test -r "$archived_source/tests/lab/dniv-reference-peer.sh"
-test -r "$archived_source/image/ubuntu-base/images.env"
-# shellcheck disable=SC1090
-. "$archived_source/image/ubuntu-base/images.env"
-snapshot=${UBUNTU_APT_SNAPSHOT:?archived images.env must pin UBUNTU_APT_SNAPSHOT}
-sudo install -m 0755 "$archived_source/tests/lab/dniv-reference-peer.sh" \
+sudo mkdir -p "$mnt/usr/local/sbin" "$mnt/etc/systemd/system/multi-user.target.wants"
+sudo install -m 0755 "$repo_root/tests/lab/dniv-reference-peer.sh" \
     "$mnt/usr/local/sbin/dniv-reference-peer"
+sudo cc -O2 -std=c11 -Wall -Wextra -Werror \
+    -o "$mnt/usr/local/sbin/dnraw" "$repo_root/tests/lab/dnraw.c"
 sudo tee "$mnt/etc/systemd/system/dniv-reference-peer.service" >/dev/null <<'EOF_SERVICE'
 [Unit]
 Description=Independent DECnet reference peer
@@ -90,33 +83,16 @@ WantedBy=multi-user.target
 EOF_SERVICE
 sudo ln -sf ../dniv-reference-peer.service \
     "$mnt/etc/systemd/system/multi-user.target.wants/dniv-reference-peer.service"
+printf '%s\n' "$source_commit" | sudo tee "$mnt/etc/dniv-reference-harness-sha" >/dev/null
+sudo test -x "$mnt/usr/local/sbin/dniv-reference-peer"
+sudo test -x "$mnt/usr/local/sbin/dnraw"
+sudo test "$(sudo cat "$mnt/etc/dniv-reference-harness-sha")" = "$source_commit"
 
-sudo mount -t proc proc "$mnt/proc"
-sudo mount -t sysfs sysfs "$mnt/sys"
-sudo mount --rbind /dev "$mnt/dev"
-sudo mount --make-rslave "$mnt/dev"
-chroot_mounted=1
-sudo chroot "$mnt" /usr/bin/env UBUNTU_APT_SNAPSHOT="$snapshot" /bin/bash -euxc '
-export DEBIAN_FRONTEND=noninteractive
-apt-get --snapshot "$UBUNTU_APT_SNAPSHOT" update
-apt-get --snapshot "$UBUNTU_APT_SNAPSHOT" install -y --no-install-recommends \
-    python3 libpcap0.8t64
-apt-get clean
-rm -rf /var/lib/apt/lists/*
-'
-sudo umount -R "$mnt/dev"
-sudo umount "$mnt/sys"
-sudo umount "$mnt/proc"
-chroot_mounted=0
 sudo umount "$mnt"
 mounted=0
 normalize_ext4 "$raw"
 
-# Acceptance correctness wins over file-size optimization. Keep the derived
-# image uncompressed, validate its qcow2 structure, then compare guest-visible
-# logical content directly across raw and qcow2. Sparse zero allocation is an
-# implementation detail, not a content difference.
 qemu-img convert -q -f raw -O qcow2 "$raw" "$output"
 qemu-img check -q -f qcow2 "$output"
 qemu-img compare -q -f raw -F qcow2 "$raw" "$output"
-echo "prepare-reference-image: created $output from archived source $source_commit"
+echo "prepare-reference-image: created $output with harness from exact source $source_commit"

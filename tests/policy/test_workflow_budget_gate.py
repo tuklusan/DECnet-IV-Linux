@@ -89,16 +89,24 @@ jobs:
             scenarios: \"l1 l2\"
     env:
       DNIV_SCRATCH_DIR: ${{{{ github.workspace }}}}/scratch/runtime/${{{{ github.run_id }}}}/${{{{ github.job }}}}-${{{{ matrix.arch }}}}-${{{{ matrix.suite }}}}
-      DNIV_OUTER_SESSION_ID: outer-v1-${{{{ matrix.arch }}}}-${{{{ github.sha }}}}
     steps:
       - name: Bind candidate
         run: python3 tools/scratch_state.py init --expected-sha '${{{{ inputs.expected_sha }}}}'
+      - name: Compute stable foundation
+        run: |
+          fingerprint=abc
+          session=\"outer-v2-${{{{ matrix.arch }}}}-$fingerprint\"
+          echo build-foundation.sh
       - name: Restore outer
         uses: actions/cache/restore@{CACHE_PIN}
       - name: Save outer
         uses: actions/cache/save@{CACHE_PIN}
-      - name: Prepare disposable interoperability images
-        run: true
+      - name: Verify source-independent architecture foundation
+        run: "! grep -q '^SOURCE_SHA=' session.env"
+      - name: Prepare disposable exact-candidate and reference images
+        run: |
+          tests/lab/prepare-candidate-image.sh base candidate
+          tests/lab/prepare-reference-image.sh base reference
       - name: Preserve evidence
         uses: actions/upload-artifact@{UPLOAD_PIN}
         with:
@@ -143,7 +151,7 @@ def main() -> int:
 
         result = invoke(root, "--tree", "HEAD")
         if result.returncode != 0:
-            raise SystemExit("workflow budget rejected valid committed controls")
+            raise SystemExit("workflow budget rejected valid committed controls: " + result.stderr)
 
         bad_queue = GOOD.replace("  queue: max\n", "", 1)
         sample.write_text(bad_queue, encoding="utf-8")
@@ -188,6 +196,17 @@ def main() -> int:
         result = invoke(root, "--staged")
         if result.returncode == 0 or "3 scenarios" not in result.stderr:
             raise SystemExit("workflow budget failed to reject an oversized staged interop scenario group")
+
+        run(root, "git", "reset", "-q", "HEAD", "--", str(interop.relative_to(root)))
+        sha_keyed = INTEROP_GOOD.replace(
+            'session="outer-v2-${{ matrix.arch }}-$fingerprint"',
+            'session="outer-v1-${{ matrix.arch }}-${{ github.sha }}"',
+        )
+        interop.write_text(sha_keyed, encoding="utf-8")
+        run(root, "git", "add", str(interop.relative_to(root)))
+        result = invoke(root, "--staged")
+        if result.returncode == 0 or "outer-v1" not in result.stderr:
+            raise SystemExit("workflow budget failed to reject source-SHA-keyed full foundations")
 
     print("workflow budget regression tests passed")
     return 0

@@ -33,7 +33,7 @@ Preferred exact reference pins remain Route20 `b94115b2615c6463d1f006924ceeadde8
 - Hosted jobs have explicit timeouts of at most 75 minutes; concurrency uses `queue: max` with `cancel-in-progress: false` where a concurrency block is needed.
 - Repository-policy/control runs are isolated by exact candidate SHA and do not consume the protocol-lab `dniv-runner-*` serialization slots.
 - GitHub-owned actions remain pinned to immutable full SHAs.
-- Compact evidence retention is at most 30 days. Transient VM overlays and QMP sockets are never uploaded as acceptance evidence.
+- Compact evidence retention is at most 30 days. Transient candidate images, VM overlays and QMP sockets are never acceptance state.
 - Candidate promotion is determined only by documented exact-SHA mechanical, build, VM, reference, protocol and interoperability gates.
 
 ## Phase status
@@ -50,17 +50,15 @@ Foundation complete: pinned Ubuntu Base 26.04.1 amd64/arm64 rootfs files and pac
 
 Implementation remains active. Router/endnode hello generation/parsing, periodic hello, per-interface adjacencies, 3.1x listen expiry, DR election, router-router INIT/UP behavior, endnode admission/router selection, L2 cross-area behavior, 33-router/interface admission, protocol source MACs, DECnet unicast filters and primary-MAC-change survival are implemented and covered by the E1/interop harnesses.
 
-Exact-SHA acceptance on `3f41bec910b5b07520c23b05dcbb1996d091ef62` established that native builds and continuity gates were green but the VM/interoperability path was spending acceptance time in guest-image construction and mutation. The subsequent image-stability correction `102972a5e8a35e517ac65bd100a8d3f271f37720` made ext4 conversion deterministic, but protocol acceptance remained too tightly coupled to repeated image production.
+Exact-SHA acceptance on `3f41bec910b5b07520c23b05dcbb1996d091ef62` established that native builds and continuity gates were green but the VM/interoperability path was spending acceptance time in guest-image construction and mutation. Image-stability correction `102972a5e8a35e517ac65bd100a8d3f271f37720` made ext4 conversion deterministic. The subsequent Python-QEMU work removed writable inner-VM checkpoint/upload/restore/rebase/prune machinery and proved that architecture images can be cached/restored between jobs.
 
-`tests/lab/dniv_lab.py` remains the two-node virtualization controller. It launches QEMU directly, creates disposable qcow2 overlays per guest, uses TAP/bridge networking, records serial and DECnet packet evidence, and uses QMP for shutdown. Mutable inner-VM checkpoint/upload/restore/rebase/prune machinery remains retired.
+The final infrastructure boundary is now explicit. `image/ubuntu-base/build-foundation.sh` creates a source-independent amd64/arm64 foundation containing Ubuntu userspace, pinned guest kernel/initrd, headers/compiler and reference-runtime dependencies. Its stable session ID is `outer-v2-<arch>-<foundation-fingerprint>`, where the fingerprint derives only from the pinned image metadata and foundation recipe. The manifest contains no source SHA. Therefore ordinary project commits reuse the same architecture foundation instead of repeating package installation and full image construction.
 
-The architecture persistence boundary is now explicit. Each architecture slot has one immutable outer base session for the exact candidate, identified as `outer-v1-<arch>-<source-sha>`. GitHub-hosted runner root filesystems are ephemeral, so the architecture disk session is persisted through the GitHub Actions cache and restored on later acceptance jobs for that same exact SHA. The cached session contains only `base.qcow2`, kernel/initrd, a session manifest and checksums. Every restore verifies architecture, exact source SHA, all SHA-256 sums and `qemu-img check` before use. A different architecture or source SHA cannot reuse the session.
+`tests/lab/prepare-candidate-image.sh` derives a disposable image from that verified foundation, archives the exact checked-out commit, builds and installs `decnet_iv.ko`, `dnctl`, `dnraw` and the smoke entry points, and records exact candidate provenance. It performs no package installation. `tests/lab/prepare-reference-image.sh` similarly derives a disposable reference runtime without package installation. Route20/PyDECnet remain independently pinned and attached separately.
 
-Both the Python two-node gate and interoperability now consume that same architecture session. The first job for an architecture/SHA may build and save it; later jobs restore it instead of re-running Ubuntu Base extraction, package installation and base-image conversion. Interoperability then derives disposable candidate/reference images from the immutable session base. Prior-run interoperability evidence restore inputs are removed because they did not alter execution and only added transfer/lineage overhead.
+`tests/lab/dniv_lab.py` remains the two-node virtualization controller. It launches QEMU directly, creates disposable qcow2 overlays per guest, uses TAP/bridge networking, records serial and DECnet packet evidence, and uses QMP for shutdown. Its runtime/evidence root is now placed under a short `/tmp/dniv-*` path by the workflow so QMP UNIX socket names cannot exceed the Linux pathname limit; compact logs/pcaps are copied back to `scratch/runtime/` and all disposable disks/sockets are removed.
 
-Repository policy and acceptance dispatch remain isolated from lab-runner concurrency. Protocol jobs remain serialized by their architecture slots, which also prevents two jobs racing to create the same outer session.
-
-Candidate `22fa6771250b5f46b68ac822fd9af38d82baba23` proved the first cache wiring was not workflow-valid: GitHub rejected `vm-lab.yml` before creating jobs because `runner.temp` is unavailable in job-level `env`. The correction uses `${{ github.workspace }}/scratch/outer/<arch>`, an ignored workspace path whose `github` context is valid at job scope. Results from `22fa677...` are historical and do not count toward acceptance.
+Repository policy and acceptance dispatch remain isolated from lab-runner concurrency. Protocol jobs remain serialized by architecture slot, preventing foundation creation races. Release-image construction remains a separate exact-source gate and is not inferred from the cached protocol foundation.
 
 ## Test addressing
 
@@ -68,12 +66,12 @@ Ordinary lab addressing remains area 31, nodes 70 through 79, names DN70 through
 
 ## Pre-production acceptance
 
-`docs/PRE_PRODUCTION_TEST.md` is the consolidated production procedure. Required tests must execute with complete evidence; documentation alone is never green. Long campaigns should reuse immutable architecture sessions while keeping guest writable state disposable.
+`docs/PRE_PRODUCTION_TEST.md` is the consolidated production procedure. Required tests must execute with complete evidence; documentation alone is never green. Long campaigns reuse immutable source-independent architecture foundations while keeping exact-candidate and writable guest state disposable.
 
 ## Resume point
 
-Phase 3 remains active. The current candidate combines the Python QEMU/QMP disposable-overlay controller with exact-SHA persistent architecture base sessions shared by E1 and interoperability. No protocol promotion is implied until the unchanged candidate passes build, continuity, reference, E1 and interoperability gates.
+Phase 3 remains active. Infrastructure work is considered closed after one exact-head acceptance exercise proves the `outer-v2` foundation path parses, creates/restores foundations, injects the exact candidate, and reaches E1/interoperability execution without the previous QMP pathname failure. No protocol promotion is implied until the unchanged candidate passes the documented gates.
 
 ## Next action
 
-Run fresh exact-head acceptance. The first amd64 and arm64 lab jobs should create or restore their `outer-v1-<arch>-<sha>` sessions; subsequent jobs for the same SHA must report cache hits and skip base construction. Then evaluate E1 and interoperability protocol results independently of image-preparation overhead.
+Run one fresh exact-head acceptance for the infrastructure-finalization candidate. If the foundation/cache/candidate-injection path works, stop infrastructure work and resume Phase 3 protocol/interoperability debugging from the first substantive protocol failure, following `docs/ROADMAP.md`.
