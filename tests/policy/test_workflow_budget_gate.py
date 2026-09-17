@@ -46,7 +46,30 @@ jobs:
           retention-days: 3
 """
 
-BAD = GOOD.replace("timeout-minutes: 75", "timeout-minutes: 76")
+INTEROP_GOOD = """name: Interop Budget Test
+on: workflow_dispatch
+jobs:
+  live-interop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            suite: routing
+            scenarios: \"l1 l2\"
+    env:
+      DNIV_SCRATCH_DIR: ${{ github.workspace }}/scratch/runtime/${{ github.run_id }}/${{ github.job }}-${{ matrix.arch }}-${{ matrix.suite }}
+    steps:
+      - name: Preserve evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: scratch-interop-${{ matrix.arch }}-${{ matrix.suite }}-${{ github.run_id }}
+          path: |
+            ${{ env.DNIV_SCRATCH_DIR }}/
+            !${{ env.DNIV_SCRATCH_DIR }}/interop/**/*.qcow2
+          retention-days: 30
+"""
 
 
 def invoke(root: Path) -> subprocess.CompletedProcess[str]:
@@ -65,16 +88,25 @@ def main() -> int:
         root = Path(temporary)
         workflows = root / ".github" / "workflows"
         workflows.mkdir(parents=True)
-        path = workflows / "sample.yml"
-        path.write_text(GOOD, encoding="utf-8")
+        sample = workflows / "sample.yml"
+        interop = workflows / "interop.yml"
+
+        sample.write_text(GOOD, encoding="utf-8")
+        interop.write_text(INTEROP_GOOD, encoding="utf-8")
         result = invoke(root)
         if result.returncode != 0:
-            raise SystemExit("workflow budget rejected adjacent valid artifact blocks")
+            raise SystemExit("workflow budget rejected valid adjacent artifacts or bounded interop rows")
 
-        path.write_text(BAD, encoding="utf-8")
+        sample.write_text(GOOD.replace("timeout-minutes: 75", "timeout-minutes: 76"), encoding="utf-8")
         result = invoke(root)
         if result.returncode == 0 or "76" not in result.stderr:
             raise SystemExit("workflow budget failed to reject a job above 75 minutes")
+
+        sample.write_text(GOOD, encoding="utf-8")
+        interop.write_text(INTEROP_GOOD.replace('scenarios: "l1 l2"', 'scenarios: "l1 l2 endnode"'), encoding="utf-8")
+        result = invoke(root)
+        if result.returncode == 0 or "3 scenarios" not in result.stderr:
+            raise SystemExit("workflow budget failed to reject an oversized interop scenario group")
 
     print("workflow budget regression tests passed")
     return 0

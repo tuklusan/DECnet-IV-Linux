@@ -25,11 +25,13 @@ WORKFLOW_DIR = Path(".github/workflows")
 MAX_JOB_MINUTES = 75
 MAX_EVIDENCE_DAYS = 30
 VM_CHECKPOINT_DAYS = 3
+MAX_INTEROP_SCENARIOS_PER_JOB = 2
 
 JOB_RE = re.compile(r"^  ([A-Za-z0-9_-]+):\s*$")
 TIMEOUT_RE = re.compile(r"^    timeout-minutes:\s*([0-9]+)\s*$")
 RETENTION_RE = re.compile(r"^\s+retention-days:\s*([0-9]+)\s*$")
 STEP_RE = re.compile(r"^      - name:\s+")
+SCENARIOS_RE = re.compile(r"^\s+scenarios:\s*[\"']?([^\"'#]+?)[\"']?\s*$")
 
 
 def job_ranges(lines: list[str]) -> list[tuple[str, int, int]]:
@@ -106,10 +108,28 @@ def check_workflow(path: Path) -> list[str]:
         for marker in required:
             if marker not in text:
                 errors.append(f"{path}: missing VM checkpoint storage safeguard: {marker}")
+
     if path.name == "interop.yml":
-        marker = "!${{ env.DNIV_SCRATCH_DIR }}/interop/**/*.qcow2"
-        if marker not in text:
-            errors.append(f"{path}: transient interoperability disks are not excluded from artifacts")
+        required = (
+            "!${{ env.DNIV_SCRATCH_DIR }}/interop/**/*.qcow2",
+            "scratch-interop-${{ matrix.arch }}-${{ matrix.suite }}-${{ github.run_id }}",
+            "${{ github.job }}-${{ matrix.arch }}-${{ matrix.suite }}",
+        )
+        for marker in required:
+            if marker not in text:
+                errors.append(f"{path}: missing interoperability storage/runtime safeguard: {marker}")
+        scenario_rows = []
+        for line in lines:
+            match = SCENARIOS_RE.match(line)
+            if match:
+                scenarios = match.group(1).split()
+                scenario_rows.append(scenarios)
+                if not scenarios or len(scenarios) > MAX_INTEROP_SCENARIOS_PER_JOB:
+                    errors.append(
+                        f"{path}: interop matrix row has {len(scenarios)} scenarios; maximum is {MAX_INTEROP_SCENARIOS_PER_JOB}"
+                    )
+        if not scenario_rows:
+            errors.append(f"{path}: no bounded interoperability scenario rows found")
 
     return errors
 
@@ -126,7 +146,7 @@ def main() -> int:
             print(f"workflow-budget: {error}", file=sys.stderr)
         return 1
     print(
-        f"workflow-budget: {len(paths)} workflow files verified; jobs <= {MAX_JOB_MINUTES} minutes, artifacts <= {MAX_EVIDENCE_DAYS} days"
+        f"workflow-budget: {len(paths)} workflow files verified; jobs <= {MAX_JOB_MINUTES} minutes, artifacts <= {MAX_EVIDENCE_DAYS} days, interop scenarios/job <= {MAX_INTEROP_SCENARIOS_PER_JOB}"
     )
     return 0
 

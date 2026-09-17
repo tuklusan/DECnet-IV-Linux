@@ -22,13 +22,14 @@ Hosted-runner lifetime and storage policy is explicit and machine-enforced. Ever
 
 Two-node VM persistence is explicit disk checkpointing. Compact logs, scan manifests and packet evidence are retained for 30 days. The compact artifact excludes checkpoint QCOW2 files, kernel and initrd so those heavy files are not duplicated under long retention. The complete resumable checkpoint is uploaded separately for 3 days, and after a successful replacement upload the workflow deletes older checkpoint artifacts for that architecture. Failed-run artifacts age out by retention policy. Interoperability evidence excludes transient QCOW2 overlays because that workflow always starts fresh independent peers; its `resume_run_id` restores prior evidence for lineage, not a live or disk-resumed VM.
 
-Continuity validation reads staged records from the index and committed records from the requested commit object, with a regression test proving working-tree substitutions cannot mask either case. The first workflow-budget implementation exposed a parser defect during review: adjacent artifact-upload steps could be read as one block and produce a false duplicate-retention error. Upload blocks are bounded by step boundaries and a regression test covers adjacent uploads plus the 75-minute ceiling. A subsequent storage review caught duplicate kernel/initrd retention in the compact VM evidence bundle; the compact artifact now excludes all heavy checkpoint payloads while retaining checkpoint metadata. These corrections are substantive, so all earlier SoP pass counts and acceptance evidence are invalid for the resulting `main` candidate.
+Continuity validation reads staged records from the index and committed records from the requested commit object, with a regression test proving working-tree substitutions cannot mask either case. The workflow-budget gate bounds artifact parsing by workflow step, enforces the 75-minute ceiling and storage limits, and now also caps each live interoperability matrix row at two scenarios. The previous single interoperability job ran seven scenarios sequentially, which could approach or exceed the voluntary job ceiling under worst-case wait paths; the matrix is now split into bounded Route20/PyDECnet suites with unique scratch and artifact names. All earlier SoP pass counts and acceptance evidence are invalid for the resulting `main` candidate.
 
 | Field | Current value |
 | --- | --- |
 | Protocol phase | Phase 3 |
 | Working ref | `main` only |
 | Hosted job voluntary ceiling | 75 minutes |
+| Interoperability scenarios per hosted job | maximum 2 |
 | Compact workflow evidence retention | 30 days |
 | Resumable VM checkpoint retention | 3 days, rolling newest successful per architecture |
 | SoP clean semantic/manual passes on this candidate | 0 |
@@ -46,4 +47,4 @@ The tracked table above is the durable human index. It is updated with `docs/PRO
 
 ## Next action
 
-Restart the complete semantic/manual SoP review on the exact resulting `main` commit. Require three consecutive clean full-repository passes, with workflow byte-scan manifests agreeing on that same commit/tree and both policy regression tests green. Then execute exact-head repository policy/continuity, native x86_64/aarch64 build, pinned reference baselines, E1 self-to-self, and live Route20/PyDECnet interoperability gates. Preserve compact evidence automatically and retain only the rolling resumable VM checkpoints defined above. Phase 4 starts only after the unchanged Phase 3 candidate is green.
+Restart the complete semantic/manual SoP review on the exact resulting `main` commit. Require three consecutive clean full-repository passes, with workflow byte-scan manifests agreeing on that same commit/tree and both policy regression tests green. Then execute exact-head repository policy/continuity, native x86_64/aarch64 build, pinned reference baselines, E1 self-to-self, and the bounded live Route20/PyDECnet interoperability suites. Preserve compact evidence automatically and retain only the rolling resumable VM checkpoints defined above. Phase 4 starts only after the unchanged Phase 3 candidate is green.

@@ -45,17 +45,65 @@ jobs:
             slot: x64
             arch: amd64
             qemu: qemu-system-x86
+            suite: r20-routing
+            reference: route20
+            scenarios: "l1 l2"
           - runner: ubuntu-24.04-arm
             slot: arm64
             arch: arm64
             qemu: qemu-system-arm
+            suite: r20-routing
+            reference: route20
+            scenarios: "l1 l2"
+          - runner: ubuntu-24.04
+            slot: x64
+            arch: amd64
+            qemu: qemu-system-x86
+            suite: r20-endnode
+            reference: route20
+            scenarios: "endnode"
+          - runner: ubuntu-24.04-arm
+            slot: arm64
+            arch: arm64
+            qemu: qemu-system-arm
+            suite: r20-endnode
+            reference: route20
+            scenarios: "endnode"
+          - runner: ubuntu-24.04
+            slot: x64
+            arch: amd64
+            qemu: qemu-system-x86
+            suite: py-routing
+            reference: pydecnet
+            scenarios: "l1 l2"
+          - runner: ubuntu-24.04-arm
+            slot: arm64
+            arch: arm64
+            qemu: qemu-system-arm
+            suite: py-routing
+            reference: pydecnet
+            scenarios: "l1 l2"
+          - runner: ubuntu-24.04
+            slot: x64
+            arch: amd64
+            qemu: qemu-system-x86
+            suite: py-roles
+            reference: pydecnet
+            scenarios: "endnode router-endnode"
+          - runner: ubuntu-24.04-arm
+            slot: arm64
+            arch: arm64
+            qemu: qemu-system-arm
+            suite: py-roles
+            reference: pydecnet
+            scenarios: "endnode router-endnode"
     runs-on: ${{ matrix.runner }}
     concurrency:
       group: dniv-runner-${{ matrix.slot }}
       cancel-in-progress: false
     timeout-minutes: 75
     env:
-      DNIV_SCRATCH_DIR: ${{ github.workspace }}/scratch/runtime/${{ github.run_id }}/${{ github.run_attempt }}/${{ github.job }}-${{ matrix.arch }}
+      DNIV_SCRATCH_DIR: ${{ github.workspace }}/scratch/runtime/${{ github.run_id }}/${{ github.run_attempt }}/${{ github.job }}-${{ matrix.arch }}-${{ matrix.suite }}
     steps:
       - name: Check out exact repository
         uses: actions/checkout@v4
@@ -77,7 +125,8 @@ jobs:
           set -euo pipefail
           python3 tools/scratch_state.py init --dir "$DNIV_SCRATCH_DIR" \
             --workflow interop --job "$GITHUB_JOB" --arch '${{ matrix.arch }}' \
-            --source-sha "$GITHUB_SHA" --parent-run-id '${{ inputs.parent_run_id }}' \
+            --mode '${{ matrix.suite }}' --source-sha "$GITHUB_SHA" \
+            --parent-run-id '${{ inputs.parent_run_id }}' \
             --resume-run-id '${{ inputs.resume_run_id }}'
           tools/workflow_sop.sh "$DNIV_SCRATCH_DIR" "$GITHUB_SHA" main
           echo "DNIV_INTEROP_ARTIFACTS=$DNIV_SCRATCH_DIR/interop" >> "$GITHUB_ENV"
@@ -108,7 +157,7 @@ jobs:
             "$DNIV_SCRATCH_DIR/base-image.env"
           echo "UBUNTU_BASE_TARBALL=$RUNNER_TEMP/$file" >> "$GITHUB_ENV"
 
-      - name: Build exact candidate image and peer images
+      - name: Build exact candidate image and peer image
         shell: bash
         run: |
           set -euo pipefail
@@ -127,61 +176,66 @@ jobs:
           echo "DNIV_KERNEL=$RUNNER_TEMP/boot-${{ matrix.arch }}/vmlinuz" >> "$GITHUB_ENV"
           echo "DNIV_INITRD=$RUNNER_TEMP/boot-${{ matrix.arch }}/initrd.img" >> "$GITHUB_ENV"
 
-      - name: Build exact pinned independent peers
+      - name: Build exact pinned independent peer
         shell: bash
         run: |
           set -euo pipefail
           . tests/reference/refs.env
+          reference='${{ matrix.reference }}'
+          case "$reference" in
+            route20)
+              work="$RUNNER_TEMP/route20"
+              git init "$work"
+              git -C "$work" remote add origin https://github.com/tuklusan/Route20.git
+              git -C "$work" fetch --depth=1 origin "$ROUTE20_REF"
+              git -C "$work" checkout --detach FETCH_HEAD
+              test "$(git -C "$work" rev-parse HEAD)" = "$ROUTE20_REF"
+              make -C "$work/Route20" 2>&1 | tee "$DNIV_SCRATCH_DIR/route20-build.log"
+              bundle="$RUNNER_TEMP/bundle-route20"
+              mkdir -p "$bundle"
+              cp "$work/Route20/route20" "$bundle/route20"
+              printf 'REFERENCE=route20\nREFERENCE_SHA=%s\n' "$ROUTE20_REF" > "$bundle/manifest.env"
+              (cd "$bundle" && sha256sum route20 > SHA256SUMS)
+              printf 'ROUTE20_REF=%s\n' "$ROUTE20_REF" > "$DNIV_SCRATCH_DIR/references.env"
+              ;;
+            pydecnet)
+              work="$RUNNER_TEMP/pydecnet"
+              git init "$work"
+              git -C "$work" remote add origin https://github.com/tuklusan/pydecnet.git
+              git -C "$work" fetch --depth=1 origin "$PYDECNET_REF"
+              git -C "$work" checkout --detach FETCH_HEAD
+              test "$(git -C "$work" rev-parse HEAD)" = "$PYDECNET_REF"
+              bundle="$RUNNER_TEMP/bundle-pydecnet"
+              mkdir -p "$bundle"
+              git -C "$work" archive --format=tar --output="$bundle/pydecnet.tar" HEAD pydecnet
+              printf 'REFERENCE=pydecnet\nREFERENCE_SHA=%s\n' "$PYDECNET_REF" > "$bundle/manifest.env"
+              (cd "$bundle" && sha256sum pydecnet.tar > SHA256SUMS)
+              printf 'PYDECNET_REF=%s\n' "$PYDECNET_REF" > "$DNIV_SCRATCH_DIR/references.env"
+              ;;
+            *)
+              echo "unknown reference: $reference" >&2
+              exit 2
+              ;;
+          esac
 
-          route_work="$RUNNER_TEMP/route20"
-          git init "$route_work"
-          git -C "$route_work" remote add origin https://github.com/tuklusan/Route20.git
-          git -C "$route_work" fetch --depth=1 origin "$ROUTE20_REF"
-          git -C "$route_work" checkout --detach FETCH_HEAD
-          test "$(git -C "$route_work" rev-parse HEAD)" = "$ROUTE20_REF"
-          make -C "$route_work/Route20" 2>&1 | tee "$DNIV_SCRATCH_DIR/route20-build.log"
-          route_bundle="$RUNNER_TEMP/bundle-route20"
-          mkdir -p "$route_bundle"
-          cp "$route_work/Route20/route20" "$route_bundle/route20"
-          printf 'REFERENCE=route20\nREFERENCE_SHA=%s\n' "$ROUTE20_REF" > "$route_bundle/manifest.env"
-          (cd "$route_bundle" && sha256sum route20 > SHA256SUMS)
-
-          py_work="$RUNNER_TEMP/pydecnet"
-          git init "$py_work"
-          git -C "$py_work" remote add origin https://github.com/tuklusan/pydecnet.git
-          git -C "$py_work" fetch --depth=1 origin "$PYDECNET_REF"
-          git -C "$py_work" checkout --detach FETCH_HEAD
-          test "$(git -C "$py_work" rev-parse HEAD)" = "$PYDECNET_REF"
-          py_bundle="$RUNNER_TEMP/bundle-pydecnet"
-          mkdir -p "$py_bundle"
-          git -C "$py_work" archive --format=tar --output="$py_bundle/pydecnet.tar" HEAD pydecnet
-          printf 'REFERENCE=pydecnet\nREFERENCE_SHA=%s\n' "$PYDECNET_REF" > "$py_bundle/manifest.env"
-          (cd "$py_bundle" && sha256sum pydecnet.tar > SHA256SUMS)
-          printf 'ROUTE20_REF=%s\nPYDECNET_REF=%s\n' "$ROUTE20_REF" "$PYDECNET_REF" > \
-            "$DNIV_SCRATCH_DIR/references.env"
-
-      - name: Run Route20 and PyDECnet live Phase 3 matrix
+      - name: Run bounded live Phase 3 interoperability suite
         shell: bash
         run: |
           set -euo pipefail
-          for reference in route20 pydecnet; do
-            scenarios='l1 l2 endnode'
-            if [[ "$reference" == pydecnet ]]; then
-              scenarios="$scenarios router-endnode"
-            fi
-            bundle="$RUNNER_TEMP/bundle-$reference"
-            for scenario in $scenarios; do
-              session="run-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${{ matrix.arch }}-${reference}-${scenario}"
-              printf '%s %s %s\n' "$reference" "$scenario" "$session" >> \
-                "$DNIV_SCRATCH_DIR/sessions.tsv"
-              DNIV_INTEROP_SESSION_ID="$session" tests/lab/run-interop.sh \
-                "$DNIV_CANDIDATE_IMAGE" "$DNIV_REFERENCE_IMAGE" \
-                "$DNIV_KERNEL" "$DNIV_INITRD" "$reference" "$bundle" "$scenario" 2>&1 | \
-                tee "$DNIV_SCRATCH_DIR/interop-${reference}-${scenario}.log"
-            done
+          reference='${{ matrix.reference }}'
+          scenarios='${{ matrix.scenarios }}'
+          bundle="$RUNNER_TEMP/bundle-$reference"
+          for scenario in $scenarios; do
+            session="run-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${{ matrix.arch }}-${reference}-${scenario}"
+            printf '%s %s %s\n' "$reference" "$scenario" "$session" >> \
+              "$DNIV_SCRATCH_DIR/sessions.tsv"
+            DNIV_INTEROP_SESSION_ID="$session" tests/lab/run-interop.sh \
+              "$DNIV_CANDIDATE_IMAGE" "$DNIV_REFERENCE_IMAGE" \
+              "$DNIV_KERNEL" "$DNIV_INITRD" "$reference" "$bundle" "$scenario" 2>&1 | \
+              tee "$DNIV_SCRATCH_DIR/interop-${reference}-${scenario}.log"
           done
           python3 tools/scratch_state.py mark --dir "$DNIV_SCRATCH_DIR" \
-            --status interop-matrix-green --note 'all independent Phase 3 scenarios passed'
+            --status interop-suite-green --note 'bounded independent Phase 3 suite passed'
 
       - name: Verify exact tree after interoperability gate
         shell: bash
@@ -206,7 +260,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: scratch-interop-${{ matrix.arch }}-${{ github.run_id }}
+          name: scratch-interop-${{ matrix.arch }}-${{ matrix.suite }}-${{ github.run_id }}
           path: |
             ${{ env.DNIV_SCRATCH_DIR }}/
             !${{ env.DNIV_SCRATCH_DIR }}/interop/**/*.qcow2
