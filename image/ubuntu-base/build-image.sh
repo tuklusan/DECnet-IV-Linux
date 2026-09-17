@@ -48,12 +48,18 @@ source_commit=$(git -C "$repo_root" rev-parse --verify 'HEAD^{commit}')
 work=$(mktemp -d)
 raw="$work/root.raw"
 mnt="$work/root"
-mkdir -p "$mnt" "$boot_dir" "$(dirname "$output")"
+verify_mnt="$work/verify-root"
+verify_raw="$work/verify.raw"
+mkdir -p "$mnt" "$verify_mnt" "$boot_dir" "$(dirname "$output")"
 
 mounted=0
 chroot_mounted=0
+verify_mounted=0
 cleanup() {
     set +e
+    if (( verify_mounted )); then
+        sudo umount "$verify_mnt" 2>/dev/null || true
+    fi
     if (( chroot_mounted )); then
         sudo umount -R "$mnt/dev" 2>/dev/null || true
         sudo umount "$mnt/sys" 2>/dev/null || true
@@ -136,12 +142,23 @@ rm -f /usr/sbin/policy-rc.d
 sudo rm -f "$mnt/etc/machine-id" "$mnt/var/lib/dbus/machine-id"
 sudo touch "$mnt/etc/machine-id"
 
-sudo install -m 0755 "$mnt/usr/src/decnet-iv-linux/tests/lab/dniv-smoke.sh" \
-    "$mnt/usr/local/sbin/dniv-smoke"
-sudo install -m 0644 "$mnt/usr/src/decnet-iv-linux/tests/lab/dniv-smoke.service" \
-    "$mnt/etc/systemd/system/dniv-smoke.service"
+smoke_script_source="$mnt/usr/src/decnet-iv-linux/tests/lab/dniv-smoke.sh"
+smoke_unit_source="$mnt/usr/src/decnet-iv-linux/tests/lab/dniv-smoke.service"
+smoke_script_dest="$mnt/usr/local/sbin/dniv-smoke"
+smoke_unit_dest="$mnt/etc/systemd/system/dniv-smoke.service"
+sudo install -m 0755 "$smoke_script_source" "$smoke_script_dest"
+sudo install -m 0644 "$smoke_unit_source" "$smoke_unit_dest"
 sudo ln -sf ../dniv-smoke.service \
     "$mnt/etc/systemd/system/multi-user.target.wants/dniv-smoke.service"
+
+# The guest acceptance entry point is part of the image contract. Prove that
+# installation preserved the exact archived bytes and that systemd accepts the
+# installed unit before the filesystem is converted.
+sudo cmp -s "$smoke_script_source" "$smoke_script_dest"
+sudo cmp -s "$smoke_unit_source" "$smoke_unit_dest"
+smoke_script_sha=$(sudo sha256sum "$smoke_script_source" | awk '{print $1}')
+smoke_unit_sha=$(sudo sha256sum "$smoke_unit_source" | awk '{print $1}')
+sudo chroot "$mnt" systemd-analyze verify /etc/systemd/system/dniv-smoke.service
 
 kernel=$(find "$mnt/boot" -maxdepth 1 -type f -name 'vmlinuz-*' | sort -V | tail -1)
 initrd=$(find "$mnt/boot" -maxdepth 1 -type f -name 'initrd.img-*' | sort -V | tail -1)
@@ -149,7 +166,27 @@ if [[ -z "$kernel" || -z "$initrd" ]]; then
     echo "build-image: installed kernel or initrd not found" >&2
     exit 1
 fi
-sudo cp "$kernel" "$boot_dir/vmlinuz"
+
+# Ubuntu arm64 packages store vmlinuz as a gzip-compressed Image. AArch64 does
+# not self-decompress that payload for QEMU direct boot, so hand QEMU the
+# decompressed Image and prove its mandatory ARM64 image-header magic. amd64
+# keeps the packaged vmlinuz/bzImage unchanged.
+if [[ "$arch" == arm64 ]]; then
+    kernel_magic=$(sudo dd if="$kernel" bs=1 count=2 status=none | od -An -tx1 | tr -d ' \n')
+    if [[ "$kernel_magic" == 1f8b ]]; then
+        sudo gzip -dc "$kernel" > "$boot_dir/vmlinuz"
+    else
+        sudo cp "$kernel" "$boot_dir/vmlinuz"
+    fi
+    arm64_magic=$(dd if="$boot_dir/vmlinuz" bs=1 skip=56 count=4 status=none | \
+        od -An -tx1 | tr -d ' \n')
+    if [[ "$arm64_magic" != 41524d64 ]]; then
+        echo "build-image: arm64 direct-boot kernel lacks ARM64 Image magic" >&2
+        exit 1
+    fi
+else
+    sudo cp "$kernel" "$boot_dir/vmlinuz"
+fi
 sudo cp "$initrd" "$boot_dir/initrd.img"
 sudo chown "$(id -u):$(id -g)" "$boot_dir/vmlinuz" "$boot_dir/initrd.img"
 
@@ -160,6 +197,23 @@ chroot_mounted=0
 sudo umount "$mnt"
 mounted=0
 
-qemu-img convert -f raw -O qcow2 -c "$raw" "$output"
+# Keep candidate images uncompressed. The acceptance image is correctness
+# evidence, not a distribution-size optimization. Check qcow2 structure and
+# round-trip it back to raw so critical guest bytes are proven after conversion.
+qemu-img convert -f raw -O qcow2 "$raw" "$output"
+qemu-img check -f qcow2 "$output"
+qemu-img convert -f qcow2 -O raw "$output" "$verify_raw"
+sudo mount -o loop,ro,noload "$verify_raw" "$verify_mnt"
+verify_mounted=1
+verify_script_sha=$(sudo sha256sum "$verify_mnt/usr/local/sbin/dniv-smoke" | awk '{print $1}')
+verify_unit_sha=$(sudo sha256sum "$verify_mnt/etc/systemd/system/dniv-smoke.service" | awk '{print $1}')
+if [[ "$verify_script_sha" != "$smoke_script_sha" || "$verify_unit_sha" != "$smoke_unit_sha" ]]; then
+    echo "build-image: critical guest bytes changed during image conversion" >&2
+    exit 1
+fi
+sudo umount "$verify_mnt"
+verify_mounted=0
+rm -f "$verify_raw"
+
 qemu-img info "$output"
-echo "build-image: created $output from source $source_commit with direct-boot kernel artifacts in $boot_dir"
+echo "build-image: created $output from source $source_commit with verified direct-boot artifacts in $boot_dir"
