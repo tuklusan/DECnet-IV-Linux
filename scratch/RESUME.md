@@ -28,6 +28,8 @@ Interoperability no longer accepts or downloads prior-run scratch evidence. Thos
 
 Repository branch policy remains exactly one remote branch, `refs/heads/main`. Repository-policy/control jobs do not consume protocol-lab concurrency slots. GitHub-owned actions, including cache restore/save, are pinned to immutable full SHAs.
 
+The first persistence candidate `22fa6771250b5f46b68ac822fd9af38d82baba23` is historical: GitHub rejected `vm-lab.yml` before job creation because `runner.temp` is not available in job-level `env`. The corrected definition stores the restored cache under `${{ github.workspace }}/scratch/outer/<arch>`, which is ignored by Git and valid at job scope.
+
 | Field | Current value |
 | --- | --- |
 | Protocol phase | Phase 3 |

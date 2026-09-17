@@ -107,7 +107,7 @@ jobs:
     env:
       DNIV_SCRATCH_DIR: ${{ github.workspace }}/scratch/runtime/${{ github.run_id }}/${{ github.run_attempt }}/${{ github.job }}-${{ matrix.arch }}-${{ matrix.suite }}
       DNIV_OUTER_SESSION_ID: outer-v1-${{ matrix.arch }}-${{ github.sha }}
-      DNIV_OUTER_BASE_DIR: ${{ runner.temp }}/dniv-outer-${{ matrix.arch }}
+      DNIV_OUTER_BASE_DIR: ${{ github.workspace }}/scratch/outer/${{ matrix.arch }}
     steps:
       - name: Check out exact repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262

@@ -60,6 +60,8 @@ Both the Python two-node gate and interoperability now consume that same archite
 
 Repository policy and acceptance dispatch remain isolated from lab-runner concurrency. Protocol jobs remain serialized by their architecture slots, which also prevents two jobs racing to create the same outer session.
 
+Candidate `22fa6771250b5f46b68ac822fd9af38d82baba23` proved the first cache wiring was not workflow-valid: GitHub rejected `vm-lab.yml` before creating jobs because `runner.temp` is unavailable in job-level `env`. The correction uses `${{ github.workspace }}/scratch/outer/<arch>`, an ignored workspace path whose `github` context is valid at job scope. Results from `22fa677...` are historical and do not count toward acceptance.
+
 ## Test addressing
 
 Ordinary lab addressing remains area 31, nodes 70 through 79, names DN70 through DN79. The live L2 interoperability case deliberately uses an independent peer in area 32.
