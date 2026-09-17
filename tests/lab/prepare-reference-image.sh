@@ -23,12 +23,6 @@ base=$1
 output=$2
 [[ -r "$base" ]] || { echo "prepare-reference-image: missing $base" >&2; exit 2; }
 
-script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-repo_root=$(cd "$script_dir/../.." && pwd)
-# shellcheck disable=SC1091
-. "$repo_root/image/ubuntu-base/images.env"
-snapshot=${UBUNTU_APT_SNAPSHOT:?images.env must pin UBUNTU_APT_SNAPSHOT}
-
 work=$(mktemp -d)
 raw="$work/reference.raw"
 mnt="$work/root"
@@ -52,7 +46,15 @@ trap cleanup EXIT INT TERM
 qemu-img convert -q -f qcow2 -O raw "$base" "$raw"
 sudo mount -o loop "$raw" "$mnt"
 mounted=1
-sudo install -m 0755 "$script_dir/dniv-reference-peer.sh" "$mnt/usr/local/sbin/dniv-reference-peer"
+archived_source="$mnt/usr/src/decnet-iv-linux"
+test -r "$archived_source/.source-commit"
+test -r "$archived_source/tests/lab/dniv-reference-peer.sh"
+test -r "$archived_source/image/ubuntu-base/images.env"
+# shellcheck disable=SC1090
+. "$archived_source/image/ubuntu-base/images.env"
+snapshot=${UBUNTU_APT_SNAPSHOT:?archived images.env must pin UBUNTU_APT_SNAPSHOT}
+sudo install -m 0755 "$archived_source/tests/lab/dniv-reference-peer.sh" \
+    "$mnt/usr/local/sbin/dniv-reference-peer"
 sudo tee "$mnt/etc/systemd/system/dniv-reference-peer.service" >/dev/null <<'EOF_SERVICE'
 [Unit]
 Description=Independent DECnet reference peer
@@ -92,4 +94,4 @@ sudo umount "$mnt"
 mounted=0
 qemu-img convert -q -f raw -O qcow2 -c "$raw" "$output"
 qemu-img check -q -f qcow2 "$output"
-echo "prepare-reference-image: created $output"
+echo "prepare-reference-image: created $output from archived candidate source"

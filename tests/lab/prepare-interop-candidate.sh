@@ -21,7 +21,6 @@ fi
 base=$1
 output=$2
 [[ -r "$base" ]] || { echo "prepare-interop-candidate: missing $base" >&2; exit 2; }
-script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 work=$(mktemp -d)
 raw="$work/candidate.raw"
 mnt="$work/root"
@@ -36,7 +35,11 @@ trap cleanup EXIT INT TERM
 qemu-img convert -q -f qcow2 -O raw "$base" "$raw"
 sudo mount -o loop "$raw" "$mnt"
 mounted=1
-sudo install -m 0755 "$script_dir/dniv-interop-smoke.sh" "$mnt/usr/local/sbin/dniv-interop-smoke"
+archived_source="$mnt/usr/src/decnet-iv-linux"
+test -r "$archived_source/.source-commit"
+test -r "$archived_source/tests/lab/dniv-interop-smoke.sh"
+sudo install -m 0755 "$archived_source/tests/lab/dniv-interop-smoke.sh" \
+    "$mnt/usr/local/sbin/dniv-interop-smoke"
 sudo tee "$mnt/etc/systemd/system/dniv-interop-smoke.service" >/dev/null <<'EOF_SERVICE'
 [Unit]
 Description=DECnet Phase IV independent-peer interoperability test
@@ -58,4 +61,4 @@ sudo umount "$mnt"
 mounted=0
 qemu-img convert -q -f raw -O qcow2 -c "$raw" "$output"
 qemu-img check -q -f qcow2 "$output"
-echo "prepare-interop-candidate: created $output"
+echo "prepare-interop-candidate: created $output from archived candidate source"
