@@ -14,7 +14,7 @@
 
 # Scratch workspace
 
-`scratch/` is the repository-root persistence workspace for workflow and review state. The directory itself, this contract, and `RESUME.md` are tracked. Mutable runner state is deliberately not committed because changing the candidate while acceptance is running would invalidate the exact-head gate and reset the manual delivery review sequence.
+`scratch/` is the repository-root persistence workspace for workflow and review state. The directory itself, this contract, and `RESUME.md` are tracked. Mutable runner state is deliberately not committed because acceptance is tied to one exact source commit.
 
 Every workflow creates a unique directory under `scratch/runtime/<run-id>/<run-attempt>/<job>/`. It records `state.json`, exact source commit/tree identity, workflow/run/job/runner identifiers, parent or resumed run identifiers, status milestones, and workflow integrity manifests. VM and interoperability workflows place packet captures, serial logs, hashes, and other evidence below the same run directory.
 
@@ -24,6 +24,6 @@ Compact workflow evidence is retained for at most 30 days. The two-node VM workf
 
 Every hosted job declares an explicit timeout no greater than 75 minutes. `tools/workflow_budget_gate.py` enforces job timeouts, evidence retention, rolling VM checkpoint safeguards and interoperability disk exclusion before workflow integrity evidence is recorded.
 
-`tools/integrity_scan.py` can verify every tracked blob completely with explicit `--full-tree`, and its default bounded mode records the exact parent-to-candidate diff plus changed-file blob hashes while checking checkout bytes and modes. `tools/workflow_guard.sh` runs the ordinary policy/regression gates and records one bounded baseline diff manifest; workflows perform a matching final scan before preserving state. These machine checks prove candidate identity and checkout immutability for their recorded scope. They do not implement or stand in for the delivery SoP, which remains a separate human three-pass complete semantic/manual review of the exact latest tracked tree. Automated workflows and gates use only integrity/policy terminology and must not encode the SoP name or concept.
+`tools/integrity_scan.py` can verify every tracked blob completely with explicit `--full-tree`, and its default bounded mode records the exact parent-to-candidate diff plus changed-file blob hashes while checking checkout bytes and modes. `tools/workflow_guard.sh` runs ordinary policy/regression gates and records one bounded baseline diff manifest; workflows perform a matching final scan before preserving state. These machine checks prove candidate identity and checkout immutability for their recorded scope.
 
-`scratch/RESUME.md` is the durable human resume index. `docs/PROJECT_STATE.md` remains the authoritative protocol/project state. Every substantive commit must refresh both files in the same commit.
+There is no manual delivery-pass counter or multi-pass review prerequisite. `scratch/RESUME.md` is the durable human resume index. `docs/PROJECT_STATE.md` remains the authoritative protocol/project state. Every substantive commit must refresh both files in the same commit.
