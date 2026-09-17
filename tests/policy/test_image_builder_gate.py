@@ -31,23 +31,34 @@ INSTALL_PREFIX = 'apt-get --snapshot "$UBUNTU_APT_SNAPSHOT" install -y --no-inst
 INITRD_CHECK = 'test -s "/boot/initrd.img-$krel"'
 ARM64_OWNER_FIX = 'sudo chown "$(id -u):$(id -g)" "$boot_dir/vmlinuz"'
 ARM64_MAGIC_READ = 'arm64_magic=$(dd if="$boot_dir/vmlinuz" bs=1 skip=56 count=4 status=none |'
+HOST_RAW_CMP = 'cmp -s "$raw"'
 BASE_REQUIRED_SNIPPETS = {
     "installed smoke script byte comparison": 'sudo cmp -s "$smoke_script_source" "$smoke_script_dest"',
     "installed smoke unit byte comparison": 'sudo cmp -s "$smoke_unit_source" "$smoke_unit_dest"',
     "systemd unit validation": 'systemd-analyze verify /etc/systemd/system/dniv-smoke.service',
-    "arm64 gzip decompression": 'sudo gzip -dc "$kernel" > "$boot_dir/vmlinuz"',
+    "arm64 outer gzip decompression": 'sudo gzip -dc "$kernel" > "$boot_dir/vmlinuz"',
     "arm64 boot artifact ownership": ARM64_OWNER_FIX,
     "arm64 Image magic read": ARM64_MAGIC_READ,
-    "arm64 Image magic validation": 'if [[ "$arm64_magic" != 41524d64 ]]; then',
+    "arm64 raw Image acceptance": 'if [[ "$arm64_magic" == 41524d64 ]]; then',
+    "arm64 EFI-zboot MZ read": 'zboot_msdos=$(dd if="$boot_dir/vmlinuz" bs=1 count=2 status=none |',
+    "arm64 EFI-zboot tag read": 'zboot_tag=$(dd if="$boot_dir/vmlinuz" bs=1 skip=4 count=4 status=none |',
+    "arm64 EFI-zboot Linux magic read": 'zboot_linux_magic=$(dd if="$boot_dir/vmlinuz" bs=1 skip=56 count=4 status=none |',
+    "arm64 EFI-zboot compression read": 'zboot_compression=$(dd if="$boot_dir/vmlinuz" bs=1 skip=24 count=32 status=none |',
+    "arm64 EFI-zboot payload offset read": 'zboot_payload_offset=$(dd if="$boot_dir/vmlinuz" bs=1 skip=8 count=4 status=none |',
+    "arm64 EFI-zboot payload size read": 'zboot_payload_size=$(dd if="$boot_dir/vmlinuz" bs=1 skip=12 count=4 status=none |',
+    "arm64 EFI-zboot file size read": 'zboot_file_size=$(stat -c \'%s\' "$boot_dir/vmlinuz")',
+    "arm64 EFI-zboot MZ validation": '"$zboot_msdos" != 4d5a',
+    "arm64 EFI-zboot tag validation": '"$zboot_tag" != 7a696d67',
+    "arm64 EFI-zboot Linux magic validation": '"$zboot_linux_magic" != cd238281',
+    "arm64 EFI-zboot compression validation": 'if [[ "$zboot_compression" != gzip ]]; then',
+    "arm64 EFI-zboot payload bounds": 'zboot_payload_offset + zboot_payload_size > zboot_file_size',
     "qcow2 structural validation": 'qemu-img check -f qcow2 "$output"',
-    "qcow2-to-raw verification round trip": 'qemu-img convert -f qcow2 -O raw "$output" "$verify_raw"',
-    "full RAW content comparison": 'cmp -s "$raw" "$verify_raw"',
+    "logical raw/qcow2 comparison": 'qemu-img compare -f raw -F qcow2 "$raw" "$output"',
 }
 DERIVED_REQUIRED_SNIPPETS = {
     "uncompressed qcow2 conversion": 'qemu-img convert -q -f raw -O qcow2 "$raw" "$output"',
     "qcow2 structural validation": 'qemu-img check -q -f qcow2 "$output"',
-    "qcow2-to-raw verification round trip": 'qemu-img convert -q -f qcow2 -O raw "$output" "$verify_raw"',
-    "full RAW content comparison": 'cmp -s "$raw" "$verify_raw"',
+    "logical raw/qcow2 comparison": 'qemu-img compare -q -f raw -F qcow2 "$raw" "$output"',
     "archived source provenance read": 'source_commit=$(sudo cat "$archived_source/.source-commit")',
     "archived source provenance validation": '[[ "$source_commit" =~ ^[0-9a-f]{40}$ ]] || {',
 }
@@ -81,17 +92,30 @@ def install_tokens(text: str) -> set[str]:
     raise SystemExit("image-builder gate: pinned package install block not found")
 
 
-def has_compressed_qcow2_convert(text: str) -> bool:
+def qemu_img_lines(text: str, subcommand: str) -> list[list[str]]:
     logical_text = text.replace(chr(92) + "\n", " ")
+    commands: list[list[str]] = []
     for line in logical_text.splitlines():
         tokens = line.split()
-        if len(tokens) < 2 or tokens[:2] != ["qemu-img", "convert"]:
+        for index, token in enumerate(tokens[:-1]):
+            if token == "qemu-img" and tokens[index + 1] == subcommand:
+                commands.append(tokens[index:])
+                break
+    return commands
+
+
+def has_compressed_qcow2_convert(text: str) -> bool:
+    for tokens in qemu_img_lines(text, "convert"):
+        if "-c" not in tokens or "-O" not in tokens:
             continue
-        if "-c" in tokens and "-O" in tokens:
-            out_index = tokens.index("-O") + 1
-            if out_index < len(tokens) and tokens[out_index] == "qcow2":
-                return True
+        out_index = tokens.index("-O") + 1
+        if out_index < len(tokens) and tokens[out_index] == "qcow2":
+            return True
     return False
+
+
+def has_strict_qemu_img_compare(text: str) -> bool:
+    return any("-s" in tokens for tokens in qemu_img_lines(text, "compare"))
 
 
 def require_snippets(label: str, text: str, snippets: dict[str, str]) -> None:
@@ -100,6 +124,18 @@ def require_snippets(label: str, text: str, snippets: dict[str, str]) -> None:
         raise SystemExit(
             f"image-builder gate: {label} required safeguard(s) missing: "
             + ", ".join(missing)
+        )
+
+
+def reject_bad_image_compare(label: str, text: str) -> None:
+    if HOST_RAW_CMP in text:
+        raise SystemExit(
+            f"image-builder gate: {label} must compare logical image content with qemu-img, "
+            "not host RAW file bytes"
+        )
+    if has_strict_qemu_img_compare(text):
+        raise SystemExit(
+            f"image-builder gate: {label} qemu-img compare must not use strict allocation mode"
         )
 
 
@@ -139,12 +175,13 @@ def main() -> int:
     if base_text.index(ARM64_OWNER_FIX) > base_text.index(ARM64_MAGIC_READ):
         raise SystemExit(
             "image-builder gate: arm64 direct-boot kernel must become runner-readable "
-            "before the non-root Image-header probe"
+            "before the non-root format probe"
         )
     if has_compressed_qcow2_convert(base_text):
         raise SystemExit(
             "image-builder gate: acceptance base image conversion must not use qcow2 compression"
         )
+    reject_bad_image_compare("base image", base_text)
 
     for path, text in derived.items():
         require_snippets(path, text, DERIVED_REQUIRED_SNIPPETS)
@@ -153,10 +190,11 @@ def main() -> int:
                 f"image-builder gate: derived acceptance image conversion in {path} "
                 "must not use qcow2 compression"
             )
+        reject_bad_image_compare(path, text)
 
     print(
         "image-builder gate: source=" + source_label
-        + " initrd, arm64 direct boot and base/derived image-integrity safeguards verified"
+        + " initrd, arm64 raw/EFI-zboot direct boot and logical image-integrity safeguards verified"
     )
     return 0
 

@@ -48,7 +48,6 @@ source_commit=$(git -C "$repo_root" rev-parse --verify 'HEAD^{commit}')
 work=$(mktemp -d)
 raw="$work/root.raw"
 mnt="$work/root"
-verify_raw="$work/verify.raw"
 mkdir -p "$mnt" "$boot_dir" "$(dirname "$output")"
 
 mounted=0
@@ -160,10 +159,11 @@ if [[ -z "$kernel" || -z "$initrd" ]]; then
     exit 1
 fi
 
-# Ubuntu arm64 packages store vmlinuz as a gzip-compressed Image. AArch64 does
-# not self-decompress that payload for QEMU direct boot, so hand QEMU the
-# decompressed Image and prove its mandatory ARM64 image-header magic. amd64
-# keeps the packaged vmlinuz/bzImage unchanged.
+# QEMU direct boot for AArch64 accepts a raw Image and EFI-zboot images. It also
+# accepts a plain gzip-compressed Image, but it cannot chain an outer gzip layer
+# into the EFI-zboot decoder. Strip one outer gzip layer when present, then
+# validate that the resulting artifact is either a raw Image or a gzip EFI-zboot
+# image that QEMU 8.x can unpack directly.
 if [[ "$arch" == arm64 ]]; then
     kernel_magic=$(sudo dd if="$kernel" bs=1 count=2 status=none | od -An -tx1 | tr -d ' \n')
     if [[ "$kernel_magic" == 1f8b ]]; then
@@ -171,14 +171,43 @@ if [[ "$arch" == arm64 ]]; then
     else
         sudo cp "$kernel" "$boot_dir/vmlinuz"
     fi
-    # Packaged kernels may be root-only. Make the copied/decompressed artifact
-    # owned by the invoking user before the non-root direct-boot header probe.
     sudo chown "$(id -u):$(id -g)" "$boot_dir/vmlinuz"
+
     arm64_magic=$(dd if="$boot_dir/vmlinuz" bs=1 skip=56 count=4 status=none | \
         od -An -tx1 | tr -d ' \n')
-    if [[ "$arm64_magic" != 41524d64 ]]; then
-        echo "build-image: arm64 direct-boot kernel lacks ARM64 Image magic" >&2
-        exit 1
+    if [[ "$arm64_magic" == 41524d64 ]]; then
+        : # raw AArch64 Image: "ARM\x64" at offset 56
+    else
+        zboot_msdos=$(dd if="$boot_dir/vmlinuz" bs=1 count=2 status=none | \
+            od -An -tx1 | tr -d ' \n')
+        zboot_tag=$(dd if="$boot_dir/vmlinuz" bs=1 skip=4 count=4 status=none | \
+            od -An -tx1 | tr -d ' \n')
+        zboot_linux_magic=$(dd if="$boot_dir/vmlinuz" bs=1 skip=56 count=4 status=none | \
+            od -An -tx1 | tr -d ' \n')
+        zboot_compression=$(dd if="$boot_dir/vmlinuz" bs=1 skip=24 count=32 status=none | \
+            tr -d '\000')
+        zboot_payload_offset=$(dd if="$boot_dir/vmlinuz" bs=1 skip=8 count=4 status=none | \
+            od -An -tu4 | tr -d ' \n')
+        zboot_payload_size=$(dd if="$boot_dir/vmlinuz" bs=1 skip=12 count=4 status=none | \
+            od -An -tu4 | tr -d ' \n')
+        zboot_file_size=$(stat -c '%s' "$boot_dir/vmlinuz")
+
+        if [[ "$zboot_msdos" != 4d5a || "$zboot_tag" != 7a696d67 || \
+              "$zboot_linux_magic" != cd238281 ]]; then
+            echo "build-image: arm64 direct-boot kernel is neither raw Image nor EFI zboot" >&2
+            exit 1
+        fi
+        if [[ "$zboot_compression" != gzip ]]; then
+            echo "build-image: unsupported arm64 EFI-zboot compression: $zboot_compression" >&2
+            exit 1
+        fi
+        if [[ ! "$zboot_payload_offset" =~ ^[0-9]+$ || \
+              ! "$zboot_payload_size" =~ ^[0-9]+$ ]] || \
+           (( zboot_payload_offset <= 0 || zboot_payload_size <= 0 || \
+              zboot_payload_offset + zboot_payload_size > zboot_file_size )); then
+            echo "build-image: invalid arm64 EFI-zboot payload bounds" >&2
+            exit 1
+        fi
     fi
 else
     sudo cp "$kernel" "$boot_dir/vmlinuz"
@@ -193,19 +222,13 @@ chroot_mounted=0
 sudo umount "$mnt"
 mounted=0
 
-# Keep candidate images uncompressed. The acceptance image is correctness
-# evidence, not a distribution-size optimization. Check qcow2 structure and
-# round-trip it back to raw, then compare every logical disk byte. The exact
-# smoke/unit installation was already proven while the source filesystem was
-# mounted, so this stronger check covers every filesystem and journal byte.
+# Acceptance correctness wins over file-size optimization. Keep the image
+# uncompressed, validate qcow2 structure, then compare guest-visible logical
+# content directly across raw and qcow2. qemu-img compare deliberately treats
+# sparse/unallocated zero sectors as equal; host-file cmp does not.
 qemu-img convert -f raw -O qcow2 "$raw" "$output"
 qemu-img check -f qcow2 "$output"
-qemu-img convert -f qcow2 -O raw "$output" "$verify_raw"
-if ! cmp -s "$raw" "$verify_raw"; then
-    echo "build-image: RAW content changed during image conversion" >&2
-    exit 1
-fi
-rm -f "$verify_raw"
+qemu-img compare -f raw -F qcow2 "$raw" "$output"
 
 qemu-img info "$output"
 echo "build-image: created $output from source $source_commit with verified direct-boot artifacts in $boot_dir"

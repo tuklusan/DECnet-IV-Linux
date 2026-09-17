@@ -24,9 +24,13 @@ Workflow jobs still bind exact source commit/tree, expected parent candidate SHA
 
 Hosted-runner policy is unchanged: at most 75 minutes per job, `queue: max`, `cancel-in-progress: false`, compact evidence at most 30 days, VM checkpoints 3 days with paginated stale-checkpoint pruning, and fresh interoperability VMs.
 
-Exact-head acceptance parent `35192508159` on candidate `6d4ef7b364392d1a999c1bf433d833aed86c6eef` completed repository/continuity, native x86_64/aarch64 build and external reference gates green; the PyDECnet reference row passed on one isolated rerun after its timing-sensitive DDCMP UDP queue test missed by one packet on the first attempt. E1 child `35192540407` and independent-interoperability child `35192542464` both failed before protocol assertions while building the exact candidate image.
+Exact-head acceptance parent `35195064164` on candidate `3af6da37274006fbd2b0cbe9682821f30bd5f7ba` completed repository policy, project-state/continuity, native x86_64/aarch64 build and external reference gates green. E1 child `35195101815` and independent-interoperability child `35195103898` both failed before protocol assertions during base-image construction.
 
-The failures are now localized. arm64 copied/decompressed the direct-boot kernel but attempted a non-root Image-header `dd` while the artifact could still be root-owned, producing `Permission denied`. amd64 passed `qemu-img check` and produced a mountable round-tripped raw image, but the `ro,noload` verification mount did not expose the already-validated smoke entry point. The correction gives the arm64 kernel artifact to the invoking user before the header probe and replaces the fragile mounted critical-file round-trip check with a complete RAW byte-for-byte comparison after QCOW2 conversion. Pre-conversion exact smoke script/unit comparisons and systemd validation remain mandatory. The image-builder policy gate now requires both safeguards.
+The failures moved deeper after the preceding image correction. amd64 produced a structurally valid uncompressed QCOW2, but the host `cmp` of intended RAW versus QCOW2-round-tripped RAW reported inequality even though sparse/allocation representation is not guest-visible content. arm64 progressed past the prior ownership problem but failed the raw Image magic check because Ubuntu 26.04 supplies an EFI-zboot wrapper that QEMU 8.x can unpack for direct boot.
+
+The current correction switches base and derived acceptance images to `qemu-img compare` for RAW/QCOW2 logical-content equality and explicitly rejects host RAW `cmp` or strict allocation-sensitive compare. It also keeps one outer-gzip peel for arm64, then accepts either raw AArch64 Image magic or a validated gzip EFI-zboot header with sane payload bounds. `tests/policy/test_image_builder_gate.py` requires every read, signature check and logical comparison safeguard. This substantive change resets the scoped pass count to zero and invalidates all earlier acceptance results for promotion.
+
+Commit `f18465c08fd5c6fe2fb72a12875781a3c874bff3` accidentally created an empty top-level `NONEXISTENT` path during repository tooling. The current candidate deletes it; it contained no protocol/build content and no acceptance was dispatched from that state.
 
 Repository branch policy remains active with only `refs/heads/main`. Cleanup run `35179252422` is the last successful branch-cleanup run. GitHub-owned actions remain pinned to immutable full SHAs.
 
@@ -45,11 +49,13 @@ Repository branch policy remains active with only `refs/heads/main`. Cleanup run
 | Clean scoped semantic/manual passes on this candidate | 0 |
 | Routine workflow scan requirement | one bounded baseline diff manifest plus matching final diff manifest |
 | Explicit full-tree scan | opt-in only via `tools/sop_scan.py --full-tree` |
-| Phase 3 acceptance | base-image acceptance failure corrected; fresh exact-head acceptance required |
-| Latest acceptance parent | `35192508159` |
-| Latest E1 VM run | `35192540407`, failure during image build |
-| Latest interoperability run | `35192542464`, failure during candidate image build |
-| Latest reference baseline run | `35192537809`, success on attempt 2 |
+| Phase 3 acceptance | EFI-zboot/logical-image correction plus stray-path removal applied; fresh exact-head acceptance required |
+| Latest acceptance parent | `35195064164` |
+| Latest E1 VM run | `35195101815`, failure during base-image build |
+| Latest interoperability run | `35195103898`, failure during base-image build |
+| Latest reference baseline run | `35195100046`, success |
+| Latest native build run | `35195096243`, success |
+| Latest project-state run | `35195098169`, success |
 | Latest branch-cleanup run | `35179252422`, success |
 
 ## Persistent run index

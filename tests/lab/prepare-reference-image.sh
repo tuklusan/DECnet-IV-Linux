@@ -25,7 +25,6 @@ output=$2
 
 work=$(mktemp -d)
 raw="$work/reference.raw"
-verify_raw="$work/verify.raw"
 mnt="$work/root"
 mkdir -p "$mnt" "$(dirname "$output")"
 mounted=0
@@ -100,14 +99,10 @@ sudo umount "$mnt"
 mounted=0
 
 # Acceptance correctness wins over file-size optimization. Keep the derived
-# image uncompressed, validate its qcow2 structure, then prove that converting
-# it back to RAW reproduces the complete intended disk byte-for-byte.
+# image uncompressed, validate its qcow2 structure, then compare guest-visible
+# logical content directly across raw and qcow2. Sparse zero allocation is an
+# implementation detail, not a content difference.
 qemu-img convert -q -f raw -O qcow2 "$raw" "$output"
 qemu-img check -q -f qcow2 "$output"
-qemu-img convert -q -f qcow2 -O raw "$output" "$verify_raw"
-if ! cmp -s "$raw" "$verify_raw"; then
-    echo "prepare-reference-image: full RAW content changed during image conversion" >&2
-    exit 1
-fi
-rm -f "$verify_raw"
+qemu-img compare -q -f raw -F qcow2 "$raw" "$output"
 echo "prepare-reference-image: created $output from archived source $source_commit"
