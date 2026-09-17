@@ -79,6 +79,8 @@ Foundation complete: pinned Ubuntu Base 26.04.1 amd64/arm64 rootfs files, pinned
 
 Ubuntu Base initially lacks usable certificate trust for the snapshot service. Image construction bootstraps only signed `ca-certificates` with TLS peer verification temporarily disabled, refreshes package-owned trust, then requires ordinary verified snapshot access for all remaining packages. The sparse root filesystem floor is 4 GiB.
 
+Image source staging archives the exact tracked `HEAD` commit with `git archive` and records that commit inside the guest source tree. Mutable `scratch/runtime`, restored workflow artifacts, generated lab evidence and other untracked checkout state cannot leak into the candidate image.
+
 The retained `phase2` smoke gate exchanges deliberately generated standard DECnet Routing Layer Ethernet frames. Successful resumable checkpoints are sealed as format 2 and include `session.env` in `SHA256SUMS`; resume requires matching architecture, exact source revision and mode. Older unsealed format-1 checkpoints are rejected.
 
 ### Phase 3
@@ -93,7 +95,7 @@ The E1 self-to-self harness covers L1 hello exchange, observable INIT/UP behavio
 
 The independent-peer harness boots candidate and reference in separate VMs on both native architectures. Route20 and PyDECnet cover Linux L1 router, L2 router and endnode roles against independent routers. PyDECnet additionally runs as an independent endnode against a Linux L1 router, closing the previously missing independent proof that Linux router-side endnode-hello parsing/admission works. The gate requires standard framing, protocol-derived source MACs, two-way router-list evidence where applicable, endnode hello test data, hardware-MAC change survival, protocol-unicast reception, hard peer loss/listen expiry, fresh-peer recovery and retained packet/serial evidence. The reference image never loads `decnet_iv`.
 
-Previous full-tree reviews fixed QEMU process-lifetime handling in the interop harness, sealed checkpoint metadata integrity, stale format-1 lab documentation, the missing independent endnode-to-Linux-router direction and hosted HEAD-metadata policy enforcement. The current repository change adds durable `scratch/` state/evidence handling and exact-tree scan verification to every acceptance workflow. Because workflow and continuity behavior changed, SoP is reset again; no earlier clean pass or acceptance evidence carries forward.
+Previous full-tree reviews fixed QEMU process-lifetime handling in the interop harness, sealed checkpoint metadata integrity, stale format-1 lab documentation, the missing independent endnode-to-Linux-router direction, hosted HEAD-metadata policy enforcement, and durable `scratch/` workflow state/evidence handling. The latest review found that the image builder copied the mutable working tree after workflows had already created `scratch/runtime`; transient workflow state could therefore enter the guest source tree and make the image depend on runner state. Image staging now uses `git archive` of the exact candidate commit and installs guest harness files from that archived tree. This correction resets SoP; no earlier clean pass or acceptance evidence carries forward.
 
 ## Test addressing
 
@@ -105,7 +107,7 @@ Ordinary lab addressing is centralized in `tests/lab/test-addresses.env`: area 3
 
 ## Resume point
 
-The current `main` candidate combines the Phase 1/2 foundation, Phase 3 Ethernet initialization/adjacency implementation, self-to-self E1 harness, live two-VM Route20/PyDECnet interoperability in both router directions that their roles support, signed-snapshot certificate bootstrap, framing/filter/multicast/concurrency fixes, endnode test-data bound, repository policy, exact-QEMU-PID hard-stop testing, sealed format-2 VM checkpoints, hosted HEAD-metadata policy enforcement, and the repository-root `scratch/` persistence namespace. Acceptance workflows now record exact run/session lineage and evidence below `scratch/runtime/`, restore prior artifacts below `scratch/restored/`, and require three matching byte-complete exact-tree scans plus a final post-gate scan on the same candidate. The protocol phase remains Phase 3.
+The current `main` candidate combines the Phase 1/2 foundation, Phase 3 Ethernet initialization/adjacency implementation, self-to-self E1 harness, live two-VM Route20/PyDECnet interoperability in both router directions that their roles support, signed-snapshot certificate bootstrap, exact-commit image source staging, framing/filter/multicast/concurrency fixes, endnode test-data bound, repository policy, exact-QEMU-PID hard-stop testing, sealed format-2 VM checkpoints, hosted HEAD-metadata policy enforcement, and the repository-root `scratch/` persistence namespace. Acceptance workflows record exact run/session lineage and evidence below `scratch/runtime/`, restore prior artifacts below `scratch/restored/`, and require three matching byte-complete exact-tree scans plus a final post-gate scan on the same candidate. The protocol phase remains Phase 3.
 
 ## Next action
 

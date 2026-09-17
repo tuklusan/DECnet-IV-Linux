@@ -43,6 +43,7 @@ if [[ ! -f "$base_tar" ]]; then
     echo "build-image: base tarball not found: $base_tar" >&2
     exit 2
 fi
+source_commit=$(git -C "$repo_root" rev-parse --verify 'HEAD^{commit}')
 
 work=$(mktemp -d)
 raw="$work/root.raw"
@@ -73,8 +74,13 @@ sudo tar --numeric-owner --xattrs --acls -xpf "$base_tar" -C "$mnt"
 
 sudo mkdir -p "$mnt/usr/src/decnet-iv-linux" "$mnt/usr/local/sbin" \
     "$mnt/etc/systemd/system/multi-user.target.wants"
-sudo tar -C "$repo_root" --exclude=.git --exclude=out -cf - . | \
+# Archive the exact tracked commit, not the mutable workflow checkout. This keeps
+# scratch/runtime, restored artifacts and all other untracked build products out
+# of the guest source tree while preserving the exact candidate bytes.
+git -C "$repo_root" archive --format=tar "$source_commit" | \
     sudo tar -C "$mnt/usr/src/decnet-iv-linux" -xf -
+printf '%s\n' "$source_commit" | \
+    sudo tee "$mnt/usr/src/decnet-iv-linux/.source-commit" >/dev/null
 
 sudo rm -f "$mnt/etc/resolv.conf"
 sudo cp -L /etc/resolv.conf "$mnt/etc/resolv.conf"
@@ -129,8 +135,9 @@ rm -f /usr/sbin/policy-rc.d
 sudo rm -f "$mnt/etc/machine-id" "$mnt/var/lib/dbus/machine-id"
 sudo touch "$mnt/etc/machine-id"
 
-sudo install -m 0755 "$repo_root/tests/lab/dniv-smoke.sh" "$mnt/usr/local/sbin/dniv-smoke"
-sudo install -m 0644 "$repo_root/tests/lab/dniv-smoke.service" \
+sudo install -m 0755 "$mnt/usr/src/decnet-iv-linux/tests/lab/dniv-smoke.sh" \
+    "$mnt/usr/local/sbin/dniv-smoke"
+sudo install -m 0644 "$mnt/usr/src/decnet-iv-linux/tests/lab/dniv-smoke.service" \
     "$mnt/etc/systemd/system/dniv-smoke.service"
 sudo ln -sf ../dniv-smoke.service \
     "$mnt/etc/systemd/system/multi-user.target.wants/dniv-smoke.service"
@@ -154,4 +161,4 @@ mounted=0
 
 qemu-img convert -f raw -O qcow2 -c "$raw" "$output"
 qemu-img info "$output"
-echo "build-image: created $output with direct-boot kernel artifacts in $boot_dir"
+echo "build-image: created $output from source $source_commit with direct-boot kernel artifacts in $boot_dir"

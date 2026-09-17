@@ -16,9 +16,9 @@
 
 ## Current checkpoint
 
-Phase 3 remains the active protocol phase. Work is performed only on `main`. The commit containing this file adds the repository-root `scratch/` persistence contract, exact-tree SoP scan tooling, and workflow state/evidence persistence. Mutable workflow state is written below ignored `scratch/runtime/` during a run, uploaded as uniquely named workflow artifacts, and restored below ignored `scratch/restored/` on later runner sessions.
+Phase 3 remains the active protocol phase. Work is performed only on `main`. The repository-root `scratch/` persistence contract, exact-tree SoP scan tooling, and workflow state/evidence persistence are active. Mutable workflow state is written below ignored `scratch/runtime/` during a run, uploaded as uniquely named workflow artifacts, and restored below ignored `scratch/restored/` on later runner sessions.
 
-The persistence and workflow-gate changes are substantive, so all earlier SoP pass counts and acceptance evidence are invalid for the resulting `main` candidate.
+The latest review found that image construction copied the mutable workflow checkout after `scratch/runtime/` had been created. The image builder now archives the exact tracked `HEAD` commit with `git archive`, records that source commit inside the guest tree, and installs the guest test harness from the archived copy. Transient runner state therefore cannot contaminate candidate images. This fix is substantive, so all earlier SoP pass counts and acceptance evidence are invalid for the resulting `main` candidate.
 
 | Field | Current value |
 | --- | --- |
