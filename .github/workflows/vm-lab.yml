@@ -70,6 +70,8 @@ jobs:
       DNIV_LAB_SESSION_ID: run-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.arch }}-${{ inputs.lab_mode }}
       DNIV_LAB_ARCH: ${{ matrix.arch }}
       DNIV_LAB_SOURCE_SHA: ${{ github.sha }}
+      DNIV_OUTER_SESSION_ID: outer-v1-${{ matrix.arch }}-${{ github.sha }}
+      DNIV_OUTER_BASE_DIR: ${{ runner.temp }}/dniv-outer-${{ matrix.arch }}
     steps:
       - name: Check out exact repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -96,7 +98,15 @@ jobs:
           sudo apt-get install -y ${{ matrix.qemu }} qemu-utils e2fsprogs tcpdump curl 2>&1 | \
             tee "$DNIV_SCRATCH_DIR/apt-install.log"
 
-      - name: Download and verify pinned Ubuntu Base rootfs
+      - name: Restore immutable outer architecture session
+        id: outer-base
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ${{ env.DNIV_OUTER_BASE_DIR }}
+          key: ${{ env.DNIV_OUTER_SESSION_ID }}
+
+      - name: Download pinned Ubuntu Base rootfs on outer-session miss
+        if: ${{ steps.outer-base.outputs.cache-hit != 'true' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -112,17 +122,58 @@ jobs:
           echo "$sha  $RUNNER_TEMP/$file" | sha256sum -c -
           echo "UBUNTU_BASE_TARBALL=$RUNNER_TEMP/$file" >> "$GITHUB_ENV"
 
-      - name: Build immutable DECnet test base
+      - name: Build immutable outer architecture session on cache miss
+        if: ${{ steps.outer-base.outputs.cache-hit != 'true' }}
         shell: bash
         run: |
           set -euo pipefail
           sudo -v
+          rm -rf "$DNIV_OUTER_BASE_DIR"
+          mkdir -p "$DNIV_OUTER_BASE_DIR/boot"
           image/ubuntu-base/build-image.sh '${{ matrix.arch }}' "$UBUNTU_BASE_TARBALL" \
-            "$RUNNER_TEMP/dniv-${{ matrix.arch }}.qcow2" "$RUNNER_TEMP/boot-${{ matrix.arch }}" 2>&1 | \
+            "$DNIV_OUTER_BASE_DIR/base.qcow2" "$DNIV_OUTER_BASE_DIR/boot" 2>&1 | \
             tee "$DNIV_SCRATCH_DIR/build-image.log"
-          echo "DNIV_LAB_BASE=$RUNNER_TEMP/dniv-${{ matrix.arch }}.qcow2" >> "$GITHUB_ENV"
-          echo "DNIV_LAB_KERNEL=$RUNNER_TEMP/boot-${{ matrix.arch }}/vmlinuz" >> "$GITHUB_ENV"
-          echo "DNIV_LAB_INITRD=$RUNNER_TEMP/boot-${{ matrix.arch }}/initrd.img" >> "$GITHUB_ENV"
+          cat > "$DNIV_OUTER_BASE_DIR/session.env" <<EOF
+          FORMAT=1
+          SESSION_ID=$DNIV_OUTER_SESSION_ID
+          ARCH=${{ matrix.arch }}
+          SOURCE_SHA=$GITHUB_SHA
+          EOF
+          (
+            cd "$DNIV_OUTER_BASE_DIR"
+            sha256sum base.qcow2 boot/vmlinuz boot/initrd.img session.env > SHA256SUMS
+            sha256sum -c SHA256SUMS
+          )
+          qemu-img check -q -f qcow2 "$DNIV_OUTER_BASE_DIR/base.qcow2"
+
+      - name: Save immutable outer architecture session
+        if: ${{ steps.outer-base.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ${{ env.DNIV_OUTER_BASE_DIR }}
+          key: ${{ env.DNIV_OUTER_SESSION_ID }}
+
+      - name: Verify pinned outer architecture session
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "$DNIV_OUTER_BASE_DIR/session.env"
+          test -f "$DNIV_OUTER_BASE_DIR/SHA256SUMS"
+          grep -Fx 'FORMAT=1' "$DNIV_OUTER_BASE_DIR/session.env"
+          grep -Fx "SESSION_ID=$DNIV_OUTER_SESSION_ID" "$DNIV_OUTER_BASE_DIR/session.env"
+          grep -Fx 'ARCH=${{ matrix.arch }}' "$DNIV_OUTER_BASE_DIR/session.env"
+          grep -Fx "SOURCE_SHA=$GITHUB_SHA" "$DNIV_OUTER_BASE_DIR/session.env"
+          (
+            cd "$DNIV_OUTER_BASE_DIR"
+            sha256sum -c SHA256SUMS
+          )
+          qemu-img check -q -f qcow2 "$DNIV_OUTER_BASE_DIR/base.qcow2"
+          cp "$DNIV_OUTER_BASE_DIR/session.env" "$DNIV_SCRATCH_DIR/outer-session.env"
+          printf 'CACHE_HIT=%s\n' '${{ steps.outer-base.outputs.cache-hit }}' >> \
+            "$DNIV_SCRATCH_DIR/outer-session.env"
+          echo "DNIV_LAB_BASE=$DNIV_OUTER_BASE_DIR/base.qcow2" >> "$GITHUB_ENV"
+          echo "DNIV_LAB_KERNEL=$DNIV_OUTER_BASE_DIR/boot/vmlinuz" >> "$GITHUB_ENV"
+          echo "DNIV_LAB_INITRD=$DNIV_OUTER_BASE_DIR/boot/initrd.img" >> "$GITHUB_ENV"
 
       - name: Run Python QEMU overlay lab
         shell: bash

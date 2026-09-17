@@ -18,15 +18,15 @@
 
 Phase 3 remains active and all substantive work stays on `main`. Candidate promotion is controlled only by exact-SHA mechanical, build, VM, reference, protocol and interoperability gates.
 
-The prior acceptance lineage on `3f41bec910b5b07520c23b05dcbb1996d091ef62` proved native x86_64/aarch64 build and continuity but failed before protocol acceptance in guest-image preparation. Commit `102972a5e8a35e517ac65bd100a8d3f271f37720` corrected late ext4 metadata/conversion instability. The current work changes the acceptance architecture rather than continuing to add checkpoint/image plumbing.
+The two-node lab uses `tests/lab/dniv_lab.py`, a Python direct-QEMU controller with QMP shutdown, Linux bridge/TAP networking, packet capture, serial marker assertions and disposable qcow2 node overlays. Writable inner-VM checkpoints remain retired.
 
-The two-node lab now uses `tests/lab/dniv_lab.py`: a Python direct-QEMU controller with QMP shutdown, Linux bridge/TAP networking, packet capture, serial marker assertions, and disposable qcow2 overlays over one immutable candidate base. `tests/lab/run-two-node.sh` is retired. VM resume inputs, archived writable checkpoints, rebasing, checksum sealing and stale-checkpoint pruning are removed from `vm-lab.yml`; transient `.qcow2` and `.qmp` files are excluded from evidence uploads.
+The two architecture slots now retain immutable outer base sessions across acceptance jobs. The session identifier is `outer-v1-<arch>-<source-sha>` and the persisted payload is `base.qcow2`, `boot/vmlinuz`, `boot/initrd.img`, `session.env` and `SHA256SUMS`. Because GitHub-hosted runner root filesystems are ephemeral, the payload is stored in the Actions cache and restored onto the matching amd64 or arm64 runner. Restores are accepted only when the manifest matches the exact architecture and source SHA, all checksums verify, and `qemu-img check` passes.
 
-The first acceptance request on Python-controller commit `8354451bde25651d3cce0fe37835a6a5524606fd` exposed an unrelated scheduling bottleneck before its repository-policy job could execute: an older interoperability job held `dniv-runner-x64`, and repository-policy/dispatch incorrectly shared that protocol-lab slot. The correction isolates repository-control workflow concurrency by exact candidate SHA and removes lab-runner job concurrency from repository-policy, branch cleanup and acceptance dispatch. Old protocol runs can no longer prevent a newer exact head from reaching policy and dispatch.
+The same outer session is consumed by `vm-lab.yml` and `interop.yml`. Architecture-specific `dniv-runner-*` serialization means the first job can create a missing session without a same-architecture race; later jobs for that exact candidate restore it. New source SHAs receive new session IDs and cannot reuse a prior candidate image.
 
-The hosted VM workflow still builds one immutable candidate base per architecture. This is deliberate for the first feasibility run. If E1 is green, the next reduction is to prepare/persist the base outside ordinary protocol runs, preferably on native self-hosted KVM-capable x86_64 and aarch64 runners. Interoperability has not yet been migrated and remains the next target after the Python two-node path proves itself.
+Interoperability no longer accepts or downloads prior-run scratch evidence. Those restored artifacts were lineage-only and did not participate in VM execution. Candidate/reference working images remain disposable and are rebuilt from the verified immutable outer base; they are not persisted as acceptance state.
 
-Repository branch policy remains exactly one remote branch, `refs/heads/main`. GitHub-owned actions remain pinned to immutable full SHAs. The machine helpers remain `tools/workflow_guard.sh`, `tools/integrity_scan.py`, `tools/project_state_gate.py` and `tools/workflow_budget_gate.py`.
+Repository branch policy remains exactly one remote branch, `refs/heads/main`. Repository-policy/control jobs do not consume protocol-lab concurrency slots. GitHub-owned actions, including cache restore/save, are pinned to immutable full SHAs.
 
 | Field | Current value |
 | --- | --- |
@@ -36,22 +36,20 @@ Repository branch policy remains exactly one remote branch, `refs/heads/main`. G
 | Hosted job ceiling | 75 minutes |
 | Protocol runner queue policy | architecture-specific `dniv-runner-*`, `queue: max` |
 | Repository-control queue policy | exact-SHA workflow concurrency; no protocol runner slot |
-| VM lifecycle | Python direct QEMU/QMP |
-| VM disk state | disposable qcow2 overlays over immutable base |
-| Writable VM checkpoint artifacts | retired |
+| VM lifecycle | Python direct QEMU/QMP for two-node gate |
+| Outer architecture state | immutable exact-SHA base session cached per architecture |
+| Outer session ID | `outer-v1-<arch>-<source-sha>` |
+| Inner VM disk state | disposable qcow2 overlays/derived images |
+| Writable inner VM checkpoint artifacts | retired |
+| Interop prior-run evidence restore | retired |
 | Compact evidence retention | 30 days maximum |
 | Acceptance child binding | parent run ID + exact expected SHA |
-| Previous acceptance parent | `35232209976` on `3f41bec910b5b07520c23b05dcbb1996d091ef62` |
-| Previous native build run | `35232466634`, success |
-| Previous project-state run | `35232469698`, success |
-| Previous E1 VM run | `35232475152`, image-path failure before protocol acceptance |
-| Previous interoperability run | `35232477599`, image-preparation failure before protocol assertions |
-| Current feasibility target | E1 on Python overlay controller |
+| Current feasibility target | E1 and interoperability using restored architecture sessions |
 
 ## Persistent run index
 
-Mutable workflow state remains below ignored `scratch/runtime/`; restored evidence may exist below ignored `scratch/restored/` only for workflows that explicitly consume prior evidence. A run ID is lineage, not persistent execution. VM writable disks are ephemeral and do not transfer acceptance state between runs.
+Run IDs remain lineage, not execution state. Persistent execution input is limited to the verified immutable architecture session cache. Mutable workflow state remains below ignored `scratch/runtime/`; compact evidence may be uploaded, but it never substitutes for exact source/tree verification or becomes writable guest state for a later run.
 
 ## Next action
 
-Commit the control-plane scheduling correction directly to `main` and dispatch a fresh exact-head acceptance request. Treat E1 as the proof point for the Python controller. If it passes on both architectures, migrate interoperability orchestration and then remove the remaining protocol-test image mutation machinery where it is no longer needed.
+Dispatch fresh exact-head acceptance. Confirm each architecture creates at most one cache session for the exact candidate, later same-SHA jobs restore it, and no protocol job repeats full base-image construction after that session exists. Then continue Phase 3 protocol/interoperability debugging from the resulting evidence.

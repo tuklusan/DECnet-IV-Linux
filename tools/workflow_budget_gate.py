@@ -32,6 +32,8 @@ ACTION_PINS = {
     "actions/checkout": "11d5960a326750d5838078e36cf38b85af677262",
     "actions/upload-artifact": "ea165f8d65b6e75b540449e92b4886f43607fa02",
     "actions/download-artifact": "d3f86a106a0bac45b974a628896c90dbdf5c8093",
+    "actions/cache/restore": "0057852bfaa89a56745cba8c7296529d2fc39830",
+    "actions/cache/save": "0057852bfaa89a56745cba8c7296529d2fc39830",
 }
 CHILD_WORKFLOWS = {
     "build.yml", "project-state.yml", "reference-baselines.yml", "vm-lab.yml", "interop.yml",
@@ -42,7 +44,9 @@ RETENTION_RE = re.compile(r"^\s+retention-days:\s*([0-9]+)\s*$")
 STEP_RE = re.compile(r"^      - name:\s+")
 SCENARIOS_RE = re.compile(r"^\s+scenarios:\s*[\"']?([^\"'#]+?)[\"']?\s*$")
 CONCURRENCY_RE = re.compile(r"^(\s*)concurrency:\s*$")
-USES_RE = re.compile(r"^\s+uses:\s+(actions/(?:checkout|upload-artifact|download-artifact))@([^\s#]+)")
+USES_RE = re.compile(
+    r"^\s+uses:\s+(actions/(?:checkout|upload-artifact|download-artifact|cache/(?:restore|save)))@([^\s#]+)"
+)
 
 
 def git(*args: str) -> str:
@@ -164,7 +168,10 @@ def check_workflow(path: str, text: str) -> list[str]:
     if name == "vm-lab.yml":
         required = (
             "python3 tests/lab/dniv_lab.py",
-            "Build immutable DECnet test base",
+            "DNIV_OUTER_SESSION_ID: outer-v1-${{ matrix.arch }}-${{ github.sha }}",
+            "actions/cache/restore@",
+            "actions/cache/save@",
+            "Verify pinned outer architecture session",
             "!${{ env.DNIV_SCRATCH_DIR }}/lab/**/*.qcow2",
             "!${{ env.DNIV_SCRATCH_DIR }}/lab/**/*.qmp",
         )
@@ -176,19 +183,32 @@ def check_workflow(path: str, text: str) -> list[str]:
         )
         for marker in required:
             if marker not in text:
-                errors.append(f"{path}: missing Python overlay-lab safeguard: {marker}")
+                errors.append(f"{path}: missing persistent-outer/disposable-inner safeguard: {marker}")
         for marker in forbidden:
             if marker in text:
-                errors.append(f"{path}: obsolete resumable-VM machinery remains: {marker}")
+                errors.append(f"{path}: obsolete resumable-inner-VM machinery remains: {marker}")
 
     if name == "interop.yml":
-        for marker in (
+        required = (
+            "DNIV_OUTER_SESSION_ID: outer-v1-${{ matrix.arch }}-${{ github.sha }}",
+            "actions/cache/restore@",
+            "actions/cache/save@",
+            "Prepare disposable interoperability images",
             "!${{ env.DNIV_SCRATCH_DIR }}/interop/**/*.qcow2",
             "scratch-interop-${{ matrix.arch }}-${{ matrix.suite }}-${{ github.run_id }}",
             "${{ github.job }}-${{ matrix.arch }}-${{ matrix.suite }}",
-        ):
+        )
+        forbidden = (
+            "resume_run_id:",
+            "Restore prior scratch artifacts",
+            "--resume-run-id",
+        )
+        for marker in required:
             if marker not in text:
                 errors.append(f"{path}: missing interoperability storage/runtime safeguard: {marker}")
+        for marker in forbidden:
+            if marker in text:
+                errors.append(f"{path}: obsolete interoperability resume plumbing remains: {marker}")
         rows = []
         for line in lines:
             if match := SCENARIOS_RE.match(line):

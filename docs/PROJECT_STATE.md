@@ -50,13 +50,15 @@ Foundation complete: pinned Ubuntu Base 26.04.1 amd64/arm64 rootfs files and pac
 
 Implementation remains active. Router/endnode hello generation/parsing, periodic hello, per-interface adjacencies, 3.1x listen expiry, DR election, router-router INIT/UP behavior, endnode admission/router selection, L2 cross-area behavior, 33-router/interface admission, protocol source MACs, DECnet unicast filters and primary-MAC-change survival are implemented and covered by the E1/interop harnesses.
 
-Exact-SHA acceptance on `3f41bec910b5b07520c23b05dcbb1996d091ef62` established that native builds and continuity gates were green but the VM/interoperability path was spending acceptance time in guest-image construction and mutation. The subsequent image-stability correction `102972a5e8a35e517ac65bd100a8d3f271f37720` made ext4 conversion deterministic, but the broader design problem remained: protocol acceptance was coupled too tightly to image production.
+Exact-SHA acceptance on `3f41bec910b5b07520c23b05dcbb1996d091ef62` established that native builds and continuity gates were green but the VM/interoperability path was spending acceptance time in guest-image construction and mutation. The subsequent image-stability correction `102972a5e8a35e517ac65bd100a8d3f271f37720` made ext4 conversion deterministic, but protocol acceptance remained too tightly coupled to repeated image production.
 
-The lab is therefore being simplified. `tests/lab/dniv_lab.py` is now the two-node virtualization controller. It launches QEMU directly, creates one disposable qcow2 overlay per guest over an immutable input base, uses TAP/bridge networking, records serial and DECnet packet evidence, and uses QMP for guest shutdown. The previous shell two-node launcher plus resumable checkpoint/upload/restore/rebase/prune machinery is retired. The distributable image builder remains because image production is still a separate release requirement.
+`tests/lab/dniv_lab.py` remains the two-node virtualization controller. It launches QEMU directly, creates disposable qcow2 overlays per guest, uses TAP/bridge networking, records serial and DECnet packet evidence, and uses QMP for shutdown. Mutable inner-VM checkpoint/upload/restore/rebase/prune machinery remains retired.
 
-The first fresh acceptance request for the Python-controller candidate exposed a control-plane scheduling defect before any new gate executed: repository-policy shared `dniv-runner-x64` with an older interoperability run, so an obsolete candidate could block policy and dispatch for the new exact head. Repository policy and dispatch are now removed from lab-runner job concurrency, and workflow-level repository-policy concurrency is keyed by exact candidate SHA. Protocol jobs remain serialized by their architecture slots.
+The architecture persistence boundary is now explicit. Each architecture slot has one immutable outer base session for the exact candidate, identified as `outer-v1-<arch>-<source-sha>`. GitHub-hosted runner root filesystems are ephemeral, so the architecture disk session is persisted through the GitHub Actions cache and restored on later acceptance jobs for that same exact SHA. The cached session contains only `base.qcow2`, kernel/initrd, a session manifest and checksums. Every restore verifies architecture, exact source SHA, all SHA-256 sums and `qemu-img check` before use. A different architecture or source SHA cannot reuse the session.
 
-This migration intentionally changes orchestration before changing the guest payload model. The hosted VM workflow still constructs one immutable candidate base per architecture, then Python performs only overlay-based protocol execution. Once this path is proven, the next optimization is to move immutable base preparation out of ordinary protocol CI, preferably onto native self-hosted x86_64/aarch64 KVM runners or another persistent base-image store. Interoperability still uses the existing shell launcher and derived peer images until the Python two-node path is green.
+Both the Python two-node gate and interoperability now consume that same architecture session. The first job for an architecture/SHA may build and save it; later jobs restore it instead of re-running Ubuntu Base extraction, package installation and base-image conversion. Interoperability then derives disposable candidate/reference images from the immutable session base. Prior-run interoperability evidence restore inputs are removed because they did not alter execution and only added transfer/lineage overhead.
+
+Repository policy and acceptance dispatch remain isolated from lab-runner concurrency. Protocol jobs remain serialized by their architecture slots, which also prevents two jobs racing to create the same outer session.
 
 ## Test addressing
 
@@ -64,12 +66,12 @@ Ordinary lab addressing remains area 31, nodes 70 through 79, names DN70 through
 
 ## Pre-production acceptance
 
-`docs/PRE_PRODUCTION_TEST.md` is the consolidated production procedure. Required tests must execute with complete evidence; documentation alone is never green. Long campaigns requiring persistence need a persistent controller rather than archived writable VM checkpoints.
+`docs/PRE_PRODUCTION_TEST.md` is the consolidated production procedure. Required tests must execute with complete evidence; documentation alone is never green. Long campaigns should reuse immutable architecture sessions while keeping guest writable state disposable.
 
 ## Resume point
 
-Phase 3 remains active. The current candidate combines the Python QEMU/QMP disposable-overlay controller with independent control-plane scheduling so stale protocol runs cannot block exact-head policy/dispatch. No protocol promotion is implied until the exact candidate passes build, continuity, reference, E1 and interoperability gates.
+Phase 3 remains active. The current candidate combines the Python QEMU/QMP disposable-overlay controller with exact-SHA persistent architecture base sessions shared by E1 and interoperability. No protocol promotion is implied until the unchanged candidate passes build, continuity, reference, E1 and interoperability gates.
 
 ## Next action
 
-Dispatch fresh exact-head acceptance on the control-plane scheduling correction. Prioritize E1 on both architectures as the feasibility proof for the Python overlay controller. Interoperability remains on the existing path for this candidate; migrate it only after the Python two-node gate is green.
+Run fresh exact-head acceptance. The first amd64 and arm64 lab jobs should create or restore their `outer-v1-<arch>-<sha>` sessions; subsequent jobs for the same SHA must report cache hits and skip base construction. Then evaluate E1 and interoperability protocol results independently of image-preparation overhead.

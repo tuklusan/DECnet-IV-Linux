@@ -16,40 +16,46 @@
 
 ## Purpose
 
-The lab proves DECnet protocol behavior independently of release-image production. Protocol tests should spend their time booting and exercising nodes, not serializing mutable VM state between hosted runners.
+The lab proves DECnet protocol behavior independently of release-image production. Protocol tests should spend their time booting and exercising nodes, not repeatedly rebuilding or serializing mutable VM state.
 
-## Current two-node architecture
+## Architecture sessions
 
-`tests/lab/dniv_lab.py` owns VM lifecycle for the Phase 2/E1 two-node gate. The workflow supplies one read-only-by-convention base QCOW2 plus its kernel/initrd. The controller creates fresh qcow2 overlays, a Linux bridge, two TAP devices, a DECnet-only packet capture and one QMP socket per guest. It launches QEMU directly, waits for guest acceptance markers, validates the captured wire behavior, shuts guests down through QMP where possible, and removes host networking on every exit path.
+There are two logical outer architecture sessions for each exact candidate: amd64 and arm64. Their stable session IDs are `outer-v1-<arch>-<source-sha>`. GitHub-hosted runners themselves are ephemeral, so their root disks are not relied upon; instead the immutable architecture disk payload is persisted in the Actions cache and restored onto the matching architecture runner.
 
-The base image is immutable input. Overlay disks and QMP sockets are transient and are excluded from uploaded evidence. Serial logs, packet captures, scratch metadata and integrity manifests remain the durable acceptance evidence.
+An outer session contains only:
+
+- `base.qcow2`;
+- `boot/vmlinuz`;
+- `boot/initrd.img`;
+- `session.env`;
+- `SHA256SUMS`.
+
+A restore is usable only if `ARCH` and `SOURCE_SHA` match the running job, the stable session ID matches exactly, every checksum verifies, and `qemu-img check` succeeds. Cache keys contain both architecture and exact source SHA, so no cross-architecture or cross-candidate reuse is possible.
+
+The architecture-specific `dniv-runner-x64` and `dniv-runner-arm64` concurrency groups serialize creation/consumption. The first job for an architecture/SHA can populate a missing session; subsequent E1 or interoperability jobs restore it instead of rebuilding the Ubuntu Base image.
+
+## Two-node execution
+
+`tests/lab/dniv_lab.py` owns VM lifecycle for the Phase 2/E1 gate. It receives the verified immutable outer base plus kernel/initrd and creates fresh qcow2 node overlays, a Linux bridge, two TAP devices, DECnet packet capture and one QMP socket per guest. It launches QEMU directly, waits for guest acceptance markers, validates captured wire behavior, shuts guests down through QMP where possible, and removes host networking on every exit path.
+
+Node overlays and QMP sockets are transient and excluded from uploaded evidence. Serial logs, packet captures, outer-session metadata and integrity manifests are durable acceptance evidence.
 
 ## Architectures
 
-The hosted proof matrix remains native runner architecture where available:
+The hosted matrix remains:
 
-- amd64 on `ubuntu-24.04`, using `qemu-system-x86_64` and KVM only when `/dev/kvm` is usable.
-- arm64 on `ubuntu-24.04-arm`, using `qemu-system-aarch64` and KVM only when `/dev/kvm` is usable.
+- amd64 on `ubuntu-24.04`, using `qemu-system-x86_64` and KVM when `/dev/kvm` is usable;
+- arm64 on `ubuntu-24.04-arm`, using `qemu-system-aarch64` and KVM when `/dev/kvm` is usable.
 
-If KVM is unavailable the controller falls back to TCG. Long term, native self-hosted KVM-capable x86_64 and aarch64 runners are preferred so protocol tests do not depend on nested/emulated virtualization performance.
+If KVM is unavailable the controller falls back to TCG. Native self-hosted KVM-capable x86_64 and arm64 machines remain the path to literal persistent runner root disks, but protocol acceptance no longer depends on runner-local disk survival.
 
 ## Addressing
 
 Ordinary test nodes use area 31, nodes 70 through 79, with names DN70 through DN79 as defined in `tests/lab/test-addresses.env`. DECnet Phase IV protocol MACs are derived from area/node. E1 deliberately gives the emulated NIC a different primary MAC so the test proves that protocol-originated frames use the DECnet-derived source MAC and that unicast filtering survives later primary-MAC changes.
 
-## Evidence
-
-For each two-node session the controller retains:
-
-- `node-a.serial.log` and `node-b.serial.log`;
-- `lan.pcap` containing EtherType `0x6003` traffic;
-- workflow scratch/integrity metadata.
-
-It does not retain guest overlays, VM checkpoints or QMP sockets.
-
 ## Interoperability
 
-Route20 and PyDECnet remain pinned independent peers. The existing interoperability workflow still uses its shell launcher and derived peer images while the Python two-node controller is proven. After E1 is green on both architectures, interoperability should move to the same Python lifecycle model and image mutation should be reduced to the minimum needed to inject a pinned peer payload.
+Route20 and PyDECnet remain pinned independent peers. Interoperability consumes the same verified architecture session and derives disposable candidate/reference images from it. Prior-run evidence restore is not part of execution. Route20/PyDECnet payloads remain exact-SHA pinned and are injected only into disposable working images.
 
 ## Scale and faults
 
@@ -57,4 +63,4 @@ The Python controller is intentionally small enough to extend from two to 16 ind
 
 ## Release-image separation
 
-`image/ubuntu-base/build-image.sh` remains the release/base-image construction path. Its filesystem and RAW/QCOW2 integrity checks are valid image-production gates, but image construction is not itself a DECnet protocol assertion. Once persistent immutable bases are available, ordinary protocol jobs should consume them and leave full image construction to dedicated image/release validation.
+`image/ubuntu-base/build-image.sh` remains the canonical full image-construction path and is used to populate a missing architecture session. Its filesystem and RAW/QCOW2 checks remain valid release/image gates. Once a verified outer session exists for the exact candidate, ordinary protocol jobs restore it rather than repeating full construction.

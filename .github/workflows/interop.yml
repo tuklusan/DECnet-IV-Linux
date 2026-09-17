@@ -25,10 +25,6 @@ on:
         description: Exact parent candidate SHA; blank for direct dispatch
         required: false
         type: string
-      resume_run_id:
-        description: Prior interoperability run ID whose scratch evidence should be restored for lineage; VMs start fresh
-        required: false
-        type: string
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -110,20 +106,13 @@ jobs:
     timeout-minutes: 75
     env:
       DNIV_SCRATCH_DIR: ${{ github.workspace }}/scratch/runtime/${{ github.run_id }}/${{ github.run_attempt }}/${{ github.job }}-${{ matrix.arch }}-${{ matrix.suite }}
+      DNIV_OUTER_SESSION_ID: outer-v1-${{ matrix.arch }}-${{ github.sha }}
+      DNIV_OUTER_BASE_DIR: ${{ runner.temp }}/dniv-outer-${{ matrix.arch }}
     steps:
       - name: Check out exact repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           fetch-depth: 0
-
-      - name: Restore prior scratch artifacts
-        if: ${{ inputs.resume_run_id != '' }}
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          path: ${{ github.workspace }}/scratch/restored/${{ inputs.resume_run_id }}
-          github-token: ${{ github.token }}
-          repository: ${{ github.repository }}
-          run-id: ${{ inputs.resume_run_id }}
 
       - name: Initialize scratch state and verify integrity checks
         shell: bash
@@ -133,8 +122,7 @@ jobs:
             --workflow interop --job "$GITHUB_JOB" --arch '${{ matrix.arch }}' \
             --mode '${{ matrix.suite }}' --source-sha "$GITHUB_SHA" \
             --parent-run-id '${{ inputs.parent_run_id }}' \
-            --expected-sha '${{ inputs.expected_sha }}' \
-            --resume-run-id '${{ inputs.resume_run_id }}'
+            --expected-sha '${{ inputs.expected_sha }}'
           tools/workflow_guard.sh "$DNIV_SCRATCH_DIR" "$GITHUB_SHA" main
           echo "DNIV_INTEROP_ARTIFACTS=$DNIV_SCRATCH_DIR/interop" >> "$GITHUB_ENV"
 
@@ -146,7 +134,15 @@ jobs:
           sudo apt-get install -y ${{ matrix.qemu }} qemu-utils e2fsprogs tcpdump curl build-essential libpcap-dev 2>&1 | \
             tee "$DNIV_SCRATCH_DIR/apt-install.log"
 
-      - name: Download and verify pinned Ubuntu Base rootfs
+      - name: Restore immutable outer architecture session
+        id: outer-base
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ${{ env.DNIV_OUTER_BASE_DIR }}
+          key: ${{ env.DNIV_OUTER_SESSION_ID }}
+
+      - name: Download pinned Ubuntu Base rootfs on outer-session miss
+        if: ${{ steps.outer-base.outputs.cache-hit != 'true' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -160,28 +156,73 @@ jobs:
           fi
           curl -fL "$UBUNTU_BASE_URL/$file" -o "$RUNNER_TEMP/$file"
           echo "$sha  $RUNNER_TEMP/$file" | sha256sum -c -
-          printf 'UBUNTU_BASE_FILE=%s\nUBUNTU_BASE_SHA256=%s\n' "$file" "$sha" > \
-            "$DNIV_SCRATCH_DIR/base-image.env"
           echo "UBUNTU_BASE_TARBALL=$RUNNER_TEMP/$file" >> "$GITHUB_ENV"
 
-      - name: Build exact candidate image and peer image
+      - name: Build immutable outer architecture session on cache miss
+        if: ${{ steps.outer-base.outputs.cache-hit != 'true' }}
         shell: bash
         run: |
           set -euo pipefail
           sudo -v
+          rm -rf "$DNIV_OUTER_BASE_DIR"
+          mkdir -p "$DNIV_OUTER_BASE_DIR/boot"
           image/ubuntu-base/build-image.sh '${{ matrix.arch }}' "$UBUNTU_BASE_TARBALL" \
-            "$RUNNER_TEMP/base-${{ matrix.arch }}.qcow2" "$RUNNER_TEMP/boot-${{ matrix.arch }}" 2>&1 | \
+            "$DNIV_OUTER_BASE_DIR/base.qcow2" "$DNIV_OUTER_BASE_DIR/boot" 2>&1 | \
             tee "$DNIV_SCRATCH_DIR/build-image.log"
+          cat > "$DNIV_OUTER_BASE_DIR/session.env" <<EOF
+          FORMAT=1
+          SESSION_ID=$DNIV_OUTER_SESSION_ID
+          ARCH=${{ matrix.arch }}
+          SOURCE_SHA=$GITHUB_SHA
+          EOF
+          (
+            cd "$DNIV_OUTER_BASE_DIR"
+            sha256sum base.qcow2 boot/vmlinuz boot/initrd.img session.env > SHA256SUMS
+            sha256sum -c SHA256SUMS
+          )
+          qemu-img check -q -f qcow2 "$DNIV_OUTER_BASE_DIR/base.qcow2"
+
+      - name: Save immutable outer architecture session
+        if: ${{ steps.outer-base.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ${{ env.DNIV_OUTER_BASE_DIR }}
+          key: ${{ env.DNIV_OUTER_SESSION_ID }}
+
+      - name: Verify pinned outer architecture session
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "$DNIV_OUTER_BASE_DIR/session.env"
+          test -f "$DNIV_OUTER_BASE_DIR/SHA256SUMS"
+          grep -Fx 'FORMAT=1' "$DNIV_OUTER_BASE_DIR/session.env"
+          grep -Fx "SESSION_ID=$DNIV_OUTER_SESSION_ID" "$DNIV_OUTER_BASE_DIR/session.env"
+          grep -Fx 'ARCH=${{ matrix.arch }}' "$DNIV_OUTER_BASE_DIR/session.env"
+          grep -Fx "SOURCE_SHA=$GITHUB_SHA" "$DNIV_OUTER_BASE_DIR/session.env"
+          (
+            cd "$DNIV_OUTER_BASE_DIR"
+            sha256sum -c SHA256SUMS
+          )
+          qemu-img check -q -f qcow2 "$DNIV_OUTER_BASE_DIR/base.qcow2"
+          cp "$DNIV_OUTER_BASE_DIR/session.env" "$DNIV_SCRATCH_DIR/outer-session.env"
+          printf 'CACHE_HIT=%s\n' '${{ steps.outer-base.outputs.cache-hit }}' >> \
+            "$DNIV_SCRATCH_DIR/outer-session.env"
+          echo "DNIV_OUTER_BASE=$DNIV_OUTER_BASE_DIR/base.qcow2" >> "$GITHUB_ENV"
+          echo "DNIV_KERNEL=$DNIV_OUTER_BASE_DIR/boot/vmlinuz" >> "$GITHUB_ENV"
+          echo "DNIV_INITRD=$DNIV_OUTER_BASE_DIR/boot/initrd.img" >> "$GITHUB_ENV"
+
+      - name: Prepare disposable interoperability images
+        shell: bash
+        run: |
+          set -euo pipefail
           tests/lab/prepare-interop-candidate.sh \
-            "$RUNNER_TEMP/base-${{ matrix.arch }}.qcow2" "$RUNNER_TEMP/candidate-${{ matrix.arch }}.qcow2" 2>&1 | \
+            "$DNIV_OUTER_BASE" "$RUNNER_TEMP/candidate-${{ matrix.arch }}.qcow2" 2>&1 | \
             tee "$DNIV_SCRATCH_DIR/prepare-candidate.log"
           tests/lab/prepare-reference-image.sh \
-            "$RUNNER_TEMP/base-${{ matrix.arch }}.qcow2" "$RUNNER_TEMP/reference-${{ matrix.arch }}.qcow2" 2>&1 | \
+            "$DNIV_OUTER_BASE" "$RUNNER_TEMP/reference-${{ matrix.arch }}.qcow2" 2>&1 | \
             tee "$DNIV_SCRATCH_DIR/prepare-reference.log"
           echo "DNIV_CANDIDATE_IMAGE=$RUNNER_TEMP/candidate-${{ matrix.arch }}.qcow2" >> "$GITHUB_ENV"
           echo "DNIV_REFERENCE_IMAGE=$RUNNER_TEMP/reference-${{ matrix.arch }}.qcow2" >> "$GITHUB_ENV"
-          echo "DNIV_KERNEL=$RUNNER_TEMP/boot-${{ matrix.arch }}/vmlinuz" >> "$GITHUB_ENV"
-          echo "DNIV_INITRD=$RUNNER_TEMP/boot-${{ matrix.arch }}/initrd.img" >> "$GITHUB_ENV"
 
       - name: Build exact pinned independent peer
         shell: bash

@@ -25,6 +25,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 GATE = ROOT / "tools" / "workflow_budget_gate.py"
 UPLOAD_PIN = "ea165f8d65b6e75b540449e92b4886f43607fa02"
+CACHE_PIN = "0057852bfaa89a56745cba8c7296529d2fc39830"
 
 GOOD = f"""name: Budget Test
 on: workflow_dispatch
@@ -37,6 +38,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 75
     steps:
+      - name: Restore cache
+        uses: actions/cache/restore@{CACHE_PIN}
+        with:
+          path: cache
+          key: cache-key
+      - name: Save cache
+        uses: actions/cache/save@{CACHE_PIN}
+        with:
+          path: cache
+          key: cache-key
       - name: First artifact
         uses: actions/upload-artifact@{UPLOAD_PIN}
         with:
@@ -78,9 +89,16 @@ jobs:
             scenarios: \"l1 l2\"
     env:
       DNIV_SCRATCH_DIR: ${{{{ github.workspace }}}}/scratch/runtime/${{{{ github.run_id }}}}/${{{{ github.job }}}}-${{{{ matrix.arch }}}}-${{{{ matrix.suite }}}}
+      DNIV_OUTER_SESSION_ID: outer-v1-${{{{ matrix.arch }}}}-${{{{ github.sha }}}}
     steps:
       - name: Bind candidate
         run: python3 tools/scratch_state.py init --expected-sha '${{{{ inputs.expected_sha }}}}'
+      - name: Restore outer
+        uses: actions/cache/restore@{CACHE_PIN}
+      - name: Save outer
+        uses: actions/cache/save@{CACHE_PIN}
+      - name: Prepare disposable interoperability images
+        run: true
       - name: Preserve evidence
         uses: actions/upload-artifact@{UPLOAD_PIN}
         with:
@@ -152,7 +170,15 @@ def main() -> int:
         sample.write_text(GOOD, encoding="utf-8")
         result = invoke(root, "--staged")
         if result.returncode == 0 or "must be pinned" not in result.stderr:
-            raise SystemExit("workflow budget failed to reject a movable action tag")
+            raise SystemExit("workflow budget failed to reject a movable artifact action tag")
+
+        bad_cache_pin = GOOD.replace(CACHE_PIN, "v4", 1)
+        sample.write_text(bad_cache_pin, encoding="utf-8")
+        run(root, "git", "add", str(sample.relative_to(root)))
+        sample.write_text(GOOD, encoding="utf-8")
+        result = invoke(root, "--staged")
+        if result.returncode == 0 or "actions/cache/restore" not in result.stderr:
+            raise SystemExit("workflow budget failed to reject a movable cache action tag")
 
         run(root, "git", "reset", "-q", "HEAD", "--", str(sample.relative_to(root)))
         interop_bad = INTEROP_GOOD.replace('scenarios: "l1 l2"', 'scenarios: "l1 l2 endnode"')
