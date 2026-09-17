@@ -200,6 +200,8 @@ def check_workflow(path: str, text: str) -> list[str]:
             "scratch-vm-lab-checkpoint-${{ matrix.arch }}-${{ github.run_id }}",
             f"retention-days: {VM_CHECKPOINT_DAYS}",
             "Prune superseded successful VM checkpoints",
+            "actions/artifacts?per_page=100",
+            "--paginate",
             "!${{ env.DNIV_SCRATCH_DIR }}/lab/**/checkpoint/*.qcow2",
             "!${{ env.DNIV_SCRATCH_DIR }}/lab/**/checkpoint/vmlinuz",
             "!${{ env.DNIV_SCRATCH_DIR }}/lab/**/checkpoint/initrd.img",

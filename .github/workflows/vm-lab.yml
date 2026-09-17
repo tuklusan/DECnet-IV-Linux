@@ -264,6 +264,7 @@ jobs:
           current="${prefix}${GITHUB_RUN_ID}"
           mapfile -t stale < <(
             gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100" \
+              --paginate \
               --jq '.artifacts[] | [.name, (.id|tostring)] | @tsv' | \
               awk -F '\t' -v prefix="$prefix" -v current="$current" \
                 'index($1, prefix) == 1 && $1 != current {print $2}'
