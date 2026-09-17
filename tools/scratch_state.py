@@ -65,6 +65,17 @@ def init_state(args: argparse.Namespace) -> int:
     source_sha = args.source_sha or os.environ.get("GITHUB_SHA") or git_text("rev-parse", "HEAD")
     source_sha = git_text("rev-parse", "--verify", source_sha + "^{commit}")
     source_tree = git_text("rev-parse", "--verify", source_sha + "^{tree}")
+    expected_sha = ""
+    if args.expected_sha:
+        expected_sha = git_text("rev-parse", "--verify", args.expected_sha + "^{commit}")
+        if source_sha != expected_sha:
+            raise SystemExit(
+                "scratch-state: workflow source commit does not match parent expected SHA"
+            )
+    if args.parent_run_id and not expected_sha:
+        raise SystemExit(
+            "scratch-state: parent_run_id requires expected_sha to bind the child run"
+        )
     timestamp = now()
     data = {
         "format": 1,
@@ -77,6 +88,7 @@ def init_state(args: argparse.Namespace) -> int:
         "updated_utc": timestamp,
         "source_sha": source_sha,
         "source_tree": source_tree,
+        "expected_sha": expected_sha,
         "repository": os.environ.get("GITHUB_REPOSITORY", ""),
         "ref": os.environ.get("GITHUB_REF", ""),
         "event": os.environ.get("GITHUB_EVENT_NAME", ""),
@@ -126,6 +138,15 @@ def verify_state(args: argparse.Namespace) -> int:
         raise SystemExit(
             "scratch-state: checkout no longer matches recorded source commit/tree"
         )
+    expected_sha = data.get("expected_sha", "")
+    if expected_sha and expected_sha != head:
+        raise SystemExit(
+            "scratch-state: checkout no longer matches parent expected SHA"
+        )
+    if data.get("parent_run_id") and not expected_sha:
+        raise SystemExit(
+            "scratch-state: parent run lineage is not bound to an expected SHA"
+        )
     print(f"scratch-state: exact source verified {head} {tree}")
     return 0
 
@@ -142,6 +163,7 @@ def main() -> int:
     init.add_argument("--mode")
     init.add_argument("--source-sha")
     init.add_argument("--parent-run-id")
+    init.add_argument("--expected-sha")
     init.add_argument("--resume-run-id")
     init.add_argument("--resume-run-attempt")
     init.set_defaults(func=init_state)

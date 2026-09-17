@@ -39,6 +39,7 @@ BLOCKED = (
 )
 CONTROL_ROOT = "." + "git" + "hub"
 ENV_PREFIX = ("git" + "hub").upper()
+MAIN_BRANCH_REF = b"refs/heads/main"
 
 
 def run(*args: str, check: bool = True) -> subprocess.CompletedProcess[bytes]:
@@ -79,6 +80,16 @@ def has_blocked_bytes(value: bytes) -> bool:
         return bool(BLOCKED_BYTES_PATTERN.search(value))
 
 
+def branch_update_error(remote_ref: bytes, deleting: bool) -> str | None:
+    if not remote_ref.startswith(b"refs/heads/"):
+        return None
+    if remote_ref == MAIN_BRANCH_REF:
+        return "main branch deletion is prohibited" if deleting else None
+    if deleting:
+        return None
+    return "non-main branch updates are prohibited"
+
+
 def matcher_self_check() -> list[str]:
     errors: list[str] = []
     allowed = ("main", "mail", "detail", "maintained", "chair", "domain")
@@ -99,6 +110,16 @@ def matcher_self_check() -> list[str]:
     required = license_monkey.render_header("hash") + "\n\npayload"
     if has_blocked_text(required):
         errors.append("matcher rejected the mandatory canonical project header")
+    if branch_update_error(b"refs/heads/main", False):
+        errors.append("branch policy rejected main update")
+    if not branch_update_error(b"refs/heads/main", True):
+        errors.append("branch policy allowed main deletion")
+    if not branch_update_error(b"refs/heads/topic", False):
+        errors.append("branch policy allowed non-main update")
+    if branch_update_error(b"refs/heads/topic", True):
+        errors.append("branch policy rejected non-main deletion")
+    if branch_update_error(b"refs/tags/v1", False):
+        errors.append("branch policy rejected tag update")
     return errors
 
 
@@ -322,6 +343,42 @@ def scan_local_config(failures: list[str]) -> None:
             report("local git config")
 
 
+def enforce_local_main(failures: list[str]) -> None:
+    result = run("git", "symbolic-ref", "--quiet", "--short", "HEAD", check=False)
+    branch = result.stdout.decode("utf-8", errors="replace").strip() if result.returncode == 0 else ""
+    if branch != "main":
+        failures.append("working branch")
+        print("repository policy error: project work must be performed on main", file=sys.stderr)
+
+
+def scan_remote_branch_policy(failures: list[str]) -> None:
+    result = run("git", "ls-remote", "--heads", "origin", check=False)
+    if result.returncode != 0:
+        failures.append("remote branch inspection")
+        print("repository policy error: remote branch inspection failed", file=sys.stderr)
+        return
+    main_seen = False
+    for line in result.stdout.splitlines():
+        fields = line.split()
+        if len(fields) != 2:
+            failures.append("remote branch inspection")
+            print("repository policy error: malformed remote branch listing", file=sys.stderr)
+            continue
+        ref = fields[1]
+        if ref == MAIN_BRANCH_REF:
+            main_seen = True
+        elif ref.startswith(b"refs/heads/"):
+            failures.append("remote branch policy")
+            print(
+                "repository policy error: non-main remote branch exists: "
+                + ref.decode("utf-8", errors="replace"),
+                file=sys.stderr,
+            )
+    if not main_seen:
+        failures.append("remote main branch")
+        print("repository policy error: refs/heads/main is missing", file=sys.stderr)
+
+
 def scan_refs_and_config(failures: list[str]) -> None:
     refs = run("git", "for-each-ref", "--format=%(refname)", check=False)
     if refs.returncode != 0:
@@ -401,6 +458,7 @@ def scan_ref_target_object(rev: str, failures: list[str]) -> str | None:
 def pre_push_checks(hook_context: list[str], failures: list[str]) -> None:
     for index, value in enumerate(hook_context):
         check_value(f"pre-push argument {index}", value, failures)
+    enforce_local_main(failures)
     scan_local_config(failures)
     scanned_commits: set[str] = set()
     scanned_trees: set[str] = set()
@@ -417,10 +475,15 @@ def pre_push_checks(hook_context: list[str], failures: list[str]) -> None:
         except UnicodeDecodeError:
             failures.append("pre-push object id")
             continue
-        if zero_object_id(local_sha):
-            continue
+        deleting = zero_object_id(local_sha)
         check_bytes("local push ref", local_ref_raw, failures)
         check_bytes("remote push ref", remote_ref_raw, failures)
+        branch_error = branch_update_error(remote_ref_raw, deleting)
+        if branch_error:
+            failures.append("branch policy")
+            print(f"repository policy error: {branch_error}", file=sys.stderr)
+        if deleting:
+            continue
         local_commit = scan_ref_target_object(local_sha, failures)
         if not local_commit:
             continue
@@ -454,6 +517,7 @@ def main() -> int:
             return 1
         return 0
     if args.staged:
+        enforce_local_main(failures)
         staged_checks(failures)
         scan_refs_and_config(failures)
     elif args.pre_push:
@@ -480,6 +544,7 @@ def main() -> int:
             scan_commits(base_commit, head_commit, failures,
                          scanned_commits, scanned_trees)
         scan_refs_and_config(failures)
+        scan_remote_branch_policy(failures)
     if failures:
         print(f"repository policy failed with {len(failures)} violation(s)", file=sys.stderr)
         return 1

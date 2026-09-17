@@ -15,9 +15,10 @@
 name: Repository Policy
 
 # Ordinary source pushes do not consume a hosted runner. Local hooks guard
-# commits and pushes; this workflow handles explicit metadata review and the
-# owner acceptance dispatcher.
+# commits and pushes; this workflow handles explicit metadata review, automatic
+# non-main branch cleanup, and the owner acceptance/maintenance dispatchers.
 on:
+  create:
   issues:
     types: [opened, edited, transferred]
   issue_comment:
@@ -36,6 +37,7 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
+  queue: max
   cancel-in-progress: false
 
 permissions:
@@ -43,16 +45,25 @@ permissions:
 
 jobs:
   repository-policy:
+    if: >-
+      !((github.event_name == 'issues' &&
+      github.event.action == 'opened' &&
+      github.event.sender.login == github.repository_owner &&
+      github.event.issue.title == 'DNIV branch cleanup') ||
+      (github.event_name == 'create' &&
+      github.event.ref_type == 'branch' &&
+      github.event.ref != 'main'))
     runs-on: ubuntu-latest
     timeout-minutes: 20
     concurrency:
       group: dniv-runner-x64
+      queue: max
       cancel-in-progress: false
     env:
       DNIV_SCRATCH_DIR: ${{ github.workspace }}/scratch/runtime/${{ github.run_id }}/${{ github.run_attempt }}/${{ github.job }}
     steps:
       - name: Check out exact event repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           fetch-depth: 0
 
@@ -100,9 +111,110 @@ jobs:
 
       - name: Preserve policy scratch state
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: scratch-repository-policy-${{ github.run_id }}
+          path: ${{ env.DNIV_SCRATCH_DIR }}/
+          if-no-files-found: warn
+          retention-days: 30
+          compression-level: 6
+          overwrite: true
+
+  cleanup-branches:
+    if: >-
+      (github.event_name == 'issues' &&
+      github.event.action == 'opened' &&
+      github.event.sender.login == github.repository_owner &&
+      github.event.issue.title == 'DNIV branch cleanup') ||
+      (github.event_name == 'create' &&
+      github.event.ref_type == 'branch' &&
+      github.event.ref != 'main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: dniv-runner-x64
+      queue: max
+      cancel-in-progress: false
+    permissions:
+      actions: read
+      contents: write
+    env:
+      DNIV_SCRATCH_DIR: ${{ github.workspace }}/scratch/runtime/${{ github.run_id }}/${{ github.run_attempt }}/${{ github.job }}
+    steps:
+      - name: Check out current main maintenance candidate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Initialize maintenance state
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate=$(git rev-parse --verify 'HEAD^{commit}')
+          remote=$(git ls-remote origin refs/heads/main | awk 'NR == 1 {print $1}')
+          test -n "$remote"
+          test "$candidate" = "$remote"
+          printf 'CANDIDATE_SHA=%s\n' "$candidate" > "$DNIV_SCRATCH_DIR/maintenance.env"
+          python3 tools/scratch_state.py init --dir "$DNIV_SCRATCH_DIR" \
+            --workflow repository-policy --job "$GITHUB_JOB" --source-sha "$candidate"
+
+      - name: Delete every non-main branch ref
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          candidate=$(git rev-parse --verify 'HEAD^{commit}')
+          head=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
+          test "$head" = "$candidate"
+          mapfile -t refs < <(
+            gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/heads" --paginate --jq '.[].ref'
+          )
+          saw_main=0
+          : > "$DNIV_SCRATCH_DIR/deleted-branches.txt"
+          for ref in "${refs[@]}"; do
+            if [[ "$ref" == refs/heads/main ]]; then
+              saw_main=1
+              continue
+            fi
+            printf '%s\n' "$ref" >> "$DNIV_SCRATCH_DIR/deleted-branches.txt"
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/${ref#refs/}"
+          done
+          test "$saw_main" -eq 1
+          mapfile -t remaining < <(
+            gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/heads" --paginate --jq '.[].ref'
+          )
+          test "${#remaining[@]}" -eq 1
+          test "${remaining[0]}" = refs/heads/main
+          printf '%s\n' "${remaining[@]}" > "$DNIV_SCRATCH_DIR/remaining-branches.txt"
+
+      - name: Verify branch invariant and exact tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate=$(git rev-parse --verify 'HEAD^{commit}')
+          tools/workflow_sop.sh "$DNIV_SCRATCH_DIR" "$candidate" main
+          python3 tools/sop_scan.py --rev "$candidate" --pass-id final \
+            --baseline "$DNIV_SCRATCH_DIR/sop/pass-1.json" \
+            --output "$DNIV_SCRATCH_DIR/sop/final.json"
+          python3 tools/scratch_state.py verify --dir "$DNIV_SCRATCH_DIR"
+
+      - name: Record cleanup result
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f "$DNIV_SCRATCH_DIR/state.json" ]]; then
+            python3 tools/scratch_state.py mark --dir "$DNIV_SCRATCH_DIR" \
+              --status '${{ job.status }}' --note 'branch cleanup completed'
+          fi
+
+      - name: Preserve cleanup scratch state
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: scratch-branch-cleanup-${{ github.run_id }}
           path: ${{ env.DNIV_SCRATCH_DIR }}/
           if-no-files-found: warn
           retention-days: 30
@@ -120,6 +232,7 @@ jobs:
     timeout-minutes: 15
     concurrency:
       group: dniv-runner-x64
+      queue: max
       cancel-in-progress: false
     permissions:
       actions: write
@@ -128,7 +241,7 @@ jobs:
       DNIV_SCRATCH_DIR: ${{ github.workspace }}/scratch/runtime/${{ github.run_id }}/${{ github.run_attempt }}/${{ github.job }}
     steps:
       - name: Check out exact main candidate
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           fetch-depth: 0
 
@@ -159,15 +272,15 @@ jobs:
             printf 'INTEROP=interop.yml\n'
           } > "$DNIV_SCRATCH_DIR/dispatch.env"
           gh workflow run build.yml --repo "$GITHUB_REPOSITORY" --ref main \
-            -f parent_run_id="$GITHUB_RUN_ID"
+            -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
           gh workflow run project-state.yml --repo "$GITHUB_REPOSITORY" --ref main \
-            -f parent_run_id="$GITHUB_RUN_ID"
+            -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
           gh workflow run reference-baselines.yml --repo "$GITHUB_REPOSITORY" --ref main \
-            -f parent_run_id="$GITHUB_RUN_ID"
+            -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
           gh workflow run vm-lab.yml --repo "$GITHUB_REPOSITORY" --ref main \
-            -f lab_mode=e1 -f parent_run_id="$GITHUB_RUN_ID"
+            -f lab_mode=e1 -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
           gh workflow run interop.yml --repo "$GITHUB_REPOSITORY" --ref main \
-            -f parent_run_id="$GITHUB_RUN_ID"
+            -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
 
       - name: Verify dispatcher exact tree
         shell: bash
@@ -190,7 +303,7 @@ jobs:
 
       - name: Preserve dispatcher scratch state
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: scratch-acceptance-dispatch-${{ github.run_id }}
           path: ${{ env.DNIV_SCRATCH_DIR }}/

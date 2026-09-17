@@ -13,7 +13,7 @@
 # patent, trademark, and governing-law provisions.
 # ============================================================================
 
-"""Enforce hosted-runner duration and scratch-artifact storage limits."""
+"""Enforce hosted-runner duration, queueing, action pins and artifact limits."""
 
 from __future__ import annotations
 
@@ -29,12 +29,26 @@ MAX_JOB_MINUTES = 75
 MAX_EVIDENCE_DAYS = 30
 VM_CHECKPOINT_DAYS = 3
 MAX_INTEROP_SCENARIOS_PER_JOB = 2
+ACTION_PINS = {
+    "actions/checkout": "11d5960a326750d5838078e36cf38b85af677262",
+    "actions/upload-artifact": "ea165f8d65b6e75b540449e92b4886f43607fa02",
+    "actions/download-artifact": "d3f86a106a0bac45b974a628896c90dbdf5c8093",
+}
+CHILD_WORKFLOWS = {
+    "build.yml",
+    "project-state.yml",
+    "reference-baselines.yml",
+    "vm-lab.yml",
+    "interop.yml",
+}
 
 JOB_RE = re.compile(r"^  ([A-Za-z0-9_-]+):\s*$")
 TIMEOUT_RE = re.compile(r"^    timeout-minutes:\s*([0-9]+)\s*$")
 RETENTION_RE = re.compile(r"^\s+retention-days:\s*([0-9]+)\s*$")
 STEP_RE = re.compile(r"^      - name:\s+")
 SCENARIOS_RE = re.compile(r"^\s+scenarios:\s*[\"']?([^\"'#]+?)[\"']?\s*$")
+CONCURRENCY_RE = re.compile(r"^(\s*)concurrency:\s*$")
+USES_RE = re.compile(r"^\s+uses:\s+(actions/(?:checkout|upload-artifact|download-artifact))@([^\s#]+)")
 
 
 def git(*args: str) -> str:
@@ -100,6 +114,20 @@ def upload_block(lines: list[str], uses_index: int) -> list[str]:
     return lines[uses_index:end]
 
 
+def nested_block(lines: list[str], start: int) -> list[str]:
+    indent = len(lines[start]) - len(lines[start].lstrip())
+    end = len(lines)
+    for index in range(start + 1, len(lines)):
+        line = lines[index]
+        if not line.strip():
+            continue
+        current = len(line) - len(line.lstrip())
+        if current <= indent:
+            end = index
+            break
+    return lines[start:end]
+
+
 def check_workflow(path: str, text: str) -> list[str]:
     name = PurePosixPath(path).name
     lines = text.splitlines()
@@ -121,6 +149,26 @@ def check_workflow(path: str, text: str) -> list[str]:
                 f"{path}: job {job_name} timeout {values[0]} exceeds voluntary {MAX_JOB_MINUTES}-minute ceiling"
             )
 
+    for index, line in enumerate(lines):
+        if CONCURRENCY_RE.match(line):
+            block = nested_block(lines, index)
+            queue = [entry.strip() for entry in block if entry.strip().startswith("queue:")]
+            if queue != ["queue: max"]:
+                errors.append(f"{path}: concurrency block near line {index + 1} must declare exactly queue: max")
+            if any(entry.strip() == "cancel-in-progress: true" for entry in block):
+                errors.append(f"{path}: queue: max cannot be combined with cancel-in-progress: true")
+
+    for index, line in enumerate(lines):
+        match = USES_RE.match(line)
+        if not match:
+            continue
+        action, revision = match.groups()
+        expected = ACTION_PINS[action]
+        if revision != expected:
+            errors.append(
+                f"{path}: {action} near line {index + 1} must be pinned to {expected}"
+            )
+
     upload_lines = [i for i, line in enumerate(lines) if "uses: actions/upload-artifact@" in line]
     for index in upload_lines:
         block = upload_block(lines, index)
@@ -131,6 +179,21 @@ def check_workflow(path: str, text: str) -> list[str]:
             errors.append(
                 f"{path}: artifact retention {retention[0]} days exceeds {MAX_EVIDENCE_DAYS}-day evidence ceiling"
             )
+
+    if name in CHILD_WORKFLOWS:
+        for marker in ("expected_sha:", "--expected-sha '${{ inputs.expected_sha }}'"):
+            if marker not in text:
+                errors.append(f"{path}: missing parent-candidate binding safeguard: {marker}")
+
+    if name == "repository-policy.yml":
+        required = (
+            'github.event.issue.title == \'DNIV branch cleanup\'',
+            'git/matching-refs/heads',
+            '-f expected_sha="$GITHUB_SHA"',
+        )
+        for marker in required:
+            if marker not in text:
+                errors.append(f"{path}: missing repository-control safeguard: {marker}")
 
     if name == "vm-lab.yml":
         required = (
@@ -207,7 +270,7 @@ def main() -> int:
             print(f"workflow-budget: {error}", file=sys.stderr)
         return 1
     print(
-        f"workflow-budget: source={source_label} files={len(paths)} jobs<={MAX_JOB_MINUTES}m artifacts<={MAX_EVIDENCE_DAYS}d interop-scenarios/job<={MAX_INTEROP_SCENARIOS_PER_JOB}"
+        f"workflow-budget: source={source_label} files={len(paths)} jobs<={MAX_JOB_MINUTES}m artifacts<={MAX_EVIDENCE_DAYS}d queue=max actions=pinned interop-scenarios/job<={MAX_INTEROP_SCENARIOS_PER_JOB}"
     )
     return 0
 

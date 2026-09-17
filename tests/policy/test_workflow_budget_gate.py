@@ -13,7 +13,7 @@
 # patent, trademark, and governing-law provisions.
 # ============================================================================
 
-"""Regression tests for workflow duration, storage and exact-source parsing."""
+"""Regression tests for workflow duration, queueing, pins and exact-source parsing."""
 
 from __future__ import annotations
 
@@ -24,34 +24,52 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 GATE = ROOT / "tools" / "workflow_budget_gate.py"
+UPLOAD_PIN = "ea165f8d65b6e75b540449e92b4886f43607fa02"
 
-GOOD = """name: Budget Test
+GOOD = f"""name: Budget Test
 on: workflow_dispatch
+concurrency:
+  group: budget-test
+  queue: max
+  cancel-in-progress: false
 jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 75
     steps:
       - name: First artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@{UPLOAD_PIN}
         with:
           name: first
           path: one
           retention-days: 30
       - name: Second artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@{UPLOAD_PIN}
         with:
           name: second
           path: two
           retention-days: 3
 """
 
-INTEROP_GOOD = """name: Interop Budget Test
-on: workflow_dispatch
+INTEROP_GOOD = f"""name: Interop Budget Test
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        required: false
+        type: string
+concurrency:
+  group: interop-test
+  queue: max
+  cancel-in-progress: false
 jobs:
   live-interop:
     runs-on: ubuntu-latest
     timeout-minutes: 75
+    concurrency:
+      group: dniv-runner-x64
+      queue: max
+      cancel-in-progress: false
     strategy:
       matrix:
         include:
@@ -59,15 +77,17 @@ jobs:
             suite: routing
             scenarios: \"l1 l2\"
     env:
-      DNIV_SCRATCH_DIR: ${{ github.workspace }}/scratch/runtime/${{ github.run_id }}/${{ github.job }}-${{ matrix.arch }}-${{ matrix.suite }}
+      DNIV_SCRATCH_DIR: ${{{{ github.workspace }}}}/scratch/runtime/${{{{ github.run_id }}}}/${{{{ github.job }}}}-${{{{ matrix.arch }}}}-${{{{ matrix.suite }}}}
     steps:
+      - name: Bind candidate
+        run: python3 tools/scratch_state.py init --expected-sha '${{{{ inputs.expected_sha }}}}'
       - name: Preserve evidence
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@{UPLOAD_PIN}
         with:
-          name: scratch-interop-${{ matrix.arch }}-${{ matrix.suite }}-${{ github.run_id }}
+          name: scratch-interop-${{{{ matrix.arch }}}}-${{{{ matrix.suite }}}}-${{{{ github.run_id }}}}
           path: |
-            ${{ env.DNIV_SCRATCH_DIR }}/
-            !${{ env.DNIV_SCRATCH_DIR }}/interop/**/*.qcow2
+            ${{{{ env.DNIV_SCRATCH_DIR }}}}/
+            !${{{{ env.DNIV_SCRATCH_DIR }}}}/interop/**/*.qcow2
           retention-days: 30
 """
 
@@ -105,7 +125,15 @@ def main() -> int:
 
         result = invoke(root, "--tree", "HEAD")
         if result.returncode != 0:
-            raise SystemExit("workflow budget rejected valid committed adjacent artifacts or bounded interop rows")
+            raise SystemExit("workflow budget rejected valid committed controls")
+
+        bad_queue = GOOD.replace("  queue: max\n", "", 1)
+        sample.write_text(bad_queue, encoding="utf-8")
+        run(root, "git", "add", str(sample.relative_to(root)))
+        sample.write_text(GOOD, encoding="utf-8")
+        result = invoke(root, "--staged")
+        if result.returncode == 0 or "queue: max" not in result.stderr:
+            raise SystemExit("workflow budget failed to reject missing staged queue:max")
 
         bad_timeout = GOOD.replace("timeout-minutes: 75", "timeout-minutes: 76")
         sample.write_text(bad_timeout, encoding="utf-8")
@@ -117,6 +145,14 @@ def main() -> int:
         result = invoke(root, "--tree", "HEAD")
         if result.returncode != 0:
             raise SystemExit("tree budget gate read mutable working/index bytes instead of the commit")
+
+        bad_pin = GOOD.replace(UPLOAD_PIN, "v4", 1)
+        sample.write_text(bad_pin, encoding="utf-8")
+        run(root, "git", "add", str(sample.relative_to(root)))
+        sample.write_text(GOOD, encoding="utf-8")
+        result = invoke(root, "--staged")
+        if result.returncode == 0 or "must be pinned" not in result.stderr:
+            raise SystemExit("workflow budget failed to reject a movable action tag")
 
         run(root, "git", "reset", "-q", "HEAD", "--", str(sample.relative_to(root)))
         interop_bad = INTEROP_GOOD.replace('scenarios: "l1 l2"', 'scenarios: "l1 l2 endnode"')

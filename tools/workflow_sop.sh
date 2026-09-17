@@ -49,6 +49,7 @@ python3 tools/license_monkey.py --tree "$expected" | tee "$state_dir/sop/license
 python3 tests/policy/test_workflow_budget_gate.py | tee "$state_dir/sop/workflow-budget-regression.log"
 python3 tools/workflow_budget_gate.py --tree "$expected" | tee "$state_dir/sop/workflow-budget.log"
 python3 tests/policy/test_project_state_gate.py | tee "$state_dir/sop/project-state-regression.log"
+python3 tests/policy/test_repo_policy_branch.py | tee "$state_dir/sop/branch-policy-regression.log"
 if [[ "$scope" == main ]]; then
     python3 tools/project_state_gate.py --head "$expected" | tee "$state_dir/sop/project-state.log"
     CI=false python3 tools/repo_policy.py | tee "$state_dir/sop/repository-policy.log"

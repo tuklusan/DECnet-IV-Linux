@@ -21,6 +21,10 @@ on:
         description: Parent acceptance workflow run ID; blank for direct dispatch
         required: false
         type: string
+      expected_sha:
+        description: Exact parent candidate SHA; blank for direct dispatch
+        required: false
+        type: string
       resume_run_id:
         description: Prior build run ID whose scratch artifacts should be restored
         required: false
@@ -28,6 +32,7 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
+  queue: max
   cancel-in-progress: false
 
 permissions:
@@ -49,18 +54,19 @@ jobs:
     timeout-minutes: 30
     concurrency:
       group: dniv-runner-${{ matrix.slot }}
+      queue: max
       cancel-in-progress: false
     env:
       DNIV_SCRATCH_DIR: ${{ github.workspace }}/scratch/runtime/${{ github.run_id }}/${{ github.run_attempt }}/${{ github.job }}-${{ matrix.slot }}
     steps:
       - name: Check out exact repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           fetch-depth: 0
 
       - name: Restore prior scratch artifacts
         if: ${{ inputs.resume_run_id != '' }}
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           path: ${{ github.workspace }}/scratch/restored/${{ inputs.resume_run_id }}
           github-token: ${{ github.token }}
@@ -74,6 +80,7 @@ jobs:
           python3 tools/scratch_state.py init --dir "$DNIV_SCRATCH_DIR" \
             --workflow build --job "$GITHUB_JOB" --arch '${{ matrix.slot }}' \
             --source-sha "$GITHUB_SHA" --parent-run-id '${{ inputs.parent_run_id }}' \
+            --expected-sha '${{ inputs.expected_sha }}' \
             --resume-run-id '${{ inputs.resume_run_id }}'
           tools/workflow_sop.sh "$DNIV_SCRATCH_DIR" "$GITHUB_SHA" main
 
@@ -121,7 +128,7 @@ jobs:
 
       - name: Preserve scratch state
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: scratch-build-${{ matrix.slot }}-${{ github.run_id }}
           path: ${{ env.DNIV_SCRATCH_DIR }}/
