@@ -66,9 +66,29 @@ wait_adjacency_up() {
     return 1
 }
 
-stat_value() {
-    label=$1
-    /usr/local/sbin/dnctl stats | sed -n "s/^$label[[:space:]]*=[[:space:]]*//p"
+stats_snapshot() {
+    tries=${1:-8}
+    dnctl=${DNIV_DNCTL:-/usr/local/sbin/dnctl}
+    i=0
+    while [ "$i" -lt "$tries" ]; do
+        stats=$("$dnctl" stats 2>/dev/null || true)
+        routing=$(printf '%s\n' "$stats" | sed -n 's/^Routing frames received[[:space:]]*=[[:space:]]*//p')
+        hello_rx=$(printf '%s\n' "$stats" | sed -n 's/^Hello frames received[[:space:]]*=[[:space:]]*//p')
+        hello_tx=$(printf '%s\n' "$stats" | sed -n 's/^Hello frames sent[[:space:]]*=[[:space:]]*//p')
+        valid=1
+        for value in "$routing" "$hello_rx" "$hello_tx"; do
+            case "$value" in
+                ''|*[!0-9]*) valid=0 ;;
+            esac
+        done
+        if [ "$valid" -eq 1 ] && [ "$routing" -ge "$hello_rx" ]; then
+            printf '%s %s %s\n' "$routing" "$hello_rx" "$hello_tx"
+            return 0
+        fi
+        i=$((i + 1))
+        sleep 0.02
+    done
+    return 1
 }
 
 wait_post_change_hello() {
@@ -78,10 +98,9 @@ wait_post_change_hello() {
     i=0
     while [ "$i" -lt "$tries" ]; do
         output=$(/usr/local/sbin/dnctl adjacencies 2>/dev/null || true)
-        hello_now=$(stat_value 'Hello frames received')
-        case "$hello_now" in
-            ''|*[!0-9]*) return 1 ;;
-        esac
+        snapshot=$(stats_snapshot 8) || return 1
+        set -- $snapshot
+        hello_now=$2
         if [ "$hello_now" -gt "$hello_baseline" ] && \
            printf '%s\n' "$output" | grep -F "$peer_address via " | \
                grep -Fq ' L1 router UP '; then
@@ -102,6 +121,11 @@ poweroff_pass() {
     poweroff -f
     exit 0
 }
+
+if [ "${1:-}" = --stats-selftest ]; then
+    stats_snapshot "${2:-8}"
+    exit $?
+fi
 
 area=$(get_arg dniv.area || printf '31')
 node=$(get_arg dniv.node || printf '70')
@@ -189,10 +213,12 @@ e1)
         exit 1
     fi
 
-    change_hello_before=$(stat_value 'Hello frames received')
-    case "$change_hello_before" in
-        ''|*[!0-9]*) echo "DNIV-E1-FAIL session=$session node=$name reason=bad-changeaddr-stats"; exit 1 ;;
-    esac
+    snapshot=$(stats_snapshot 8) || {
+        echo "DNIV-E1-FAIL session=$session node=$name reason=bad-changeaddr-stats"
+        exit 1
+    }
+    set -- $snapshot
+    change_hello_before=$2
     address=$((area * 1024 + node))
     changed_mac=$(printf '52:54:01:00:%02x:%02x' \
         "$((address & 255))" "$(((address >> 8) & 255))")
@@ -205,17 +231,13 @@ e1)
         exit 1
     fi
 
-    routing_before=$(stat_value 'Routing frames received')
-    hello_before=$(stat_value 'Hello frames received')
-    for value in "$routing_before" "$hello_before"; do
-        case "$value" in
-            ''|*[!0-9]*) echo "DNIV-E1-FAIL session=$session node=$name reason=bad-stats"; exit 1 ;;
-        esac
-    done
-    if [ "$routing_before" -lt "$hello_before" ]; then
+    snapshot=$(stats_snapshot 8) || {
         echo "DNIV-E1-FAIL session=$session node=$name reason=bad-stats"
         exit 1
-    fi
+    }
+    set -- $snapshot
+    routing_before=$1
+    hello_before=$2
 
     i=0
     while [ "$i" -lt 40 ]; do
@@ -225,18 +247,14 @@ e1)
     done
     sleep 1
 
-    routing_after=$(stat_value 'Routing frames received')
-    hello_after=$(stat_value 'Hello frames received')
-    hello_tx=$(stat_value 'Hello frames sent')
-    for value in "$routing_after" "$hello_after" "$hello_tx"; do
-        case "$value" in
-            ''|*[!0-9]*) echo "DNIV-E1-FAIL session=$session node=$name reason=bad-stats"; exit 1 ;;
-        esac
-    done
-    if [ "$routing_after" -lt "$hello_after" ]; then
+    snapshot=$(stats_snapshot 8) || {
         echo "DNIV-E1-FAIL session=$session node=$name reason=bad-stats"
         exit 1
-    fi
+    }
+    set -- $snapshot
+    routing_after=$1
+    hello_after=$2
+    hello_tx=$3
     nonhello_before=$((routing_before - hello_before))
     nonhello_after=$((routing_after - hello_after))
     unicast_delta=$((nonhello_after - nonhello_before))

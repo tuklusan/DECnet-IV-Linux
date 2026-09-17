@@ -59,6 +59,8 @@ The ARM64 normalizer now treats the kernel artifact as a bounded chain of recogn
 
 The Route20 reference launcher now preserves failure evidence instead of merely reporting `reference-exited`: on an unexpected Route20 death it emits the Route20 syslog tail and relevant kernel crash lines into the serial log. It does not patch, wrap or otherwise alter the pinned Route20 implementation. The next interoperability run must use that evidence to distinguish a Route20/runtime crash from any candidate protocol defect before changing DECnet behavior.
 
+Exact-head candidate `a04d2a4ec8687f21fafce1950d339b983f15c973` cleared the ARM64 boot boundary in VM run `35262769735`: the real Ubuntu 26.04 kernel normalized through `pe-linux+efi-zboot:zstd+raw`, the foundation and candidate injection completed, and both routers reached UP adjacency after the runtime primary-MAC change. The amd64 E1 job passed. ARM64 then failed in the harness because `Routing frames received` and `Hello frames received` were sampled by separate `dnctl stats` calls; a hello arriving between calls manufactured `hello > routing` and DN70 exited before its unicast transmit loop, after which DN71 correctly observed zero unicast receive delta. The fix is therefore confined to coherent, bounded-retry harness sampling; kernel and wire behavior remain unchanged.
+
 Repository policy and acceptance dispatch remain isolated from protocol-lab runner concurrency. Release-image construction remains a separate exact-source gate and is not inferred from the cached protocol foundation.
 
 ## Test addressing
@@ -71,10 +73,10 @@ Ordinary lab addressing remains area 31, nodes 70 through 79, names DN70 through
 
 ## Resume point
 
-Phase 3 is the active workstream. Infrastructure architecture is closed. The current candidate combines the ARM64 wrapper normalization correction with Route20 post-mortem evidence capture and refreshes both durable continuity records in the same substantive commit. The previous exact-head attempt was rejected by the continuity gate before child acceptance dispatch because the ARM normalizer change had not refreshed these records; that rejected commit is not a promotable state.
+Phase 3 is the active workstream. Infrastructure architecture and ARM64 direct boot are closed. The current candidate changes only E1 counter sampling and its regression coverage: each logical sample comes from one `dnctl stats` invocation, internally inconsistent `rx_frames < hello_rx` snapshots are retried within a strict bound, and persistent inconsistency remains a hard failure. No kernel, UAPI, routing, hello, adjacency or reference implementation behavior is changed.
 
-The immediate technical unknowns are now narrow: whether Ubuntu 26.04 ARM64's installed kernel normalizes to a raw Image and boots under QEMU, and why pinned Route20 exits shortly after READY on amd64 L1. Neither justifies redesigning the persistence architecture.
+The remaining runtime questions are Route20 stability/interoperability and whatever genuine protocol failure appears after the ARM64 E1 harness can complete its unicast and expire/recover stages.
 
 ## Next action
 
-Run exact-head acceptance on `main`. Require repository policy, native amd64/arm64 build, project-state, reference-baseline, amd64/arm64 E1 VM and interoperability children to bind to the same SHA. Confirm ARM64 normalization/serial boot first. For Route20, inspect the newly surfaced syslog/kernel diagnostics from any `reference-exited` failure and fix only the demonstrated launch/runtime cause. Once the reference remains alive, resume Phase 3 from the first genuine DECnet interoperability failure.
+Run exact-head acceptance on `main`, with ARM64 E1 as the first runtime discriminator. Require the new host-side counter-snapshot regression, repository policy, native amd64/arm64 builds and project-state gates to be green. If ARM64 E1 passes, confirm amd64 E1 remains green and continue the full reference/interoperability set on the same exact SHA. For any Route20 `reference-exited` result, use the captured syslog/kernel diagnostics before changing DECnet protocol code.

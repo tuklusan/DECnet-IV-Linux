@@ -56,6 +56,7 @@ python3 tools/license_monkey.py --tree "$expected" | tee "$state_dir/integrity/l
 python3 tests/policy/test_workflow_budget_gate.py | tee "$state_dir/integrity/workflow-budget-regression.log"
 python3 tools/workflow_budget_gate.py --tree "$expected" | tee "$state_dir/integrity/workflow-budget.log"
 python3 tests/policy/test_image_builder_gate.py --tree "$expected" | tee "$state_dir/integrity/image-builder-regression.log"
+python3 tests/policy/test_lab_stats_snapshot.py | tee "$state_dir/integrity/lab-stats-regression.log"
 python3 tests/policy/test_project_state_gate.py | tee "$state_dir/integrity/project-state-regression.log"
 python3 tests/policy/test_repo_policy_branch.py | tee "$state_dir/integrity/branch-policy-regression.log"
 if [[ "$scope" == main || "$scope" == maintenance ]]; then
