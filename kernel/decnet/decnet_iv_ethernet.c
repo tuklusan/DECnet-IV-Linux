@@ -30,6 +30,7 @@
 #include "decnet_iv_ethernet.h"
 
 #define DNIV_MAX_ADJACENCIES 64U
+#define DNIV_MAX_DR_STATES 64U
 #define DNIV_DR_DELAY_SECONDS 5U
 #define DNIV_ETH_LENGTH_LEN 2U
 
@@ -50,13 +51,20 @@ struct dniv_adj_entry {
     unsigned long expires;
 };
 
+struct dniv_dr_state {
+    bool used;
+    bool local_candidate;
+    int ifindex;
+    unsigned long candidate_since;
+};
+
 static DEFINE_SPINLOCK(dniv_adj_lock);
 static struct dniv_adj_entry dniv_adjacencies[DNIV_MAX_ADJACENCIES];
+static struct dniv_dr_state dniv_dr_states[DNIV_MAX_DR_STATES];
 static __u16 dniv_local_address;
 static __u16 dniv_hello_interval;
 static __u8 dniv_local_node_type;
 static __u8 dniv_local_priority;
-static unsigned long dniv_started;
 
 static atomic64_t dniv_rx_frames = ATOMIC64_INIT(0);
 static atomic64_t dniv_rx_bytes = ATOMIC64_INIT(0);
@@ -93,6 +101,50 @@ static struct dniv_adj_entry *dniv_alloc_adj_locked(void)
             return &dniv_adjacencies[i];
     }
     return NULL;
+}
+
+static struct dniv_dr_state *dniv_find_dr_state_locked(int ifindex)
+{
+    unsigned int i;
+
+    for (i = 0; i < DNIV_MAX_DR_STATES; i++) {
+        if (dniv_dr_states[i].used && dniv_dr_states[i].ifindex == ifindex)
+            return &dniv_dr_states[i];
+    }
+    return NULL;
+}
+
+static struct dniv_dr_state *dniv_alloc_dr_state_locked(int ifindex)
+{
+    struct dniv_dr_state *state;
+    unsigned int i;
+
+    state = dniv_find_dr_state_locked(ifindex);
+    if (state)
+        return state;
+    for (i = 0; i < DNIV_MAX_DR_STATES; i++) {
+        if (!dniv_dr_states[i].used) {
+            state = &dniv_dr_states[i];
+            memset(state, 0, sizeof(*state));
+            state->used = true;
+            state->ifindex = ifindex;
+            return state;
+        }
+    }
+    return NULL;
+}
+
+static void dniv_drop_dr_state_locked(int ifindex)
+{
+    struct dniv_dr_state *state = dniv_find_dr_state_locked(ifindex);
+
+    if (state)
+        memset(state, 0, sizeof(*state));
+}
+
+static void dniv_clear_dr_states_locked(void)
+{
+    memset(dniv_dr_states, 0, sizeof(dniv_dr_states));
 }
 
 static void dniv_drop_adj_locked(struct dniv_adj_entry *adj)
@@ -243,10 +295,12 @@ static int dniv_netdev_event(struct notifier_block *nb, unsigned long event,
     int err;
 
     (void)nb;
-    if (event == NETDEV_UNREGISTER) {
-        dniv_remove_dev_filters(dev, READ_ONCE(dniv_local_address));
+    if (event == NETDEV_DOWN || event == NETDEV_UNREGISTER) {
+        if (event == NETDEV_UNREGISTER)
+            dniv_remove_dev_filters(dev, READ_ONCE(dniv_local_address));
         spin_lock_irqsave(&dniv_adj_lock, flags);
         dniv_drop_if_adjacencies_locked(dev->ifindex);
+        dniv_drop_dr_state_locked(dev->ifindex);
         spin_unlock_irqrestore(&dniv_adj_lock, flags);
         return NOTIFY_DONE;
     }
@@ -330,16 +384,18 @@ static __u8 dniv_collect_router_entries(int ifindex,
 
 static bool dniv_local_is_dr(int ifindex)
 {
+    struct dniv_dr_state *state;
     unsigned long flags;
-    __u16 local = READ_ONCE(dniv_local_address);
-    __u16 local_area = DNIV_ADDR_AREA(local);
+    unsigned long now = jiffies;
+    __u16 local;
+    __u16 local_area;
     bool best = true;
+    bool ready = false;
     unsigned int i;
 
-    if (time_before(jiffies, dniv_started + DNIV_DR_DELAY_SECONDS * HZ))
-        return false;
-
     spin_lock_irqsave(&dniv_adj_lock, flags);
+    local = dniv_local_address;
+    local_area = DNIV_ADDR_AREA(local);
     for (i = 0; i < DNIV_MAX_ADJACENCIES; i++) {
         const struct dniv_adj_entry *adj = &dniv_adjacencies[i];
 
@@ -353,8 +409,27 @@ static bool dniv_local_is_dr(int ifindex)
             break;
         }
     }
+
+    state = dniv_find_dr_state_locked(ifindex);
+    if (!best) {
+        if (state) {
+            state->local_candidate = false;
+            state->candidate_since = 0;
+        }
+    } else {
+        if (!state)
+            state = dniv_alloc_dr_state_locked(ifindex);
+        if (state && !state->local_candidate) {
+            state->local_candidate = true;
+            state->candidate_since = now;
+        } else if (state && time_after_eq(
+                       now, state->candidate_since +
+                            DNIV_DR_DELAY_SECONDS * HZ)) {
+            ready = true;
+        }
+    }
     spin_unlock_irqrestore(&dniv_adj_lock, flags);
-    return best;
+    return ready;
 }
 
 static void dniv_endnode_neighbor(int ifindex, __u8 neighbor[ETH_ALEN])
@@ -627,8 +702,8 @@ int dniv_eth_init(__u16 address, __u8 node_type, __u8 priority,
     dniv_local_node_type = node_type;
     dniv_local_priority = priority;
     dniv_hello_interval = hello_interval;
-    dniv_started = jiffies;
     memset(dniv_adjacencies, 0, sizeof(dniv_adjacencies));
+    memset(dniv_dr_states, 0, sizeof(dniv_dr_states));
 
     err = register_netdevice_notifier_net(&init_net, &dniv_netdev_notifier);
     if (err)
@@ -689,8 +764,8 @@ int dniv_eth_set_address(__u16 address)
 
     spin_lock_irqsave(&dniv_adj_lock, flags);
     dniv_local_address = address;
-    dniv_started = jiffies;
     dniv_clear_adjacencies_locked();
+    dniv_clear_dr_states_locked();
     spin_unlock_irqrestore(&dniv_adj_lock, flags);
 
     for_each_netdev(&init_net, dev) {

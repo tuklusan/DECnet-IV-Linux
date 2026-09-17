@@ -251,13 +251,19 @@ e1)
     echo "DNIV-E1-UCAST session=$session node=$name peer=$peer_node delta=$unicast_delta"
     echo "DNIV-E1-INITIAL session=$session node=$name peer=$peer_node"
 
-    if [ "$role" = A ]; then
+    # DN71 has the higher node address at equal priority, so it is the DR.
+    # Silence that router long enough for DN70 to expire it, but for less than
+    # listener expiry plus DRDELAY. A correct DN70 must therefore never emit an
+    # All-Endnodes hello before DN71 returns.
+    if [ "$role" = B ]; then
         sleep 1
         modprobe -r decnet_iv
         echo "DNIV-E1-SILENT session=$session node=$name"
-        sleep 9
+        sleep 12
         modprobe decnet_iv default_area="$area" default_node="$node" default_name="$name" \
             default_node_type=2 router_priority=64 hello_interval=2
+        /usr/local/sbin/dnctl set "$area.$node" "$name"
+        /usr/local/sbin/dnctl reset-stats
         ip link set "$iface" up
         if ! wait_adjacency_up "$peer_node" DNIV-E1-RESTART-INIT 120; then
             echo "DNIV-E1-FAIL session=$session node=$name reason=recovery-adjacency"

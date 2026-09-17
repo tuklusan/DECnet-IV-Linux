@@ -81,7 +81,11 @@ Commit `f18465c08fd5c6fe2fb72a12875781a3c874bff3` accidentally created an empty 
 
 The first complete-tree review of `57f123d43760554a333772755da9d196c6444614` found stale continuity/policy text. `docs/TEST_LAB.md` still described three automatic pre-work exact-tree scans although current workflows use one bounded baseline plus a matching final manifest, and it claimed the repository workflow did not run on `create` even though non-main branch creation deliberately triggers automatic cleanup. `docs/HANDOVER.md` and `docs/PROJECT_STATE.md` also still described the semantic/manual SoP as diff-scoped, conflicting with the governing complete-tree rule. Candidate `c71bc79a176bbac367a910567160e8809283c051` corrected those statements.
 
-The first complete-tree pass on `c71bc79a176bbac367a910567160e8809283c051` then found the same obsolete machine-scan description in `scratch/README.md`, which still claimed three automatic complete scans and a three-scan `workflow_sop.sh` gate. The current candidate corrects the scratch workspace contract to describe the actual bounded baseline/final machine checks while preserving the separate three-pass complete semantic/manual delivery SoP. That correction resets all clean-pass and acceptance evidence again.
+The first complete-tree pass on `c71bc79a176bbac367a910567160e8809283c051` then found the same obsolete machine-scan description in `scratch/README.md`, which still claimed three automatic complete scans and a three-scan `workflow_sop.sh` gate. Candidate `f2bab342389ce8da8c8696c222c37c35326ceefe` corrected the scratch workspace contract to describe the actual bounded baseline/final machine checks while preserving the separate three-pass complete semantic/manual delivery SoP.
+
+The complete-tree pass on `f2bab342389ce8da8c8696c222c37c35326ceefe` found a Phase IV designated-router timing defect. The kernel used one module-start timestamp for DRDELAY, so a lower-priority router could become DR immediately after a better router expired once the module had been loaded for more than five seconds. The pinned PyDECnet live reference starts a fresh five-second DRDELAY when the local router first becomes the best candidate and cancels it when a better router is present. The current candidate tracks that candidacy per interface, resets it on interface-down and identity changes, and restarts DRDELAY after a better router disappears. E1 now deliberately silences DN71, the equal-priority higher-address DR, for longer than listener expiry but less than listener expiry plus DRDELAY; DN70 must expire DN71 but must never emit an All-Endnodes hello before DN71 returns. This is both the regression and the normal E1 failover/recovery proof.
+
+During repository tooling for that correction, commit `f2147d83c4063a461bc732f3e017608bd5ba675c` accidentally created tracked `scratch/SHOULD_NOT_CREATE`. No acceptance evidence is associated with that state. The current candidate deletes that path in the same forward correction that contains the DRDELAY fix and refreshed continuity records. The SoP clean-pass count is therefore reset to zero again.
 
 ## Test addressing
 
@@ -93,7 +97,7 @@ Ordinary lab addressing remains area 31, nodes 70 through 79, names DN70 through
 
 ## Resume point
 
-Phase 3 remains active. Image-path and branch-cleanup maintenance corrections are on `main`; subsequent complete-tree review found and corrected stale SoP/workflow continuity text in the durable documentation and scratch contract. No clean pass carries forward. The pass count starts at zero on the exact current candidate.
+Phase 3 remains active. Image-path and branch-cleanup maintenance corrections are on `main`; the latest complete-tree review additionally found and corrected per-interface designated-router DRDELAY/handoff behavior and strengthened E1 to prove the handoff suppression. No clean pass carries forward. The pass count starts at zero on the exact current candidate.
 
 ## Next action
 

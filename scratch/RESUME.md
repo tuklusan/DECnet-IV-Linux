@@ -32,7 +32,13 @@ Commit `f18465c08fd5c6fe2fb72a12875781a3c874bff3` accidentally created an empty 
 
 The first complete-tree review of `57f123d43760554a333772755da9d196c6444614` found stale continuity and SoP text. `docs/TEST_LAB.md` still claimed three automatic pre-work exact-tree scans, while current workflows record one bounded baseline plus a matching final manifest. It also claimed the Repository Policy workflow did not run on `create`, although non-main branch creation intentionally triggers automatic cleanup. `docs/HANDOVER.md` and `docs/PROJECT_STATE.md` still described the semantic/manual SoP as diff-scoped rather than complete-tree. Candidate `c71bc79a176bbac367a910567160e8809283c051` corrected those records.
 
-The first complete-tree pass on `c71bc79a176bbac367a910567160e8809283c051` found the same obsolete machine-scan description in `scratch/README.md`, which still claimed three automatic complete scans and a three-scan `workflow_sop.sh` gate. The current candidate corrects the scratch workspace contract to describe the actual bounded baseline/final machine checks while preserving the separate three-pass complete semantic/manual delivery SoP. That correction resets the complete clean-pass count to zero again.
+The first complete-tree pass on `c71bc79a176bbac367a910567160e8809283c051` found the same obsolete machine-scan description in `scratch/README.md`, which still claimed three automatic complete scans and a three-scan `workflow_sop.sh` gate. Candidate `f2bab342389ce8da8c8696c222c37c35326ceefe` corrected the scratch workspace contract to describe the actual bounded baseline/final machine checks while preserving the separate three-pass complete semantic/manual delivery SoP.
+
+The complete-tree pass on `f2bab342389ce8da8c8696c222c37c35326ceefe` then found a real Phase IV DR handoff defect. `dniv_local_is_dr()` delayed only from module load/identity change, so after a higher-priority or equal-priority higher-address router disappeared the local router could start sending All-Endnodes hellos immediately. The pinned live PyDECnet reference starts a new five-second DRDELAY whenever the local router first becomes the best candidate and cancels that pending transition when a better router is known. The correction keeps separate candidate timing per interface, resets it across interface-down and identity changes, and drops interface adjacencies on link-down.
+
+The E1 regression is strengthened at the wire level rather than relying only on a source check. DN71 is the designated router at equal priority because its node address is higher. E1 silences DN71 long enough for DN70 to expire it, but for less than listener expiry plus DRDELAY. DN70 must show expiry/recovery yet must never emit an All-Endnodes hello during that gap. The existing capture rule `endnodesA == 0` therefore detects the old immediate-handoff bug while still requiring DN71 All-Endnodes traffic.
+
+Commit `f2147d83c4063a461bc732f3e017608bd5ba675c` accidentally created tracked `scratch/SHOULD_NOT_CREATE` during repository tooling. It has no acceptance evidence. The current forward correction deletes it together with the DRDELAY change and both durable continuity updates. Consequently the complete clean-pass count is zero again.
 
 Repository branch policy is active and the live remote branch invariant is only `refs/heads/main`. Cleanup run `35219630482` is the latest cleanup attempt: branch deletion succeeded, post-delete SoP verification exposed the maintenance-scope bug that is now corrected. GitHub-owned actions remain pinned to immutable full SHAs.
 
@@ -51,7 +57,7 @@ Repository branch policy is active and the live remote branch invariant is only 
 | Clean complete semantic/manual passes on this candidate | 0 |
 | Routine workflow scan requirement | one bounded baseline diff manifest plus matching final diff manifest |
 | Explicit machine full-tree scan | `tools/sop_scan.py --full-tree` |
-| Phase 3 acceptance | image and maintenance corrections applied; scratch continuity correction pending fresh complete passes and exact-head gates |
+| Phase 3 acceptance | image/maintenance corrections plus DR handoff correction applied; pending fresh complete passes and exact-head gates |
 | Latest acceptance parent | `35195064164` |
 | Latest E1 VM run | `35195101815`, failure during base-image build |
 | Latest interoperability run | `35195103898`, failure during base-image build |

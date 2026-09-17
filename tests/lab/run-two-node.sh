@@ -339,7 +339,7 @@ if [[ "$mode" == e1 ]]; then
         echo "two-node: E1 initial INIT state was not observed" >&2
         exit 1
     fi
-    grep -Fq "DNIV-E1-EXPIRED session=$session node=$name_b" "$log_b" || {
+    grep -Fq "DNIV-E1-EXPIRED session=$session node=$name_a" "$log_a" || {
         echo "two-node: E1 listener expiry was not observed" >&2
         exit 1
     }
