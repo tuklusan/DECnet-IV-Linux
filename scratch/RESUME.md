@@ -38,9 +38,11 @@ The complete-tree pass on `f2bab342389ce8da8c8696c222c37c35326ceefe` then found 
 
 The E1 regression is strengthened at the wire level rather than relying only on a source check. DN71 is the designated router at equal priority because its node address is higher. E1 silences DN71 long enough for DN70 to expire it, but for less than listener expiry plus DRDELAY. DN70 must show expiry/recovery yet must never emit an All-Endnodes hello during that gap. The existing capture rule `endnodesA == 0` therefore detects the old immediate-handoff bug while still requiring DN71 All-Endnodes traffic.
 
-Commit `f2147d83c4063a461bc732f3e017608bd5ba675c` accidentally created tracked `scratch/SHOULD_NOT_CREATE` during repository tooling. It has no acceptance evidence. The current forward correction deletes it together with the DRDELAY change and both durable continuity updates. Consequently the complete clean-pass count is zero again.
+Commit `f2147d83c4063a461bc732f3e017608bd5ba675c` accidentally created tracked `scratch/SHOULD_NOT_CREATE` during repository tooling. It has no acceptance evidence. Candidate `2e23adcacad4945b2495c3704d07cb1a2860a04a` deletes it together with the DRDELAY change. Candidate `6f4baf02029c3ac9e0c44885a85add79564017df` removed pending SoP-pass actions from tracked next-action markers while retaining the pass/progress fields.
 
-Repository branch policy is active and the live remote branch invariant is only `refs/heads/main`. Cleanup run `35219630482` is the latest cleanup attempt: branch deletion succeeded, post-delete SoP verification exposed the maintenance-scope bug that is now corrected. GitHub-owned actions remain pinned to immutable full SHAs.
+Branch-cleanup maintenance run `35224985329` on `6f4baf02029c3ac9e0c44885a85add79564017df` confirmed the one-branch invariant and exact tree, then failed because `test_repo_policy_branch.py` used substring matching for the stale `main` invocation and therefore treated the valid `maintenance` invocation as stale. The current candidate makes that check line-exact.
+
+Repository branch policy is active and the live remote branch invariant is only `refs/heads/main`. GitHub-owned actions remain pinned to immutable full SHAs.
 
 | Field | Current value |
 | --- | --- |
@@ -64,7 +66,7 @@ Repository branch policy is active and the live remote branch invariant is only 
 | Latest reference baseline run | `35195100046`, success |
 | Latest native build run | `35195096243`, success |
 | Latest project-state run | `35195098169`, success |
-| Latest branch-cleanup run | `35219630482`, branch deletion success; verification failure exposed now-fixed maintenance-scope bug |
+| Latest branch-cleanup run | `35224985329`, branch invariant/exact tree green; regression false positive in maintenance-scope check |
 
 ## Persistent run index
 
@@ -74,4 +76,4 @@ The tracked table above is the durable human index. Runtime evidence belongs onl
 
 ## Next action
 
-Verify repository/continuity and branch-cleanup maintenance behavior on exact head, then dispatch fresh exact-head Phase 3 x86_64/aarch64 native build, pinned reference, E1, Route20 and PyDECnet interoperability gates. Phase 4 starts only after that unchanged candidate is green.
+Retry branch-cleanup maintenance verification on the exact current head. If green, dispatch fresh exact-head Phase 3 x86_64/aarch64 native build, pinned reference, E1, Route20 and PyDECnet interoperability gates. Phase 4 starts only after that unchanged candidate is green.

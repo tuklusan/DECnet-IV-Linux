@@ -85,7 +85,9 @@ The first complete-tree pass on `c71bc79a176bbac367a910567160e8809283c051` then 
 
 The complete-tree pass on `f2bab342389ce8da8c8696c222c37c35326ceefe` found a Phase IV designated-router timing defect. The kernel used one module-start timestamp for DRDELAY, so a lower-priority router could become DR immediately after a better router expired once the module had been loaded for more than five seconds. The pinned PyDECnet live reference starts a fresh five-second DRDELAY when the local router first becomes the best candidate and cancels it when a better router is present. The current candidate tracks that candidacy per interface, resets it on interface-down and identity changes, and restarts DRDELAY after a better router disappears. E1 now deliberately silences DN71, the equal-priority higher-address DR, for longer than listener expiry but less than listener expiry plus DRDELAY; DN70 must expire DN71 but must never emit an All-Endnodes hello before DN71 returns. This is both the regression and the normal E1 failover/recovery proof.
 
-During repository tooling for that correction, commit `f2147d83c4063a461bc732f3e017608bd5ba675c` accidentally created tracked `scratch/SHOULD_NOT_CREATE`. No acceptance evidence is associated with that state. The current candidate deletes that path in the same forward correction that contains the DRDELAY fix and refreshed continuity records. The SoP clean-pass count is therefore reset to zero again.
+During repository tooling for that correction, commit `f2147d83c4063a461bc732f3e017608bd5ba675c` accidentally created tracked `scratch/SHOULD_NOT_CREATE`. No acceptance evidence is associated with that state. Candidate `2e23adcacad4945b2495c3704d07cb1a2860a04a` deletes that path in the same forward correction that contains the DRDELAY fix and refreshed continuity records. Candidate `6f4baf02029c3ac9e0c44885a85add79564017df` then removed the pending SoP-pass action from the tracked next-action markers while retaining the recorded pass/progress fields.
+
+Branch-cleanup maintenance run `35224985329` on `6f4baf02029c3ac9e0c44885a85add79564017df` confirmed the one-branch invariant and exact tree, then failed in `test_repo_policy_branch.py`: its stale `main`-scope detector used substring matching, so the valid `maintenance` invocation was misclassified because `maintenance` begins with `main`. The current candidate makes that detector line-exact.
 
 ## Test addressing
 
@@ -97,8 +99,8 @@ Ordinary lab addressing remains area 31, nodes 70 through 79, names DN70 through
 
 ## Resume point
 
-Phase 3 remains active. Image-path and branch-cleanup maintenance corrections are on `main`; the latest complete-tree review additionally found and corrected per-interface designated-router DRDELAY/handoff behavior and strengthened E1 to prove the handoff suppression. No clean pass carries forward. The pass count starts at zero on the exact current candidate.
+Phase 3 remains active. Image-path and branch-cleanup maintenance corrections are on `main`; the latest protocol correction fixes per-interface designated-router DRDELAY/handoff behavior and E1 proves the handoff suppression. The branch-cleanup maintenance regression false positive is corrected in the current candidate. The tracked SoP pass/progress marker remains unchanged.
 
 ## Next action
 
-Verify repository/continuity and branch-cleanup maintenance behavior on exact head and dispatch fresh exact-head native x86_64/aarch64 build, pinned reference, E1 and bounded Route20/PyDECnet interoperability gates. Phase 4 begins only after the unchanged Phase 3 candidate is green.
+Retry branch-cleanup maintenance verification on the exact current head. If green, dispatch fresh exact-head native x86_64/aarch64 build, pinned reference, E1 and bounded Route20/PyDECnet interoperability gates. Phase 4 begins only after the unchanged Phase 3 candidate is green.

@@ -64,7 +64,10 @@ def main() -> int:
     stale_cleanup_call = (
         'tools/workflow_sop.sh "$DNIV_SCRATCH_DIR" "$candidate" main'
     )
-    if stale_cleanup_call in repository_workflow:
+    if any(
+        line.strip() == stale_cleanup_call
+        for line in repository_workflow.splitlines()
+    ):
         raise SystemExit(
             "branch policy regression: branch cleanup still uses acceptance-only main scope"
         )
