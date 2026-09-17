@@ -46,16 +46,16 @@ The live PyDECnet pin has a pre-existing `Macaddr("1.24")` self-test contradicti
 
 ## SoP delivery rule
 
-Routine SoP is now deliberately bounded. Full-repository semantic rereads and automatic repeated full-tree scans are disabled for normal development and acceptance work.
+The delivery SoP is a complete semantic/manual review of the latest exact tracked tree. Diff manifests and policy gates are support evidence only.
 
-1. Review the exact first-parent-to-candidate unified diff with three context lines. The semantic review scope is changed hunks plus only the local file context or directly affected dependency needed to validate those hunks; untouched repository areas are not reread merely to satisfy SoP.
-2. If a defect is found and fixed, the candidate changes. Recompute the parent-to-candidate diff and restart the scoped review on that new diff.
-3. Delivery still requires three consecutive clean semantic/manual passes, but all three operate on the same bounded candidate diff rather than the entire repository.
-4. Any later substantive change creates a new candidate and resets those scoped passes.
+1. Read the complete latest disk copy byte-for-byte and line-by-line, without truncation, and identify defects or gaps. Fix every defect or gap found.
+2. Any fix changes the candidate and resets the sequence. Restart Step 1 from the new latest disk copy.
+3. Delivery requires three consecutive clean complete-tree Step-1 passes on one exact unchanged candidate.
+4. Any later substantive change resets the sequence to Step 1 again.
 
-`tools/sop_scan.py` now defaults to the same bounded parent-to-candidate diff. It records the exact base, candidate, unified-diff hash, changed paths and changed-file blob hashes while rejecting tracked working-tree drift. A complete tracked-tree scan remains available only through explicit `--full-tree`; routine workflows do not request it. `tools/workflow_sop.sh` runs the ordinary policy/regression gates and records one bounded baseline diff manifest. Existing workflow final scans compare against that baseline, so normal CI performs no automatic three-pass full-repository SoP.
+`tools/sop_scan.py` records machine-readable candidate identity, changed paths/blob hashes and optional full-tree manifests. `tools/workflow_sop.sh` runs policy/regression gates and records a bounded baseline diff manifest which workflow final scans use to detect checkout drift. Those machine checks never replace the complete semantic/manual delivery passes.
 
-Domain-specific policy gates may still inspect broader files when their own invariant requires it; those checks are validators, not semantic SoP passes.
+Domain-specific policy gates may inspect broader files when their own invariant requires it; those checks are validators, not semantic SoP passes.
 
 ## Phase status
 
@@ -77,7 +77,9 @@ For candidate `3af6da37274006fbd2b0cbe9682821f30bd5f7ba`, repository policy, pro
 
 Candidate `c33241a984b6f1c61c0a7aa83b89945dd60a4fb6` corrects both deeper image-validation defects. Base and derived image builders use `qemu-img compare` across RAW and QCOW2, which compares logical disk content while treating unallocated zero sectors as equivalent. The arm64 path keeps its outer-gzip peel, then validates either raw AArch64 Image magic or the EFI-zboot `MZ`/`zimg`/Linux header, requires the gzip compression type supported by the deployed QEMU 8.x loader, and checks payload bounds. The image-builder policy gate requires these safeguards and explicitly forbids host RAW `cmp` and strict allocation-sensitive image comparison.
 
-Commit `f18465c08fd5c6fe2fb72a12875781a3c874bff3` accidentally created an empty top-level `NONEXISTENT` path during repository tooling. Candidate `c33241a984b6f1c61c0a7aa83b89945dd60a4fb6` deleted that path and no acceptance result was associated with the accidental state. A subsequent unintended non-main ref was automatically deleted by cleanup run `35219630482`; deletion and the one-branch invariant succeeded, but the cleanup job then exposed a workflow contradiction: `workflow_sop.sh` treated its `main` scope as acceptance-only and rejected the immutable create-event `GITHUB_REF` even after checkout had switched to the exact current `main` tree. The current candidate adds an explicit maintenance scope that verifies current remote `main` without requiring acceptance-event ref metadata, and the branch-policy regression test requires the cleanup workflow to use it. All clean-pass and acceptance evidence resets on this change.
+Commit `f18465c08fd5c6fe2fb72a12875781a3c874bff3` accidentally created an empty top-level `NONEXISTENT` path during repository tooling. Candidate `c33241a984b6f1c61c0a7aa83b89945dd60a4fb6` deleted that path and no acceptance result was associated with the accidental state. A subsequent unintended non-main ref was automatically deleted by cleanup run `35219630482`; deletion and the one-branch invariant succeeded, but the cleanup job then exposed a workflow contradiction: `workflow_sop.sh` treated its `main` scope as acceptance-only and rejected the immutable create-event `GITHUB_REF` even after checkout had switched to the exact current `main` tree. Candidate `57f123d43760554a333772755da9d196c6444614` added an explicit maintenance scope that verifies current remote `main` without requiring acceptance-event ref metadata, and the branch-policy regression test requires the cleanup workflow to use it.
+
+The first complete-tree review of `57f123d43760554a333772755da9d196c6444614` found stale continuity/policy text. `docs/TEST_LAB.md` still described three automatic pre-work exact-tree scans although current workflows use one bounded baseline plus a matching final manifest, and it claimed the repository workflow did not run on `create` even though non-main branch creation deliberately triggers automatic cleanup. `docs/HANDOVER.md` and this file also still described the semantic/manual SoP as diff-scoped, conflicting with the governing complete-tree rule. The current candidate corrects all of those statements. That documentation/policy correction resets all clean-pass and acceptance evidence again.
 
 ## Test addressing
 
@@ -89,8 +91,8 @@ Ordinary lab addressing remains area 31, nodes 70 through 79, names DN70 through
 
 ## Resume point
 
-Phase 3 remains active. The latest exact-head acceptance reached all static/native/reference gates but failed in image construction on both architectures before any DECnet protocol assertion. The image-path correction is now on `main`; the latest maintenance run also exposed and removed the branch-cleanup verification-scope defect. The current candidate contains that maintenance correction and regression coverage. No clean pass carries forward, so the pass count starts at zero on the exact current candidate.
+Phase 3 remains active. The image-path and branch-cleanup maintenance corrections are on `main`, but the subsequent complete-tree review found and corrected stale test-lab and SoP continuity text. No clean pass carries forward. The pass count starts at zero on the exact current candidate.
 
 ## Next action
 
-Perform three consecutive clean semantic/manual passes over the exact candidate, with any defect restarting the sequence. Then verify repository/continuity and branch-cleanup maintenance behavior on the unchanged exact head and dispatch fresh exact-head native x86_64/aarch64 build, pinned reference, E1 and bounded Route20/PyDECnet interoperability gates. Phase 4 begins only after the unchanged Phase 3 candidate is green.
+Perform three consecutive complete semantic/manual passes over the exact current tree, byte-for-byte and line-by-line, with any defect restarting the sequence. After three clean passes on the unchanged candidate, verify repository/continuity and branch-cleanup maintenance behavior on exact head and dispatch fresh exact-head native x86_64/aarch64 build, pinned reference, E1 and bounded Route20/PyDECnet interoperability gates. Phase 4 begins only after the unchanged Phase 3 candidate is green.

@@ -16,11 +16,9 @@
 
 ## Current checkpoint
 
-Phase 3 remains active and all substantive work stays on `main`. Routine repository SoP is defined by the tracked project state as the exact first-parent-to-candidate unified diff with three lines of context, while the active review may apply stricter full-tree reading where required. Automatic workflow three-pass full-tree scanning remains disabled; `tools/sop_scan.py --full-tree` is explicit opt-in.
+Phase 3 remains active and all substantive work stays on `main`. The active delivery review is the complete exact tracked tree, byte-for-byte and line-by-line. Any defect changes the candidate and resets the clean-pass count; three consecutive clean complete passes are required before fresh acceptance.
 
-The semantic/manual delivery rule still requires three consecutive clean passes. A fix creates a new candidate and resets the pass count.
-
-Workflow jobs bind exact source commit/tree, expected parent candidate SHA where applicable, run lineage, runner identity, architecture/mode and retained evidence. `tools/workflow_sop.sh` runs the ordinary policy/regression checks and records one bounded baseline diff manifest. Its `main` scope remains acceptance-only; the new `maintenance` scope verifies the exact current remote `main` tree for branch cleanup even when immutable create-event metadata still names the non-main ref that triggered cleanup.
+Workflow jobs bind exact source commit/tree, expected parent candidate SHA where applicable, run lineage, runner identity, architecture/mode and retained evidence. Routine workflow immutability checks use one bounded parent-to-candidate baseline diff manifest and one matching final manifest. A byte-complete tracked-tree machine scan remains explicit through `tools/sop_scan.py --full-tree`; these machine checks do not replace the semantic/manual delivery passes.
 
 Hosted-runner policy is unchanged: at most 75 minutes per job, `queue: max`, `cancel-in-progress: false`, compact evidence at most 30 days, VM checkpoints 3 days with paginated stale-checkpoint pruning, and fresh interoperability VMs.
 
@@ -30,9 +28,11 @@ The image failures moved deeper after the preceding image correction. amd64 prod
 
 Candidate `c33241a984b6f1c61c0a7aa83b89945dd60a4fb6` switches base and derived acceptance images to `qemu-img compare` for RAW/QCOW2 logical-content equality and explicitly rejects host RAW `cmp` or strict allocation-sensitive compare. It also keeps one outer-gzip peel for arm64, then accepts either raw AArch64 Image magic or a validated gzip EFI-zboot header with sane payload bounds. `tests/policy/test_image_builder_gate.py` requires every read, signature check and logical comparison safeguard.
 
-Commit `f18465c08fd5c6fe2fb72a12875781a3c874bff3` accidentally created an empty top-level `NONEXISTENT` path during repository tooling; candidate `c33241a984b6f1c61c0a7aa83b89945dd60a4fb6` deleted it. A later unintended non-main ref triggered repository cleanup run `35219630482`. The cleanup step successfully deleted every non-main ref and confirmed only `refs/heads/main` remained, but its verification step failed because `workflow_sop.sh ... main` rejected the create-event `GITHUB_REF` even though the job had checked out exact current `main`. The current correction adds a dedicated `maintenance` scope, changes cleanup to use it, and adds regression coverage so maintenance still verifies exact remote main while acceptance-only ref checks remain confined to `main` scope.
+Commit `f18465c08fd5c6fe2fb72a12875781a3c874bff3` accidentally created an empty top-level `NONEXISTENT` path during repository tooling; candidate `c33241a984b6f1c61c0a7aa83b89945dd60a4fb6` deleted it. A later unintended non-main ref triggered repository cleanup run `35219630482`. The cleanup step successfully deleted every non-main ref and confirmed only `refs/heads/main` remained, but its verification step failed because `workflow_sop.sh ... main` rejected the create-event `GITHUB_REF` even though the job had checked out exact current `main`. Candidate `57f123d43760554a333772755da9d196c6444614` added a dedicated `maintenance` scope, changed cleanup to use it, and added regression coverage so maintenance still verifies exact remote main while acceptance-only ref checks remain confined to `main` scope.
 
-Repository branch policy is active and the live remote branch invariant is again only `refs/heads/main`. Cleanup run `35219630482` is the latest cleanup attempt: branch deletion succeeded, post-delete SoP verification exposed the maintenance-scope defect described above. GitHub-owned actions remain pinned to immutable full SHAs.
+The first complete-tree review of `57f123d43760554a333772755da9d196c6444614` found stale continuity and SoP text. `docs/TEST_LAB.md` still claimed three automatic pre-work exact-tree scans, while current workflows record one bounded baseline plus a matching final manifest. It also claimed the Repository Policy workflow did not run on `create`, although non-main branch creation intentionally triggers automatic cleanup. `docs/HANDOVER.md` and `docs/PROJECT_STATE.md` still described the semantic/manual SoP as diff-scoped rather than complete-tree. The current candidate corrects all three records, so the complete clean-pass count is reset to zero again.
+
+Repository branch policy is active and the live remote branch invariant is only `refs/heads/main`. Cleanup run `35219630482` is the latest cleanup attempt: branch deletion succeeded, post-delete SoP verification exposed the maintenance-scope bug that is now corrected. GitHub-owned actions remain pinned to immutable full SHAs.
 
 | Field | Current value |
 | --- | --- |
@@ -45,18 +45,18 @@ Repository branch policy is active and the live remote branch invariant is again
 | Compact evidence retention | 30 days |
 | VM checkpoint retention | 3 days; rolling newest successful per architecture; paginated pruning |
 | Acceptance child binding | parent run ID + exact expected SHA |
-| Routine semantic/manual SoP scope | tracked rule: exact first-parent-to-candidate diff; stricter full-tree review may be applied |
-| Clean semantic/manual passes on this candidate | 0 |
+| Delivery semantic/manual SoP scope | complete exact tracked tree, byte-for-byte and line-by-line |
+| Clean complete semantic/manual passes on this candidate | 0 |
 | Routine workflow scan requirement | one bounded baseline diff manifest plus matching final diff manifest |
-| Explicit full-tree scan | opt-in via `tools/sop_scan.py --full-tree` |
-| Phase 3 acceptance | image-path correction applied; maintenance-scope correction pending fresh clean passes and exact-head gates |
+| Explicit machine full-tree scan | `tools/sop_scan.py --full-tree` |
+| Phase 3 acceptance | image and maintenance corrections applied; continuity/SoP text correction pending fresh complete passes and exact-head gates |
 | Latest acceptance parent | `35195064164` |
 | Latest E1 VM run | `35195101815`, failure during base-image build |
 | Latest interoperability run | `35195103898`, failure during base-image build |
 | Latest reference baseline run | `35195100046`, success |
 | Latest native build run | `35195096243`, success |
 | Latest project-state run | `35195098169`, success |
-| Latest branch-cleanup run | `35219630482`, branch deletion success; verification failure exposed maintenance-scope bug |
+| Latest branch-cleanup run | `35219630482`, branch deletion success; verification failure exposed now-fixed maintenance-scope bug |
 
 ## Persistent run index
 
@@ -66,4 +66,4 @@ The tracked table above is the durable human index. Runtime evidence belongs onl
 
 ## Next action
 
-Perform three consecutive clean semantic/manual passes on the exact unchanged candidate. Any defect creates a new candidate and resets the sequence. After three clean passes, verify repository/continuity and branch-cleanup maintenance behavior on exact head, then dispatch fresh exact-head Phase 3 x86_64/aarch64 native build, pinned reference, E1, Route20 and PyDECnet interoperability gates. Phase 4 starts only after that unchanged candidate is green.
+Perform three consecutive complete semantic/manual passes over the exact unchanged tracked tree, byte-for-byte and line-by-line. Any defect creates a new candidate and resets the sequence. After three clean passes, verify repository/continuity and branch-cleanup maintenance behavior on exact head, then dispatch fresh exact-head Phase 3 x86_64/aarch64 native build, pinned reference, E1, Route20 and PyDECnet interoperability gates. Phase 4 starts only after that unchanged candidate is green.
