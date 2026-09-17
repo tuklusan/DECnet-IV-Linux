@@ -155,6 +155,7 @@ jobs:
           remote=$(git ls-remote origin refs/heads/main | awk 'NR == 1 {print $1}')
           test -n "$remote"
           test "$candidate" = "$remote"
+          mkdir -p "$DNIV_SCRATCH_DIR"
           printf 'CANDIDATE_SHA=%s\n' "$candidate" > "$DNIV_SCRATCH_DIR/maintenance.env"
           python3 tools/scratch_state.py init --dir "$DNIV_SCRATCH_DIR" \
             --workflow repository-policy --job "$GITHUB_JOB" --source-sha "$candidate"
