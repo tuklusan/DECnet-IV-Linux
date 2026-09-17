@@ -30,7 +30,8 @@ Preferred exact reference pins remain Route20 `b94115b2615c6463d1f006924ceeadde8
 - The remote branch invariant is exactly `refs/heads/main`.
 - Every substantive commit updates this file and `scratch/RESUME.md` in the same commit.
 - Acceptance applies only to one exact unchanged `main` commit and children are bound to parent run ID plus exact expected SHA.
-- Hosted jobs have explicit timeouts of at most 75 minutes; concurrency uses `queue: max` with `cancel-in-progress: false`.
+- Hosted jobs have explicit timeouts of at most 75 minutes; concurrency uses `queue: max` with `cancel-in-progress: false` where a concurrency block is needed.
+- Repository-policy/control runs are isolated by exact candidate SHA and do not consume the protocol-lab `dniv-runner-*` serialization slots.
 - GitHub-owned actions remain pinned to immutable full SHAs.
 - Compact evidence retention is at most 30 days. Transient VM overlays and QMP sockets are never uploaded as acceptance evidence.
 - Candidate promotion is determined only by documented exact-SHA mechanical, build, VM, reference, protocol and interoperability gates.
@@ -53,7 +54,9 @@ Exact-SHA acceptance on `3f41bec910b5b07520c23b05dcbb1996d091ef62` established t
 
 The lab is therefore being simplified. `tests/lab/dniv_lab.py` is now the two-node virtualization controller. It launches QEMU directly, creates one disposable qcow2 overlay per guest over an immutable input base, uses TAP/bridge networking, records serial and DECnet packet evidence, and uses QMP for guest shutdown. The previous shell two-node launcher plus resumable checkpoint/upload/restore/rebase/prune machinery is retired. The distributable image builder remains because image production is still a separate release requirement.
 
-This first migration step intentionally changes orchestration before changing the guest payload model. The current hosted VM workflow still constructs one immutable candidate base per architecture, then Python performs only overlay-based protocol execution. Once this path is proven, the next optimization is to move immutable base preparation out of ordinary protocol CI, preferably onto native self-hosted x86_64/aarch64 KVM runners or another persistent base-image store. Interoperability still uses the existing shell launcher and derived peer images until the Python two-node path is green.
+The first fresh acceptance request for the Python-controller candidate exposed a control-plane scheduling defect before any new gate executed: repository-policy shared `dniv-runner-x64` with an older interoperability run, so an obsolete candidate could block policy and dispatch for the new exact head. Repository policy and dispatch are now removed from lab-runner job concurrency, and workflow-level repository-policy concurrency is keyed by exact candidate SHA. Protocol jobs remain serialized by their architecture slots.
+
+This migration intentionally changes orchestration before changing the guest payload model. The hosted VM workflow still constructs one immutable candidate base per architecture, then Python performs only overlay-based protocol execution. Once this path is proven, the next optimization is to move immutable base preparation out of ordinary protocol CI, preferably onto native self-hosted x86_64/aarch64 KVM runners or another persistent base-image store. Interoperability still uses the existing shell launcher and derived peer images until the Python two-node path is green.
 
 ## Test addressing
 
@@ -65,8 +68,8 @@ Ordinary lab addressing remains area 31, nodes 70 through 79, names DN70 through
 
 ## Resume point
 
-Phase 3 remains active. The current candidate replaces the two-node shell VM lifecycle with a Python QEMU/QMP overlay controller and removes resumable VM checkpoint state from the hosted acceptance path. No protocol promotion is implied until the exact candidate passes the existing build, continuity, reference, E1 and interoperability gates.
+Phase 3 remains active. The current candidate combines the Python QEMU/QMP disposable-overlay controller with independent control-plane scheduling so stale protocol runs cannot block exact-head policy/dispatch. No protocol promotion is implied until the exact candidate passes build, continuity, reference, E1 and interoperability gates.
 
 ## Next action
 
-Run repository policy on the exact new `main` SHA. If policy is green, run native x86_64/aarch64 build, project-state, pinned reference and E1. The E1 result is the feasibility proof for the Python overlay controller. Interoperability remains on the existing path for this candidate; migrate it only after the Python two-node gate is green.
+Dispatch fresh exact-head acceptance on the control-plane scheduling correction. Prioritize E1 on both architectures as the feasibility proof for the Python overlay controller. Interoperability remains on the existing path for this candidate; migrate it only after the Python two-node gate is green.

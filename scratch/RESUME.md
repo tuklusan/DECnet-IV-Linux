@@ -22,7 +22,9 @@ The prior acceptance lineage on `3f41bec910b5b07520c23b05dcbb1996d091ef62` prove
 
 The two-node lab now uses `tests/lab/dniv_lab.py`: a Python direct-QEMU controller with QMP shutdown, Linux bridge/TAP networking, packet capture, serial marker assertions, and disposable qcow2 overlays over one immutable candidate base. `tests/lab/run-two-node.sh` is retired. VM resume inputs, archived writable checkpoints, rebasing, checksum sealing and stale-checkpoint pruning are removed from `vm-lab.yml`; transient `.qcow2` and `.qmp` files are excluded from evidence uploads.
 
-The hosted workflow still builds one immutable candidate base per architecture. This is deliberate for the first feasibility run. If E1 is green, the next reduction is to prepare/persist the base outside ordinary protocol runs, preferably on native self-hosted KVM-capable x86_64 and aarch64 runners. Interoperability has not yet been migrated and remains the next target after the Python two-node path proves itself.
+The first acceptance request on Python-controller commit `8354451bde25651d3cce0fe37835a6a5524606fd` exposed an unrelated scheduling bottleneck before its repository-policy job could execute: an older interoperability job held `dniv-runner-x64`, and repository-policy/dispatch incorrectly shared that protocol-lab slot. The correction isolates repository-control workflow concurrency by exact candidate SHA and removes lab-runner job concurrency from repository-policy, branch cleanup and acceptance dispatch. Old protocol runs can no longer prevent a newer exact head from reaching policy and dispatch.
+
+The hosted VM workflow still builds one immutable candidate base per architecture. This is deliberate for the first feasibility run. If E1 is green, the next reduction is to prepare/persist the base outside ordinary protocol runs, preferably on native self-hosted KVM-capable x86_64 and aarch64 runners. Interoperability has not yet been migrated and remains the next target after the Python two-node path proves itself.
 
 Repository branch policy remains exactly one remote branch, `refs/heads/main`. GitHub-owned actions remain pinned to immutable full SHAs. The machine helpers remain `tools/workflow_guard.sh`, `tools/integrity_scan.py`, `tools/project_state_gate.py` and `tools/workflow_budget_gate.py`.
 
@@ -32,7 +34,8 @@ Repository branch policy remains exactly one remote branch, `refs/heads/main`. G
 | Working ref | `main` only |
 | Remote branch invariant | only `refs/heads/main` |
 | Hosted job ceiling | 75 minutes |
-| Runner queue policy | `queue: max`; no cancellation of pending acceptance work |
+| Protocol runner queue policy | architecture-specific `dniv-runner-*`, `queue: max` |
+| Repository-control queue policy | exact-SHA workflow concurrency; no protocol runner slot |
 | VM lifecycle | Python direct QEMU/QMP |
 | VM disk state | disposable qcow2 overlays over immutable base |
 | Writable VM checkpoint artifacts | retired |
@@ -51,4 +54,4 @@ Mutable workflow state remains below ignored `scratch/runtime/`; restored eviden
 
 ## Next action
 
-Commit the Python/QEMU migration and checkpoint cleanup directly to `main`, then dispatch fresh exact-head acceptance. Treat E1 as the proof point for the new controller. If it passes on both architectures, migrate interoperability orchestration and then remove the remaining protocol-test image mutation machinery where it is no longer needed.
+Commit the control-plane scheduling correction directly to `main` and dispatch a fresh exact-head acceptance request. Treat E1 as the proof point for the Python controller. If it passes on both architectures, migrate interoperability orchestration and then remove the remaining protocol-test image mutation machinery where it is no longer needed.

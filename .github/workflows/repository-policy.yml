@@ -35,8 +35,11 @@ on:
     types: [created, edited]
   workflow_dispatch:
 
+# Repository-control runs are isolated by exact candidate SHA. They must not
+# share the scarce protocol-lab runner slots or an obsolete candidate can block
+# policy/dispatch for a newer exact-head candidate.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.sha }}
   queue: max
   cancel-in-progress: false
 
@@ -55,10 +58,6 @@ jobs:
       github.event.ref != 'main'))
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    concurrency:
-      group: dniv-runner-x64
-      queue: max
-      cancel-in-progress: false
     env:
       DNIV_SCRATCH_DIR: ${{ github.workspace }}/scratch/runtime/${{ github.run_id }}/${{ github.run_attempt }}/${{ github.job }}
     steps:
@@ -131,10 +130,6 @@ jobs:
       github.event.ref != 'main')
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    concurrency:
-      group: dniv-runner-x64
-      queue: max
-      cancel-in-progress: false
     permissions:
       actions: read
       contents: write
@@ -231,10 +226,6 @@ jobs:
     needs: repository-policy
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    concurrency:
-      group: dniv-runner-x64
-      queue: max
-      cancel-in-progress: false
     permissions:
       actions: write
       contents: read
