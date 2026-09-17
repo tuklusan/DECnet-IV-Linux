@@ -14,10 +14,9 @@
 
 name: Repository Policy
 
-# Deliberately no push, create, or pull_request:synchronize trigger here.
-# Editing source, documentation, policy, or workflow files must not consume a
-# hosted runner. Local hooks enforce commit/push policy; Actions are reserved
-# for explicit review/metadata events and manual or acceptance-gate requests.
+# Ordinary source pushes do not consume a hosted runner. Local hooks guard
+# commits and pushes; this workflow handles explicit metadata review and the
+# owner acceptance dispatcher.
 on:
   issues:
     types: [opened, edited, transferred]
@@ -37,7 +36,6 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  queue: max
   cancel-in-progress: false
 
 permissions:
@@ -48,20 +46,67 @@ jobs:
     runs-on: ubuntu-latest
     concurrency:
       group: dniv-runner-x64
-      queue: max
+      cancel-in-progress: false
+    env:
+      DNIV_SCRATCH_DIR: ${{ github.workspace }}/scratch/runtime/${{ github.run_id }}/${{ github.run_attempt }}/${{ github.job }}
     steps:
-      - name: Check out repository
+      - name: Check out exact event repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
+      - name: Initialize scratch state and verify event-tree scans
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/scratch_state.py init --dir "$DNIV_SCRATCH_DIR" \
+            --workflow repository-policy --job "$GITHUB_JOB" --source-sha "$GITHUB_SHA"
+          tools/workflow_sop.sh "$DNIV_SCRATCH_DIR" "$GITHUB_SHA" event
+
       - name: Run LICENSE-MONKEY
-        run: python3 tools/license_monkey.py --tree "$GITHUB_SHA"
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/license_monkey.py --tree "$GITHUB_SHA" 2>&1 | \
+            tee "$DNIV_SCRATCH_DIR/license-monkey.log"
 
       - name: Enforce repository policy
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 tools/repo_policy.py
+        run: |
+          set -euo pipefail
+          python3 tools/repo_policy.py 2>&1 | tee "$DNIV_SCRATCH_DIR/repository-policy.log"
+
+      - name: Verify exact event tree after policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/sop_scan.py --rev "$GITHUB_SHA" --pass-id final \
+            --baseline "$DNIV_SCRATCH_DIR/sop/pass-1.json" \
+            --output "$DNIV_SCRATCH_DIR/sop/final.json"
+          python3 tools/scratch_state.py verify --dir "$DNIV_SCRATCH_DIR"
+
+      - name: Record policy result
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f "$DNIV_SCRATCH_DIR/state.json" ]]; then
+            python3 tools/scratch_state.py mark --dir "$DNIV_SCRATCH_DIR" \
+              --status '${{ job.status }}' --note 'repository-policy job completed'
+          fi
+
+      - name: Preserve policy scratch state
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: scratch-repository-policy-${{ github.run_id }}
+          path: ${{ env.DNIV_SCRATCH_DIR }}/
+          if-no-files-found: warn
+          retention-days: 90
+          compression-level: 0
+          overwrite: true
 
   dispatch-acceptance:
     if: >-
@@ -73,20 +118,81 @@ jobs:
     runs-on: ubuntu-latest
     concurrency:
       group: dniv-runner-x64
-      queue: max
+      cancel-in-progress: false
     permissions:
       actions: write
       contents: read
+    env:
+      DNIV_SCRATCH_DIR: ${{ github.workspace }}/scratch/runtime/${{ github.run_id }}/${{ github.run_attempt }}/${{ github.job }}
     steps:
-      - name: Dispatch acceptance workflows
+      - name: Check out exact main candidate
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Initialize dispatcher state and verify main SoP scans
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/scratch_state.py init --dir "$DNIV_SCRATCH_DIR" \
+            --workflow repository-policy --job "$GITHUB_JOB" --source-sha "$GITHUB_SHA"
+          tools/workflow_sop.sh "$DNIV_SCRATCH_DIR" "$GITHUB_SHA" main
+
+      - name: Dispatch exact-head acceptance workflows
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          set -eu
+          set -euo pipefail
           head=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
           test "$head" = "$GITHUB_SHA"
-          gh workflow run build.yml --repo "$GITHUB_REPOSITORY" --ref main
-          gh workflow run project-state.yml --repo "$GITHUB_REPOSITORY" --ref main
-          gh workflow run reference-baselines.yml --repo "$GITHUB_REPOSITORY" --ref main
-          gh workflow run vm-lab.yml --repo "$GITHUB_REPOSITORY" --ref main -f lab_mode=e1
-          gh workflow run interop.yml --repo "$GITHUB_REPOSITORY" --ref main
+          {
+            printf 'PARENT_RUN_ID=%s\n' "$GITHUB_RUN_ID"
+            printf 'PARENT_RUN_ATTEMPT=%s\n' "$GITHUB_RUN_ATTEMPT"
+            printf 'SOURCE_SHA=%s\n' "$GITHUB_SHA"
+            printf 'BUILD=build.yml\n'
+            printf 'PROJECT_STATE=project-state.yml\n'
+            printf 'REFERENCES=reference-baselines.yml\n'
+            printf 'VM_LAB=vm-lab.yml\n'
+            printf 'INTEROP=interop.yml\n'
+          } > "$DNIV_SCRATCH_DIR/dispatch.env"
+          gh workflow run build.yml --repo "$GITHUB_REPOSITORY" --ref main \
+            -f parent_run_id="$GITHUB_RUN_ID"
+          gh workflow run project-state.yml --repo "$GITHUB_REPOSITORY" --ref main \
+            -f parent_run_id="$GITHUB_RUN_ID"
+          gh workflow run reference-baselines.yml --repo "$GITHUB_REPOSITORY" --ref main \
+            -f parent_run_id="$GITHUB_RUN_ID"
+          gh workflow run vm-lab.yml --repo "$GITHUB_REPOSITORY" --ref main \
+            -f lab_mode=e1 -f parent_run_id="$GITHUB_RUN_ID"
+          gh workflow run interop.yml --repo "$GITHUB_REPOSITORY" --ref main \
+            -f parent_run_id="$GITHUB_RUN_ID"
+
+      - name: Verify dispatcher exact tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/sop_scan.py --rev "$GITHUB_SHA" --pass-id final \
+            --baseline "$DNIV_SCRATCH_DIR/sop/pass-1.json" \
+            --output "$DNIV_SCRATCH_DIR/sop/final.json"
+          python3 tools/scratch_state.py verify --dir "$DNIV_SCRATCH_DIR"
+
+      - name: Record dispatcher result
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f "$DNIV_SCRATCH_DIR/state.json" ]]; then
+            python3 tools/scratch_state.py mark --dir "$DNIV_SCRATCH_DIR" \
+              --status '${{ job.status }}' --note 'acceptance dispatcher completed'
+          fi
+
+      - name: Preserve dispatcher scratch state
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: scratch-acceptance-dispatch-${{ github.run_id }}
+          path: ${{ env.DNIV_SCRATCH_DIR }}/
+          if-no-files-found: warn
+          retention-days: 90
+          compression-level: 0
+          overwrite: true

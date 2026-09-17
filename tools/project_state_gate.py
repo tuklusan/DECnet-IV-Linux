@@ -13,7 +13,7 @@
 # patent, trademark, and governing-law provisions.
 # ============================================================================
 
-"""Require every substantive commit to refresh the project continuity record."""
+"""Require substantive commits to refresh both durable continuity records."""
 
 from __future__ import annotations
 
@@ -22,41 +22,55 @@ import subprocess
 import sys
 from pathlib import Path
 
-STATE = "docs/PROJECT_STATE.md"
-REQUIRED_HEADINGS = ("## Resume point", "## Next action")
+PROJECT_STATE = "docs/PROJECT_STATE.md"
+SCRATCH_RESUME = "scratch/RESUME.md"
+CONTINUITY = (PROJECT_STATE, SCRATCH_RESUME)
+REQUIRED_HEADINGS = {
+    PROJECT_STATE: ("## Resume point", "## Next action"),
+    SCRATCH_RESUME: ("## Current checkpoint", "## Next action"),
+}
 
 
 def git(*args: str) -> str:
     return subprocess.check_output(("git", *args), text=True).strip()
 
 
-def validate_state() -> list[str]:
-    path = Path(STATE)
+def validate_record(path_text: str) -> list[str]:
+    path = Path(path_text)
     if not path.exists():
-        return [f"missing {STATE}"]
+        return [f"missing {path_text}"]
     text = path.read_text(encoding="utf-8")
     errors: list[str] = []
-    for heading in REQUIRED_HEADINGS:
+    for heading in REQUIRED_HEADINGS[path_text]:
         pos = text.find(heading)
         if pos < 0:
-            errors.append(f"{STATE} is missing '{heading}'")
+            errors.append(f"{path_text} is missing '{heading}'")
             continue
-        body = text[pos + len(heading):]
+        body = text[pos + len(heading) :]
         next_heading = body.find("\n## ")
         if next_heading >= 0:
             body = body[:next_heading]
         if not body.strip():
-            errors.append(f"{heading} must not be empty")
+            errors.append(f"{path_text} {heading} must not be empty")
+    return errors
+
+
+def validate_state() -> list[str]:
+    errors: list[str] = []
+    for path in CONTINUITY:
+        errors.extend(validate_record(path))
     return errors
 
 
 def require_state_for_paths(paths: list[str], label: str) -> list[str]:
     changed = {p for p in paths if p}
-    substantive = changed - {STATE}
-    if substantive and STATE not in changed:
+    continuity = set(CONTINUITY)
+    substantive = changed - continuity
+    missing = continuity - changed
+    if substantive and missing:
         return [
-            f"{label} changes project files but does not update {STATE}",
-            "refresh the Resume point and Next action in the same commit",
+            f"{label} changes project files but does not update " + ", ".join(sorted(missing)),
+            "refresh both durable continuity records in the same commit",
         ]
     return []
 
@@ -99,7 +113,7 @@ def main() -> int:
         for error in errors:
             print(f"project-state gate: {error}", file=sys.stderr)
         return 1
-    print("project-state gate: continuity record is current")
+    print("project-state gate: durable continuity records are current")
     return 0
 
 

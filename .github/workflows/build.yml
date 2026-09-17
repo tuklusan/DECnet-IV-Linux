@@ -16,18 +16,26 @@ name: Build Bootstrap
 
 on:
   workflow_dispatch:
+    inputs:
+      parent_run_id:
+        description: Parent acceptance workflow run ID; blank for direct dispatch
+        required: false
+        type: string
+      resume_run_id:
+        description: Prior build run ID whose scratch artifacts should be restored
+        required: false
+        type: string
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  queue: max
   cancel-in-progress: false
 
 permissions:
+  actions: read
   contents: read
 
 jobs:
   build:
-    # Native builds on both required CPU architectures catch ABI and compiler assumptions early.
     strategy:
       fail-fast: false
       max-parallel: 2
@@ -40,22 +48,83 @@ jobs:
     runs-on: ${{ matrix.runner }}
     concurrency:
       group: dniv-runner-${{ matrix.slot }}
-      queue: max
+      cancel-in-progress: false
+    env:
+      DNIV_SCRATCH_DIR: ${{ github.workspace }}/scratch/runtime/${{ github.run_id }}/${{ github.run_attempt }}/${{ github.job }}-${{ matrix.slot }}
     steps:
-      - name: Check out repository
+      - name: Check out exact repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      # Generic headers are sufficient for the bootstrap compile gate; image CI later builds against the exact selected image kernel.
-      - name: Install build dependencies
+      - name: Restore prior scratch artifacts
+        if: ${{ inputs.resume_run_id != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          path: ${{ github.workspace }}/scratch/restored/${{ inputs.resume_run_id }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.resume_run_id }}
+
+      - name: Initialize scratch state and verify SoP scans
+        shell: bash
         run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential linux-headers-generic
+          set -euo pipefail
+          python3 tools/scratch_state.py init --dir "$DNIV_SCRATCH_DIR" \
+            --workflow build --job "$GITHUB_JOB" --arch '${{ matrix.slot }}' \
+            --source-sha "$GITHUB_SHA" --parent-run-id '${{ inputs.parent_run_id }}' \
+            --resume-run-id '${{ inputs.resume_run_id }}'
+          tools/workflow_sop.sh "$DNIV_SCRATCH_DIR" "$GITHUB_SHA" main
+
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update 2>&1 | tee "$DNIV_SCRATCH_DIR/apt-update.log"
+          sudo apt-get install -y build-essential linux-headers-generic 2>&1 | \
+            tee "$DNIV_SCRATCH_DIR/apt-install.log"
 
       - name: Build userspace and run unit tests
-        run: make all
+        shell: bash
+        run: |
+          set -euo pipefail
+          make all 2>&1 | tee "$DNIV_SCRATCH_DIR/make-all.log"
 
       - name: Build kernel module
+        shell: bash
         run: |
+          set -euo pipefail
           KDIR="$(find /usr/src -maxdepth 1 -type d -name 'linux-headers-*-generic' | sort -V | tail -1)"
           test -n "$KDIR"
-          make kernel KDIR="$KDIR"
+          printf 'KDIR=%s\n' "$KDIR" > "$DNIV_SCRATCH_DIR/kernel-build.env"
+          make kernel KDIR="$KDIR" 2>&1 | tee "$DNIV_SCRATCH_DIR/make-kernel.log"
+
+      - name: Verify exact tree after build
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/sop_scan.py --rev "$GITHUB_SHA" --pass-id final \
+            --baseline "$DNIV_SCRATCH_DIR/sop/pass-1.json" \
+            --output "$DNIV_SCRATCH_DIR/sop/final.json"
+          python3 tools/scratch_state.py verify --dir "$DNIV_SCRATCH_DIR"
+
+      - name: Record workflow result
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f "$DNIV_SCRATCH_DIR/state.json" ]]; then
+            python3 tools/scratch_state.py mark --dir "$DNIV_SCRATCH_DIR" \
+              --status '${{ job.status }}' --note 'build workflow completed'
+          fi
+
+      - name: Preserve scratch state
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: scratch-build-${{ matrix.slot }}-${{ github.run_id }}
+          path: ${{ env.DNIV_SCRATCH_DIR }}/
+          if-no-files-found: warn
+          retention-days: 90
+          compression-level: 0
+          overwrite: true

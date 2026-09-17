@@ -16,13 +16,22 @@ name: External Reference Baselines
 
 on:
   workflow_dispatch:
+    inputs:
+      parent_run_id:
+        description: Parent acceptance workflow run ID; blank for direct dispatch
+        required: false
+        type: string
+      resume_run_id:
+        description: Prior reference run ID whose scratch artifacts should be restored
+        required: false
+        type: string
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  queue: max
   cancel-in-progress: false
 
 permissions:
+  actions: read
   contents: read
 
 jobs:
@@ -30,19 +39,46 @@ jobs:
     runs-on: ubuntu-24.04
     concurrency:
       group: dniv-runner-x64
-      queue: max
+      cancel-in-progress: false
+    env:
+      DNIV_SCRATCH_DIR: ${{ github.workspace }}/scratch/runtime/${{ github.run_id }}/${{ github.run_attempt }}/${{ github.job }}
     steps:
-      - name: Check out repository
+      - name: Check out exact repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Restore prior scratch artifacts
+        if: ${{ inputs.resume_run_id != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          path: ${{ github.workspace }}/scratch/restored/${{ inputs.resume_run_id }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.resume_run_id }}
+
+      - name: Initialize scratch state and verify SoP scans
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/scratch_state.py init --dir "$DNIV_SCRATCH_DIR" \
+            --workflow reference-baselines --job "$GITHUB_JOB" --arch x64 \
+            --source-sha "$GITHUB_SHA" --parent-run-id '${{ inputs.parent_run_id }}' \
+            --resume-run-id '${{ inputs.resume_run_id }}'
+          tools/workflow_sop.sh "$DNIV_SCRATCH_DIR" "$GITHUB_SHA" main
 
       - name: Install Route20 build dependencies
+        shell: bash
         run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential libpcap-dev
+          set -euo pipefail
+          sudo apt-get update 2>&1 | tee "$DNIV_SCRATCH_DIR/apt-update.log"
+          sudo apt-get install -y build-essential libpcap-dev 2>&1 | \
+            tee "$DNIV_SCRATCH_DIR/apt-install.log"
 
       - name: Build pinned Route20 fork
+        shell: bash
         run: |
-          set -eu
+          set -euo pipefail
           . tests/reference/refs.env
           work="$RUNNER_TEMP/route20"
           git init "$work"
@@ -50,25 +86,84 @@ jobs:
           git -C "$work" fetch --depth=1 origin "$ROUTE20_REF"
           git -C "$work" checkout --detach FETCH_HEAD
           test "$(git -C "$work" rev-parse HEAD)" = "$ROUTE20_REF"
-          make -C "$work/Route20"
+          printf 'REFERENCE=route20\nREFERENCE_SHA=%s\n' "$ROUTE20_REF" > \
+            "$DNIV_SCRATCH_DIR/reference.env"
+          make -C "$work/Route20" 2>&1 | tee "$DNIV_SCRATCH_DIR/route20-build.log"
+
+      - name: Verify exact tree after reference build
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/sop_scan.py --rev "$GITHUB_SHA" --pass-id final \
+            --baseline "$DNIV_SCRATCH_DIR/sop/pass-1.json" \
+            --output "$DNIV_SCRATCH_DIR/sop/final.json"
+          python3 tools/scratch_state.py verify --dir "$DNIV_SCRATCH_DIR"
+
+      - name: Record workflow result
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f "$DNIV_SCRATCH_DIR/state.json" ]]; then
+            python3 tools/scratch_state.py mark --dir "$DNIV_SCRATCH_DIR" \
+              --status '${{ job.status }}' --note 'Route20 baseline completed'
+          fi
+
+      - name: Preserve scratch state
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: scratch-reference-route20-${{ github.run_id }}
+          path: ${{ env.DNIV_SCRATCH_DIR }}/
+          if-no-files-found: warn
+          retention-days: 90
+          compression-level: 0
+          overwrite: true
 
   pydecnet-tests:
     runs-on: ubuntu-24.04
     concurrency:
       group: dniv-runner-x64
-      queue: max
+      cancel-in-progress: false
+    env:
+      DNIV_SCRATCH_DIR: ${{ github.workspace }}/scratch/runtime/${{ github.run_id }}/${{ github.run_attempt }}/${{ github.job }}
     steps:
-      - name: Check out repository
+      - name: Check out exact repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Restore prior scratch artifacts
+        if: ${{ inputs.resume_run_id != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          path: ${{ github.workspace }}/scratch/restored/${{ inputs.resume_run_id }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.resume_run_id }}
+
+      - name: Initialize scratch state and verify SoP scans
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/scratch_state.py init --dir "$DNIV_SCRATCH_DIR" \
+            --workflow reference-baselines --job "$GITHUB_JOB" --arch x64 \
+            --source-sha "$GITHUB_SHA" --parent-run-id '${{ inputs.parent_run_id }}' \
+            --resume-run-id '${{ inputs.resume_run_id }}'
+          tools/workflow_sop.sh "$DNIV_SCRATCH_DIR" "$GITHUB_SHA" main
 
       - name: Install Python test dependencies
+        shell: bash
         run: |
-          sudo apt-get update
-          sudo apt-get install -y python3-venv libpcap-dev
+          set -euo pipefail
+          sudo apt-get update 2>&1 | tee "$DNIV_SCRATCH_DIR/apt-update.log"
+          sudo apt-get install -y python3-venv libpcap-dev 2>&1 | \
+            tee "$DNIV_SCRATCH_DIR/apt-install.log"
 
       - name: Run pinned PyDECnet fork unit suite
+        shell: bash
         run: |
-          set -eu
+          set -euo pipefail
           . tests/reference/refs.env
           work="$RUNNER_TEMP/pydecnet"
           git init "$work"
@@ -76,8 +171,45 @@ jobs:
           git -C "$work" fetch --depth=1 origin "$PYDECNET_TEST_REF"
           git -C "$work" checkout --detach FETCH_HEAD
           test "$(git -C "$work" rev-parse HEAD)" = "$PYDECNET_TEST_REF"
+          printf 'REFERENCE=pydecnet-tests\nREFERENCE_SHA=%s\n' "$PYDECNET_TEST_REF" > \
+            "$DNIV_SCRATCH_DIR/reference.env"
           python3 -m venv "$RUNNER_TEMP/pyvenv"
-          "$RUNNER_TEMP/pyvenv/bin/python" -m pip install --upgrade pip setuptools
-          "$RUNNER_TEMP/pyvenv/bin/python" -m pip install "$work/pydecnet"
+          "$RUNNER_TEMP/pyvenv/bin/python" -m pip install --upgrade pip setuptools 2>&1 | \
+            tee "$DNIV_SCRATCH_DIR/pip-bootstrap.log"
+          "$RUNNER_TEMP/pyvenv/bin/python" -m pip install "$work/pydecnet" 2>&1 | \
+            tee "$DNIV_SCRATCH_DIR/pip-install.log"
           cd "$work/pydecnet"
-          "$RUNNER_TEMP/pyvenv/bin/python" -m unittest discover -s tests -t . -p 'test_*.py'
+          "$RUNNER_TEMP/pyvenv/bin/python" -m unittest discover -s tests -t . -p 'test_*.py' 2>&1 | \
+            tee "$DNIV_SCRATCH_DIR/pydecnet-tests.log"
+
+      - name: Verify exact tree after reference tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          python3 tools/sop_scan.py --rev "$GITHUB_SHA" --pass-id final \
+            --baseline "$DNIV_SCRATCH_DIR/sop/pass-1.json" \
+            --output "$DNIV_SCRATCH_DIR/sop/final.json"
+          python3 tools/scratch_state.py verify --dir "$DNIV_SCRATCH_DIR"
+
+      - name: Record workflow result
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          if [[ -f "$DNIV_SCRATCH_DIR/state.json" ]]; then
+            python3 tools/scratch_state.py mark --dir "$DNIV_SCRATCH_DIR" \
+              --status '${{ job.status }}' --note 'PyDECnet baseline completed'
+          fi
+
+      - name: Preserve scratch state
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: scratch-reference-pydecnet-${{ github.run_id }}
+          path: ${{ env.DNIV_SCRATCH_DIR }}/
+          if-no-files-found: warn
+          retention-days: 90
+          compression-level: 0
+          overwrite: true

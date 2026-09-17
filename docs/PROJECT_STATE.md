@@ -14,7 +14,7 @@
 
 # Project State
 
-This is the authoritative continuity record for DECnet-IV-Linux. Read `docs/HANDOVER.md`, this file, `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, `docs/TEST_LAB.md` and `docs/PRE_PRODUCTION_TEST.md` before changing protocol, image or acceptance behavior. Commit history retains prior state records; this file describes the current tree.
+This is the authoritative continuity record for DECnet-IV-Linux. Read `docs/HANDOVER.md`, this file, `scratch/RESUME.md`, `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, `docs/TEST_LAB.md` and `docs/PRE_PRODUCTION_TEST.md` before changing protocol, image or acceptance behavior. Commit history retains prior state records; this file describes the current tree.
 
 ## Goal
 
@@ -50,12 +50,13 @@ Self-to-self success is never sufficient for final interoperability claims.
 ## Repository discipline
 
 - Perform substantive work directly on `main`; do not create or use feature branches for project work.
-- Every substantive commit updates this file in the same commit.
+- Every substantive commit updates both this file and `scratch/RESUME.md` in the same commit.
 - Acceptance applies only to the exact unchanged `main` commit that satisfies the required SoP and gates.
 - `tools/project_state_gate.py`, `tools/license_monkey.py` and `tools/repo_policy.py` enforce continuity, licensing/header and repository word policy.
 - Ordinary source/document pushes do not automatically consume hosted runners. Acceptance workflows are demand-driven; an owner-opened issue titled exactly `DNIV acceptance gates` is the controlled dispatcher after repository policy succeeds and the event revision still equals `main`.
 - Runner jobs share repository-wide x64 and arm64 concurrency slots and queue rather than replacing pending work.
-- Generated VM evidence remains under ignored `tests/lab/artifacts/` and workflow artifacts.
+- `scratch/` is the persistent workflow/review namespace. Tracked `scratch/RESUME.md` records the durable human checkpoint; mutable run state is written below ignored `scratch/runtime/`, uploaded as workflow artifacts, and restored below ignored `scratch/restored/` on later runner sessions.
+- Each workflow state records the exact source commit/tree, workflow/job/run/attempt, runner identity, parent/resume run identifiers, milestones, scan manifests, logs and applicable resumable evidence.
 
 ## SoP delivery rule
 
@@ -64,7 +65,7 @@ Self-to-self success is never sufficient for final interoperability claims.
 3. Delivery requires three consecutive clean complete Step-1 passes.
 4. Any later change resets the sequence.
 
-Automated tests, diffs, excerpts and previous reviews do not replace this rule.
+`tools/sop_scan.py` and `tools/workflow_sop.sh` verify that workflow jobs repeatedly read the complete tracked byte image of one exact commit/tree and that no tracked byte changes during a gate. Those machine scans are evidence of byte completeness and immutability; they do not replace the required semantic/manual SoP review. Automated tests, diffs, excerpts and previous reviews likewise do not replace the rule.
 
 ## Phase status
 
@@ -92,7 +93,7 @@ The E1 self-to-self harness covers L1 hello exchange, observable INIT/UP behavio
 
 The independent-peer harness boots candidate and reference in separate VMs on both native architectures. Route20 and PyDECnet cover Linux L1 router, L2 router and endnode roles against independent routers. PyDECnet additionally runs as an independent endnode against a Linux L1 router, closing the previously missing independent proof that Linux router-side endnode-hello parsing/admission works. The gate requires standard framing, protocol-derived source MACs, two-way router-list evidence where applicable, endnode hello test data, hardware-MAC change survival, protocol-unicast reception, hard peer loss/listen expiry, fresh-peer recovery and retained packet/serial evidence. The reference image never loads `decnet_iv`.
 
-Previous full-tree reviews fixed QEMU process-lifetime handling in the interop harness, sealed checkpoint metadata integrity, stale format-1 lab documentation and the missing independent endnode-to-Linux-router direction. The latest review then found a hosted repository-policy gap: on metadata/manual events where target resolution deliberately used the checked-out HEAD as both head and base, range scanning was empty and the HEAD commit object's message/author/committer metadata was not inspected. Tree content was inspected, but commit metadata could escape the hosted gate if local hooks were bypassed. The policy gate now scans HEAD commit metadata explicitly once before any additional range scan. This correction resets SoP; no earlier clean pass or acceptance evidence carries forward.
+Previous full-tree reviews fixed QEMU process-lifetime handling in the interop harness, sealed checkpoint metadata integrity, stale format-1 lab documentation, the missing independent endnode-to-Linux-router direction and hosted HEAD-metadata policy enforcement. The current repository change adds durable `scratch/` state/evidence handling and exact-tree scan verification to every acceptance workflow. Because workflow and continuity behavior changed, SoP is reset again; no earlier clean pass or acceptance evidence carries forward.
 
 ## Test addressing
 
@@ -104,8 +105,8 @@ Ordinary lab addressing is centralized in `tests/lab/test-addresses.env`: area 3
 
 ## Resume point
 
-The current `main` candidate combines the Phase 1/2 foundation, Phase 3 Ethernet initialization/adjacency implementation, self-to-self E1 harness, live two-VM Route20/PyDECnet interoperability in both router directions that their roles support, signed-snapshot certificate bootstrap, 4 GiB sparse image workspace, framing/filter/multicast/concurrency fixes, endnode test-data bound, repository policy, license/header enforcement, exact-QEMU-PID hard-stop testing, sealed format-2 resumable checkpoint metadata and hosted HEAD-metadata policy enforcement. The protocol phase remains Phase 3.
+The current `main` candidate combines the Phase 1/2 foundation, Phase 3 Ethernet initialization/adjacency implementation, self-to-self E1 harness, live two-VM Route20/PyDECnet interoperability in both router directions that their roles support, signed-snapshot certificate bootstrap, framing/filter/multicast/concurrency fixes, endnode test-data bound, repository policy, exact-QEMU-PID hard-stop testing, sealed format-2 VM checkpoints, hosted HEAD-metadata policy enforcement, and the repository-root `scratch/` persistence namespace. Acceptance workflows now record exact run/session lineage and evidence below `scratch/runtime/`, restore prior artifacts below `scratch/restored/`, and require three matching byte-complete exact-tree scans plus a final post-gate scan on the same candidate. The protocol phase remains Phase 3.
 
 ## Next action
 
-Restart the SoP sequence on the exact current `main` commit and require three consecutive clean complete full-repository passes. Then run exact-head repository policy/continuity, native x86_64/aarch64 build, pinned reference baselines, E1 self-to-self and live Route20/PyDECnet interoperability on both architectures. Accept only that unchanged `main` commit after every required Phase 3 gate is green. Any defect, evidence gap or later edit resets SoP. Phase 4 routing begins only after the Phase 3 gates are green.
+Restart the semantic/manual SoP sequence on the exact resulting `main` commit and require three consecutive clean complete full-repository passes. The workflow scan manifests must independently agree on the same commit/tree. Then run exact-head repository policy/continuity, native x86_64/aarch64 build, pinned reference baselines, E1 self-to-self and live Route20/PyDECnet interoperability on both architectures. Preserve each run's state and resumable evidence through `scratch/` artifacts. Accept only that unchanged `main` commit after every required Phase 3 gate is green. Any defect, evidence gap or later edit resets SoP. Phase 4 routing begins only after the Phase 3 gates are green.

@@ -16,13 +16,22 @@ name: Project State Gate
 
 on:
   workflow_dispatch:
+    inputs:
+      parent_run_id:
+        description: Parent acceptance workflow run ID; blank for direct dispatch
+        required: false
+        type: string
+      resume_run_id:
+        description: Prior state-gate run ID whose scratch artifacts should be restored
+        required: false
+        type: string
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  queue: max
   cancel-in-progress: false
 
 permissions:
+  actions: read
   contents: read
 
 jobs:
@@ -30,12 +39,67 @@ jobs:
     runs-on: ubuntu-latest
     concurrency:
       group: dniv-runner-x64
-      queue: max
+      cancel-in-progress: false
+    env:
+      DNIV_SCRATCH_DIR: ${{ github.workspace }}/scratch/runtime/${{ github.run_id }}/${{ github.run_attempt }}/${{ github.job }}
     steps:
-      - name: Check out repository
+      - name: Check out exact repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Verify continuity record
-        run: python3 tools/project_state_gate.py --head "$GITHUB_SHA"
+      - name: Restore prior scratch artifacts
+        if: ${{ inputs.resume_run_id != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          path: ${{ github.workspace }}/scratch/restored/${{ inputs.resume_run_id }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.resume_run_id }}
+
+      - name: Initialize scratch state and verify SoP scans
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/scratch_state.py init --dir "$DNIV_SCRATCH_DIR" \
+            --workflow project-state --job "$GITHUB_JOB" --source-sha "$GITHUB_SHA" \
+            --parent-run-id '${{ inputs.parent_run_id }}' \
+            --resume-run-id '${{ inputs.resume_run_id }}'
+          tools/workflow_sop.sh "$DNIV_SCRATCH_DIR" "$GITHUB_SHA" main
+
+      - name: Verify durable continuity records
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/project_state_gate.py --head "$GITHUB_SHA" 2>&1 | \
+            tee "$DNIV_SCRATCH_DIR/project-state-gate.log"
+
+      - name: Verify exact tree after gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/sop_scan.py --rev "$GITHUB_SHA" --pass-id final \
+            --baseline "$DNIV_SCRATCH_DIR/sop/pass-1.json" \
+            --output "$DNIV_SCRATCH_DIR/sop/final.json"
+          python3 tools/scratch_state.py verify --dir "$DNIV_SCRATCH_DIR"
+
+      - name: Record workflow result
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f "$DNIV_SCRATCH_DIR/state.json" ]]; then
+            python3 tools/scratch_state.py mark --dir "$DNIV_SCRATCH_DIR" \
+              --status '${{ job.status }}' --note 'project-state workflow completed'
+          fi
+
+      - name: Preserve scratch state
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: scratch-project-state-${{ github.run_id }}
+          path: ${{ env.DNIV_SCRATCH_DIR }}/
+          if-no-files-found: warn
+          retention-days: 90
+          compression-level: 0
+          overwrite: true

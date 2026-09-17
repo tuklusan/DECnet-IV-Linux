@@ -16,13 +16,22 @@ name: Phase 3 Independent Interoperability
 
 on:
   workflow_dispatch:
+    inputs:
+      parent_run_id:
+        description: Parent acceptance workflow run ID; blank for direct dispatch
+        required: false
+        type: string
+      resume_run_id:
+        description: Prior interoperability run ID whose scratch artifacts should be restored
+        required: false
+        type: string
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  queue: max
   cancel-in-progress: false
 
 permissions:
+  actions: read
   contents: read
 
 jobs:
@@ -43,18 +52,43 @@ jobs:
     runs-on: ${{ matrix.runner }}
     concurrency:
       group: dniv-runner-${{ matrix.slot }}
-      queue: max
+      cancel-in-progress: false
     timeout-minutes: 75
     env:
-      DNIV_INTEROP_ARTIFACTS: ${{ github.workspace }}/tests/lab/artifacts
+      DNIV_SCRATCH_DIR: ${{ github.workspace }}/scratch/runtime/${{ github.run_id }}/${{ github.run_attempt }}/${{ github.job }}-${{ matrix.arch }}
     steps:
-      - name: Check out repository
+      - name: Check out exact repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Restore prior scratch artifacts
+        if: ${{ inputs.resume_run_id != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          path: ${{ github.workspace }}/scratch/restored/${{ inputs.resume_run_id }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.resume_run_id }}
+
+      - name: Initialize scratch state and verify SoP scans
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/scratch_state.py init --dir "$DNIV_SCRATCH_DIR" \
+            --workflow interop --job "$GITHUB_JOB" --arch '${{ matrix.arch }}' \
+            --source-sha "$GITHUB_SHA" --parent-run-id '${{ inputs.parent_run_id }}' \
+            --resume-run-id '${{ inputs.resume_run_id }}'
+          tools/workflow_sop.sh "$DNIV_SCRATCH_DIR" "$GITHUB_SHA" main
+          echo "DNIV_INTEROP_ARTIFACTS=$DNIV_SCRATCH_DIR/interop" >> "$GITHUB_ENV"
 
       - name: Install host tools
+        shell: bash
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ${{ matrix.qemu }} qemu-utils e2fsprogs tcpdump curl build-essential libpcap-dev
+          set -euo pipefail
+          sudo apt-get update 2>&1 | tee "$DNIV_SCRATCH_DIR/apt-update.log"
+          sudo apt-get install -y ${{ matrix.qemu }} qemu-utils e2fsprogs tcpdump curl build-essential libpcap-dev 2>&1 | \
+            tee "$DNIV_SCRATCH_DIR/apt-install.log"
 
       - name: Download and verify pinned Ubuntu Base rootfs
         shell: bash
@@ -70,18 +104,24 @@ jobs:
           fi
           curl -fL "$UBUNTU_BASE_URL/$file" -o "$RUNNER_TEMP/$file"
           echo "$sha  $RUNNER_TEMP/$file" | sha256sum -c -
+          printf 'UBUNTU_BASE_FILE=%s\nUBUNTU_BASE_SHA256=%s\n' "$file" "$sha" > \
+            "$DNIV_SCRATCH_DIR/base-image.env"
           echo "UBUNTU_BASE_TARBALL=$RUNNER_TEMP/$file" >> "$GITHUB_ENV"
 
       - name: Build exact candidate image and peer images
+        shell: bash
         run: |
           set -euo pipefail
           sudo -v
           image/ubuntu-base/build-image.sh '${{ matrix.arch }}' "$UBUNTU_BASE_TARBALL" \
-            "$RUNNER_TEMP/base-${{ matrix.arch }}.qcow2" "$RUNNER_TEMP/boot-${{ matrix.arch }}"
+            "$RUNNER_TEMP/base-${{ matrix.arch }}.qcow2" "$RUNNER_TEMP/boot-${{ matrix.arch }}" 2>&1 | \
+            tee "$DNIV_SCRATCH_DIR/build-image.log"
           tests/lab/prepare-interop-candidate.sh \
-            "$RUNNER_TEMP/base-${{ matrix.arch }}.qcow2" "$RUNNER_TEMP/candidate-${{ matrix.arch }}.qcow2"
+            "$RUNNER_TEMP/base-${{ matrix.arch }}.qcow2" "$RUNNER_TEMP/candidate-${{ matrix.arch }}.qcow2" 2>&1 | \
+            tee "$DNIV_SCRATCH_DIR/prepare-candidate.log"
           tests/lab/prepare-reference-image.sh \
-            "$RUNNER_TEMP/base-${{ matrix.arch }}.qcow2" "$RUNNER_TEMP/reference-${{ matrix.arch }}.qcow2"
+            "$RUNNER_TEMP/base-${{ matrix.arch }}.qcow2" "$RUNNER_TEMP/reference-${{ matrix.arch }}.qcow2" 2>&1 | \
+            tee "$DNIV_SCRATCH_DIR/prepare-reference.log"
           echo "DNIV_CANDIDATE_IMAGE=$RUNNER_TEMP/candidate-${{ matrix.arch }}.qcow2" >> "$GITHUB_ENV"
           echo "DNIV_REFERENCE_IMAGE=$RUNNER_TEMP/reference-${{ matrix.arch }}.qcow2" >> "$GITHUB_ENV"
           echo "DNIV_KERNEL=$RUNNER_TEMP/boot-${{ matrix.arch }}/vmlinuz" >> "$GITHUB_ENV"
@@ -99,7 +139,7 @@ jobs:
           git -C "$route_work" fetch --depth=1 origin "$ROUTE20_REF"
           git -C "$route_work" checkout --detach FETCH_HEAD
           test "$(git -C "$route_work" rev-parse HEAD)" = "$ROUTE20_REF"
-          make -C "$route_work/Route20"
+          make -C "$route_work/Route20" 2>&1 | tee "$DNIV_SCRATCH_DIR/route20-build.log"
           route_bundle="$RUNNER_TEMP/bundle-route20"
           mkdir -p "$route_bundle"
           cp "$route_work/Route20/route20" "$route_bundle/route20"
@@ -117,6 +157,8 @@ jobs:
           git -C "$py_work" archive --format=tar --output="$py_bundle/pydecnet.tar" HEAD pydecnet
           printf 'REFERENCE=pydecnet\nREFERENCE_SHA=%s\n' "$PYDECNET_REF" > "$py_bundle/manifest.env"
           (cd "$py_bundle" && sha256sum pydecnet.tar > SHA256SUMS)
+          printf 'ROUTE20_REF=%s\nPYDECNET_REF=%s\n' "$ROUTE20_REF" "$PYDECNET_REF" > \
+            "$DNIV_SCRATCH_DIR/references.env"
 
       - name: Run Route20 and PyDECnet live Phase 3 matrix
         shell: bash
@@ -129,20 +171,44 @@ jobs:
             fi
             bundle="$RUNNER_TEMP/bundle-$reference"
             for scenario in $scenarios; do
-              DNIV_INTEROP_SESSION_ID="run-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${{ matrix.arch }}-${reference}-${scenario}" \
-                tests/lab/run-interop.sh \
-                  "$DNIV_CANDIDATE_IMAGE" "$DNIV_REFERENCE_IMAGE" \
-                  "$DNIV_KERNEL" "$DNIV_INITRD" "$reference" "$bundle" "$scenario"
+              session="run-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${{ matrix.arch }}-${reference}-${scenario}"
+              printf '%s %s %s\n' "$reference" "$scenario" "$session" >> \
+                "$DNIV_SCRATCH_DIR/sessions.tsv"
+              DNIV_INTEROP_SESSION_ID="$session" tests/lab/run-interop.sh \
+                "$DNIV_CANDIDATE_IMAGE" "$DNIV_REFERENCE_IMAGE" \
+                "$DNIV_KERNEL" "$DNIV_INITRD" "$reference" "$bundle" "$scenario" 2>&1 | \
+                tee "$DNIV_SCRATCH_DIR/interop-${reference}-${scenario}.log"
             done
           done
+          python3 tools/scratch_state.py mark --dir "$DNIV_SCRATCH_DIR" \
+            --status interop-matrix-green --note 'all independent Phase 3 scenarios passed'
 
-      - name: Retain interoperability evidence
+      - name: Verify exact tree after interoperability gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/sop_scan.py --rev "$GITHUB_SHA" --pass-id final \
+            --baseline "$DNIV_SCRATCH_DIR/sop/pass-1.json" \
+            --output "$DNIV_SCRATCH_DIR/sop/final.json"
+          python3 tools/scratch_state.py verify --dir "$DNIV_SCRATCH_DIR"
+
+      - name: Record workflow result
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f "$DNIV_SCRATCH_DIR/state.json" ]]; then
+            python3 tools/scratch_state.py mark --dir "$DNIV_SCRATCH_DIR" \
+              --status '${{ job.status }}' --note 'interoperability workflow completed'
+          fi
+
+      - name: Preserve scratch state and interoperability evidence
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: phase3-interop-${{ matrix.arch }}-${{ github.run_id }}
-          path: ${{ env.DNIV_INTEROP_ARTIFACTS }}/
+          name: scratch-interop-${{ matrix.arch }}-${{ github.run_id }}
+          path: ${{ env.DNIV_SCRATCH_DIR }}/
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 90
           compression-level: 0
           overwrite: true

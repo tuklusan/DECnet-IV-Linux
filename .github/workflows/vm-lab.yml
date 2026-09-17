@@ -25,14 +25,17 @@ on:
         options:
           - phase2
           - e1
+      parent_run_id:
+        description: Parent acceptance workflow run ID; blank for direct dispatch
+        required: false
+        type: string
       resume_run_id:
-        description: Prior Two-Node VM Lab run ID to resume; blank starts fresh
+        description: Prior Two-Node VM Lab run ID to restore from scratch artifacts
         required: false
         type: string
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  queue: max
   cancel-in-progress: false
 
 permissions:
@@ -57,12 +60,12 @@ jobs:
     runs-on: ${{ matrix.runner }}
     concurrency:
       group: dniv-runner-${{ matrix.slot }}
-      queue: max
+      cancel-in-progress: false
     timeout-minutes: 40
     env:
+      DNIV_SCRATCH_DIR: ${{ github.workspace }}/scratch/runtime/${{ github.run_id }}/${{ github.run_attempt }}/${{ github.job }}-${{ matrix.arch }}
       DNIV_LAB_MODE: ${{ inputs.lab_mode }}
       DNIV_LAB_TIMEOUT_SECONDS: 300
-      DNIV_LAB_ARTIFACTS: ${{ github.workspace }}/tests/lab/artifacts
       DNIV_LAB_SESSION_ID: run-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.arch }}-${{ inputs.lab_mode }}
       DNIV_LAB_ARCH: ${{ matrix.arch }}
       DNIV_LAB_SOURCE_SHA: ${{ github.sha }}
@@ -70,31 +73,55 @@ jobs:
       DNIV_LAB_SOURCE_RUN_ATTEMPT: ${{ github.run_attempt }}
       DNIV_LAB_RESUME_RUN_ID: ${{ inputs.resume_run_id }}
     steps:
-      - name: Check out repository
+      - name: Check out exact repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Install host tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ${{ matrix.qemu }} qemu-utils e2fsprogs tcpdump curl
-
-      - name: Restore prior VM state
+      - name: Restore prior scratch artifacts
         if: ${{ inputs.resume_run_id != '' }}
         uses: actions/download-artifact@v4
         with:
-          name: two-node-state-${{ matrix.arch }}-${{ inputs.resume_run_id }}
-          path: ${{ runner.temp }}/resume-${{ matrix.arch }}
+          path: ${{ github.workspace }}/scratch/restored/${{ inputs.resume_run_id }}
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
           run-id: ${{ inputs.resume_run_id }}
+
+      - name: Initialize scratch state and verify SoP scans
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/scratch_state.py init --dir "$DNIV_SCRATCH_DIR" \
+            --workflow vm-lab --job "$GITHUB_JOB" --arch '${{ matrix.arch }}' \
+            --mode '${{ inputs.lab_mode }}' --source-sha "$GITHUB_SHA" \
+            --parent-run-id '${{ inputs.parent_run_id }}' \
+            --resume-run-id '${{ inputs.resume_run_id }}'
+          tools/workflow_sop.sh "$DNIV_SCRATCH_DIR" "$GITHUB_SHA" main
+          echo "DNIV_LAB_ARTIFACTS=$DNIV_SCRATCH_DIR/lab" >> "$GITHUB_ENV"
+
+      - name: Install host tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update 2>&1 | tee "$DNIV_SCRATCH_DIR/apt-update.log"
+          sudo apt-get install -y ${{ matrix.qemu }} qemu-utils e2fsprogs tcpdump curl 2>&1 | \
+            tee "$DNIV_SCRATCH_DIR/apt-install.log"
 
       - name: Verify restored VM state
         if: ${{ inputs.resume_run_id != '' }}
         shell: bash
         run: |
           set -euo pipefail
-          state="$RUNNER_TEMP/resume-${{ matrix.arch }}/checkpoint"
-          test -f "$state/session.env"
+          restore_root="$GITHUB_WORKSPACE/scratch/restored/${{ inputs.resume_run_id }}"
+          session_file=
+          while IFS= read -r candidate; do
+            if grep -Fxq 'ARCH=${{ matrix.arch }}' "$candidate"; then
+              session_file=$candidate
+              break
+            fi
+          done < <(find "$restore_root" -type f -path '*/checkpoint/session.env' -print)
+          test -n "$session_file"
+          state=$(dirname "$session_file")
           test -f "$state/SHA256SUMS"
           grep -Fx 'FORMAT=2' "$state/session.env"
           grep -Fx 'ARCH=${{ matrix.arch }}' "$state/session.env"
@@ -104,10 +131,13 @@ jobs:
           (cd "$state" && sha256sum -c SHA256SUMS)
           qemu-img check -q -f qcow2 "$state/node-a.qcow2"
           qemu-img check -q -f qcow2 "$state/node-b.qcow2"
+          printf 'RESTORED_CHECKPOINT=%s\n' "$state" > "$DNIV_SCRATCH_DIR/resume.env"
           echo "DNIV_LAB_RESUME_DIR=$state" >> "$GITHUB_ENV"
           echo "DNIV_LAB_BASE=$state/base.qcow2" >> "$GITHUB_ENV"
           echo "DNIV_LAB_KERNEL=$state/vmlinuz" >> "$GITHUB_ENV"
           echo "DNIV_LAB_INITRD=$state/initrd.img" >> "$GITHUB_ENV"
+          python3 tools/scratch_state.py mark --dir "$DNIV_SCRATCH_DIR" \
+            --status restored --note "restored checkpoint from run ${{ inputs.resume_run_id }}"
 
       - name: Download and verify pinned Ubuntu Base rootfs
         if: ${{ inputs.resume_run_id == '' }}
@@ -124,21 +154,29 @@ jobs:
           fi
           curl -fL "$UBUNTU_BASE_URL/$file" -o "$RUNNER_TEMP/$file"
           echo "$sha  $RUNNER_TEMP/$file" | sha256sum -c -
+          printf 'UBUNTU_BASE_FILE=%s\nUBUNTU_BASE_SHA256=%s\n' "$file" "$sha" > \
+            "$DNIV_SCRATCH_DIR/base-image.env"
           echo "UBUNTU_BASE_TARBALL=$RUNNER_TEMP/$file" >> "$GITHUB_ENV"
 
       - name: Build minimal DECnet test image
         if: ${{ inputs.resume_run_id == '' }}
+        shell: bash
         run: |
+          set -euo pipefail
           sudo -v
           image/ubuntu-base/build-image.sh '${{ matrix.arch }}' "$UBUNTU_BASE_TARBALL" \
-            "$RUNNER_TEMP/dniv-${{ matrix.arch }}.qcow2" "$RUNNER_TEMP/boot-${{ matrix.arch }}"
+            "$RUNNER_TEMP/dniv-${{ matrix.arch }}.qcow2" "$RUNNER_TEMP/boot-${{ matrix.arch }}" 2>&1 | \
+            tee "$DNIV_SCRATCH_DIR/build-image.log"
           echo "DNIV_LAB_BASE=$RUNNER_TEMP/dniv-${{ matrix.arch }}.qcow2" >> "$GITHUB_ENV"
           echo "DNIV_LAB_KERNEL=$RUNNER_TEMP/boot-${{ matrix.arch }}/vmlinuz" >> "$GITHUB_ENV"
           echo "DNIV_LAB_INITRD=$RUNNER_TEMP/boot-${{ matrix.arch }}/initrd.img" >> "$GITHUB_ENV"
 
       - name: Boot two independent nodes and run selected DECnet gate
+        shell: bash
         run: |
-          tests/lab/run-two-node.sh "$DNIV_LAB_BASE" "$DNIV_LAB_KERNEL" "$DNIV_LAB_INITRD"
+          set -euo pipefail
+          tests/lab/run-two-node.sh "$DNIV_LAB_BASE" "$DNIV_LAB_KERNEL" "$DNIV_LAB_INITRD" 2>&1 | \
+            tee "$DNIV_SCRATCH_DIR/two-node.log"
 
       - name: Seal resumable checkpoint metadata
         shell: bash
@@ -154,14 +192,37 @@ jobs:
             sha256sum base.qcow2 node-a.qcow2 node-b.qcow2 vmlinuz initrd.img session.env > SHA256SUMS
             sha256sum -c SHA256SUMS
           )
+          python3 tools/scratch_state.py set --dir "$DNIV_SCRATCH_DIR" \
+            --key checkpoint --value "$checkpoint"
+          python3 tools/scratch_state.py mark --dir "$DNIV_SCRATCH_DIR" \
+            --status checkpoint-sealed --note 'format-2 checkpoint verified'
 
-      - name: Retain resumable VM state and evidence
+      - name: Verify exact tree after VM gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/sop_scan.py --rev "$GITHUB_SHA" --pass-id final \
+            --baseline "$DNIV_SCRATCH_DIR/sop/pass-1.json" \
+            --output "$DNIV_SCRATCH_DIR/sop/final.json"
+          python3 tools/scratch_state.py verify --dir "$DNIV_SCRATCH_DIR"
+
+      - name: Record workflow result
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f "$DNIV_SCRATCH_DIR/state.json" ]]; then
+            python3 tools/scratch_state.py mark --dir "$DNIV_SCRATCH_DIR" \
+              --status '${{ job.status }}' --note 'two-node VM workflow completed'
+          fi
+
+      - name: Preserve scratch state and resumable evidence
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: two-node-state-${{ matrix.arch }}-${{ github.run_id }}
-          path: ${{ env.DNIV_LAB_ARTIFACTS }}/${{ env.DNIV_LAB_SESSION_ID }}/
+          name: scratch-vm-lab-${{ matrix.arch }}-${{ github.run_id }}
+          path: ${{ env.DNIV_SCRATCH_DIR }}/
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 90
           compression-level: 0
           overwrite: true
