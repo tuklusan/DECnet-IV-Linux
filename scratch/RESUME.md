@@ -30,7 +30,9 @@ Candidate `c33241a984b6f1c61c0a7aa83b89945dd60a4fb6` switches base and derived a
 
 Commit `f18465c08fd5c6fe2fb72a12875781a3c874bff3` accidentally created an empty top-level `NONEXISTENT` path during repository tooling; candidate `c33241a984b6f1c61c0a7aa83b89945dd60a4fb6` deleted it. A later unintended non-main ref triggered repository cleanup run `35219630482`. The cleanup step successfully deleted every non-main ref and confirmed only `refs/heads/main` remained, but its verification step failed because `workflow_sop.sh ... main` rejected the create-event `GITHUB_REF` even though the job had checked out exact current `main`. Candidate `57f123d43760554a333772755da9d196c6444614` added a dedicated `maintenance` scope, changed cleanup to use it, and added regression coverage so maintenance still verifies exact remote main while acceptance-only ref checks remain confined to `main` scope.
 
-The first complete-tree review of `57f123d43760554a333772755da9d196c6444614` found stale continuity and SoP text. `docs/TEST_LAB.md` still claimed three automatic pre-work exact-tree scans, while current workflows record one bounded baseline plus a matching final manifest. It also claimed the Repository Policy workflow did not run on `create`, although non-main branch creation intentionally triggers automatic cleanup. `docs/HANDOVER.md` and `docs/PROJECT_STATE.md` still described the semantic/manual SoP as diff-scoped rather than complete-tree. The current candidate corrects all three records, so the complete clean-pass count is reset to zero again.
+The first complete-tree review of `57f123d43760554a333772755da9d196c6444614` found stale continuity and SoP text. `docs/TEST_LAB.md` still claimed three automatic pre-work exact-tree scans, while current workflows record one bounded baseline plus a matching final manifest. It also claimed the Repository Policy workflow did not run on `create`, although non-main branch creation intentionally triggers automatic cleanup. `docs/HANDOVER.md` and `docs/PROJECT_STATE.md` still described the semantic/manual SoP as diff-scoped rather than complete-tree. Candidate `c71bc79a176bbac367a910567160e8809283c051` corrected those records.
+
+The first complete-tree pass on `c71bc79a176bbac367a910567160e8809283c051` found the same obsolete machine-scan description in `scratch/README.md`, which still claimed three automatic complete scans and a three-scan `workflow_sop.sh` gate. The current candidate corrects the scratch workspace contract to describe the actual bounded baseline/final machine checks while preserving the separate three-pass complete semantic/manual delivery SoP. That correction resets the complete clean-pass count to zero again.
 
 Repository branch policy is active and the live remote branch invariant is only `refs/heads/main`. Cleanup run `35219630482` is the latest cleanup attempt: branch deletion succeeded, post-delete SoP verification exposed the maintenance-scope bug that is now corrected. GitHub-owned actions remain pinned to immutable full SHAs.
 
@@ -49,7 +51,7 @@ Repository branch policy is active and the live remote branch invariant is only 
 | Clean complete semantic/manual passes on this candidate | 0 |
 | Routine workflow scan requirement | one bounded baseline diff manifest plus matching final diff manifest |
 | Explicit machine full-tree scan | `tools/sop_scan.py --full-tree` |
-| Phase 3 acceptance | image and maintenance corrections applied; continuity/SoP text correction pending fresh complete passes and exact-head gates |
+| Phase 3 acceptance | image and maintenance corrections applied; scratch continuity correction pending fresh complete passes and exact-head gates |
 | Latest acceptance parent | `35195064164` |
 | Latest E1 VM run | `35195101815`, failure during base-image build |
 | Latest interoperability run | `35195103898`, failure during base-image build |

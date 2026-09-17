@@ -79,7 +79,9 @@ Candidate `c33241a984b6f1c61c0a7aa83b89945dd60a4fb6` corrects both deeper image-
 
 Commit `f18465c08fd5c6fe2fb72a12875781a3c874bff3` accidentally created an empty top-level `NONEXISTENT` path during repository tooling. Candidate `c33241a984b6f1c61c0a7aa83b89945dd60a4fb6` deleted that path and no acceptance result was associated with the accidental state. A subsequent unintended non-main ref was automatically deleted by cleanup run `35219630482`; deletion and the one-branch invariant succeeded, but the cleanup job then exposed a workflow contradiction: `workflow_sop.sh` treated its `main` scope as acceptance-only and rejected the immutable create-event `GITHUB_REF` even after checkout had switched to the exact current `main` tree. Candidate `57f123d43760554a333772755da9d196c6444614` added an explicit maintenance scope that verifies current remote `main` without requiring acceptance-event ref metadata, and the branch-policy regression test requires the cleanup workflow to use it.
 
-The first complete-tree review of `57f123d43760554a333772755da9d196c6444614` found stale continuity/policy text. `docs/TEST_LAB.md` still described three automatic pre-work exact-tree scans although current workflows use one bounded baseline plus a matching final manifest, and it claimed the repository workflow did not run on `create` even though non-main branch creation deliberately triggers automatic cleanup. `docs/HANDOVER.md` and this file also still described the semantic/manual SoP as diff-scoped, conflicting with the governing complete-tree rule. The current candidate corrects all of those statements. That documentation/policy correction resets all clean-pass and acceptance evidence again.
+The first complete-tree review of `57f123d43760554a333772755da9d196c6444614` found stale continuity/policy text. `docs/TEST_LAB.md` still described three automatic pre-work exact-tree scans although current workflows use one bounded baseline plus a matching final manifest, and it claimed the repository workflow did not run on `create` even though non-main branch creation deliberately triggers automatic cleanup. `docs/HANDOVER.md` and `docs/PROJECT_STATE.md` also still described the semantic/manual SoP as diff-scoped, conflicting with the governing complete-tree rule. Candidate `c71bc79a176bbac367a910567160e8809283c051` corrected those statements.
+
+The first complete-tree pass on `c71bc79a176bbac367a910567160e8809283c051` then found the same obsolete machine-scan description in `scratch/README.md`, which still claimed three automatic complete scans and a three-scan `workflow_sop.sh` gate. The current candidate corrects the scratch workspace contract to describe the actual bounded baseline/final machine checks while preserving the separate three-pass complete semantic/manual delivery SoP. That correction resets all clean-pass and acceptance evidence again.
 
 ## Test addressing
 
@@ -91,7 +93,7 @@ Ordinary lab addressing remains area 31, nodes 70 through 79, names DN70 through
 
 ## Resume point
 
-Phase 3 remains active. The image-path and branch-cleanup maintenance corrections are on `main`, but the subsequent complete-tree review found and corrected stale test-lab and SoP continuity text. No clean pass carries forward. The pass count starts at zero on the exact current candidate.
+Phase 3 remains active. Image-path and branch-cleanup maintenance corrections are on `main`; subsequent complete-tree review found and corrected stale SoP/workflow continuity text in the durable documentation and scratch contract. No clean pass carries forward. The pass count starts at zero on the exact current candidate.
 
 ## Next action
 
