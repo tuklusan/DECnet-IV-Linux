@@ -33,8 +33,17 @@ def one(pattern: str, text: str, label: str) -> int:
     return int(matches[0])
 
 
+def uniform(pattern: str, text: str, label: str) -> int:
+    matches = [int(value) for value in re.findall(pattern, text, re.MULTILINE)]
+    if not matches:
+        raise SystemExit(f"e1-silence regression: {label}: no matches")
+    if len(set(matches)) != 1:
+        raise SystemExit(f"e1-silence regression: {label}: values disagree: {matches}")
+    return matches[0]
+
+
 def main() -> int:
-    hello_seconds = one(
+    hello_seconds = uniform(
         r"default_node_type=2 router_priority=64 hello_interval=(\d+)",
         SMOKE,
         "router hello interval",

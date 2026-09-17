@@ -40,7 +40,7 @@ The VM controller budget is therefore architecture-specific: amd64 stays at 300 
 
 Acceptance run `35266940092` on `31fc8e00d1c46ffd5cc74c6663c287753a0b7e5d` proved the ARM64 guests themselves are green: both delivered unicast `delta=40`, DN70 expired DN71, restart INIT and recovery occurred, and both emitted `DNIV-E1-PASS`; amd64 E1 passed. ARM64 failed only because host PCAP saw one DN70 All-End-Nodes hello. The test intended DN71 silence to exceed listener expiry but remain below DR eligibility; with hello interval 2s, 3.1x listen expiry is 6.2s and the 5s DR delay makes eligibility 11.2s, so the old 12s silence violated the test's own negative assertion.
 
-The silence window is corrected to 7s and a workflow-guard regression reads the actual hello interval, 3.1x multiplier and DR-delay constant and enforces `expiry < silence < DR eligibility`. The old 12s value fails this regression.
+The silence window is corrected to 7s and a workflow-guard regression reads the actual hello interval, 3.1x multiplier and DR-delay constant and enforces `expiry < silence < DR eligibility`. The old 12s value fails this regression. Acceptance parent `35285482332` ran the updated license scanner successfully and reached this regression; it failed only because the first regression version required one router interval occurrence even though the smoke script has two valid, equal `hello_interval=2` load sites. The regression now accepts repeated equal values and rejects disagreement.
 
 Repository license validation now excludes `__pycache__` and `.git` directories in the Git enumeration command itself for both exact-tree and staged scans, at any depth, so generated caches and repository metadata never reach the validator.
 
