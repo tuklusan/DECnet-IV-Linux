@@ -13,16 +13,31 @@
 # patent, trademark, and governing-law provisions.
 # ============================================================================
 
-"""Regression checks for direct-boot image kernel/initrd construction."""
+"""Gate direct-boot image kernel/initrd construction from an exact source."""
 
 from __future__ import annotations
 
+import argparse
+import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-BUILDER = ROOT / "image" / "ubuntu-base" / "build-image.sh"
+BUILDER = "image/ubuntu-base/build-image.sh"
 INSTALL_PREFIX = 'apt-get --snapshot "$UBUNTU_APT_SNAPSHOT" install -y --no-install-recommends'
 INITRD_CHECK = 'test -s "/boot/initrd.img-$krel"'
+
+
+def git(*args: str) -> str:
+    return subprocess.check_output(("git", *args), text=True).strip()
+
+
+def read_builder(staged: bool, tree: str | None) -> tuple[str, str]:
+    if staged:
+        return subprocess.check_output(("git", "show", ":" + BUILDER), text=True), "staged index"
+    if tree:
+        commit = git("rev-parse", "--verify", tree + "^{commit}")
+        return subprocess.check_output(("git", "show", f"{commit}:{BUILDER}"), text=True), commit
+    return (ROOT / BUILDER).read_text(encoding="utf-8"), "working tree"
 
 
 def install_tokens(text: str) -> set[str]:
@@ -41,7 +56,17 @@ def install_tokens(text: str) -> set[str]:
 
 
 def main() -> int:
-    text = BUILDER.read_text(encoding="utf-8")
+    parser = argparse.ArgumentParser()
+    source = parser.add_mutually_exclusive_group()
+    source.add_argument("--staged", action="store_true")
+    source.add_argument("--tree")
+    args = parser.parse_args()
+
+    try:
+        text, source_label = read_builder(args.staged, args.tree)
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise SystemExit(f"image-builder gate: cannot read exact source: {exc}") from exc
+
     packages = install_tokens(text)
     required = {
         "initramfs-tools",
@@ -58,7 +83,10 @@ def main() -> int:
         raise SystemExit(
             "image-builder gate: generated initrd is not checked before build cleanup"
         )
-    print("image-builder gate: explicit initramfs generation safeguards verified")
+    print(
+        "image-builder gate: source=" + source_label
+        + " explicit initramfs generation safeguards verified"
+    )
     return 0
 
 

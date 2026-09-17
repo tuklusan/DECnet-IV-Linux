@@ -15,6 +15,6 @@
 
 python3 tools/license_monkey.py --staged || exit $?
 python3 tools/workflow_budget_gate.py --staged || exit $?
-python3 tests/policy/test_image_builder_gate.py || exit $?
+python3 tests/policy/test_image_builder_gate.py --staged || exit $?
 python3 tools/repo_policy.py --staged || exit $?
 exec python3 tools/project_state_gate.py --staged
