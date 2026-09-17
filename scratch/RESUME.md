@@ -22,11 +22,13 @@ Hosted-runner lifetime and storage policy is machine-enforced. Every workflow jo
 
 Acceptance fan-out is bound to one immutable candidate. The owner acceptance dispatcher passes both its run ID and exact `GITHUB_SHA` to every child. `tools/scratch_state.py` rejects a child with a parent run ID unless an expected SHA is also supplied, resolves that SHA to a commit, and refuses initialization unless it equals the child's actual source commit. `state.json` retains both the source and expected SHA for later audit. If `main` moves during dispatch or before a queued child starts, the child fails instead of silently testing a different candidate.
 
-Repository branch policy is active and the remote invariant is now satisfied. Project work must be on local `main`; pre-push rejects creation/update of any non-main branch and rejects deletion of `main`, while permitting cleanup deletion of obsolete non-main refs. Acceptance policy inspects remote heads and requires `refs/heads/main` to be the only branch. Cleanup run `35179252422` removed the legacy refs, verified only `main` remained, ran the exact-main workflow SoP machinery, and completed successfully. A future non-main branch creation event enters the same cleanup path automatically.
+Candidate `a57f44a2400bbf1fce7cc411489d51182c9ccd95` completed three semantic/manual SoP passes, then exact acceptance parent `35181684059` exposed an arm64 image-construction defect in child VM run `35181712924`: the kernel installed, but no initrd was generated because image package installation used `--no-install-recommends` without explicitly installing `initramfs-tools`. The current candidate explicitly installs `initramfs-tools`, asserts `/boot/initrd.img-$krel` before cleanup, and runs `tests/policy/test_image_builder_gate.py` from both pre-commit and workflow SoP. This fix resets semantic SoP and invalidates all acceptance evidence from the prior candidate.
+
+Repository branch policy is active and the remote invariant is satisfied. Project work must be on local `main`; pre-push rejects creation/update of any non-main branch and rejects deletion of `main`, while permitting cleanup deletion of obsolete non-main refs. Acceptance policy inspects remote heads and requires `refs/heads/main` to be the only branch. Cleanup run `35179252422` removed the legacy refs, verified only `main` remained, ran the exact-main workflow SoP machinery, and completed successfully. A future non-main branch creation event enters the same cleanup path automatically.
 
 The first cleanup canary, run `35179022863`, failed before deleting any ref because the workflow attempted to write `maintenance.env` before creating its scratch directory. The corrected run `35179252422` passed after that initialization-order fix. Both runs are diagnostic history; the correction and subsequent continuity update reset semantic SoP.
 
-GitHub-owned workflow actions are pinned to immutable full commit SHAs: checkout v4.4.0 `11d5960a326750d5838078e36cf38b85af677262`, upload-artifact v4.6.2 `ea165f8d65b6e75b540449e92b4886f43607fa02`, and download-artifact v4.3.0 `d3f86a106a0bac45b974a628896c90dbdf5c8093`. `tools/workflow_budget_gate.py` enforces these pins together with `queue: max`, the 75-minute ceiling, retention limits, expected-SHA inputs and the maximum-two-scenario interoperability rows. Regression tests cover exact staged/committed workflow sources, queueing, action pins, scenario bounds and branch-update policy.
+GitHub-owned workflow actions are pinned to immutable full commit SHAs: checkout v4.4.0 `11d5960a326750d5838078e36cf38b85af677262`, upload-artifact v4.6.2 `ea165f8d65b6e75b540449e92b4886f43607fa02`, and download-artifact v4.3.0 `d3f86a106a0bac45b974a628896c90dbdf5c8093`. `tools/workflow_budget_gate.py` enforces these pins together with `queue: max`, the 75-minute ceiling, retention limits, expected-SHA inputs and the maximum-two-scenario interoperability rows. Regression tests cover exact staged/committed workflow sources, queueing, action pins, scenario bounds and branch-update policy. `tests/policy/test_image_builder_gate.py` additionally prevents direct-boot image construction from dropping its explicit initramfs generator or generated-initrd assertion.
 
 A run/session ID records lineage only. Hosted runner RAM, processes and live QEMU state do not survive job termination. Persistence exists only for explicitly uploaded and subsequently verified files. Two-node resume additionally requires the sealed format-2 checkpoint hashes, matching architecture, exact source revision and mode.
 
@@ -43,11 +45,11 @@ A run/session ID records lineage only. Hosted runner RAM, processes and live QEM
 | Acceptance child binding | parent run ID + exact expected SHA |
 | SoP clean semantic/manual passes on this candidate | 0 |
 | Byte-complete workflow scan requirement | 3 matching scans plus final post-gate scan |
-| Phase 3 acceptance | not yet dispatched for this candidate |
-| Latest acceptance parent run | none yet |
+| Phase 3 acceptance | prior candidate failed in arm64 image build; fresh dispatch required |
+| Latest acceptance parent run | `35181684059`, prior-candidate dispatch |
 | Latest branch-cleanup run | `35179252422`, success |
-| Latest resumable VM run | none yet |
-| Latest interoperability run | none yet |
+| Latest resumable VM run | `35181712924`, arm64 failed before checkpoint |
+| Latest interoperability run | `35181714307`, prior candidate; ineligible after fix |
 
 ## Persistent run index
 
@@ -57,4 +59,4 @@ The tracked table above is the durable human index. It is updated with `docs/PRO
 
 ## Next action
 
-Restart the complete semantic/manual SoP review on the exact resulting `main` candidate and require three consecutive clean full-repository passes. The workflow byte-scan manifests, branch-policy regression, continuity regression and workflow-budget/action-pin gate must agree on that same commit/tree. Then execute exact-head repository policy/continuity, native x86_64/aarch64 build, pinned reference baselines, E1 self-to-self, and the bounded live Route20/PyDECnet interoperability suites. Only after that unchanged Phase 3 candidate is green may Phase 4 kernel routing work begin.
+Restart the complete semantic/manual SoP review on this exact new `main` candidate and require three consecutive clean full-repository passes. The workflow byte-scan manifests, image-builder regression, branch-policy regression, continuity regression and workflow-budget/action-pin gate must agree on that same commit/tree. Then execute a fresh exact-head repository policy/continuity, native x86_64/aarch64 build, pinned reference baselines, E1 self-to-self, and bounded live Route20/PyDECnet interoperability suites. Only after that unchanged Phase 3 candidate is green may Phase 4 kernel routing work begin.
