@@ -13,7 +13,7 @@
 # patent, trademark, and governing-law provisions.
 # ============================================================================
 
-"""Regression tests for workflow duration and artifact-budget parsing."""
+"""Regression tests for workflow duration, storage and exact-source parsing."""
 
 from __future__ import annotations
 
@@ -72,15 +72,19 @@ jobs:
 """
 
 
-def invoke(root: Path) -> subprocess.CompletedProcess[str]:
+def run(root: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        (sys.executable, str(GATE)),
+        args,
         cwd=root,
-        check=False,
+        check=check,
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
+
+
+def invoke(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    return run(root, sys.executable, str(GATE), *args, check=False)
 
 
 def main() -> int:
@@ -91,22 +95,37 @@ def main() -> int:
         sample = workflows / "sample.yml"
         interop = workflows / "interop.yml"
 
+        run(root, "git", "init", "-q", "-b", "main")
+        run(root, "git", "config", "user.name", "Workflow Budget Test")
+        run(root, "git", "config", "user.email", "workflow-budget@example.invalid")
         sample.write_text(GOOD, encoding="utf-8")
         interop.write_text(INTEROP_GOOD, encoding="utf-8")
-        result = invoke(root)
+        run(root, "git", "add", ".")
+        run(root, "git", "commit", "-q", "-m", "good workflows")
+
+        result = invoke(root, "--tree", "HEAD")
         if result.returncode != 0:
-            raise SystemExit("workflow budget rejected valid adjacent artifacts or bounded interop rows")
+            raise SystemExit("workflow budget rejected valid committed adjacent artifacts or bounded interop rows")
 
-        sample.write_text(GOOD.replace("timeout-minutes: 75", "timeout-minutes: 76"), encoding="utf-8")
-        result = invoke(root)
-        if result.returncode == 0 or "76" not in result.stderr:
-            raise SystemExit("workflow budget failed to reject a job above 75 minutes")
-
+        bad_timeout = GOOD.replace("timeout-minutes: 75", "timeout-minutes: 76")
+        sample.write_text(bad_timeout, encoding="utf-8")
+        run(root, "git", "add", str(sample.relative_to(root)))
         sample.write_text(GOOD, encoding="utf-8")
-        interop.write_text(INTEROP_GOOD.replace('scenarios: "l1 l2"', 'scenarios: "l1 l2 endnode"'), encoding="utf-8")
-        result = invoke(root)
+        result = invoke(root, "--staged")
+        if result.returncode == 0 or "76" not in result.stderr:
+            raise SystemExit("staged budget gate read working-tree bytes instead of the index")
+        result = invoke(root, "--tree", "HEAD")
+        if result.returncode != 0:
+            raise SystemExit("tree budget gate read mutable working/index bytes instead of the commit")
+
+        run(root, "git", "reset", "-q", "HEAD", "--", str(sample.relative_to(root)))
+        interop_bad = INTEROP_GOOD.replace('scenarios: "l1 l2"', 'scenarios: "l1 l2 endnode"')
+        interop.write_text(interop_bad, encoding="utf-8")
+        run(root, "git", "add", str(interop.relative_to(root)))
+        interop.write_text(INTEROP_GOOD, encoding="utf-8")
+        result = invoke(root, "--staged")
         if result.returncode == 0 or "3 scenarios" not in result.stderr:
-            raise SystemExit("workflow budget failed to reject an oversized interop scenario group")
+            raise SystemExit("workflow budget failed to reject an oversized staged interop scenario group")
 
     print("workflow budget regression tests passed")
     return 0

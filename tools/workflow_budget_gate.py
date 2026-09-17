@@ -17,11 +17,14 @@
 
 from __future__ import annotations
 
+import argparse
 import re
+import subprocess
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath
+from typing import Callable
 
-WORKFLOW_DIR = Path(".github/workflows")
+WORKFLOW_ROOT = ".github/workflows/"
 MAX_JOB_MINUTES = 75
 MAX_EVIDENCE_DAYS = 30
 VM_CHECKPOINT_DAYS = 3
@@ -32,6 +35,40 @@ TIMEOUT_RE = re.compile(r"^    timeout-minutes:\s*([0-9]+)\s*$")
 RETENTION_RE = re.compile(r"^\s+retention-days:\s*([0-9]+)\s*$")
 STEP_RE = re.compile(r"^      - name:\s+")
 SCENARIOS_RE = re.compile(r"^\s+scenarios:\s*[\"']?([^\"'#]+?)[\"']?\s*$")
+
+
+def git(*args: str) -> str:
+    return subprocess.check_output(("git", *args), text=True).strip()
+
+
+def is_workflow(path: str) -> bool:
+    return path.startswith(WORKFLOW_ROOT) and PurePosixPath(path).suffix in {".yml", ".yaml"}
+
+
+def worktree_source() -> tuple[list[str], Callable[[str], str]]:
+    root = Path(WORKFLOW_ROOT)
+    paths = sorted(
+        str(path.as_posix())
+        for pattern in ("*.yml", "*.yaml")
+        for path in root.glob(pattern)
+        if path.is_file()
+    )
+    return paths, lambda path: Path(path).read_text(encoding="utf-8")
+
+
+def staged_source() -> tuple[list[str], Callable[[str], str]]:
+    paths = sorted(path for path in git("ls-files", "--cached").splitlines() if is_workflow(path))
+    return paths, lambda path: subprocess.check_output(("git", "show", ":" + path), text=True)
+
+
+def tree_source(rev: str) -> tuple[list[str], Callable[[str], str]]:
+    commit = git("rev-parse", "--verify", rev + "^{commit}")
+    paths = sorted(
+        path
+        for path in git("ls-tree", "-r", "--name-only", commit, "--", WORKFLOW_ROOT).splitlines()
+        if is_workflow(path)
+    )
+    return paths, lambda path: subprocess.check_output(("git", "show", f"{commit}:{path}"), text=True)
 
 
 def job_ranges(lines: list[str]) -> list[tuple[str, int, int]]:
@@ -63,25 +100,25 @@ def upload_block(lines: list[str], uses_index: int) -> list[str]:
     return lines[uses_index:end]
 
 
-def check_workflow(path: Path) -> list[str]:
-    text = path.read_text(encoding="utf-8")
+def check_workflow(path: str, text: str) -> list[str]:
+    name = PurePosixPath(path).name
     lines = text.splitlines()
     errors: list[str] = []
 
     ranges = job_ranges(lines)
     if not ranges:
         errors.append(f"{path}: no jobs found")
-    for name, start, end in ranges:
+    for job_name, start, end in ranges:
         values = []
         for line in lines[start:end]:
             match = TIMEOUT_RE.match(line)
             if match:
                 values.append(int(match.group(1)))
         if len(values) != 1:
-            errors.append(f"{path}: job {name} must declare exactly one timeout-minutes")
+            errors.append(f"{path}: job {job_name} must declare exactly one timeout-minutes")
         elif values[0] < 1 or values[0] > MAX_JOB_MINUTES:
             errors.append(
-                f"{path}: job {name} timeout {values[0]} exceeds voluntary {MAX_JOB_MINUTES}-minute ceiling"
+                f"{path}: job {job_name} timeout {values[0]} exceeds voluntary {MAX_JOB_MINUTES}-minute ceiling"
             )
 
     upload_lines = [i for i, line in enumerate(lines) if "uses: actions/upload-artifact@" in line]
@@ -95,7 +132,7 @@ def check_workflow(path: Path) -> list[str]:
                 f"{path}: artifact retention {retention[0]} days exceeds {MAX_EVIDENCE_DAYS}-day evidence ceiling"
             )
 
-    if path.name == "vm-lab.yml":
+    if name == "vm-lab.yml":
         required = (
             "scratch-vm-lab-checkpoint-${{ matrix.arch }}-${{ github.run_id }}",
             f"retention-days: {VM_CHECKPOINT_DAYS}",
@@ -109,7 +146,7 @@ def check_workflow(path: Path) -> list[str]:
             if marker not in text:
                 errors.append(f"{path}: missing VM checkpoint storage safeguard: {marker}")
 
-    if path.name == "interop.yml":
+    if name == "interop.yml":
         required = (
             "!${{ env.DNIV_SCRATCH_DIR }}/interop/**/*.qcow2",
             "scratch-interop-${{ matrix.arch }}-${{ matrix.suite }}-${{ github.run_id }}",
@@ -135,18 +172,42 @@ def check_workflow(path: Path) -> list[str]:
 
 
 def main() -> int:
-    paths = sorted(set(WORKFLOW_DIR.glob("*.yml")) | set(WORKFLOW_DIR.glob("*.yaml")))
+    parser = argparse.ArgumentParser()
+    source = parser.add_mutually_exclusive_group()
+    source.add_argument("--staged", action="store_true")
+    source.add_argument("--tree")
+    args = parser.parse_args()
+
+    try:
+        if args.staged:
+            paths, reader = staged_source()
+            source_label = "staged index"
+        elif args.tree:
+            paths, reader = tree_source(args.tree)
+            source_label = args.tree
+        else:
+            paths, reader = worktree_source()
+            source_label = "working tree"
+    except (OSError, subprocess.CalledProcessError) as exc:
+        print(f"workflow-budget: cannot enumerate workflow source: {exc}", file=sys.stderr)
+        return 1
+
     errors: list[str] = []
     if not paths:
-        errors.append("workflow-budget: no workflow files found")
+        errors.append(f"no workflow files found in {source_label}")
     for path in paths:
-        errors.extend(check_workflow(path))
+        try:
+            text = reader(path)
+        except (OSError, subprocess.CalledProcessError, UnicodeError) as exc:
+            errors.append(f"{path}: cannot read workflow source: {exc}")
+            continue
+        errors.extend(check_workflow(path, text))
     if errors:
         for error in errors:
             print(f"workflow-budget: {error}", file=sys.stderr)
         return 1
     print(
-        f"workflow-budget: {len(paths)} workflow files verified; jobs <= {MAX_JOB_MINUTES} minutes, artifacts <= {MAX_EVIDENCE_DAYS} days, interop scenarios/job <= {MAX_INTEROP_SCENARIOS_PER_JOB}"
+        f"workflow-budget: source={source_label} files={len(paths)} jobs<={MAX_JOB_MINUTES}m artifacts<={MAX_EVIDENCE_DAYS}d interop-scenarios/job<={MAX_INTEROP_SCENARIOS_PER_JOB}"
     )
     return 0
 
