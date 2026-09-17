@@ -46,6 +46,7 @@ DERIVED_REQUIRED_SNIPPETS = {
     "qcow2-to-raw verification round trip": 'qemu-img convert -q -f qcow2 -O raw "$output" "$verify_raw"',
     "full RAW content comparison": 'cmp -s "$raw" "$verify_raw"',
     "archived source provenance read": 'source_commit=$(sudo cat "$archived_source/.source-commit")',
+    "archived source provenance validation": '[[ "$source_commit" =~ ^[0-9a-f]{40}$ ]] || {',
 }
 
 

@@ -73,7 +73,7 @@ Implementation remains active. UAPI v2 provides standard Phase IV node MAC deriv
 
 Candidate `a122e8e82541a9499b9b514568b70e77de97ca4b` completed the former full-tree review sequence and exact-head acceptance parent `35184898090` dispatched bound children. Repository/continuity, native builds and pinned reference baselines were green. E1 child run `35184925391` failed before protocol assertions: amd64 exposed corruption/misinstallation of the guest smoke service and arm64 produced no serial output because the packaged kernel image was unsuitable for direct QEMU boot. Commit `d3416e1ad9d2a5e057c6c49e9407cec92683dc86` hardened the base-image path against both failure classes.
 
-The current candidate closes the remaining derived-image gap. `tests/lab/prepare-interop-candidate.sh` and `tests/lab/prepare-reference-image.sh` now keep acceptance QCOW2 uncompressed, run structural `qemu-img check`, convert the final QCOW2 back to RAW, and compare the complete intended/final RAW disk byte-for-byte. Both builders also retain and validate the archived `.source-commit` provenance. `tests/policy/test_image_builder_gate.py` now enforces those safeguards for both derived builders, and `docs/HANDOVER.md` is aligned with the current diff-scoped SoP. No prior acceptance result is promotable after these image changes.
+The current candidate closes the remaining derived-image gap. `tests/lab/prepare-interop-candidate.sh` and `tests/lab/prepare-reference-image.sh` now keep acceptance QCOW2 uncompressed, run structural `qemu-img check`, convert the final QCOW2 back to RAW, and compare the complete intended/final RAW disk byte-for-byte. Both builders also retain and validate the archived `.source-commit` provenance. `tests/policy/test_image_builder_gate.py` now enforces the conversion, whole-RAW comparison, provenance read and SHA-format validation safeguards for both derived builders, and `docs/HANDOVER.md` is aligned with the current diff-scoped SoP. The first scoped review of the preceding candidate found the missing policy requirement for provenance validation; this candidate fixes it, so the scoped SoP count is reset to zero. No prior acceptance result is promotable after these image changes.
 
 ## Test addressing
 
@@ -85,7 +85,7 @@ Ordinary lab addressing remains area 31, nodes 70 through 79, names DN70 through
 
 ## Resume point
 
-Phase 3 remains active. The derived interoperability image integrity correction is now in the current candidate. No scoped semantic/manual pass is carried forward from an earlier candidate; the pass count starts at zero on this exact parent-to-candidate diff.
+Phase 3 remains active. The derived interoperability image integrity correction is now in the current candidate. A scoped review of the preceding candidate found and fixed a provenance-validation regression-guard gap; no clean pass carries forward, and the pass count starts at zero on this exact first-parent-to-candidate diff.
 
 ## Next action
 
