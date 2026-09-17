@@ -61,7 +61,7 @@ normalize_ext4() {
 qemu-img convert -q -f qcow2 -O raw "$foundation" "$raw"
 sudo mount -o loop "$raw" "$mnt"
 mounted=1
-sudo mkdir -p "$mnt/usr/local/sbin" "$mnt/etc/systemd/system/multi-user.target.wants"
+sudo mkdir -p "$mnt/usr/local/sbin" "$mnt/etc/systemd/system/graphical.target.wants"
 sudo install -m 0755 "$repo_root/tests/lab/dniv-reference-peer.sh" \
     "$mnt/usr/local/sbin/dniv-reference-peer"
 sudo cc -O2 -std=c11 -Wall -Wextra -Werror \
@@ -69,20 +69,21 @@ sudo cc -O2 -std=c11 -Wall -Wextra -Werror \
 sudo tee "$mnt/etc/systemd/system/dniv-reference-peer.service" >/dev/null <<'EOF_SERVICE'
 [Unit]
 Description=Independent DECnet reference peer
-After=systemd-udev-settle.service
+After=multi-user.target systemd-udev-settle.service
 
 [Service]
 Type=simple
+ExecStartPre=/bin/sleep 60
 ExecStart=/usr/local/sbin/dniv-reference-peer
 StandardOutput=journal+console
 StandardError=journal+console
 Restart=no
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=graphical.target
 EOF_SERVICE
 sudo ln -sf ../dniv-reference-peer.service \
-    "$mnt/etc/systemd/system/multi-user.target.wants/dniv-reference-peer.service"
+    "$mnt/etc/systemd/system/graphical.target.wants/dniv-reference-peer.service"
 printf '%s\n' "$source_commit" | sudo tee "$mnt/etc/dniv-reference-harness-sha" >/dev/null
 sudo test -x "$mnt/usr/local/sbin/dniv-reference-peer"
 sudo test -x "$mnt/usr/local/sbin/dnraw"

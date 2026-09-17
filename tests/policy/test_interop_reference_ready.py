@@ -22,6 +22,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = (ROOT / "tests/lab/run-interop.sh").read_text(encoding="utf-8")
+REFERENCE_IMAGE = (ROOT / "tests/lab/prepare-reference-image.sh").read_text(encoding="utf-8")
 
 
 def main() -> int:
@@ -33,14 +34,27 @@ def main() -> int:
         SCRIPT,
         re.MULTILINE,
     )
-    if default != ["90"]:
+    if default != ["180"]:
         raise SystemExit(f"interop-ready regression: amd64/default bound changed: {default}")
-    if arm != ["240"]:
+    if arm != ["360"]:
         raise SystemExit(f"interop-ready regression: ARM64 bound changed: {arm}")
     if int(arm[0]) <= int(default[0]):
         raise SystemExit("interop-ready regression: ARM64 bound must exceed default")
-    if int(arm[0]) > 300:
+    if int(arm[0]) > 420:
         raise SystemExit("interop-ready regression: ARM64 reference-ready bound is excessive")
+
+    required_service_fragments = [
+        "After=multi-user.target systemd-udev-settle.service",
+        "ExecStartPre=/bin/sleep 60",
+        "WantedBy=graphical.target",
+        "graphical.target.wants/dniv-reference-peer.service",
+    ]
+    for fragment in required_service_fragments:
+        if fragment not in REFERENCE_IMAGE:
+            raise SystemExit(
+                "interop-ready regression: reference guest must idle for 60 seconds "
+                f"after multi-user boot before peer startup; missing {fragment!r}"
+            )
 
     uses = re.findall(
         r'DNIV-REF-READY[^\n]*" "\$reference_ready_seconds" "\$REFERENCE_PID"',
@@ -51,10 +65,10 @@ def main() -> int:
             "interop-ready regression: both initial and restart reference boots "
             f"must use the bounded architecture value; saw {len(uses)}"
         )
-    if re.search(r'DNIV-REF-READY[^\n]*" 90 "\$REFERENCE_PID"', SCRIPT):
-        raise SystemExit("interop-ready regression: hardcoded 90-second wait remains")
+    if re.search(r'DNIV-REF-READY[^\n]*" [0-9]+ "\$REFERENCE_PID"', SCRIPT):
+        raise SystemExit("interop-ready regression: hardcoded readiness wait remains")
 
-    print("interop-ready regression passed: amd64=90s arm64=240s")
+    print("interop-ready regression passed: amd64=180s arm64=360s")
     return 0
 
 

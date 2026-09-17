@@ -46,7 +46,7 @@ The silence window is corrected to 7s and a workflow-guard regression reads the 
 
 Exact-head `e7ee147f40bcea7525f9a25499fa9f59974cb9b6` proved the E1 correction: parent/dispatcher, both native builds, project state, pinned PyDECnet/Route20 baselines and both VM E1 architectures were green; ARM64 captured 442 DECnet frames. In interop run `35285622023`, ARM64 Route20 routing failed before Route20 execution because the reference VM hit the hardcoded 90-second READY deadline while still completing normal boot, with rootfs handoff around guest uptime 80 seconds. This is an ARM interop harness readiness defect, not candidate DECnet evidence.
 
-Interop keeps the reference READY bound at 90s on amd64. Exact-head run `35286846863` showed 150s was still too short on ARM64: Route20 routing job `105420965692` and Route20 endnode job `105424436668` both expired before `DNIV-REF-READY`, at roughly 126s and 124s of guest uptime while systemd was still starting. ARM64 now uses 240s for both initial and restart boots. The workflow guard enforces those exact bounded values and both call sites.
+Exact-head run `35286846863` exposed that readiness was still coupled to guest boot: the reference service could start while systemd was converging on `multi-user.target`. The reference image now orders the peer after `multi-user.target` and inserts an explicit 60-second idle settle interval before peer startup. `DNIV-REF-READY` is consequently post-boot and post-settle. Host bounds are 180s amd64 and 360s ARM64 for both initial and restart boots, and the workflow guard checks the bounds, both READY waits, and the settle-service wiring.
 
 Repository license validation now excludes `__pycache__` and `.git` directories in the Git enumeration command itself for both exact-tree and staged scans, at any depth, so generated caches and repository metadata never reach the validator.
 
@@ -83,4 +83,4 @@ Acceptance lineage for `38c5b49e53c648f6514f52ebff84a93331a4732a`: repository-po
 
 ## Next action
 
-Run exact-head acceptance for current `main`. Require the new interop-readiness regression and the already-proven two-architecture E1 gates. ARM64 reference startup gets 240 seconds; amd64 remains 90 seconds. If Route20 then exits after READY, diagnose the pinned reference runtime independently and alter candidate protocol code only for separately demonstrated defects.
+Run exact-head acceptance for current `main`. Require the new interop-readiness regression and the already-proven two-architecture E1 gates. Reference startup is post-boot/post-settle: 180 seconds on amd64 and 360 seconds on ARM64, including the required 60-second idle interval after `multi-user.target`. If Route20 then exits after READY, diagnose the pinned reference runtime independently and alter candidate protocol code only for separately demonstrated defects.
