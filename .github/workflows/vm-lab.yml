@@ -12,7 +12,7 @@
 # patent, trademark, and governing-law provisions.
 # ============================================================================
 
-name: Two-Node VM Lab
+name: Python QEMU VM Lab
 
 on:
   workflow_dispatch:
@@ -33,10 +33,6 @@ on:
         description: Exact parent candidate SHA; blank for direct dispatch
         required: false
         type: string
-      resume_run_id:
-        description: Prior Two-Node VM Lab run ID to restore from scratch artifacts
-        required: false
-        type: string
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -44,11 +40,10 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  actions: write
   contents: read
 
 jobs:
-  native-two-node:
+  python-two-node:
     strategy:
       fail-fast: false
       max-parallel: 2
@@ -75,23 +70,11 @@ jobs:
       DNIV_LAB_SESSION_ID: run-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.arch }}-${{ inputs.lab_mode }}
       DNIV_LAB_ARCH: ${{ matrix.arch }}
       DNIV_LAB_SOURCE_SHA: ${{ github.sha }}
-      DNIV_LAB_SOURCE_RUN_ID: ${{ github.run_id }}
-      DNIV_LAB_SOURCE_RUN_ATTEMPT: ${{ github.run_attempt }}
-      DNIV_LAB_RESUME_RUN_ID: ${{ inputs.resume_run_id }}
     steps:
       - name: Check out exact repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           fetch-depth: 0
-
-      - name: Restore prior scratch artifacts
-        if: ${{ inputs.resume_run_id != '' }}
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          path: ${{ github.workspace }}/scratch/restored/${{ inputs.resume_run_id }}
-          github-token: ${{ github.token }}
-          repository: ${{ github.repository }}
-          run-id: ${{ inputs.resume_run_id }}
 
       - name: Initialize scratch state and verify integrity checks
         shell: bash
@@ -101,8 +84,7 @@ jobs:
             --workflow vm-lab --job "$GITHUB_JOB" --arch '${{ matrix.arch }}' \
             --mode '${{ inputs.lab_mode }}' --source-sha "$GITHUB_SHA" \
             --parent-run-id '${{ inputs.parent_run_id }}' \
-            --expected-sha '${{ inputs.expected_sha }}' \
-            --resume-run-id '${{ inputs.resume_run_id }}'
+            --expected-sha '${{ inputs.expected_sha }}'
           tools/workflow_guard.sh "$DNIV_SCRATCH_DIR" "$GITHUB_SHA" main
           echo "DNIV_LAB_ARTIFACTS=$DNIV_SCRATCH_DIR/lab" >> "$GITHUB_ENV"
 
@@ -114,44 +96,7 @@ jobs:
           sudo apt-get install -y ${{ matrix.qemu }} qemu-utils e2fsprogs tcpdump curl 2>&1 | \
             tee "$DNIV_SCRATCH_DIR/apt-install.log"
 
-      - name: Verify restored VM state
-        if: ${{ inputs.resume_run_id != '' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          restore_root="$GITHUB_WORKSPACE/scratch/restored/${{ inputs.resume_run_id }}"
-          session_file=
-          while IFS= read -r candidate; do
-            state=$(dirname "$candidate")
-            test -f "$state/node-a.qcow2" || continue
-            test -f "$state/node-b.qcow2" || continue
-            test -f "$state/base.qcow2" || continue
-            if grep -Fxq 'ARCH=${{ matrix.arch }}' "$candidate"; then
-              session_file=$candidate
-              break
-            fi
-          done < <(find "$restore_root" -type f -name 'session.env' -print)
-          test -n "$session_file"
-          state=$(dirname "$session_file")
-          test -f "$state/SHA256SUMS"
-          grep -Fx 'FORMAT=2' "$state/session.env"
-          grep -Fx 'ARCH=${{ matrix.arch }}' "$state/session.env"
-          grep -Fx "SOURCE_SHA=$GITHUB_SHA" "$state/session.env"
-          grep -Fx 'MODE=${{ inputs.lab_mode }}' "$state/session.env"
-          grep -Eq '^[0-9a-f]{64}  session\.env$' "$state/SHA256SUMS"
-          (cd "$state" && sha256sum -c SHA256SUMS)
-          qemu-img check -q -f qcow2 "$state/node-a.qcow2"
-          qemu-img check -q -f qcow2 "$state/node-b.qcow2"
-          printf 'RESTORED_CHECKPOINT=%s\n' "$state" > "$DNIV_SCRATCH_DIR/resume.env"
-          echo "DNIV_LAB_RESUME_DIR=$state" >> "$GITHUB_ENV"
-          echo "DNIV_LAB_BASE=$state/base.qcow2" >> "$GITHUB_ENV"
-          echo "DNIV_LAB_KERNEL=$state/vmlinuz" >> "$GITHUB_ENV"
-          echo "DNIV_LAB_INITRD=$state/initrd.img" >> "$GITHUB_ENV"
-          python3 tools/scratch_state.py mark --dir "$DNIV_SCRATCH_DIR" \
-            --status restored --note "restored checkpoint from run ${{ inputs.resume_run_id }}"
-
       - name: Download and verify pinned Ubuntu Base rootfs
-        if: ${{ inputs.resume_run_id == '' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -165,12 +110,9 @@ jobs:
           fi
           curl -fL "$UBUNTU_BASE_URL/$file" -o "$RUNNER_TEMP/$file"
           echo "$sha  $RUNNER_TEMP/$file" | sha256sum -c -
-          printf 'UBUNTU_BASE_FILE=%s\nUBUNTU_BASE_SHA256=%s\n' "$file" "$sha" > \
-            "$DNIV_SCRATCH_DIR/base-image.env"
           echo "UBUNTU_BASE_TARBALL=$RUNNER_TEMP/$file" >> "$GITHUB_ENV"
 
-      - name: Build minimal DECnet test image
-        if: ${{ inputs.resume_run_id == '' }}
+      - name: Build immutable DECnet test base
         shell: bash
         run: |
           set -euo pipefail
@@ -182,31 +124,12 @@ jobs:
           echo "DNIV_LAB_KERNEL=$RUNNER_TEMP/boot-${{ matrix.arch }}/vmlinuz" >> "$GITHUB_ENV"
           echo "DNIV_LAB_INITRD=$RUNNER_TEMP/boot-${{ matrix.arch }}/initrd.img" >> "$GITHUB_ENV"
 
-      - name: Boot two independent nodes and run selected DECnet gate
+      - name: Run Python QEMU overlay lab
         shell: bash
         run: |
           set -euo pipefail
-          tests/lab/run-two-node.sh "$DNIV_LAB_BASE" "$DNIV_LAB_KERNEL" "$DNIV_LAB_INITRD" 2>&1 | \
+          python3 tests/lab/dniv_lab.py "$DNIV_LAB_BASE" "$DNIV_LAB_KERNEL" "$DNIV_LAB_INITRD" 2>&1 | \
             tee "$DNIV_SCRATCH_DIR/two-node.log"
-
-      - name: Seal resumable checkpoint metadata
-        shell: bash
-        run: |
-          set -euo pipefail
-          checkpoint="$DNIV_LAB_ARTIFACTS/$DNIV_LAB_SESSION_ID/checkpoint"
-          test -f "$checkpoint/session.env"
-          grep -Fx 'FORMAT=1' "$checkpoint/session.env"
-          sed -i 's/^FORMAT=1$/FORMAT=2/' "$checkpoint/session.env"
-          grep -Fx 'FORMAT=2' "$checkpoint/session.env"
-          (
-            cd "$checkpoint"
-            sha256sum base.qcow2 node-a.qcow2 node-b.qcow2 vmlinuz initrd.img session.env > SHA256SUMS
-            sha256sum -c SHA256SUMS
-          )
-          python3 tools/scratch_state.py set --dir "$DNIV_SCRATCH_DIR" \
-            --key checkpoint --value "$checkpoint"
-          python3 tools/scratch_state.py mark --dir "$DNIV_SCRATCH_DIR" \
-            --status checkpoint-sealed --note 'format-2 checkpoint verified'
 
       - name: Verify exact tree after VM gate
         shell: bash
@@ -224,7 +147,7 @@ jobs:
           set -euo pipefail
           if [[ -f "$DNIV_SCRATCH_DIR/state.json" ]]; then
             python3 tools/scratch_state.py mark --dir "$DNIV_SCRATCH_DIR" \
-              --status '${{ job.status }}' --note 'two-node VM workflow completed'
+              --status '${{ job.status }}' --note 'Python QEMU VM workflow completed'
           fi
 
       - name: Preserve compact VM evidence
@@ -234,41 +157,9 @@ jobs:
           name: scratch-vm-lab-evidence-${{ matrix.arch }}-${{ github.run_id }}
           path: |
             ${{ env.DNIV_SCRATCH_DIR }}/
-            !${{ env.DNIV_SCRATCH_DIR }}/lab/**/checkpoint/*.qcow2
-            !${{ env.DNIV_SCRATCH_DIR }}/lab/**/checkpoint/vmlinuz
-            !${{ env.DNIV_SCRATCH_DIR }}/lab/**/checkpoint/initrd.img
+            !${{ env.DNIV_SCRATCH_DIR }}/lab/**/*.qcow2
+            !${{ env.DNIV_SCRATCH_DIR }}/lab/**/*.qmp
           if-no-files-found: warn
           retention-days: 30
           compression-level: 6
           overwrite: true
-
-      - name: Preserve resumable VM checkpoint
-        if: ${{ always() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: scratch-vm-lab-checkpoint-${{ matrix.arch }}-${{ github.run_id }}
-          path: ${{ env.DNIV_SCRATCH_DIR }}/lab/**/checkpoint/
-          if-no-files-found: warn
-          retention-days: 3
-          compression-level: 0
-          overwrite: true
-
-      - name: Prune superseded successful VM checkpoints
-        if: ${{ success() }}
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          prefix='scratch-vm-lab-checkpoint-${{ matrix.arch }}-'
-          current="${prefix}${GITHUB_RUN_ID}"
-          mapfile -t stale < <(
-            gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100" \
-              --paginate \
-              --jq '.artifacts[] | [.name, (.id|tostring)] | @tsv' | \
-              awk -F '\t' -v prefix="$prefix" -v current="$current" \
-                'index($1, prefix) == 1 && $1 != current {print $2}'
-          )
-          for artifact_id in "${stale[@]}"; do
-            gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$artifact_id"
-          done

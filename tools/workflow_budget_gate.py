@@ -13,7 +13,7 @@
 # patent, trademark, and governing-law provisions.
 # ============================================================================
 
-"""Enforce hosted-runner duration, queueing, action pins and artifact limits."""
+"""Enforce hosted-runner duration, queueing, immutable action pins and evidence limits."""
 
 from __future__ import annotations
 
@@ -27,7 +27,6 @@ from typing import Callable
 WORKFLOW_ROOT = ".github/workflows/"
 MAX_JOB_MINUTES = 75
 MAX_EVIDENCE_DAYS = 30
-VM_CHECKPOINT_DAYS = 3
 MAX_INTEROP_SCENARIOS_PER_JOB = 2
 ACTION_PINS = {
     "actions/checkout": "11d5960a326750d5838078e36cf38b85af677262",
@@ -35,13 +34,8 @@ ACTION_PINS = {
     "actions/download-artifact": "d3f86a106a0bac45b974a628896c90dbdf5c8093",
 }
 CHILD_WORKFLOWS = {
-    "build.yml",
-    "project-state.yml",
-    "reference-baselines.yml",
-    "vm-lab.yml",
-    "interop.yml",
+    "build.yml", "project-state.yml", "reference-baselines.yml", "vm-lab.yml", "interop.yml",
 }
-
 JOB_RE = re.compile(r"^  ([A-Za-z0-9_-]+):\s*$")
 TIMEOUT_RE = re.compile(r"^    timeout-minutes:\s*([0-9]+)\s*$")
 RETENTION_RE = re.compile(r"^\s+retention-days:\s*([0-9]+)\s*$")
@@ -61,12 +55,7 @@ def is_workflow(path: str) -> bool:
 
 def worktree_source() -> tuple[list[str], Callable[[str], str]]:
     root = Path(WORKFLOW_ROOT)
-    paths = sorted(
-        str(path.as_posix())
-        for pattern in ("*.yml", "*.yaml")
-        for path in root.glob(pattern)
-        if path.is_file()
-    )
+    paths = sorted(str(path.as_posix()) for pattern in ("*.yml", "*.yaml") for path in root.glob(pattern) if path.is_file())
     return paths, lambda path: Path(path).read_text(encoding="utf-8")
 
 
@@ -77,11 +66,7 @@ def staged_source() -> tuple[list[str], Callable[[str], str]]:
 
 def tree_source(rev: str) -> tuple[list[str], Callable[[str], str]]:
     commit = git("rev-parse", "--verify", rev + "^{commit}")
-    paths = sorted(
-        path
-        for path in git("ls-tree", "-r", "--name-only", commit, "--", WORKFLOW_ROOT).splitlines()
-        if is_workflow(path)
-    )
+    paths = sorted(path for path in git("ls-tree", "-r", "--name-only", commit, "--", WORKFLOW_ROOT).splitlines() if is_workflow(path))
     return paths, lambda path: subprocess.check_output(("git", "show", f"{commit}:{path}"), text=True)
 
 
@@ -98,11 +83,21 @@ def job_ranges(lines: list[str]) -> list[tuple[str, int, int]]:
         match = JOB_RE.match(line)
         if match:
             starts.append((match.group(1), index))
-    result: list[tuple[str, int, int]] = []
-    for pos, (name, start) in enumerate(starts):
-        end = starts[pos + 1][1] if pos + 1 < len(starts) else len(lines)
-        result.append((name, start, end))
-    return result
+    return [(name, start, starts[pos + 1][1] if pos + 1 < len(starts) else len(lines))
+            for pos, (name, start) in enumerate(starts)]
+
+
+def nested_block(lines: list[str], start: int) -> list[str]:
+    indent = len(lines[start]) - len(lines[start].lstrip())
+    end = len(lines)
+    for index in range(start + 1, len(lines)):
+        line = lines[index]
+        if not line.strip():
+            continue
+        if len(line) - len(line.lstrip()) <= indent:
+            end = index
+            break
+    return lines[start:end]
 
 
 def upload_block(lines: list[str], uses_index: int) -> list[str]:
@@ -114,40 +109,19 @@ def upload_block(lines: list[str], uses_index: int) -> list[str]:
     return lines[uses_index:end]
 
 
-def nested_block(lines: list[str], start: int) -> list[str]:
-    indent = len(lines[start]) - len(lines[start].lstrip())
-    end = len(lines)
-    for index in range(start + 1, len(lines)):
-        line = lines[index]
-        if not line.strip():
-            continue
-        current = len(line) - len(line.lstrip())
-        if current <= indent:
-            end = index
-            break
-    return lines[start:end]
-
-
 def check_workflow(path: str, text: str) -> list[str]:
     name = PurePosixPath(path).name
     lines = text.splitlines()
     errors: list[str] = []
-
     ranges = job_ranges(lines)
     if not ranges:
         errors.append(f"{path}: no jobs found")
     for job_name, start, end in ranges:
-        values = []
-        for line in lines[start:end]:
-            match = TIMEOUT_RE.match(line)
-            if match:
-                values.append(int(match.group(1)))
+        values = [int(m.group(1)) for line in lines[start:end] if (m := TIMEOUT_RE.match(line))]
         if len(values) != 1:
             errors.append(f"{path}: job {job_name} must declare exactly one timeout-minutes")
-        elif values[0] < 1 or values[0] > MAX_JOB_MINUTES:
-            errors.append(
-                f"{path}: job {job_name} timeout {values[0]} exceeds voluntary {MAX_JOB_MINUTES}-minute ceiling"
-            )
+        elif not 1 <= values[0] <= MAX_JOB_MINUTES:
+            errors.append(f"{path}: job {job_name} timeout {values[0]} exceeds voluntary {MAX_JOB_MINUTES}-minute ceiling")
 
     for index, line in enumerate(lines):
         if CONCURRENCY_RE.match(line):
@@ -160,25 +134,18 @@ def check_workflow(path: str, text: str) -> list[str]:
 
     for index, line in enumerate(lines):
         match = USES_RE.match(line)
-        if not match:
-            continue
-        action, revision = match.groups()
-        expected = ACTION_PINS[action]
-        if revision != expected:
-            errors.append(
-                f"{path}: {action} near line {index + 1} must be pinned to {expected}"
-            )
+        if match and match.group(2) != ACTION_PINS[match.group(1)]:
+            errors.append(f"{path}: {match.group(1)} near line {index + 1} must be pinned to {ACTION_PINS[match.group(1)]}")
 
-    upload_lines = [i for i, line in enumerate(lines) if "uses: actions/upload-artifact@" in line]
-    for index in upload_lines:
+    for index, line in enumerate(lines):
+        if "uses: actions/upload-artifact@" not in line:
+            continue
         block = upload_block(lines, index)
-        retention = [int(match.group(1)) for line in block if (match := RETENTION_RE.match(line))]
+        retention = [int(m.group(1)) for entry in block if (m := RETENTION_RE.match(entry))]
         if len(retention) != 1:
             errors.append(f"{path}: upload-artifact block near line {index + 1} must declare exactly one retention-days")
-        elif retention[0] < 1 or retention[0] > MAX_EVIDENCE_DAYS:
-            errors.append(
-                f"{path}: artifact retention {retention[0]} days exceeds {MAX_EVIDENCE_DAYS}-day evidence ceiling"
-            )
+        elif not 1 <= retention[0] <= MAX_EVIDENCE_DAYS:
+            errors.append(f"{path}: artifact retention {retention[0]} days exceeds {MAX_EVIDENCE_DAYS}-day evidence ceiling")
 
     if name in CHILD_WORKFLOWS:
         for marker in ("expected_sha:", "--expected-sha '${{ inputs.expected_sha }}'"):
@@ -186,53 +153,51 @@ def check_workflow(path: str, text: str) -> list[str]:
                 errors.append(f"{path}: missing parent-candidate binding safeguard: {marker}")
 
     if name == "repository-policy.yml":
-        required = (
-            'github.event.issue.title == \'DNIV branch cleanup\'',
-            'git/matching-refs/heads',
+        for marker in (
+            "github.event.issue.title == 'DNIV branch cleanup'",
+            "git/matching-refs/heads",
             '-f expected_sha="$GITHUB_SHA"',
-        )
-        for marker in required:
+        ):
             if marker not in text:
                 errors.append(f"{path}: missing repository-control safeguard: {marker}")
 
     if name == "vm-lab.yml":
         required = (
-            "scratch-vm-lab-checkpoint-${{ matrix.arch }}-${{ github.run_id }}",
-            f"retention-days: {VM_CHECKPOINT_DAYS}",
+            "python3 tests/lab/dniv_lab.py",
+            "Build immutable DECnet test base",
+            "!${{ env.DNIV_SCRATCH_DIR }}/lab/**/*.qcow2",
+            "!${{ env.DNIV_SCRATCH_DIR }}/lab/**/*.qmp",
+        )
+        forbidden = (
+            "resume_run_id:",
+            "scratch-vm-lab-checkpoint-",
             "Prune superseded successful VM checkpoints",
             "actions/artifacts?per_page=100",
-            "--paginate",
-            "!${{ env.DNIV_SCRATCH_DIR }}/lab/**/checkpoint/*.qcow2",
-            "!${{ env.DNIV_SCRATCH_DIR }}/lab/**/checkpoint/vmlinuz",
-            "!${{ env.DNIV_SCRATCH_DIR }}/lab/**/checkpoint/initrd.img",
-            "actions: write",
         )
         for marker in required:
             if marker not in text:
-                errors.append(f"{path}: missing VM checkpoint storage safeguard: {marker}")
+                errors.append(f"{path}: missing Python overlay-lab safeguard: {marker}")
+        for marker in forbidden:
+            if marker in text:
+                errors.append(f"{path}: obsolete resumable-VM machinery remains: {marker}")
 
     if name == "interop.yml":
-        required = (
+        for marker in (
             "!${{ env.DNIV_SCRATCH_DIR }}/interop/**/*.qcow2",
             "scratch-interop-${{ matrix.arch }}-${{ matrix.suite }}-${{ github.run_id }}",
             "${{ github.job }}-${{ matrix.arch }}-${{ matrix.suite }}",
-        )
-        for marker in required:
+        ):
             if marker not in text:
                 errors.append(f"{path}: missing interoperability storage/runtime safeguard: {marker}")
-        scenario_rows = []
+        rows = []
         for line in lines:
-            match = SCENARIOS_RE.match(line)
-            if match:
+            if match := SCENARIOS_RE.match(line):
                 scenarios = match.group(1).split()
-                scenario_rows.append(scenarios)
+                rows.append(scenarios)
                 if not scenarios or len(scenarios) > MAX_INTEROP_SCENARIOS_PER_JOB:
-                    errors.append(
-                        f"{path}: interop matrix row has {len(scenarios)} scenarios; maximum is {MAX_INTEROP_SCENARIOS_PER_JOB}"
-                    )
-        if not scenario_rows:
+                    errors.append(f"{path}: interop matrix row has {len(scenarios)} scenarios; maximum is {MAX_INTEROP_SCENARIOS_PER_JOB}")
+        if not rows:
             errors.append(f"{path}: no bounded interoperability scenario rows found")
-
     return errors
 
 
@@ -242,38 +207,29 @@ def main() -> int:
     source.add_argument("--staged", action="store_true")
     source.add_argument("--tree")
     args = parser.parse_args()
-
     try:
         if args.staged:
-            paths, reader = staged_source()
-            source_label = "staged index"
+            paths, reader = staged_source(); source_label = "staged index"
         elif args.tree:
-            paths, reader = tree_source(args.tree)
-            source_label = args.tree
+            paths, reader = tree_source(args.tree); source_label = args.tree
         else:
-            paths, reader = worktree_source()
-            source_label = "working tree"
+            paths, reader = worktree_source(); source_label = "working tree"
     except (OSError, subprocess.CalledProcessError) as exc:
         print(f"workflow-budget: cannot enumerate workflow source: {exc}", file=sys.stderr)
         return 1
-
     errors: list[str] = []
     if not paths:
         errors.append(f"no workflow files found in {source_label}")
     for path in paths:
         try:
-            text = reader(path)
+            errors.extend(check_workflow(path, reader(path)))
         except (OSError, subprocess.CalledProcessError, UnicodeError) as exc:
             errors.append(f"{path}: cannot read workflow source: {exc}")
-            continue
-        errors.extend(check_workflow(path, text))
     if errors:
         for error in errors:
             print(f"workflow-budget: {error}", file=sys.stderr)
         return 1
-    print(
-        f"workflow-budget: source={source_label} files={len(paths)} jobs<={MAX_JOB_MINUTES}m artifacts<={MAX_EVIDENCE_DAYS}d queue=max actions=pinned interop-scenarios/job<={MAX_INTEROP_SCENARIOS_PER_JOB}"
-    )
+    print(f"workflow-budget: source={source_label} files={len(paths)} jobs<={MAX_JOB_MINUTES}m artifacts<={MAX_EVIDENCE_DAYS}d queue=max actions=pinned interop-scenarios/job<={MAX_INTEROP_SCENARIOS_PER_JOB}")
     return 0
 
 

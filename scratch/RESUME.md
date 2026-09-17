@@ -18,21 +18,13 @@
 
 Phase 3 remains active and all substantive work stays on `main`. Candidate promotion is controlled only by exact-SHA mechanical, build, VM, reference, protocol and interoperability gates.
 
-Workflow jobs bind exact source commit/tree, expected parent candidate SHA where applicable, run lineage, runner identity, architecture/mode and retained evidence. Routine workflow integrity checks use one bounded parent-to-candidate baseline diff manifest and one matching final manifest. A byte-complete tracked-tree machine scan remains explicit through `tools/integrity_scan.py --full-tree`.
+The prior acceptance lineage on `3f41bec910b5b07520c23b05dcbb1996d091ef62` proved native x86_64/aarch64 build and continuity but failed before protocol acceptance in guest-image preparation. Commit `102972a5e8a35e517ac65bd100a8d3f271f37720` corrected late ext4 metadata/conversion instability. The current work changes the acceptance architecture rather than continuing to add checkpoint/image plumbing.
 
-Hosted-runner policy is unchanged: at most 75 minutes per job, `queue: max`, `cancel-in-progress: false`, compact evidence at most 30 days, VM checkpoints 3 days with paginated stale-checkpoint pruning, and fresh interoperability VMs.
+The two-node lab now uses `tests/lab/dniv_lab.py`: a Python direct-QEMU controller with QMP shutdown, Linux bridge/TAP networking, packet capture, serial marker assertions, and disposable qcow2 overlays over one immutable candidate base. `tests/lab/run-two-node.sh` is retired. VM resume inputs, archived writable checkpoints, rebasing, checksum sealing and stale-checkpoint pruning are removed from `vm-lab.yml`; transient `.qcow2` and `.qmp` files are excluded from evidence uploads.
 
-Acceptance parent `35232209976` targeted exact candidate `3f41bec910b5b07520c23b05dcbb1996d091ef62`. Native build child `35232466634` completed green on x86_64 and aarch64. Project-state child `35232469698` completed green. The parent repository-policy and dispatcher jobs were green and the branch-cleanup job correctly skipped.
+The hosted workflow still builds one immutable candidate base per architecture. This is deliberate for the first feasibility run. If E1 is green, the next reduction is to prepare/persist the base outside ordinary protocol runs, preferably on native self-hosted KVM-capable x86_64 and aarch64 runners. Interoperability has not yet been migrated and remains the next target after the Python two-node path proves itself.
 
-E1 child `35232475152` failed before Phase 3 protocol acceptance. On arm64 the image path reached final RAW/QCOW2 validation and detected a logical-content mismatch. On amd64 both guests booted to `multi-user.target`, but the just-created smoke-service dependency was absent from the boot transaction and no acceptance markers appeared. The evidence is consistent with late ext4 backing-file metadata writes racing image conversion rather than a DECnet protocol result.
-
-Interop child `35232477599` also failed before independent-peer protocol assertions on both architectures while preparing the mutated reference image after its package installation. Base/candidate preparation could complete first; the reference mutation then failed in its final image-integrity sequence. The correction therefore applies to every RAW filesystem mutation path instead of weakening the logical image comparison.
-
-The current correction makes base ext4 creation eager with `lazy_itable_init=0,lazy_journal_init=0`. After the final unmount, the base builder, interoperability-candidate builder and reference-image builder all synchronize the backing file and run `e2fsck -fy`. Exit statuses 0 and 1 are accepted; higher statuses fail the build. Only then may RAW-to-QCOW2 conversion, `qemu-img check`, and logical `qemu-img compare` proceed. The image-builder policy regression requires these safeguards.
-
-All results belonging to `3f41bec910b5b07520c23b05dcbb1996d091ef62` become historical when this correction lands. A fresh exact-head acceptance lineage is mandatory.
-
-Repository branch policy remains exactly one remote branch, `refs/heads/main`. GitHub-owned actions remain pinned to immutable full SHAs. The machine helpers are `tools/workflow_guard.sh` and `tools/integrity_scan.py`; workflow evidence is stored below `integrity/`.
+Repository branch policy remains exactly one remote branch, `refs/heads/main`. GitHub-owned actions remain pinned to immutable full SHAs. The machine helpers remain `tools/workflow_guard.sh`, `tools/integrity_scan.py`, `tools/project_state_gate.py` and `tools/workflow_budget_gate.py`.
 
 | Field | Current value |
 | --- | --- |
@@ -41,23 +33,22 @@ Repository branch policy remains exactly one remote branch, `refs/heads/main`. G
 | Remote branch invariant | only `refs/heads/main` |
 | Hosted job ceiling | 75 minutes |
 | Runner queue policy | `queue: max`; no cancellation of pending acceptance work |
-| Interoperability scenarios per hosted job | maximum 2 |
-| Compact evidence retention | 30 days |
-| VM checkpoint retention | 3 days; rolling newest successful per architecture; paginated pruning |
+| VM lifecycle | Python direct QEMU/QMP |
+| VM disk state | disposable qcow2 overlays over immutable base |
+| Writable VM checkpoint artifacts | retired |
+| Compact evidence retention | 30 days maximum |
 | Acceptance child binding | parent run ID + exact expected SHA |
-| Routine workflow integrity requirement | one bounded baseline diff manifest plus matching final diff manifest |
-| Explicit machine full-tree scan | `tools/integrity_scan.py --full-tree` |
 | Previous acceptance parent | `35232209976` on `3f41bec910b5b07520c23b05dcbb1996d091ef62` |
 | Previous native build run | `35232466634`, success |
 | Previous project-state run | `35232469698`, success |
 | Previous E1 VM run | `35232475152`, image-path failure before protocol acceptance |
 | Previous interoperability run | `35232477599`, image-preparation failure before protocol assertions |
-| Phase 3 acceptance | fresh exact-head lineage required after current correction |
+| Current feasibility target | E1 on Python overlay controller |
 
 ## Persistent run index
 
-Mutable workflow state remains below ignored `scratch/runtime/`; restored evidence remains below ignored `scratch/restored/`. A run ID is lineage, not persistent execution. Only explicitly uploaded and subsequently verified files persist across hosted runners. Runtime evidence belongs only to its exact candidate and never transfers acceptance status to a later commit.
+Mutable workflow state remains below ignored `scratch/runtime/`; restored evidence may exist below ignored `scratch/restored/` only for workflows that explicitly consume prior evidence. A run ID is lineage, not persistent execution. VM writable disks are ephemeral and do not transfer acceptance state between runs.
 
 ## Next action
 
-Commit the ext4 image-stability correction directly to `main`, then dispatch fresh exact-head native x86_64/aarch64 build, project-state/continuity, pinned reference, E1 and bounded Route20/PyDECnet interoperability gates. Phase 4 starts only after that unchanged candidate is green.
+Commit the Python/QEMU migration and checkpoint cleanup directly to `main`, then dispatch fresh exact-head acceptance. Treat E1 as the proof point for the new controller. If it passes on both architectures, migrate interoperability orchestration and then remove the remaining protocol-test image mutation machinery where it is no longer needed.
