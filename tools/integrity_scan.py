@@ -13,7 +13,7 @@
 # patent, trademark, and governing-law provisions.
 # ============================================================================
 
-"""Diff-scoped candidate scan with explicit full-tree opt-in."""
+"""Diff-scoped candidate integrity scan with explicit full-tree opt-in."""
 
 from __future__ import annotations
 
@@ -226,14 +226,14 @@ def main() -> int:
     parser.add_argument(
         "--full-tree",
         action="store_true",
-        help="explicit opt-in for a complete tracked-tree scan",
+        help="explicit opt-in for a complete tracked-tree machine scan",
     )
     args = parser.parse_args()
 
     commit = git_text("rev-parse", "--verify", args.rev + "^{commit}")
     head = git_text("rev-parse", "--verify", "HEAD^{commit}")
     if head != commit:
-        raise SystemExit(f"SOP-SCAN: checkout {head} is not requested commit {commit}")
+        raise SystemExit(f"INTEGRITY-SCAN: checkout {head} is not requested commit {commit}")
     tree = git_text("rev-parse", "--verify", commit + "^{tree}")
 
     if args.full_tree:
@@ -281,7 +281,7 @@ def main() -> int:
         differences.extend(extra)
         if differences:
             raise SystemExit(
-                "SOP-SCAN: scan differs from baseline in "
+                "INTEGRITY-SCAN: scan differs from baseline in "
                 + ", ".join(sorted(set(differences)))
             )
 
@@ -292,7 +292,7 @@ def main() -> int:
         else ""
     )
     print(
-        "SOP-SCAN: pass="
+        "INTEGRITY-SCAN: pass="
         + args.pass_id
         + f" scope={result['scope']} commit={commit} tree={tree}"
         + f" files={len(records)} bytes={total_bytes}{detail}"
@@ -305,5 +305,5 @@ if __name__ == "__main__":
     try:
         raise SystemExit(main())
     except (subprocess.CalledProcessError, RuntimeError) as exc:
-        print(f"SOP-SCAN: {exc}", file=sys.stderr)
+        print(f"INTEGRITY-SCAN: {exc}", file=sys.stderr)
         raise SystemExit(1)

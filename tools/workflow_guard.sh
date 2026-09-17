@@ -22,18 +22,18 @@ fi
 state_dir=$1
 expected=$2
 scope=$3
-case "$scope" in main|maintenance|event) ;; *) echo "workflow-sop: invalid scope: $scope" >&2; exit 2 ;; esac
+case "$scope" in main|maintenance|event) ;; *) echo "workflow-guard: invalid scope: $scope" >&2; exit 2 ;; esac
 
 head=$(git rev-parse --verify 'HEAD^{commit}')
 expected=$(git rev-parse --verify "$expected^{commit}")
 [[ "$head" == "$expected" ]] || {
-    echo "workflow-sop: checkout $head does not match requested $expected" >&2
+    echo "workflow-guard: checkout $head does not match requested $expected" >&2
     exit 1
 }
 
 if [[ "$scope" == main ]]; then
     [[ "${GITHUB_REF:-refs/heads/main}" == refs/heads/main ]] || {
-        echo "workflow-sop: acceptance workflows must run from main" >&2
+        echo "workflow-guard: acceptance workflows must run from main" >&2
         exit 1
     }
 fi
@@ -45,28 +45,28 @@ fi
 if [[ "$scope" == main || "$scope" == maintenance ]]; then
     remote=$(git ls-remote origin refs/heads/main | awk 'NR == 1 {print $1}')
     [[ -n "$remote" && "$remote" == "$expected" ]] || {
-        echo "workflow-sop: requested revision is not the current remote main" >&2
+        echo "workflow-guard: requested revision is not the current remote main" >&2
         exit 1
     }
 fi
 
-mkdir -p "$state_dir/sop"
+mkdir -p "$state_dir/integrity"
 python3 tools/scratch_state.py verify --dir "$state_dir"
-python3 tools/license_monkey.py --tree "$expected" | tee "$state_dir/sop/license.log"
-python3 tests/policy/test_workflow_budget_gate.py | tee "$state_dir/sop/workflow-budget-regression.log"
-python3 tools/workflow_budget_gate.py --tree "$expected" | tee "$state_dir/sop/workflow-budget.log"
-python3 tests/policy/test_image_builder_gate.py --tree "$expected" | tee "$state_dir/sop/image-builder-regression.log"
-python3 tests/policy/test_project_state_gate.py | tee "$state_dir/sop/project-state-regression.log"
-python3 tests/policy/test_repo_policy_branch.py | tee "$state_dir/sop/branch-policy-regression.log"
+python3 tools/license_monkey.py --tree "$expected" | tee "$state_dir/integrity/license.log"
+python3 tests/policy/test_workflow_budget_gate.py | tee "$state_dir/integrity/workflow-budget-regression.log"
+python3 tools/workflow_budget_gate.py --tree "$expected" | tee "$state_dir/integrity/workflow-budget.log"
+python3 tests/policy/test_image_builder_gate.py --tree "$expected" | tee "$state_dir/integrity/image-builder-regression.log"
+python3 tests/policy/test_project_state_gate.py | tee "$state_dir/integrity/project-state-regression.log"
+python3 tests/policy/test_repo_policy_branch.py | tee "$state_dir/integrity/branch-policy-regression.log"
 if [[ "$scope" == main || "$scope" == maintenance ]]; then
-    python3 tools/project_state_gate.py --head "$expected" | tee "$state_dir/sop/project-state.log"
-    CI=false python3 tools/repo_policy.py | tee "$state_dir/sop/repository-policy.log"
+    python3 tools/project_state_gate.py --head "$expected" | tee "$state_dir/integrity/project-state.log"
+    CI=false python3 tools/repo_policy.py | tee "$state_dir/integrity/repository-policy.log"
 fi
 
-# Routine workflow review is deliberately bounded to the exact parent-to-candidate
-# diff. Full-tree scanning remains available only through an explicit
-# `tools/sop_scan.py --full-tree` invocation.
-python3 tools/sop_scan.py --rev "$expected" --pass-id baseline \
-    --output "$state_dir/sop/pass-1.json"
+# Routine workflow integrity checking is deliberately bounded to the exact
+# parent-to-candidate diff. A complete tracked-tree machine scan remains
+# available only through an explicit `tools/integrity_scan.py --full-tree` call.
+python3 tools/integrity_scan.py --rev "$expected" --pass-id baseline \
+    --output "$state_dir/integrity/pass-1.json"
 python3 tools/scratch_state.py mark --dir "$state_dir" --status targeted-scan-green \
-    --note "bounded parent-to-candidate diff scan recorded; automatic full-tree SoP disabled"
+    --note "bounded parent-to-candidate integrity manifest recorded; automatic full-tree scan disabled"

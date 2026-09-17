@@ -125,7 +125,7 @@ jobs:
           repository: ${{ github.repository }}
           run-id: ${{ inputs.resume_run_id }}
 
-      - name: Initialize scratch state and verify SoP scans
+      - name: Initialize scratch state and verify integrity checks
         shell: bash
         run: |
           set -euo pipefail
@@ -135,7 +135,7 @@ jobs:
             --parent-run-id '${{ inputs.parent_run_id }}' \
             --expected-sha '${{ inputs.expected_sha }}' \
             --resume-run-id '${{ inputs.resume_run_id }}'
-          tools/workflow_sop.sh "$DNIV_SCRATCH_DIR" "$GITHUB_SHA" main
+          tools/workflow_guard.sh "$DNIV_SCRATCH_DIR" "$GITHUB_SHA" main
           echo "DNIV_INTEROP_ARTIFACTS=$DNIV_SCRATCH_DIR/interop" >> "$GITHUB_ENV"
 
       - name: Install host tools
@@ -248,9 +248,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 tools/sop_scan.py --rev "$GITHUB_SHA" --pass-id final \
-            --baseline "$DNIV_SCRATCH_DIR/sop/pass-1.json" \
-            --output "$DNIV_SCRATCH_DIR/sop/final.json"
+          python3 tools/integrity_scan.py --rev "$GITHUB_SHA" --pass-id final \
+            --baseline "$DNIV_SCRATCH_DIR/integrity/pass-1.json" \
+            --output "$DNIV_SCRATCH_DIR/integrity/final.json"
           python3 tools/scratch_state.py verify --dir "$DNIV_SCRATCH_DIR"
 
       - name: Record workflow result

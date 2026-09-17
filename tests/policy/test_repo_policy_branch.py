@@ -41,28 +41,28 @@ def main() -> int:
                 f"branch policy mismatch for {ref!r} deleting={deleting}: {actual!r} != {expected!r}"
             )
 
-    workflow_sop = (ROOT / "tools/workflow_sop.sh").read_text(encoding="utf-8")
+    workflow_guard = (ROOT / "tools/workflow_guard.sh").read_text(encoding="utf-8")
     repository_workflow = (
         ROOT / ".github/workflows/repository-policy.yml"
     ).read_text(encoding="utf-8")
-    required_sop = (
+    required_guard = (
         'main|maintenance|event',
         'if [[ "$scope" == main || "$scope" == maintenance ]]; then',
     )
-    for snippet in required_sop:
-        if snippet not in workflow_sop:
+    for snippet in required_guard:
+        if snippet not in workflow_guard:
             raise SystemExit(
-                f"branch policy regression: maintenance SoP support missing: {snippet}"
+                f"branch policy regression: maintenance guard support missing: {snippet}"
             )
     maintenance_call = (
-        'tools/workflow_sop.sh "$DNIV_SCRATCH_DIR" "$candidate" maintenance'
+        'tools/workflow_guard.sh "$DNIV_SCRATCH_DIR" "$candidate" maintenance'
     )
     if maintenance_call not in repository_workflow:
         raise SystemExit(
             "branch policy regression: branch cleanup must verify current main with maintenance scope"
         )
     stale_cleanup_call = (
-        'tools/workflow_sop.sh "$DNIV_SCRATCH_DIR" "$candidate" main'
+        'tools/workflow_guard.sh "$DNIV_SCRATCH_DIR" "$candidate" main'
     )
     if any(
         line.strip() == stale_cleanup_call
