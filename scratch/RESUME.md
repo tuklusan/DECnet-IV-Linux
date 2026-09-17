@@ -42,6 +42,10 @@ Acceptance run `35266940092` on `31fc8e00d1c46ffd5cc74c6663c287753a0b7e5d` prove
 
 The silence window is corrected to 7s and a workflow-guard regression reads the actual hello interval, 3.1x multiplier and DR-delay constant and enforces `expiry < silence < DR eligibility`. The old 12s value fails this regression. Acceptance parent `35285482332` ran the updated license scanner successfully and reached this regression; it failed only because the first regression version required one router interval occurrence even though the smoke script has two valid, equal `hello_interval=2` load sites. The regression now accepts repeated equal values and rejects disagreement.
 
+Exact-head `e7ee147f40bcea7525f9a25499fa9f59974cb9b6` proved the E1 correction: parent/dispatcher, both native builds, project state, pinned PyDECnet/Route20 baselines and both VM E1 architectures were green; ARM64 captured 442 DECnet frames. In interop run `35285622023`, ARM64 Route20 routing failed before Route20 execution because the reference VM hit the hardcoded 90-second READY deadline while still completing normal boot, with rootfs handoff around guest uptime 80 seconds. This is an ARM interop harness readiness defect, not candidate DECnet evidence.
+
+Interop now keeps the reference READY bound at 90s on amd64 and uses 150s on ARM64 for both initial and restart boots. The workflow guard enforces those exact bounded values and both call sites.
+
 Repository license validation now excludes `__pycache__` and `.git` directories in the Git enumeration command itself for both exact-tree and staged scans, at any depth, so generated caches and repository metadata never reach the validator.
 
 | Field | Current value |
@@ -61,7 +65,7 @@ Repository license validation now excludes `__pycache__` and `.git` directories 
 | Compact evidence retention | 30 days maximum |
 | Acceptance child binding | parent run ID + exact expected SHA |
 | VM controller budget | amd64 300s; ARM64 360s |
-| Infrastructure status | architecture/direct boot/stats sampling/controller budget closed; E1 silence-window correction awaiting exact acceptance |
+| Infrastructure status | architecture/direct boot/stats sampling/controller budget/E1 closed; ARM64 interop reference-ready bound awaiting exact acceptance |
 
 ## Persistent run index
 
@@ -77,4 +81,4 @@ Acceptance lineage for `38c5b49e53c648f6514f52ebff84a93331a4732a`: repository-po
 
 ## Next action
 
-Run exact-head acceptance for current `main`, taking ARM64 E1 first. Require the timing regression, bidirectional unicast, expiry, restart INIT, recovery, both PASS markers and the negative `endnodesA == 0` PCAP assertion. Confirm amd64 remains green, then continue the full exact-SHA mechanical/build/state/reference/interoperability set. Keep Route20 runtime diagnosis separate.
+Run exact-head acceptance for current `main`. Require the new interop-readiness regression and the already-proven two-architecture E1 gates. ARM64 reference startup gets 150 seconds; amd64 remains 90 seconds. If Route20 then exits after READY, diagnose the pinned reference runtime independently and alter candidate protocol code only for separately demonstrated defects.

@@ -122,6 +122,10 @@ sleep 1
 kill -0 "$TCPDUMP_PID"
 
 host_arch=$(uname -m)
+reference_ready_seconds=90
+if [[ "$host_arch" == aarch64 ]]; then
+    reference_ready_seconds=150
+fi
 accel=tcg
 if [[ -e /dev/kvm && -r /dev/kvm && -w /dev/kvm ]]; then accel=kvm; fi
 
@@ -197,7 +201,7 @@ wait_marker() {
 }
 
 start_reference "$ref1_disk" "$ref1_log" & REFERENCE_PID=$!
-if ! wait_marker "$ref1_log" "DNIV-REF-READY session=$session reference=$reference sha=$expected_sha scenario=$scenario" 90 "$REFERENCE_PID"; then
+if ! wait_marker "$ref1_log" "DNIV-REF-READY session=$session reference=$reference sha=$expected_sha scenario=$scenario" "$reference_ready_seconds" "$REFERENCE_PID"; then
     tail -160 "$ref1_log" >&2 || true
     exit 1
 fi
@@ -219,7 +223,7 @@ if ! wait_marker "$candidate_log" "DNIV-INTEROP-EXPIRED session=$session scenari
 fi
 
 start_reference "$ref2_disk" "$ref2_log" & REFERENCE_PID=$!
-if ! wait_marker "$ref2_log" "DNIV-REF-READY session=$session reference=$reference sha=$expected_sha scenario=$scenario" 90 "$REFERENCE_PID"; then
+if ! wait_marker "$ref2_log" "DNIV-REF-READY session=$session reference=$reference sha=$expected_sha scenario=$scenario" "$reference_ready_seconds" "$REFERENCE_PID"; then
     tail -160 "$ref2_log" >&2 || true
     exit 1
 fi

@@ -69,6 +69,10 @@ Exact-head `31fc8e00d1c46ffd5cc74c6663c287753a0b7e5d` then completed the guest-s
 
 The E1 silence interval is now 7 seconds. A host regression derives listener expiry and DR delay from the actual wire/kernel constants and requires `expiry < silence < expiry + DR delay`; it rejects the former 12-second interval. Acceptance run `35285482332` proved the updated license scanner and all earlier policy checks green, then exposed a regression-test bug: the smoke script contains two valid L1-router `hello_interval=2` module-load sites. The regression now requires all router interval occurrences to agree instead of requiring exactly one. No kernel or DECnet protocol behavior is changed.
 
+Exact-head acceptance for `e7ee147f40bcea7525f9a25499fa9f59974cb9b6` closed the E1 gate: repository policy/dispatcher, both native builds, project state, both pinned reference baselines, and both amd64/ARM64 E1 VM jobs were green. ARM64 reported `e1-silence regression passed: expiry=6.2s silence=7s dr=11.2s` and `python-lab: E1 pass on aarch64 ... captured 442 DECnet frames`. Interop run `35285622023` then exposed a separate ARM64 harness bound: the Route20 reference VM was terminated by the host's hardcoded 90-second READY deadline while still finishing normal boot, reaching root-filesystem handoff only around guest uptime 80 seconds. Route20 had not started, so this failure is neither the known Route20 null-IP crash nor a candidate protocol defect.
+
+Interop reference readiness is therefore bounded by host architecture: amd64 remains 90 seconds and ARM64 receives 150 seconds for both initial and restart reference boots. A workflow-guard regression requires exactly those bounded values and both READY waits to use the architecture-selected value. Candidate, reference, and protocol semantics are unchanged.
+
 Repository policy and acceptance dispatch remain isolated from protocol-lab runner concurrency. Release-image construction remains a separate exact-source gate and is not inferred from the cached protocol foundation.
 
 The license scanner prunes `__pycache__` and `.git` directories at Git enumeration time for both exact-tree and staged scans, at any depth. Their contents never enter header/license validation; ordinary tracked files and symlink blobs remain in scope.
@@ -83,10 +87,10 @@ Ordinary lab addressing remains area 31, nodes 70 through 79, names DN70 through
 
 ## Resume point
 
-Phase 3 is the active workstream. Infrastructure architecture, ARM64 direct boot, coherent E1 counter sampling and the controller budget are closed. The current candidate corrects only the E1 negative-DR silence window so it satisfies its documented timing contract and adds an automated regression for that bound. No kernel, UAPI, routing, hello, adjacency or reference implementation behavior changes.
+Phase 3 is the active workstream. Repository policy, native builds, project continuity, reference baselines, ARM64 direct boot, coherent counter sampling, controller budget and two-architecture E1 behavior are closed on the current lineage. The current change only extends the ARM64 interop reference-guest READY bound from 90 to 150 seconds while preserving amd64 at 90 seconds; it does not change kernel or DECnet behavior.
 
 The next independent blocker is Route20 stability: the retained diagnostics now show a null-instruction-pointer userspace segfault immediately after Route20 circuit startup. That reference-runtime crash must be diagnosed in the exact pinned Route20 fork before any candidate DECnet protocol change is considered for those failed interop cases.
 
 ## Next action
 
-Run exact-head acceptance on `main`, taking ARM64 E1 first. Require the new silence-window regression to pass, preserve bidirectional `delta=40`, expiry, restart INIT, recovery and both PASS markers, and require host PCAP to retain `endnodesA == 0`. Confirm amd64 E1 remains green, then continue the same exact SHA through mechanical/build/state/reference/interoperability gates. Diagnose Route20 runtime crashes separately from candidate protocol behavior.
+Run exact-head acceptance on `main`. Require the interop-readiness regression plus the already-green mechanical/build/state/reference/E1 gates. On ARM64, require the reference guest to reach READY within 150 seconds before classifying any Route20 behavior. For any subsequent Route20 exit, use retained diagnostics to distinguish the known null-IP userspace crash from candidate protocol behavior before changing DECnet code.
