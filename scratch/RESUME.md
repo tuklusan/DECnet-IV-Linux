@@ -22,11 +22,11 @@ Hosted-runner lifetime and storage policy is machine-enforced. Every workflow jo
 
 Acceptance fan-out is bound to one immutable candidate. The owner acceptance dispatcher passes both its run ID and exact `GITHUB_SHA` to every child. `tools/scratch_state.py` rejects a child with a parent run ID unless an expected SHA is also supplied, resolves that SHA to a commit, and refuses initialization unless it equals the child's actual source commit. `state.json` retains both the source and expected SHA for later audit. If `main` moves during dispatch or before a queued child starts, the child fails instead of silently testing a different candidate.
 
-Repository branch policy is explicit. Project work must be on local `main`; pre-push rejects creation/update of any non-main branch and rejects deletion of `main`, while permitting deletion of obsolete non-main refs. Acceptance policy also inspects the remote heads and requires `refs/heads/main` to be the only branch. An owner-only `DNIV branch cleanup` maintenance issue removes legacy remote heads and then runs the exact-main SoP machinery. A non-main branch creation event also enters the same cleanup path. Existing legacy refs must be cleaned by that maintenance gate before acceptance can pass.
+Repository branch policy is active and the remote invariant is now satisfied. Project work must be on local `main`; pre-push rejects creation/update of any non-main branch and rejects deletion of `main`, while permitting cleanup deletion of obsolete non-main refs. Acceptance policy inspects remote heads and requires `refs/heads/main` to be the only branch. Cleanup run `35179252422` removed the legacy refs, verified only `main` remained, ran the exact-main workflow SoP machinery, and completed successfully. A future non-main branch creation event enters the same cleanup path automatically.
 
-The first cleanup canary on run `35179022863` failed before deleting any ref because the workflow attempted to write `maintenance.env` before creating its scratch directory. The correction creates the scratch directory before that first write; the failed run is retained as diagnostic evidence only and resets SoP.
+The first cleanup canary, run `35179022863`, failed before deleting any ref because the workflow attempted to write `maintenance.env` before creating its scratch directory. The corrected run `35179252422` passed after that initialization-order fix. Both runs are diagnostic history; the correction and subsequent continuity update reset semantic SoP.
 
-GitHub-owned workflow actions used by this repository are pinned to immutable full commit SHAs: checkout v4.4.0 `11d5960a326750d5838078e36cf38b85af677262`, upload-artifact v4.6.2 `ea165f8d65b6e75b540449e92b4886f43607fa02`, and download-artifact v4.3.0 `d3f86a106a0bac45b974a628896c90dbdf5c8093`. `tools/workflow_budget_gate.py` enforces these pins together with `queue: max`, the 75-minute ceiling, retention limits, expected-SHA inputs and the maximum-two-scenario interoperability rows. Regression tests cover exact staged/committed workflow sources, queueing, action pins, scenario bounds and branch-update policy.
+GitHub-owned workflow actions are pinned to immutable full commit SHAs: checkout v4.4.0 `11d5960a326750d5838078e36cf38b85af677262`, upload-artifact v4.6.2 `ea165f8d65b6e75b540449e92b4886f43607fa02`, and download-artifact v4.3.0 `d3f86a106a0bac45b974a628896c90dbdf5c8093`. `tools/workflow_budget_gate.py` enforces these pins together with `queue: max`, the 75-minute ceiling, retention limits, expected-SHA inputs and the maximum-two-scenario interoperability rows. Regression tests cover exact staged/committed workflow sources, queueing, action pins, scenario bounds and branch-update policy.
 
 A run/session ID records lineage only. Hosted runner RAM, processes and live QEMU state do not survive job termination. Persistence exists only for explicitly uploaded and subsequently verified files. Two-node resume additionally requires the sealed format-2 checkpoint hashes, matching architecture, exact source revision and mode.
 
@@ -34,7 +34,7 @@ A run/session ID records lineage only. Hosted runner RAM, processes and live QEM
 | --- | --- |
 | Protocol phase | Phase 3 |
 | Working ref | `main` only |
-| Remote branch invariant | only `refs/heads/main`; legacy refs pending cleanup gate |
+| Remote branch invariant | satisfied: only `refs/heads/main` |
 | Hosted job voluntary ceiling | 75 minutes |
 | Runner queue policy | `queue: max` on every concurrency block |
 | Interoperability scenarios per hosted job | maximum 2 |
@@ -45,7 +45,7 @@ A run/session ID records lineage only. Hosted runner RAM, processes and live QEM
 | Byte-complete workflow scan requirement | 3 matching scans plus final post-gate scan |
 | Phase 3 acceptance | not yet dispatched for this candidate |
 | Latest acceptance parent run | none yet |
-| Latest branch-cleanup run | `35179022863` failed safely before ref deletion; retry required |
+| Latest branch-cleanup run | `35179252422`, success |
 | Latest resumable VM run | none yet |
 | Latest interoperability run | none yet |
 
@@ -57,4 +57,4 @@ The tracked table above is the durable human index. It is updated with `docs/PRO
 
 ## Next action
 
-Commit the cleanup scratch-directory correction atomically on `main`, trigger a fresh owner-only branch cleanup gate, and verify the remote contains only `main`. That change resets SoP. Restart the complete semantic/manual SoP review on the exact cleaned `main` candidate and require three consecutive clean full-repository passes. Then execute exact-head repository policy/continuity, native x86_64/aarch64 build, pinned reference baselines, E1 self-to-self, and the bounded live Route20/PyDECnet interoperability suites. Only after that unchanged Phase 3 candidate is green may Phase 4 kernel routing work begin.
+Restart the complete semantic/manual SoP review on the exact resulting `main` candidate and require three consecutive clean full-repository passes. The workflow byte-scan manifests, branch-policy regression, continuity regression and workflow-budget/action-pin gate must agree on that same commit/tree. Then execute exact-head repository policy/continuity, native x86_64/aarch64 build, pinned reference baselines, E1 self-to-self, and the bounded live Route20/PyDECnet interoperability suites. Only after that unchanged Phase 3 candidate is green may Phase 4 kernel routing work begin.
