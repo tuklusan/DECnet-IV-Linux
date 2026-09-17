@@ -41,6 +41,7 @@ Phase 3 is in progress. UAPI version 2 adds DECnet Ethernet address handling, ro
 - `image/ubuntu-base/` — pinned rootfs metadata and deterministic image builder
 - `tests/` — unit and interoperability tests
 - `docs/` — architecture, roadmap, test lab, handover and continuity state
+- `references/` — normative DECnet specifications, pinned implementation references and source-of-truth rules
 - `.github/workflows/` — repository, build, reference, continuity and VM gates
 
 Start with `docs/HANDOVER.md` when resuming work. It points to the authoritative project state and ordered roadmap.

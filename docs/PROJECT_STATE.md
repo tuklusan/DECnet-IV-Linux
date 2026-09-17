@@ -24,6 +24,8 @@ Build a complete native DECnet Phase IV stack for maintained Linux as an out-of-
 
 Preferred exact reference pins remain Route20 `b94115b2615c6463d1f006924ceeadde8e2d4367`, PyDECnet live `a7194be8d72dea6f9eb4f77083f056f53e80df58`, PyDECnet tests `9a844987bf3a1450632dee8d37e60a23a453bad3`, LinuxDECnet `ff39eef045d1e4b7b72a3d40111e89c07a473398`, and SIMH `5b73b1032b52d19bf80752ea4d9cbbdc92e7b5e0`. The product license is the canonical root `LICENSE`; the kernel reports `MODULE_LICENSE("Proprietary")`.
 
+The root `references/` directory records the development source-of-truth hierarchy and distilled protocol/reference index. Digital DNA Phase IV functional specifications are normative; PyDECnet and Route20 are independent implementation cross-checks; LinuxDECnet is the Linux ABI/userspace compatibility reference; SIMH plus genuine DEC operating systems are interoperability oracles. Third-party documents and code retain their original licenses.
+
 ## Repository discipline
 
 - Work directly on `main`; do not create or use feature branches.

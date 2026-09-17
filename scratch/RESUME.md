@@ -18,6 +18,8 @@
 
 Phase 3 remains active and all substantive work stays on `main`. Candidate promotion is controlled only by exact-SHA mechanical, build, VM, reference, protocol and interoperability gates.
 
+Reference discipline is now explicit at repository root in `references/`: Digital DNA Phase IV functional specifications are normative, pinned PyDECnet/Route20 are implementation cross-checks, pinned LinuxDECnet defines Linux-facing compatibility expectations, and pinned SIMH plus genuine DEC operating systems provide interoperability evidence. The reference directory contains project-authored distilled notes and pointers rather than unverified wholesale copies of third-party manuals.
+
 The two-node lab uses `tests/lab/dniv_lab.py`, a Python direct-QEMU controller with QMP shutdown, Linux bridge/TAP networking, packet capture, serial marker assertions and disposable qcow2 node overlays. Writable inner-VM checkpoints remain retired. Runtime/evidence lives below short `/tmp/dniv-*` paths and compact evidence is copied back to `scratch/runtime/`.
 
 The two architecture slots retain immutable source-independent foundations. Their session identifier is `outer-v2-<arch>-<foundation-fingerprint>`, derived from `image/ubuntu-base/images.env` and `build-foundation.sh`, never from the candidate SHA. A foundation contains Ubuntu userspace, the pinned kernel/initrd, build headers/toolchain, Python, libpcap and independent-reference runtime dependencies. `git` is included because pinned PyDECnet queries its Git revision at startup. No project source, module/tools, smoke service or candidate SHA is persistent.
