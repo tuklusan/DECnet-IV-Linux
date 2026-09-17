@@ -16,13 +16,13 @@
 set -euo pipefail
 
 if [[ $# -ne 3 ]]; then
-    echo "usage: $0 STATE-DIR EXPECTED-SHA main|event" >&2
+    echo "usage: $0 STATE-DIR EXPECTED-SHA main|maintenance|event" >&2
     exit 2
 fi
 state_dir=$1
 expected=$2
 scope=$3
-case "$scope" in main|event) ;; *) echo "workflow-sop: invalid scope: $scope" >&2; exit 2 ;; esac
+case "$scope" in main|maintenance|event) ;; *) echo "workflow-sop: invalid scope: $scope" >&2; exit 2 ;; esac
 
 head=$(git rev-parse --verify 'HEAD^{commit}')
 expected=$(git rev-parse --verify "$expected^{commit}")
@@ -36,6 +36,13 @@ if [[ "$scope" == main ]]; then
         echo "workflow-sop: acceptance workflows must run from main" >&2
         exit 1
     }
+fi
+
+# Both acceptance and maintenance operate on the exact current main tree. The
+# maintenance scope is used by branch-create cleanup jobs, whose immutable
+# event metadata still names the non-main branch even after checkout switches
+# to main and the branch is deleted.
+if [[ "$scope" == main || "$scope" == maintenance ]]; then
     remote=$(git ls-remote origin refs/heads/main | awk 'NR == 1 {print $1}')
     [[ -n "$remote" && "$remote" == "$expected" ]] || {
         echo "workflow-sop: requested revision is not the current remote main" >&2
@@ -51,7 +58,7 @@ python3 tools/workflow_budget_gate.py --tree "$expected" | tee "$state_dir/sop/w
 python3 tests/policy/test_image_builder_gate.py --tree "$expected" | tee "$state_dir/sop/image-builder-regression.log"
 python3 tests/policy/test_project_state_gate.py | tee "$state_dir/sop/project-state-regression.log"
 python3 tests/policy/test_repo_policy_branch.py | tee "$state_dir/sop/branch-policy-regression.log"
-if [[ "$scope" == main ]]; then
+if [[ "$scope" == main || "$scope" == maintenance ]]; then
     python3 tools/project_state_gate.py --head "$expected" | tee "$state_dir/sop/project-state.log"
     CI=false python3 tools/repo_policy.py | tee "$state_dir/sop/repository-policy.log"
 fi

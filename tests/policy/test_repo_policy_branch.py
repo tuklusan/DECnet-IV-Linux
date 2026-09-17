@@ -40,6 +40,35 @@ def main() -> int:
             raise SystemExit(
                 f"branch policy mismatch for {ref!r} deleting={deleting}: {actual!r} != {expected!r}"
             )
+
+    workflow_sop = (ROOT / "tools/workflow_sop.sh").read_text(encoding="utf-8")
+    repository_workflow = (
+        ROOT / ".github/workflows/repository-policy.yml"
+    ).read_text(encoding="utf-8")
+    required_sop = (
+        'main|maintenance|event',
+        'if [[ "$scope" == main || "$scope" == maintenance ]]; then',
+    )
+    for snippet in required_sop:
+        if snippet not in workflow_sop:
+            raise SystemExit(
+                f"branch policy regression: maintenance SoP support missing: {snippet}"
+            )
+    maintenance_call = (
+        'tools/workflow_sop.sh "$DNIV_SCRATCH_DIR" "$candidate" maintenance'
+    )
+    if maintenance_call not in repository_workflow:
+        raise SystemExit(
+            "branch policy regression: branch cleanup must verify current main with maintenance scope"
+        )
+    stale_cleanup_call = (
+        'tools/workflow_sop.sh "$DNIV_SCRATCH_DIR" "$candidate" main'
+    )
+    if stale_cleanup_call in repository_workflow:
+        raise SystemExit(
+            "branch policy regression: branch cleanup still uses acceptance-only main scope"
+        )
+
     print("branch policy regression tests passed")
     return 0
 

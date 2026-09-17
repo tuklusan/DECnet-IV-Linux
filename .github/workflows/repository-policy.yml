@@ -195,7 +195,7 @@ jobs:
         run: |
           set -euo pipefail
           candidate=$(git rev-parse --verify 'HEAD^{commit}')
-          tools/workflow_sop.sh "$DNIV_SCRATCH_DIR" "$candidate" main
+          tools/workflow_sop.sh "$DNIV_SCRATCH_DIR" "$candidate" maintenance
           python3 tools/sop_scan.py --rev "$candidate" --pass-id final \
             --baseline "$DNIV_SCRATCH_DIR/sop/pass-1.json" \
             --output "$DNIV_SCRATCH_DIR/sop/final.json"
