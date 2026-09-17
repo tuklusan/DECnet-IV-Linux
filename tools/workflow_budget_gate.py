@@ -98,7 +98,9 @@ def check_workflow(path: Path) -> list[str]:
             "scratch-vm-lab-checkpoint-${{ matrix.arch }}-${{ github.run_id }}",
             f"retention-days: {VM_CHECKPOINT_DAYS}",
             "Prune superseded successful VM checkpoints",
-            "!${{ env.DNIV_SCRATCH_DIR }}/lab/**/*.qcow2",
+            "!${{ env.DNIV_SCRATCH_DIR }}/lab/**/checkpoint/*.qcow2",
+            "!${{ env.DNIV_SCRATCH_DIR }}/lab/**/checkpoint/vmlinuz",
+            "!${{ env.DNIV_SCRATCH_DIR }}/lab/**/checkpoint/initrd.img",
             "actions: write",
         )
         for marker in required:

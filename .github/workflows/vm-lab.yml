@@ -227,7 +227,9 @@ jobs:
           name: scratch-vm-lab-evidence-${{ matrix.arch }}-${{ github.run_id }}
           path: |
             ${{ env.DNIV_SCRATCH_DIR }}/
-            !${{ env.DNIV_SCRATCH_DIR }}/lab/**/*.qcow2
+            !${{ env.DNIV_SCRATCH_DIR }}/lab/**/checkpoint/*.qcow2
+            !${{ env.DNIV_SCRATCH_DIR }}/lab/**/checkpoint/vmlinuz
+            !${{ env.DNIV_SCRATCH_DIR }}/lab/**/checkpoint/initrd.img
           if-no-files-found: warn
           retention-days: 30
           compression-level: 6
