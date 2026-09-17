@@ -68,7 +68,7 @@ wait_adjacency_up() {
 
 stat_value() {
     label=$1
-    /usr/local/sbin/dnctl stats | sed -n "s/^$label = //p"
+    /usr/local/sbin/dnctl stats | sed -n "s/^$label[[:space:]]*=[[:space:]]*//p"
 }
 
 wait_post_change_hello() {

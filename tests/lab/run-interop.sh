@@ -137,10 +137,13 @@ start_vm() {
                 -display none -monitor none -serial "file:$log" -no-reboot
             ;;
         aarch64)
-            local cpu=max
-            [[ "$accel" == kvm ]] && cpu=host
-            exec qemu-system-aarch64 -name "$role" -machine virt -accel "$accel" -cpu "$cpu" -m 512 -smp 1 \
-                -kernel "$kernel" -initrd "$initrd" -append "$common console=ttyAMA0" \
+            local cpu=max machine=virt,gic-version=3
+            if [[ "$accel" == kvm ]]; then
+                cpu=host
+                machine=virt,gic-version=host
+            fi
+            exec qemu-system-aarch64 -name "$role" -machine "$machine" -accel "$accel" -cpu "$cpu" -m 1024 -smp 1 \
+                -kernel "$kernel" -initrd "$initrd" -append "$common earlycon=pl011,0x09000000 console=ttyAMA0" \
                 -drive "file=$disk,if=virtio,format=qcow2" \
                 -netdev tap,id=lan,ifname="$tap",script=no,downscript=no \
                 -device virtio-net-pci,netdev=lan,mac="$hw" \
@@ -164,10 +167,13 @@ start_reference() {
                 -display none -monitor none -serial "file:$log" -no-reboot
             ;;
         aarch64)
-            local cpu=max
-            [[ "$accel" == kvm ]] && cpu=host
-            exec qemu-system-aarch64 -name "ref-$reference-$scenario" -machine virt -accel "$accel" -cpu "$cpu" -m 512 -smp 1 \
-                -kernel "$kernel" -initrd "$initrd" -append "$common console=ttyAMA0" \
+            local cpu=max machine=virt,gic-version=3
+            if [[ "$accel" == kvm ]]; then
+                cpu=host
+                machine=virt,gic-version=host
+            fi
+            exec qemu-system-aarch64 -name "ref-$reference-$scenario" -machine "$machine" -accel "$accel" -cpu "$cpu" -m 1024 -smp 1 \
+                -kernel "$kernel" -initrd "$initrd" -append "$common earlycon=pl011,0x09000000 console=ttyAMA0" \
                 -drive "file=$disk,if=virtio,format=qcow2" \
                 -drive "file=fat:ro:$bundle,if=virtio,format=raw,readonly=on" \
                 -netdev tap,id=lan,ifname="$tap_reference",script=no,downscript=no \

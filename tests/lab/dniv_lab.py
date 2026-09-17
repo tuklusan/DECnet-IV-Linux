@@ -189,10 +189,12 @@ class Lab:
             cmd = ["qemu-system-x86_64", "-name", guest.name, "-accel", self.accel, "-m", "512", "-smp", "1"]
             console = "console=ttyS0"
         elif self.host_arch == "aarch64":
-            cpu = "host" if self.accel == "kvm" else "max"
-            cmd = ["qemu-system-aarch64", "-name", guest.name, "-machine", "virt", "-accel", self.accel,
-                   "-cpu", cpu, "-m", "512", "-smp", "1"]
-            console = "console=ttyAMA0"
+            accel = self.accel
+            cpu = "host" if accel == "kvm" else "max"
+            machine = "virt,gic-version=host" if accel == "kvm" else "virt,gic-version=3"
+            cmd = ["qemu-system-aarch64", "-name", guest.name, "-machine", machine, "-accel", accel,
+                   "-cpu", cpu, "-m", "1024", "-smp", "1"]
+            console = "earlycon=pl011,0x09000000 console=ttyAMA0"
         else:
             raise RuntimeError(f"unsupported host architecture: {self.host_arch}")
         cmd += [

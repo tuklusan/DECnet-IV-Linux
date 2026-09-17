@@ -74,6 +74,14 @@ while [ "$i" -lt 100 ] && [ ! -b "$refdev" ]; do
     sleep 0.1
 done
 [ -b "$refdev" ] || { echo "DNIV-REF-FAIL session=$session reason=no-reference-disk"; exit 1; }
+# QEMU's vvfat backend exposes a partitioned disk. Prefer its first partition,
+# while retaining whole-disk compatibility for any future explicit image.
+i=0
+while [ "$i" -lt 50 ] && [ ! -b /dev/vdb1 ]; do
+    i=$((i + 1))
+    sleep 0.1
+done
+[ -b /dev/vdb1 ] && refdev=/dev/vdb1
 mount -o ro "$refdev" /mnt/reference
 
 manifest_ref=$(sed -n 's/^REFERENCE=//p' /mnt/reference/manifest.env | head -1)

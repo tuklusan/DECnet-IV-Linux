@@ -28,9 +28,13 @@ Each exact candidate is injected only into a disposable derived image by `tests/
 
 The VM workflow places Python-lab runtime below a short `/tmp/dniv-*` path. This removes the Linux UNIX-domain socket pathname failure seen when QMP sockets were under the long Actions scratch path. Serial/pcap evidence is copied back to `scratch/runtime/`; qcow2 and QMP files are deleted and excluded from uploaded evidence.
 
+Exact-head candidate `0ea6d28f4f77ca156a2dbc04bffec83034fd2723` proved the final persistence boundary. Repository policy and native amd64/arm64 builds passed. Both `outer-v2` foundations were built/saved once and later restored by interoperability jobs, and exact-candidate/reference image preparation completed without guest package installation. amd64 guests booted to systemd and reached live DECnet adjacency, so normal work is no longer blocked on image provisioning.
+
+Three bounded execution defects were identified from that evidence and are being corrected together: `dniv-smoke.sh` must accept the deliberately aligned whitespace in `dnctl stats`; the QEMU vvfat reference bundle appears as `/dev/vdb1` and the reference guest must mount that partition when present; and ARM64 QEMU `virt` direct boot is raised to 1 GiB with explicit GIC selection and PL011 early console. None of these changes modifies `build-foundation.sh`, so the existing amd64/arm64 `outer-v2` cache keys remain valid and should be reused on the next acceptance run.
+
 Repository branch policy remains exactly one remote branch, `refs/heads/main`. Repository-policy/control jobs do not consume protocol-lab concurrency slots. GitHub-owned actions, including cache restore/save, remain pinned to immutable full SHAs.
 
-The older `outer-v1-<arch>-<source-sha>` cache layout is obsolete because it rebuilt the expensive foundation for every source commit. The prior successful cache save/restore proved the mechanism, but not the desired persistence boundary. `outer-v2` is the final boundary.
+The older `outer-v1-<arch>-<source-sha>` cache layout is obsolete because it rebuilt the expensive foundation for every source commit. `outer-v2` is the final persistence boundary; do not reopen that design without concrete evidence that the foundation cache itself is invalid.
 
 | Field | Current value |
 | --- | --- |
@@ -48,12 +52,14 @@ The older `outer-v1-<arch>-<source-sha>` cache layout is obsolete because it reb
 | Interop prior-run evidence restore | retired |
 | Compact evidence retention | 30 days maximum |
 | Acceptance child binding | parent run ID + exact expected SHA |
-| Infrastructure status | finalization acceptance only; then return to protocol work |
+| Infrastructure status | closed; only bounded acceptance corrections remain |
 
 ## Persistent run index
 
 Run IDs remain lineage, not execution state. Persistent execution input is limited to the verified source-independent architecture foundation cache. Mutable workflow state remains below ignored `scratch/runtime/`; compact evidence may be uploaded, but it never substitutes for exact source/tree verification or becomes writable guest state for a later run.
 
+Acceptance lineage that established the current checkpoint: repository-policy/dispatcher `35246804540`; native build `35246841277` green on amd64 and arm64; Python VM lab `35246849288` reached live amd64 DECnet adjacency and exposed the aligned-stats parser issue while ARM64 produced no serial output under the 512 MiB implicit-GIC configuration; interoperability `35246852105` restored the same foundations and exposed the vvfat `/dev/vdb1` partition behavior on amd64.
+
 ## Next action
 
-Dispatch one fresh exact-head acceptance. Confirm the `outer-v2` foundation builds/restores, candidate injection runs without package installation, the Python lab no longer fails on QMP path length, and E1/interop reach protocol execution. Then stop infrastructure work and continue the Phase 3 implementation/debugging sequence from the first substantive protocol failure.
+Commit the three bounded corrections as one exact state and run one acceptance lineage using the existing `outer-v2` caches. Once execution reaches the next substantive DECnet failure, resume Phase 3 protocol/interoperability work from that failure and stop spending project time on infrastructure unless evidence directly implicates the persistent foundation mechanism.
