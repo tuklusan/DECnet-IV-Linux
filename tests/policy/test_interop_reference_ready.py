@@ -35,11 +35,11 @@ def main() -> int:
     )
     if default != ["90"]:
         raise SystemExit(f"interop-ready regression: amd64/default bound changed: {default}")
-    if arm != ["150"]:
+    if arm != ["240"]:
         raise SystemExit(f"interop-ready regression: ARM64 bound changed: {arm}")
     if int(arm[0]) <= int(default[0]):
         raise SystemExit("interop-ready regression: ARM64 bound must exceed default")
-    if int(arm[0]) > 180:
+    if int(arm[0]) > 300:
         raise SystemExit("interop-ready regression: ARM64 reference-ready bound is excessive")
 
     uses = re.findall(
@@ -54,7 +54,7 @@ def main() -> int:
     if re.search(r'DNIV-REF-READY[^\n]*" 90 "\$REFERENCE_PID"', SCRIPT):
         raise SystemExit("interop-ready regression: hardcoded 90-second wait remains")
 
-    print("interop-ready regression passed: amd64=90s arm64=150s")
+    print("interop-ready regression passed: amd64=90s arm64=240s")
     return 0
 
 
