@@ -33,7 +33,14 @@ ARM64_OWNER_FIX = 'sudo chown "$(id -u):$(id -g)" "$boot_dir/vmlinuz"'
 ARM64_MAGIC_READ = 'arm64_magic=$(dd if="$boot_dir/vmlinuz" bs=1 skip=56 count=4 status=none |'
 ARM64_HARD_REJECT = 'arm64 direct-boot kernel is neither raw Image nor EFI zboot'
 HOST_RAW_CMP = 'cmp -s "$raw"'
+EXT4_NORMALIZE_CALL = 'normalize_ext4 "$raw"'
+EXT4_FSCK = 'sudo e2fsck -fy "$image"'
+EXT4_FSCK_FATAL = 'if (( rc > 1 )); then'
 BASE_REQUIRED_SNIPPETS = {
+    "eager ext4 metadata initialization": 'mkfs.ext4 -q -F -E lazy_itable_init=0,lazy_journal_init=0 -L dniv-root "$raw"',
+    "ext4 synchronization and repair probe": EXT4_FSCK,
+    "ext4 repair status validation": EXT4_FSCK_FATAL,
+    "post-unmount ext4 normalization": EXT4_NORMALIZE_CALL,
     "installed smoke script byte comparison": 'sudo cmp -s "$smoke_script_source" "$smoke_script_dest"',
     "installed smoke unit byte comparison": 'sudo cmp -s "$smoke_unit_source" "$smoke_unit_dest"',
     "systemd unit validation": 'systemd-analyze verify /etc/systemd/system/dniv-smoke.service',
@@ -63,6 +70,9 @@ BASE_REQUIRED_SNIPPETS = {
     "logical raw/qcow2 comparison": 'qemu-img compare -f raw -F qcow2 "$raw" "$output"',
 }
 DERIVED_REQUIRED_SNIPPETS = {
+    "ext4 synchronization and repair probe": EXT4_FSCK,
+    "ext4 repair status validation": EXT4_FSCK_FATAL,
+    "post-unmount ext4 normalization": EXT4_NORMALIZE_CALL,
     "uncompressed qcow2 conversion": 'qemu-img convert -q -f raw -O qcow2 "$raw" "$output"',
     "qcow2 structural validation": 'qemu-img check -q -f qcow2 "$output"',
     "logical raw/qcow2 comparison": 'qemu-img compare -q -f raw -F qcow2 "$raw" "$output"',
@@ -206,7 +216,7 @@ def main() -> int:
 
     print(
         "image-builder gate: source=" + source_label
-        + " initrd, arm64 QEMU-compatible direct boot and logical image-integrity safeguards verified"
+        + " initrd, stable ext4 images, arm64 QEMU-compatible direct boot and logical image-integrity safeguards verified"
     )
     return 0
 

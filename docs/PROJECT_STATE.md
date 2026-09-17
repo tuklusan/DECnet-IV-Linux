@@ -55,21 +55,21 @@ Foundation complete: UAPI v2, `decnet_iv.ko`, configurable identity, Routing Lay
 
 Foundation complete: pinned Ubuntu Base 26.04.1 amd64/arm64 rootfs files and package snapshot `20260915T000000Z`, deterministic ext4/QCOW2 construction, exact guest kernel/module/userspace build, direct kernel/initrd boot, two independent one-NIC VMs, packet capture and serial evidence. Acceptance QCOW2 integrity uses `qemu-img compare`.
 
-The arm64 direct-boot path peels one outer gzip layer when present. Current raw AArch64 Images are recognized by `ARM\x64` metadata. Exact EFI-zboot wrappers are structurally validated, their bounded gzip payload is expanded to a raw AArch64 Image for QEMU direct boot, and other nonempty artifacts remain eligible for QEMU raw-image fallback. Actual VM boot remains executable proof.
+The arm64 direct-boot path peels one outer gzip layer when present. Current raw AArch64 Images are recognized by `ARM\x64` metadata. Exact EFI-zboot wrappers are structurally validated and their bounded gzip payload is expanded to a raw AArch64 Image for QEMU direct boot. Other nonempty artifacts remain eligible for QEMU raw-image fallback; actual VM boot remains executable proof.
 
-The image builder installs and verifies the VM smoke entry point, enables it with systemd's offline enable operation, and verifies the resulting `multi-user.target` dependency before image conversion.
+Acceptance image filesystems are now made stable before RAW-to-QCOW2 conversion. The base ext4 image disables lazy inode-table and journal initialization. Every base or derived RAW image is synchronized after its final unmount and checked with `e2fsck -fy`; only normal or repaired-clean statuses are accepted before conversion and logical comparison. This prevents late ext4 metadata writes from making the QCOW2 differ from the intended final RAW image.
 
 ### Phase 3
 
 Implementation remains active. UAPI v2 provides standard Phase IV node MAC derivation, router/endnode hello generation and parsing, periodic hello transmission, per-interface adjacency state, 3.1x listen expiry, designated-router election, counters and `dnctl adjacencies`. Router-router INIT/UP behavior, endnode admission, endnode router selection, L2 cross-area behavior, 33-router/interface admission, protocol source MACs, DECnet unicast filters and primary-MAC-change survival are implemented and covered by the current E1/interop harnesses.
 
-The current kernel includes the per-interface designated-router candidacy timer correction: when the local router first becomes the best candidate, a fresh five-second DRDELAY starts; the pending transition is cancelled while a better router is present; interface-down and identity changes reset the timer state. E1 includes a wire-level regression that silences DN71 long enough for listener expiry but not long enough for DN70 to complete DRDELAY, so DN70 must not emit an All-Endnodes hello during that gap.
+The kernel includes the per-interface designated-router candidacy timer correction: when the local router first becomes the best candidate, a fresh five-second DRDELAY starts; pending promotion is cancelled while a better router is known; interface-down and identity changes reset the timer state. E1 includes a wire-level regression that silences DN71 long enough for listener expiry but not long enough for DN70 to complete DRDELAY, so DN70 must not emit an All-Endnodes hello during that gap.
 
-Exact-SHA acceptance parent `35228747062` ran on candidate `3582b7ab3b0336f8b28cec6e8c1a68d02514d440`. Native build child `35228787667`, project-state child `35228789830`, and pinned reference-baseline child `35228792392` completed green. E1 child `35228794763` failed before protocol acceptance: arm64 produced no serial output from the direct-boot artifact, while amd64 booted normally but the smoke unit was absent from the boot transaction and emitted no acceptance markers. The corrective image path expands an exact validated EFI-zboot payload to raw Image and uses systemd offline enable plus enabled-link verification for the smoke unit.
+Exact-SHA acceptance parent `35232209976` ran on candidate `3f41bec910b5b07520c23b05dcbb1996d091ef62`. Native build child `35232466634` and project-state child `35232469698` completed green. E1 child `35232475152` failed before protocol acceptance: arm64 detected a RAW/QCOW2 content mismatch after image construction, while amd64 booted both guests but the smoke service dependency created immediately before conversion was absent from the boot transaction and no acceptance markers appeared. Those two observations are consistent with an image-stability defect: late backing-file metadata writes after unmount could race conversion and make the converted image represent an earlier filesystem state.
 
-Interop child `35228796950` exposed a separate harness defect before independent protocol assertions: Route20 reference startup failed on both architectures because the read-only vvfat bundle backend was attached to a writable virtio block frontend, and QEMU rejected it with `Block node is read-only`. The corrective harness marks that frontend `readonly=on`.
+Interop child `35232477599` failed before independent protocol assertions on both architectures while creating the mutated reference image after package installation. The base and candidate image path could complete first, then the reference-image mutation failed during its final image-integrity sequence. This is the same class of RAW filesystem quiescence defect and is corrected in the base and both derived image builders rather than hidden by weakening `qemu-img compare`.
 
-All results from `3582b7ab3b0336f8b28cec6e8c1a68d02514d440` are historical evidence after this correction. Phase 3 remains unaccepted until a fresh exact-head lineage is green.
+All acceptance results from `3f41bec910b5b07520c23b05dcbb1996d091ef62` are historical evidence after this correction. Phase 3 remains unaccepted until a fresh exact-head lineage is green.
 
 The repository-policy helpers are `tools/workflow_guard.sh` and `tools/integrity_scan.py`; workflow evidence is stored below `integrity/`.
 
@@ -83,7 +83,7 @@ Ordinary lab addressing remains area 31, nodes 70 through 79, names DN70 through
 
 ## Resume point
 
-Phase 3 remains active. The current candidate contains corrections for the arm64 direct-boot wrapper, deterministic smoke-unit enablement, and read-only interop bundle attachment. None of those corrections is accepted until the fresh exact-SHA child gates execute successfully.
+Phase 3 remains active. The current correction stabilizes ext4 RAW images before conversion in the base, interoperability-candidate and reference-image builders while retaining structural QCOW2 checks and logical RAW/QCOW2 equality. No protocol promotion is implied by this image-path repair.
 
 ## Next action
 

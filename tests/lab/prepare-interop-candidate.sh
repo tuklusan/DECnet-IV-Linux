@@ -32,6 +32,20 @@ cleanup() {
     rm -rf "$work"
 }
 trap cleanup EXIT INT TERM
+
+normalize_ext4() {
+    local image=$1 rc
+    sync
+    set +e
+    sudo e2fsck -fy "$image"
+    rc=$?
+    set -e
+    if (( rc > 1 )); then
+        echo "prepare-interop-candidate: ext4 normalization failed with status $rc" >&2
+        return "$rc"
+    fi
+}
+
 qemu-img convert -q -f qcow2 -O raw "$base" "$raw"
 sudo mount -o loop "$raw" "$mnt"
 mounted=1
@@ -64,6 +78,7 @@ sudo ln -sf ../dniv-interop-smoke.service \
     "$mnt/etc/systemd/system/multi-user.target.wants/dniv-interop-smoke.service"
 sudo umount "$mnt"
 mounted=0
+normalize_ext4 "$raw"
 
 # Acceptance correctness wins over file-size optimization. Keep the derived
 # image uncompressed, validate its qcow2 structure, then compare guest-visible

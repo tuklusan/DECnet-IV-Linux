@@ -16,17 +16,23 @@
 
 ## Current checkpoint
 
-Phase 3 remains active and all substantive work stays on `main`. Candidate promotion is controlled only by the documented exact-SHA mechanical, build, VM, reference, protocol and interoperability gates.
+Phase 3 remains active and all substantive work stays on `main`. Candidate promotion is controlled only by exact-SHA mechanical, build, VM, reference, protocol and interoperability gates.
 
 Workflow jobs bind exact source commit/tree, expected parent candidate SHA where applicable, run lineage, runner identity, architecture/mode and retained evidence. Routine workflow integrity checks use one bounded parent-to-candidate baseline diff manifest and one matching final manifest. A byte-complete tracked-tree machine scan remains explicit through `tools/integrity_scan.py --full-tree`.
 
 Hosted-runner policy is unchanged: at most 75 minutes per job, `queue: max`, `cancel-in-progress: false`, compact evidence at most 30 days, VM checkpoints 3 days with paginated stale-checkpoint pruning, and fresh interoperability VMs.
 
-Exact-SHA acceptance parent `35228747062` ran on `3582b7ab3b0336f8b28cec6e8c1a68d02514d440`. Native build `35228787667`, project-state `35228789830`, and reference-baseline `35228792392` completed green. E1 `35228794763` failed before protocol acceptance: arm64 emitted no serial output from the direct-boot artifact, while amd64 booted normally but never ran the smoke entry point. Interop `35228796950` also exposed an independent harness defect: Route20 reference startup failed because a read-only vvfat bundle backend was connected to a writable virtio frontend and QEMU rejected it with `Block node is read-only`.
+Acceptance parent `35232209976` targeted exact candidate `3f41bec910b5b07520c23b05dcbb1996d091ef62`. Native build child `35232466634` completed green on x86_64 and aarch64. Project-state child `35232469698` completed green. The parent repository-policy and dispatcher jobs were green and the branch-cleanup job correctly skipped.
 
-The current correction normalizes an exact validated arm64 EFI-zboot wrapper by expanding its bounded gzip payload to a raw AArch64 Image. Unknown nonempty kernel artifacts still retain QEMU raw fallback semantics, and VM boot remains the executable proof. The image builder now enables `dniv-smoke.service` through systemd's offline enable operation and verifies both enabled state and the `multi-user.target` dependency before image conversion. The interop harness marks the vvfat reference bundle block frontend read-only.
+E1 child `35232475152` failed before Phase 3 protocol acceptance. On arm64 the image path reached final RAW/QCOW2 validation and detected a logical-content mismatch. On amd64 both guests booted to `multi-user.target`, but the just-created smoke-service dependency was absent from the boot transaction and no acceptance markers appeared. The evidence is consistent with late ext4 backing-file metadata writes racing image conversion rather than a DECnet protocol result.
 
-Repository branch policy remains only `refs/heads/main`. GitHub-owned actions remain pinned to immutable full SHAs. The machine helpers are `tools/workflow_guard.sh` and `tools/integrity_scan.py`; workflow evidence is stored below `integrity/`.
+Interop child `35232477599` also failed before independent-peer protocol assertions on both architectures while preparing the mutated reference image after its package installation. Base/candidate preparation could complete first; the reference mutation then failed in its final image-integrity sequence. The correction therefore applies to every RAW filesystem mutation path instead of weakening the logical image comparison.
+
+The current correction makes base ext4 creation eager with `lazy_itable_init=0,lazy_journal_init=0`. After the final unmount, the base builder, interoperability-candidate builder and reference-image builder all synchronize the backing file and run `e2fsck -fy`. Exit statuses 0 and 1 are accepted; higher statuses fail the build. Only then may RAW-to-QCOW2 conversion, `qemu-img check`, and logical `qemu-img compare` proceed. The image-builder policy regression requires these safeguards.
+
+All results belonging to `3f41bec910b5b07520c23b05dcbb1996d091ef62` become historical when this correction lands. A fresh exact-head acceptance lineage is mandatory.
+
+Repository branch policy remains exactly one remote branch, `refs/heads/main`. GitHub-owned actions remain pinned to immutable full SHAs. The machine helpers are `tools/workflow_guard.sh` and `tools/integrity_scan.py`; workflow evidence is stored below `integrity/`.
 
 | Field | Current value |
 | --- | --- |
@@ -41,12 +47,12 @@ Repository branch policy remains only `refs/heads/main`. GitHub-owned actions re
 | Acceptance child binding | parent run ID + exact expected SHA |
 | Routine workflow integrity requirement | one bounded baseline diff manifest plus matching final diff manifest |
 | Explicit machine full-tree scan | `tools/integrity_scan.py --full-tree` |
-| Phase 3 acceptance | fresh exact-SHA gates required after current corrections |
-| Latest E1 VM run | `35228794763`, failed on prior candidate before protocol acceptance |
-| Latest native build run | `35228787667`, success on prior candidate |
-| Latest project-state run | `35228789830`, success on prior candidate |
-| Latest reference-baseline run | `35228792392`, success on prior candidate |
-| Latest interoperability run | `35228796950`, harness/reference-start failures on prior candidate; not promotable |
+| Previous acceptance parent | `35232209976` on `3f41bec910b5b07520c23b05dcbb1996d091ef62` |
+| Previous native build run | `35232466634`, success |
+| Previous project-state run | `35232469698`, success |
+| Previous E1 VM run | `35232475152`, image-path failure before protocol acceptance |
+| Previous interoperability run | `35232477599`, image-preparation failure before protocol assertions |
+| Phase 3 acceptance | fresh exact-head lineage required after current correction |
 
 ## Persistent run index
 
@@ -54,4 +60,4 @@ Mutable workflow state remains below ignored `scratch/runtime/`; restored eviden
 
 ## Next action
 
-Dispatch fresh exact-head native x86_64/aarch64 build, project-state/continuity, pinned reference, E1, Route20 and PyDECnet interoperability gates on the corrected current `main` candidate. Phase 4 starts only after that unchanged candidate is green.
+Commit the ext4 image-stability correction directly to `main`, then dispatch fresh exact-head native x86_64/aarch64 build, project-state/continuity, pinned reference, E1 and bounded Route20/PyDECnet interoperability gates. Phase 4 starts only after that unchanged candidate is green.

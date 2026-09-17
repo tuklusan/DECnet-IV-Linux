@@ -66,8 +66,21 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
+normalize_ext4() {
+    local image=$1 rc
+    sync
+    set +e
+    sudo e2fsck -fy "$image"
+    rc=$?
+    set -e
+    if (( rc > 1 )); then
+        echo "build-image: ext4 normalization failed with status $rc" >&2
+        return "$rc"
+    fi
+}
+
 truncate -s "$disk_bytes" "$raw"
-mkfs.ext4 -q -F -L dniv-root "$raw"
+mkfs.ext4 -q -F -E lazy_itable_init=0,lazy_journal_init=0 -L dniv-root "$raw"
 sudo mount -o loop "$raw" "$mnt"
 mounted=1
 sudo tar --numeric-owner --xattrs --acls -xpf "$base_tar" -C "$mnt"
@@ -238,6 +251,7 @@ sudo umount "$mnt/proc"
 chroot_mounted=0
 sudo umount "$mnt"
 mounted=0
+normalize_ext4 "$raw"
 
 # Acceptance correctness wins over file-size optimization. Keep the image
 # uncompressed, validate qcow2 structure, then compare guest-visible logical
