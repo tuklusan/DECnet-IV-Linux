@@ -106,6 +106,16 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
+dump_route20_diagnostics() {
+    echo "DNIV-REF-DIAG session=$session reference=route20 source=syslog begin"
+    journalctl -b --no-pager -t Route20 -n 200 2>&1 || true
+    echo "DNIV-REF-DIAG session=$session reference=route20 source=syslog end"
+    echo "DNIV-REF-DIAG session=$session reference=route20 source=kernel begin"
+    journalctl -b -k --no-pager -n 200 2>&1 | \
+        grep -Ei 'route20|dniv-route20|segfault|general protection|invalid opcode|killed process' || true
+    echo "DNIV-REF-DIAG session=$session reference=route20 source=kernel end"
+}
+
 probe_loop() {
     i=0
     while :; do
@@ -146,7 +156,7 @@ EOF_ROUTE20
     done
     [ -s /var/run/route20.pid ] || { echo "DNIV-REF-FAIL session=$session reason=route20-no-pid"; exit 1; }
     peer_pid=$(cat /var/run/route20.pid)
-    kill -0 "$peer_pid" 2>/dev/null || { echo "DNIV-REF-FAIL session=$session reason=route20-dead"; exit 1; }
+    kill -0 "$peer_pid" 2>/dev/null || { dump_route20_diagnostics; echo "DNIV-REF-FAIL session=$session reason=route20-dead"; exit 1; }
     ;;
 pydecnet)
     tar -xf /mnt/reference/pydecnet.tar -C /run/reference
@@ -178,5 +188,8 @@ while kill -0 "$peer_pid" 2>/dev/null; do
     sleep 1
 done
 
+if [ "$reference" = route20 ]; then
+    dump_route20_diagnostics
+fi
 echo "DNIV-REF-FAIL session=$session reason=reference-exited"
 exit 1

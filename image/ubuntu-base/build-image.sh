@@ -32,7 +32,7 @@ esac
 script_dir=$(cd "$(dirname "$0")" && pwd)
 repo_root=$(cd "$script_dir/../.." && pwd)
 arm64_normalizer="$script_dir/normalize-arm64-kernel.sh"
-arm64_normalizer_sha256=f38f5dd54fdb922ca72404ee054827bacb4037f97df472728445efff596d656d
+arm64_normalizer_sha256=e69df248a388aa69d8b9a611799d4017b57d6978ba6448d60c55a99441bc9e0c
 test -x "$arm64_normalizer"
 echo "$arm64_normalizer_sha256  $arm64_normalizer" | sha256sum -c - >/dev/null
 # shellcheck disable=SC1091
