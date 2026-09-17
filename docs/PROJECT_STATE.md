@@ -65,7 +65,7 @@ Foundation complete: UAPI v2, `decnet_iv.ko`, configurable identity, Routing Lay
 
 ### Phase 2
 
-Foundation complete: pinned Ubuntu Base 26.04.1 amd64/arm64 rootfs files and package snapshot `20260915T000000Z`, deterministic ext4/QCOW2 construction, exact guest kernel/module/userspace build, direct kernel/initrd boot, two independent one-NIC VMs, packet capture and serial evidence. The image builder explicitly installs `initramfs-tools`, verifies its generated initrd, archives the exact tracked source commit into the guest, validates the installed smoke unit/script, leaves acceptance QCOW2 uncompressed, round-trips it to raw for critical-file hash verification, and decompresses/checks arm64 kernel Image format for direct boot.
+Foundation complete: pinned Ubuntu Base 26.04.1 amd64/arm64 rootfs files and package snapshot `20260915T000000Z`, deterministic ext4/QCOW2 construction, exact guest kernel/module/userspace build, direct kernel/initrd boot, two independent one-NIC VMs, packet capture and serial evidence. The image builder explicitly installs `initramfs-tools`, verifies its generated initrd, archives the exact tracked source commit into the guest, validates the installed smoke unit/script, leaves acceptance QCOW2 uncompressed, round-trips it to raw for complete byte-for-byte disk comparison, and decompresses/checks arm64 kernel Image format for direct boot.
 
 ### Phase 3
 
@@ -73,7 +73,9 @@ Implementation remains active. UAPI v2 provides standard Phase IV node MAC deriv
 
 Candidate `a122e8e82541a9499b9b514568b70e77de97ca4b` completed the former full-tree review sequence and exact-head acceptance parent `35184898090` dispatched bound children. Repository/continuity, native builds and pinned reference baselines were green. E1 child run `35184925391` failed before protocol assertions: amd64 exposed corruption/misinstallation of the guest smoke service and arm64 produced no serial output because the packaged kernel image was unsuitable for direct QEMU boot. Commit `d3416e1ad9d2a5e057c6c49e9407cec92683dc86` hardened the base-image path against both failure classes.
 
-The current candidate closes the remaining derived-image gap. `tests/lab/prepare-interop-candidate.sh` and `tests/lab/prepare-reference-image.sh` now keep acceptance QCOW2 uncompressed, run structural `qemu-img check`, convert the final QCOW2 back to RAW, and compare the complete intended/final RAW disk byte-for-byte. Both builders also retain and validate the archived `.source-commit` provenance. `tests/policy/test_image_builder_gate.py` now enforces the conversion, whole-RAW comparison, provenance read and SHA-format validation safeguards for both derived builders, and `docs/HANDOVER.md` is aligned with the current diff-scoped SoP. The first scoped review of the preceding candidate found the missing policy requirement for provenance validation; this candidate fixes it, so the scoped SoP count is reset to zero. No prior acceptance result is promotable after these image changes.
+Candidate `6d4ef7b364392d1a999c1bf433d833aed86c6eef` then completed three scoped clean passes and acceptance parent `35192508159` dispatched exact-SHA-bound children. Repository/continuity, native x86_64/aarch64 builds and external reference baselines completed green; the PyDECnet baseline needed one isolated rerun after its known timing-sensitive DDCMP UDP queue test missed by one packet. E1 child `35192540407` and independent-interoperability child `35192542464` failed before protocol assertions while building the exact candidate image. On arm64, the copied/decompressed direct-boot kernel remained root-owned when the builder performed a non-root Image-header read, producing `Permission denied`. On amd64, the uncompressed QCOW2 passed `qemu-img check` and round-tripped to a mountable raw image, but the `ro,noload` verification mount did not expose the already-validated smoke entry point. No result from that candidate is promotable.
+
+The current candidate corrects both image-builder defects without weakening the image contract. The arm64 boot artifact is handed to the invoking user before the non-root header probe. The base-image conversion proof now matches the stronger derived-image proof: smoke script/unit bytes and systemd syntax are validated before conversion, the final QCOW2 is structurally checked and converted back to RAW, and every logical RAW disk byte is compared against the intended source image. `tests/policy/test_image_builder_gate.py` requires the ownership-before-probe ordering and the whole-RAW comparison. All scoped passes and acceptance evidence reset on this change.
 
 ## Test addressing
 
@@ -85,7 +87,7 @@ Ordinary lab addressing remains area 31, nodes 70 through 79, names DN70 through
 
 ## Resume point
 
-Phase 3 remains active. The derived interoperability image integrity correction is now in the current candidate. A scoped review of the preceding candidate found and fixed a provenance-validation regression-guard gap; no clean pass carries forward, and the pass count starts at zero on this exact first-parent-to-candidate diff.
+Phase 3 remains active. The latest exact-head acceptance exposed two base-image construction/verification defects before any DECnet protocol assertion. The current candidate contains the bounded correction and its policy regression; no clean scoped pass carries forward, so the pass count starts at zero on this exact first-parent-to-candidate diff.
 
 ## Next action
 

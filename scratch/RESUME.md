@@ -24,9 +24,9 @@ Workflow jobs still bind exact source commit/tree, expected parent candidate SHA
 
 Hosted-runner policy is unchanged: at most 75 minutes per job, `queue: max`, `cancel-in-progress: false`, compact evidence at most 30 days, VM checkpoints 3 days with paginated stale-checkpoint pruning, and fresh interoperability VMs.
 
-Exact-head acceptance parent `35184898090` on candidate `a122e8e82541a9499b9b514568b70e77de97ca4b` reached green repository/continuity, native build and pinned reference gates, but E1 child `35184925391` failed before DECnet protocol assertions. amd64 exposed a bad installed smoke-service image and arm64 did not boot to serial output because the packaged kernel image required direct-boot handling. Commit `d3416e1ad9d2a5e057c6c49e9407cec92683dc86` hardened the base-image path with smoke byte/unit checks, uncompressed acceptance QCOW2, post-conversion verification and arm64 kernel decompression/header validation.
+Exact-head acceptance parent `35192508159` on candidate `6d4ef7b364392d1a999c1bf433d833aed86c6eef` completed repository/continuity, native x86_64/aarch64 build and external reference gates green; the PyDECnet reference row passed on one isolated rerun after its timing-sensitive DDCMP UDP queue test missed by one packet on the first attempt. E1 child `35192540407` and independent-interoperability child `35192542464` both failed before protocol assertions while building the exact candidate image.
 
-The current candidate closes the remaining derived-image gap. Both interoperability image builders now use uncompressed RAW-to-QCOW2 conversion, structural `qemu-img check`, a QCOW2-to-RAW round trip and a full byte-for-byte RAW comparison. They validate and report the archived `.source-commit`, so the proof covers the complete intended filesystem/content and its provenance. The image-builder policy regression now requires the conversion, whole-RAW comparison, provenance read and SHA-format validation safeguards for both derived paths. The first scoped review of the preceding candidate caught that the policy did not explicitly require the provenance validation; this candidate fixes that gap and resets the scoped pass count to zero. `docs/HANDOVER.md` remains aligned with the current diff-scoped SoP.
+The failures are now localized. arm64 copied/decompressed the direct-boot kernel but attempted a non-root Image-header `dd` while the artifact could still be root-owned, producing `Permission denied`. amd64 passed `qemu-img check` and produced a mountable round-tripped raw image, but the `ro,noload` verification mount did not expose the already-validated smoke entry point. The correction gives the arm64 kernel artifact to the invoking user before the header probe and replaces the fragile mounted critical-file round-trip check with a complete RAW byte-for-byte comparison after QCOW2 conversion. Pre-conversion exact smoke script/unit comparisons and systemd validation remain mandatory. The image-builder policy gate now requires both safeguards.
 
 Repository branch policy remains active with only `refs/heads/main`. Cleanup run `35179252422` is the last successful branch-cleanup run. GitHub-owned actions remain pinned to immutable full SHAs.
 
@@ -45,9 +45,11 @@ Repository branch policy remains active with only `refs/heads/main`. Cleanup run
 | Clean scoped semantic/manual passes on this candidate | 0 |
 | Routine workflow scan requirement | one bounded baseline diff manifest plus matching final diff manifest |
 | Explicit full-tree scan | opt-in only via `tools/sop_scan.py --full-tree` |
-| Phase 3 acceptance | derived image-integrity correction applied; fresh exact-head acceptance required |
-| Latest acceptance parent | `35184898090` |
-| Latest E1 VM run | `35184925391` |
+| Phase 3 acceptance | base-image acceptance failure corrected; fresh exact-head acceptance required |
+| Latest acceptance parent | `35192508159` |
+| Latest E1 VM run | `35192540407`, failure during image build |
+| Latest interoperability run | `35192542464`, failure during candidate image build |
+| Latest reference baseline run | `35192537809`, success on attempt 2 |
 | Latest branch-cleanup run | `35179252422`, success |
 
 ## Persistent run index

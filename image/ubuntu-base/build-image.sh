@@ -48,18 +48,13 @@ source_commit=$(git -C "$repo_root" rev-parse --verify 'HEAD^{commit}')
 work=$(mktemp -d)
 raw="$work/root.raw"
 mnt="$work/root"
-verify_mnt="$work/verify-root"
 verify_raw="$work/verify.raw"
-mkdir -p "$mnt" "$verify_mnt" "$boot_dir" "$(dirname "$output")"
+mkdir -p "$mnt" "$boot_dir" "$(dirname "$output")"
 
 mounted=0
 chroot_mounted=0
-verify_mounted=0
 cleanup() {
     set +e
-    if (( verify_mounted )); then
-        sudo umount "$verify_mnt" 2>/dev/null || true
-    fi
     if (( chroot_mounted )); then
         sudo umount -R "$mnt/dev" 2>/dev/null || true
         sudo umount "$mnt/sys" 2>/dev/null || true
@@ -156,8 +151,6 @@ sudo ln -sf ../dniv-smoke.service \
 # installed unit before the filesystem is converted.
 sudo cmp -s "$smoke_script_source" "$smoke_script_dest"
 sudo cmp -s "$smoke_unit_source" "$smoke_unit_dest"
-smoke_script_sha=$(sudo sha256sum "$smoke_script_source" | awk '{print $1}')
-smoke_unit_sha=$(sudo sha256sum "$smoke_unit_source" | awk '{print $1}')
 sudo chroot "$mnt" systemd-analyze verify /etc/systemd/system/dniv-smoke.service
 
 kernel=$(find "$mnt/boot" -maxdepth 1 -type f -name 'vmlinuz-*' | sort -V | tail -1)
@@ -178,6 +171,9 @@ if [[ "$arch" == arm64 ]]; then
     else
         sudo cp "$kernel" "$boot_dir/vmlinuz"
     fi
+    # Packaged kernels may be root-only. Make the copied/decompressed artifact
+    # owned by the invoking user before the non-root direct-boot header probe.
+    sudo chown "$(id -u):$(id -g)" "$boot_dir/vmlinuz"
     arm64_magic=$(dd if="$boot_dir/vmlinuz" bs=1 skip=56 count=4 status=none | \
         od -An -tx1 | tr -d ' \n')
     if [[ "$arm64_magic" != 41524d64 ]]; then
@@ -199,20 +195,16 @@ mounted=0
 
 # Keep candidate images uncompressed. The acceptance image is correctness
 # evidence, not a distribution-size optimization. Check qcow2 structure and
-# round-trip it back to raw so critical guest bytes are proven after conversion.
+# round-trip it back to raw, then compare every logical disk byte. The exact
+# smoke/unit installation was already proven while the source filesystem was
+# mounted, so this stronger check covers every filesystem and journal byte.
 qemu-img convert -f raw -O qcow2 "$raw" "$output"
 qemu-img check -f qcow2 "$output"
 qemu-img convert -f qcow2 -O raw "$output" "$verify_raw"
-sudo mount -o loop,ro,noload "$verify_raw" "$verify_mnt"
-verify_mounted=1
-verify_script_sha=$(sudo sha256sum "$verify_mnt/usr/local/sbin/dniv-smoke" | awk '{print $1}')
-verify_unit_sha=$(sudo sha256sum "$verify_mnt/etc/systemd/system/dniv-smoke.service" | awk '{print $1}')
-if [[ "$verify_script_sha" != "$smoke_script_sha" || "$verify_unit_sha" != "$smoke_unit_sha" ]]; then
-    echo "build-image: critical guest bytes changed during image conversion" >&2
+if ! cmp -s "$raw" "$verify_raw"; then
+    echo "build-image: RAW content changed during image conversion" >&2
     exit 1
 fi
-sudo umount "$verify_mnt"
-verify_mounted=0
 rm -f "$verify_raw"
 
 qemu-img info "$output"

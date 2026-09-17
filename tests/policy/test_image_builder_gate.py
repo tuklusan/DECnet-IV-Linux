@@ -29,16 +29,19 @@ DERIVED_BUILDERS = (
 )
 INSTALL_PREFIX = 'apt-get --snapshot "$UBUNTU_APT_SNAPSHOT" install -y --no-install-recommends'
 INITRD_CHECK = 'test -s "/boot/initrd.img-$krel"'
+ARM64_OWNER_FIX = 'sudo chown "$(id -u):$(id -g)" "$boot_dir/vmlinuz"'
+ARM64_MAGIC_READ = 'arm64_magic=$(dd if="$boot_dir/vmlinuz" bs=1 skip=56 count=4 status=none |'
 BASE_REQUIRED_SNIPPETS = {
     "installed smoke script byte comparison": 'sudo cmp -s "$smoke_script_source" "$smoke_script_dest"',
     "installed smoke unit byte comparison": 'sudo cmp -s "$smoke_unit_source" "$smoke_unit_dest"',
     "systemd unit validation": 'systemd-analyze verify /etc/systemd/system/dniv-smoke.service',
     "arm64 gzip decompression": 'sudo gzip -dc "$kernel" > "$boot_dir/vmlinuz"',
+    "arm64 boot artifact ownership": ARM64_OWNER_FIX,
+    "arm64 Image magic read": ARM64_MAGIC_READ,
     "arm64 Image magic validation": 'if [[ "$arm64_magic" != 41524d64 ]]; then',
     "qcow2 structural validation": 'qemu-img check -f qcow2 "$output"',
     "qcow2-to-raw verification round trip": 'qemu-img convert -f qcow2 -O raw "$output" "$verify_raw"',
-    "post-conversion smoke script checksum": 'verify_script_sha=$(sudo sha256sum "$verify_mnt/usr/local/sbin/dniv-smoke"',
-    "post-conversion smoke unit checksum": 'verify_unit_sha=$(sudo sha256sum "$verify_mnt/etc/systemd/system/dniv-smoke.service"',
+    "full RAW content comparison": 'cmp -s "$raw" "$verify_raw"',
 }
 DERIVED_REQUIRED_SNIPPETS = {
     "uncompressed qcow2 conversion": 'qemu-img convert -q -f raw -O qcow2 "$raw" "$output"',
@@ -133,6 +136,11 @@ def main() -> int:
             "image-builder gate: generated initrd is not checked before build cleanup"
         )
     require_snippets("base image", base_text, BASE_REQUIRED_SNIPPETS)
+    if base_text.index(ARM64_OWNER_FIX) > base_text.index(ARM64_MAGIC_READ):
+        raise SystemExit(
+            "image-builder gate: arm64 direct-boot kernel must become runner-readable "
+            "before the non-root Image-header probe"
+        )
     if has_compressed_qcow2_convert(base_text):
         raise SystemExit(
             "image-builder gate: acceptance base image conversion must not use qcow2 compression"
