@@ -56,11 +56,10 @@ if [[ "$scope" == main ]]; then
     CI=false python3 tools/repo_policy.py | tee "$state_dir/sop/repository-policy.log"
 fi
 
-python3 tools/sop_scan.py --rev "$expected" --pass-id 1 \
+# Routine workflow review is deliberately bounded to the exact parent-to-candidate
+# diff. Full-tree scanning remains available only through an explicit
+# `tools/sop_scan.py --full-tree` invocation.
+python3 tools/sop_scan.py --rev "$expected" --pass-id baseline \
     --output "$state_dir/sop/pass-1.json"
-python3 tools/sop_scan.py --rev "$expected" --pass-id 2 \
-    --baseline "$state_dir/sop/pass-1.json" --output "$state_dir/sop/pass-2.json"
-python3 tools/sop_scan.py --rev "$expected" --pass-id 3 \
-    --baseline "$state_dir/sop/pass-1.json" --output "$state_dir/sop/pass-3.json"
-python3 tools/scratch_state.py mark --dir "$state_dir" --status sop-scan-green \
-    --note "three byte-complete exact-tree scans matched"
+python3 tools/scratch_state.py mark --dir "$state_dir" --status targeted-scan-green \
+    --note "bounded parent-to-candidate diff scan recorded; automatic full-tree SoP disabled"

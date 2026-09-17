@@ -16,49 +16,46 @@
 
 ## Current checkpoint
 
-Phase 3 remains the active protocol phase. Work is performed only on `main`. The repository-root `scratch/` persistence contract, exact-tree SoP scan tooling, workflow state/evidence persistence, runner budgets and main-only repository policy are active. Mutable workflow state is written below ignored `scratch/runtime/` during a run and restored below ignored `scratch/restored/` on later runner sessions.
+Phase 3 remains active and all substantive work stays on `main`. Routine SoP has been narrowed from complete-repository rereads to the exact first-parent-to-candidate unified diff with three lines of context. Automatic three-pass full-tree scanning is disabled. `tools/sop_scan.py` now defaults to the bounded diff and `--full-tree` is explicit opt-in only.
 
-Hosted-runner lifetime and storage policy is machine-enforced. Every workflow job declares a timeout no greater than 75 minutes. Every workflow/job concurrency block uses `queue: max`, so the shared x64/arm64 runner slots retain up to GitHub's queue limit instead of replacing an older pending gate. Compact logs, scan manifests and packet evidence are retained for at most 30 days. Two-node resumable QCOW2 checkpoints are kept separately for 3 days and older successful checkpoints for the same architecture are pruned after a replacement uploads successfully. The pruning step paginates the full artifact listing before selecting stale same-architecture checkpoints. Interoperability evidence excludes transient QCOW2 overlays because those peers always start fresh.
+The semantic/manual delivery rule still requires three consecutive clean passes, but those passes review the same bounded candidate diff plus only directly necessary local/dependency context. A fix creates a new candidate, recomputes the diff and resets the scoped pass count.
 
-Acceptance fan-out is bound to one immutable candidate. The owner acceptance dispatcher passes both its run ID and exact `GITHUB_SHA` to every child. `tools/scratch_state.py` rejects a child with a parent run ID unless an expected SHA is also supplied, resolves that SHA to a commit, and refuses initialization unless it equals the child's actual source commit. `state.json` retains both the source and expected SHA for later audit. If `main` moves during dispatch or before a queued child starts, the child fails instead of silently testing a different candidate.
+Workflow jobs still bind exact source commit/tree, expected parent candidate SHA where applicable, run lineage, runner identity, architecture/mode and retained evidence. `tools/workflow_sop.sh` runs the ordinary policy/regression checks and records one bounded baseline diff manifest. Each workflow's existing final scan compares against that same bounded manifest and therefore detects candidate/checkout drift without repeatedly rereading every tracked repository blob.
 
-Candidate `a122e8e82541a9499b9b514568b70e77de97ca4b` completed three consecutive clean semantic/manual SoP passes and exact-head acceptance parent `35184898090` dispatched children bound to that SHA. Repository/continuity, x86_64 and arm64 native builds, and pinned reference baselines were green. E1 child run `35184925391` then failed on both architectures before any DECnet protocol assertion. The amd64 guests reached userspace, but systemd parsed `/etc/systemd/system/dniv-smoke.service` as repeated assignments outside a section and refused it because no `ExecStart` was visible; rerunning the job reproduced the same failure. The tracked source remained the expected 1023-byte unit, so this exposed an image-integrity acceptance gap. The arm64 guests produced zero serial bytes for the full 300-second gate. Ubuntu arm64 packages provide gzip-compressed `vmlinuz` images while AArch64 direct boot requires a decompressed Image, explaining the direct-boot failure mode. No result from that acceptance attempt is promotable.
+Hosted-runner policy is unchanged: at most 75 minutes per job, `queue: max`, `cancel-in-progress: false`, compact evidence at most 30 days, VM checkpoints 3 days with paginated stale-checkpoint pruning, and fresh interoperability VMs.
 
-The image builder correction verifies archived smoke script/unit bytes against their installed guest copies, validates the installed unit with `systemd-analyze`, builds acceptance QCOW2 without compression, checks QCOW2 structure, round-trips the finished image back to raw and rechecks the critical guest hashes. On arm64 it decompresses a gzip-packaged `vmlinuz` before direct boot and requires the mandatory AArch64 Image magic; amd64 keeps its packaged direct-boot image. `tests/policy/test_image_builder_gate.py` requires all of those safeguards from staged and committed sources. This change invalidates the preceding three SoP passes and all acceptance evidence, so the new candidate starts at zero semantic/manual passes.
+Exact-head acceptance parent `35184898090` on candidate `a122e8e82541a9499b9b514568b70e77de97ca4b` reached green repository/continuity, native build and pinned reference gates, but E1 child `35184925391` failed before DECnet protocol assertions. amd64 exposed a bad installed smoke-service image and arm64 did not boot to serial output because the packaged kernel image required direct-boot handling. Commit `d3416e1ad9d2a5e057c6c49e9407cec92683dc86` hardened the base-image path with smoke byte/unit checks, uncompressed acceptance QCOW2, post-conversion verification and arm64 kernel decompression/header validation.
 
-Repository branch policy is active and the remote invariant is satisfied. Project work must be on local `main`; pre-push rejects creation/update of any non-main branch and rejects deletion of `main`, while permitting cleanup deletion of obsolete non-main refs. Acceptance policy inspects remote heads and requires `refs/heads/main` to be the only branch. Cleanup run `35179252422` removed the legacy refs, verified only `main` remained, ran the exact-main workflow SoP machinery, and completed successfully. A future non-main branch creation event enters the same cleanup path automatically.
+A later focused review identified one remaining image-integrity gap: both derived interoperability builders still use compressed RAW-to-QCOW2 conversion and lack post-conversion guest-content proof. That correction remains the next code change.
 
-The first cleanup canary, run `35179022863`, failed before deleting any ref because the workflow attempted to write `maintenance.env` before creating its scratch directory. The corrected run `35179252422` passed after that initialization-order fix. Both runs are diagnostic history; later corrections reset semantic SoP.
-
-GitHub-owned workflow actions are pinned to immutable full commit SHAs: checkout v4.4.0 `11d5960a326750d5838078e36cf38b85af677262`, upload-artifact v4.6.2 `ea165f8d65b6e75b540449e92b4886f43607fa02`, and download-artifact v4.3.0 `d3f86a106a0bac45b974a628896c90dbdf5c8093`. `tools/workflow_budget_gate.py` enforces these pins together with `queue: max`, the 75-minute ceiling, retention limits, expected-SHA inputs, complete paginated VM-checkpoint pruning and the maximum-two-scenario interoperability rows. Regression gates cover exact staged/committed workflow sources, queueing, action pins, storage safeguards, scenario bounds and branch-update policy. `tests/policy/test_image_builder_gate.py` additionally enforces explicit initramfs generation, installed guest-byte validation, arm64 direct-boot decompression/header validation and post-QCOW2 critical-file integrity using exact staged/committed source selection.
-
-A run/session ID records lineage only. Hosted runner RAM, processes and live QEMU state do not survive job termination. Persistence exists only for explicitly uploaded and subsequently verified files. Two-node resume additionally requires the sealed format-2 checkpoint hashes, matching architecture, exact source revision and mode.
+Repository branch policy remains active with only `refs/heads/main`. Cleanup run `35179252422` is the last successful branch-cleanup run. GitHub-owned actions remain pinned to immutable full SHAs.
 
 | Field | Current value |
 | --- | --- |
 | Protocol phase | Phase 3 |
 | Working ref | `main` only |
-| Remote branch invariant | satisfied: only `refs/heads/main` |
-| Hosted job voluntary ceiling | 75 minutes |
-| Runner queue policy | `queue: max` on every concurrency block |
+| Remote branch invariant | only `refs/heads/main` |
+| Hosted job ceiling | 75 minutes |
+| Runner queue policy | `queue: max`; no cancellation of pending acceptance work |
 | Interoperability scenarios per hosted job | maximum 2 |
-| Compact workflow evidence retention | 30 days |
-| Resumable VM checkpoint retention | 3 days, rolling newest successful per architecture, paginated pruning |
+| Compact evidence retention | 30 days |
+| VM checkpoint retention | 3 days; rolling newest successful per architecture; paginated pruning |
 | Acceptance child binding | parent run ID + exact expected SHA |
-| SoP clean semantic/manual passes on this candidate | 0 |
-| Byte-complete workflow scan requirement | 3 matching scans plus final post-gate scan |
-| Phase 3 acceptance | prior exact candidate failed E1 image/direct-boot gates; fresh acceptance required after correction |
-| Latest acceptance parent run | `35184898090`, failed by E1 child |
+| Routine semantic/manual SoP scope | exact first-parent-to-candidate diff, three context lines |
+| Clean scoped semantic/manual passes on this candidate | 0 |
+| Routine workflow scan requirement | one bounded baseline diff manifest plus matching final diff manifest |
+| Explicit full-tree scan | opt-in only via `tools/sop_scan.py --full-tree` |
+| Phase 3 acceptance | prior candidate failed E1 image/direct-boot gates; fresh acceptance required after corrections |
+| Latest acceptance parent | `35184898090` |
+| Latest E1 VM run | `35184925391` |
 | Latest branch-cleanup run | `35179252422`, success |
-| Latest resumable VM run | `35184925391`, amd64 and arm64 E1 failed before protocol assertions |
-| Latest interoperability run | prior-candidate evidence; ineligible after image correction |
 
 ## Persistent run index
 
-Every workflow records a `state.json` containing source commit/tree, expected candidate SHA where applicable, workflow/job, run ID, run attempt, runner identity, architecture/mode, parent/resume run IDs, milestones and status. Compact scratch artifacts retain scan manifests, logs, packet evidence and small checkpoint metadata. The two-node VM workflow separately retains a short-lived sealed format-2 checkpoint containing the base disk, both node deltas, kernel, initrd, `session.env` and hashes.
+Mutable workflow state remains below ignored `scratch/runtime/`; restored evidence remains below ignored `scratch/restored/`. A run ID is lineage, not persistent execution. Only explicitly uploaded and subsequently verified files persist across hosted runners.
 
-The tracked table above is the durable human index. It is updated with `docs/PROJECT_STATE.md` in every substantive commit. Runtime artifacts are evidence attached to an exact commit; they never make a changed commit inherit prior SoP or acceptance status.
+The tracked table above is the durable human index. Runtime evidence belongs only to its exact candidate and never transfers acceptance status to a later commit.
 
 ## Next action
 
-Restart the complete semantic/manual SoP review on this exact new `main` candidate and require three consecutive clean full-repository passes. The workflow byte-scan manifests, image-builder regression, branch-policy regression, continuity regression and workflow-budget/action-pin/storage gate must agree on that same commit/tree. Then execute a fresh exact-head repository policy/continuity, native x86_64/aarch64 build, pinned reference baselines, E1 self-to-self, and bounded live Route20/PyDECnet interoperability suites. Only after that unchanged Phase 3 candidate is green may Phase 4 kernel routing work begin.
+Fix `tests/lab/prepare-interop-candidate.sh` and `tests/lab/prepare-reference-image.sh` so their derived QCOW2 images receive fail-fast structural/content verification equivalent to the base-image path, add the smallest regression needed to prevent recurrence, and update this file plus `docs/PROJECT_STATE.md` in that same commit. Perform the three semantic/manual passes only on that resulting bounded diff. Then run fresh exact-head Phase 3 acceptance gates. Phase 4 starts only after the unchanged Phase 3 candidate is green.

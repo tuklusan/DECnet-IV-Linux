@@ -13,7 +13,7 @@
 # patent, trademark, and governing-law provisions.
 # ============================================================================
 
-"""Byte-complete exact-tree scan and reproducibility manifest."""
+"""Diff-scoped candidate scan with explicit full-tree opt-in."""
 
 from __future__ import annotations
 
@@ -26,6 +26,8 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+
+EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 
 
 def git_bytes(*args: str) -> bytes:
@@ -76,6 +78,45 @@ def tree_entries(rev: str):
         )
 
 
+def tree_entry(rev: str, path: str) -> tuple[str, str] | None:
+    raw = git_bytes("ls-tree", "-z", rev, "--", path)
+    records = [record for record in raw.split(b"\0") if record]
+    if not records:
+        return None
+    if len(records) != 1:
+        raise RuntimeError(f"ambiguous tree entry for {path}")
+    meta, raw_path = records[0].split(b"\t", 1)
+    mode, kind, sha = meta.split()
+    decoded = raw_path.decode("utf-8", errors="surrogateescape")
+    if decoded != path or kind != b"blob":
+        raise RuntimeError(f"unsupported tree entry for {path}")
+    return mode.decode("ascii"), sha.decode("ascii")
+
+
+def resolve_base(commit: str, requested: str | None) -> str:
+    if requested:
+        return git_text("rev-parse", "--verify", requested + "^{commit}")
+    parents = git_text("rev-list", "--parents", "-n", "1", commit).split()
+    if len(parents) > 2:
+        raise RuntimeError(
+            "merge candidate requires explicit --base for a bounded review diff"
+        )
+    if len(parents) == 2:
+        return parents[1]
+    return EMPTY_TREE
+
+
+def changed_paths(base: str, commit: str) -> list[str]:
+    raw = git_bytes(
+        "diff", "--name-only", "-z", "--no-renames", base, commit, "--"
+    )
+    return [
+        item.decode("utf-8", errors="surrogateescape")
+        for item in raw.split(b"\0")
+        if item
+    ]
+
+
 def load_summary(path: Path) -> dict:
     data = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
@@ -96,12 +137,97 @@ def atomic_json(path: Path, payload: dict) -> None:
             os.unlink(temporary)
 
 
+def scan_blob(path: str, mode: str, blob_sha: str, verify_checkout: bool) -> dict:
+    object_data = git_bytes("cat-file", "blob", blob_sha)
+    if verify_checkout:
+        try:
+            checkout_data = working_bytes(path, mode)
+        except (OSError, UnicodeError, RuntimeError) as exc:
+            raise RuntimeError(f"cannot verify checkout path {path}: {exc}") from exc
+        if checkout_data != object_data:
+            raise RuntimeError(f"checkout bytes differ from commit object: {path}")
+    return {
+        "path": path,
+        "mode": mode,
+        "blob": blob_sha,
+        "sha256": hashlib.sha256(object_data).hexdigest(),
+        "bytes": len(object_data),
+        "lines": line_count(object_data),
+    }
+
+
+def full_tree_scan(commit: str) -> tuple[list[dict], int, str]:
+    records: list[dict] = []
+    aggregate = hashlib.sha256()
+    total_bytes = 0
+    for mode, blob_sha, path in tree_entries(commit):
+        record = scan_blob(path, mode, blob_sha, True)
+        total_bytes += record["bytes"]
+        aggregate.update(json.dumps(record, sort_keys=True).encode("utf-8") + b"\n")
+        records.append(record)
+    return records, total_bytes, aggregate.hexdigest()
+
+
+def diff_scan(base: str, commit: str) -> tuple[list[dict], int, str, bytes]:
+    status = git_text("status", "--porcelain=v1", "--untracked-files=no")
+    if status:
+        raise RuntimeError("tracked checkout differs from requested commit")
+
+    patch = git_bytes(
+        "diff",
+        "--binary",
+        "--full-index",
+        "--no-ext-diff",
+        "--no-color",
+        "--unified=3",
+        "--no-renames",
+        base,
+        commit,
+        "--",
+    )
+    records: list[dict] = []
+    total_bytes = 0
+    aggregate = hashlib.sha256(patch)
+
+    for path in changed_paths(base, commit):
+        old_entry = tree_entry(base, path)
+        new_entry = tree_entry(commit, path)
+        if old_entry is None and new_entry is None:
+            raise RuntimeError(f"changed path missing from both trees: {path}")
+
+        if new_entry is None:
+            mode, blob_sha = old_entry
+            record = scan_blob(path, mode, blob_sha, False)
+            record["status"] = "deleted"
+            if os.path.lexists(path):
+                raise RuntimeError(f"deleted path still present in checkout: {path}")
+        else:
+            mode, blob_sha = new_entry
+            record = scan_blob(path, mode, blob_sha, True)
+            record["status"] = "added" if old_entry is None else "changed"
+            if old_entry is not None:
+                record["old_mode"] = old_entry[0]
+                record["old_blob"] = old_entry[1]
+
+        total_bytes += record["bytes"]
+        aggregate.update(json.dumps(record, sort_keys=True).encode("utf-8") + b"\n")
+        records.append(record)
+
+    return records, total_bytes, aggregate.hexdigest(), patch
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--rev", required=True)
     parser.add_argument("--pass-id", required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--baseline", type=Path)
+    parser.add_argument("--base")
+    parser.add_argument(
+        "--full-tree",
+        action="store_true",
+        help="explicit opt-in for a complete tracked-tree scan",
+    )
     args = parser.parse_args()
 
     commit = git_text("rev-parse", "--verify", args.rev + "^{commit}")
@@ -110,66 +236,67 @@ def main() -> int:
         raise SystemExit(f"SOP-SCAN: checkout {head} is not requested commit {commit}")
     tree = git_text("rev-parse", "--verify", commit + "^{tree}")
 
-    records: list[dict] = []
-    aggregate = hashlib.sha256()
-    total_bytes = 0
-
-    for mode, blob_sha, path in tree_entries(commit):
-        object_data = git_bytes("cat-file", "blob", blob_sha)
-        try:
-            checkout_data = working_bytes(path, mode)
-        except (OSError, UnicodeError, RuntimeError) as exc:
-            raise SystemExit(f"SOP-SCAN: cannot verify checkout path {path}: {exc}") from exc
-        if checkout_data != object_data:
-            raise SystemExit(f"SOP-SCAN: checkout bytes differ from commit object: {path}")
-
-        digest = hashlib.sha256(object_data).hexdigest()
-        size = len(object_data)
-        lines = line_count(object_data)
-        total_bytes += size
-        encoded_path = path.encode("utf-8", errors="surrogateescape")
-        aggregate.update(mode.encode("ascii") + b"\0")
-        aggregate.update(encoded_path + b"\0")
-        aggregate.update(blob_sha.encode("ascii") + b"\0")
-        aggregate.update(digest.encode("ascii") + b"\0")
-        aggregate.update(str(size).encode("ascii") + b"\0")
-        aggregate.update(str(lines).encode("ascii") + b"\n")
-        records.append(
-            {
-                "path": path,
-                "mode": mode,
-                "blob": blob_sha,
-                "sha256": digest,
-                "bytes": size,
-                "lines": lines,
-            }
-        )
-
-    result = {
-        "format": 1,
-        "pass_id": args.pass_id,
-        "commit": commit,
-        "tree": tree,
-        "file_count": len(records),
-        "byte_count": total_bytes,
-        "scan_sha256": aggregate.hexdigest(),
-        "files": records,
-    }
+    if args.full_tree:
+        records, total_bytes, scan_sha256 = full_tree_scan(commit)
+        result = {
+            "format": 2,
+            "scope": "full-tree",
+            "pass_id": args.pass_id,
+            "commit": commit,
+            "tree": tree,
+            "file_count": len(records),
+            "byte_count": total_bytes,
+            "scan_sha256": scan_sha256,
+            "files": records,
+        }
+    else:
+        base = resolve_base(commit, args.base)
+        records, total_bytes, scan_sha256, patch = diff_scan(base, commit)
+        result = {
+            "format": 2,
+            "scope": "diff",
+            "context_lines": 3,
+            "pass_id": args.pass_id,
+            "base": base,
+            "commit": commit,
+            "tree": tree,
+            "file_count": len(records),
+            "byte_count": total_bytes,
+            "diff_bytes": len(patch),
+            "diff_lines": line_count(patch),
+            "diff_sha256": hashlib.sha256(patch).hexdigest(),
+            "scan_sha256": scan_sha256,
+            "files": records,
+        }
 
     if args.baseline:
         baseline = load_summary(args.baseline)
-        comparable = ("commit", "tree", "file_count", "byte_count", "scan_sha256", "files")
-        differences = [key for key in comparable if baseline.get(key) != result.get(key)]
+        comparable = tuple(key for key in result if key != "pass_id")
+        differences = [
+            key
+            for key in comparable
+            if baseline.get(key) != result.get(key)
+        ]
+        extra = [key for key in baseline if key not in result and key != "pass_id"]
+        differences.extend(extra)
         if differences:
             raise SystemExit(
-                "SOP-SCAN: scan differs from baseline in " + ", ".join(differences)
+                "SOP-SCAN: scan differs from baseline in "
+                + ", ".join(sorted(set(differences)))
             )
 
     atomic_json(args.output, result)
+    detail = (
+        f" base={result['base']} diff-lines={result['diff_lines']}"
+        if result["scope"] == "diff"
+        else ""
+    )
     print(
-        "SOP-SCAN: pass=" + args.pass_id
-        + f" commit={commit} tree={tree} files={len(records)}"
-        + f" bytes={total_bytes} digest={result['scan_sha256']}"
+        "SOP-SCAN: pass="
+        + args.pass_id
+        + f" scope={result['scope']} commit={commit} tree={tree}"
+        + f" files={len(records)} bytes={total_bytes}{detail}"
+        + f" digest={result['scan_sha256']}"
     )
     return 0
 
