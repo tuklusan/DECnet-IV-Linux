@@ -383,7 +383,9 @@ e2)
             done
             # Endnodes boot later than the router on hosted QEMU. Keep the
             # forwarding node alive through both endpoint evidence windows.
-            sleep 120
+            # The controller owns router teardown after both endpoint evidence
+            # markers and PCAP capture. Avoid a guest-local wall-clock race.
+            sleep 600
             poweroff_pass "DNIV-E2-PASS session=$session node=$name"
             ;;
         *)
@@ -542,7 +544,10 @@ e4)
             # Six-guest hosted boots are intentionally unsynchronized. Keep
             # transit routing alive through route propagation and endpoint
             # evidence instead of racing a short fixed lifetime.
-            sleep 120
+            # The E4 controller owns transit-router teardown after both
+            # endpoint evidence markers. Six ARM64 TCG guests can have large
+            # boot skew, so no router may disappear on a short local timer.
+            sleep 600
             poweroff_pass "DNIV-E4-PASS session=$session node=$name"
             ;;
         L2)
@@ -556,7 +561,10 @@ e4)
             # Six-guest hosted boots are intentionally unsynchronized. Keep
             # transit routing alive through route propagation and endpoint
             # evidence instead of racing a short fixed lifetime.
-            sleep 120
+            # The E4 controller owns transit-router teardown after both
+            # endpoint evidence markers. Six ARM64 TCG guests can have large
+            # boot skew, so no router may disappear on a short local timer.
+            sleep 600
             poweroff_pass "DNIV-E4-PASS session=$session node=$name"
             ;;
         *)

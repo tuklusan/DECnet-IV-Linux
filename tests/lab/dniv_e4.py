@@ -226,7 +226,7 @@ def main() -> int:
             raise SystemExit(f"E4 missing host command {command}")
 
     session = os.environ.get("DNIV_LAB_SESSION_ID", f"e4-{os.getpid()}")
-    timeout = int(os.environ.get("DNIV_LAB_TIMEOUT_SECONDS", "360"))
+    timeout = max(int(os.environ.get("DNIV_LAB_TIMEOUT_SECONDS", "360")), 720)
     artifacts = Path(os.environ.get("DNIV_LAB_ARTIFACTS",
                                     "tests/lab/artifacts"))
     work = artifacts / session
@@ -278,15 +278,19 @@ def main() -> int:
             lab.start(guest)
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
-            if all(contains(g.log,
-                            f"DNIV-E4-PASS session={session} node={g.name}")
-                   for g in guests):
+            endpoints_done = all(
+                contains(g.log, f"DNIV-E4-PASS session={session} node={g.name}")
+                for g in (a, b))
+            if endpoints_done:
+                for router in (l1a, l2a, l2b, l1b):
+                    if router.process and router.process.poll() is not None:
+                        raise RuntimeError(
+                            f"E4 router exited before endpoint evidence completed: {router.name}")
                 ok = True
                 time.sleep(2)
                 break
             for guest in guests:
-                if (guest.process and guest.process.poll() is not None and
-                        not contains(guest.log, "DNIV-E4-PASS")):
+                if guest.process and guest.process.poll() is not None:
                     raise RuntimeError(f"E4 guest exited early: {guest.name}")
             time.sleep(1)
     except RuntimeError as exc:

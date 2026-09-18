@@ -266,7 +266,7 @@ def main() -> int:
 
     area = 31
     session = os.environ.get("DNIV_LAB_SESSION_ID", f"e2-{os.getpid()}")
-    timeout = int(os.environ.get("DNIV_LAB_TIMEOUT_SECONDS", "360"))
+    timeout = max(int(os.environ.get("DNIV_LAB_TIMEOUT_SECONDS", "360")), 480)
     artifacts = Path(os.environ.get("DNIV_LAB_ARTIFACTS", "tests/lab/artifacts"))
     work = artifacts / session
     work.mkdir(parents=True, exist_ok=True)
@@ -293,13 +293,19 @@ def main() -> int:
         lab.start(gb, area)
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
-            if all(contains(g.log, f"DNIV-E2-PASS session={session} node={g.name}")
-                   for g in (ga, gb, gr)):
+            endpoints_done = all(
+                contains(g.log, f"DNIV-E2-PASS session={session} node={g.name}")
+                for g in (ga, gb))
+            if endpoints_done:
+                if gr.process and gr.process.poll() is not None:
+                    raise RuntimeError("E2 router exited before endpoint evidence completed")
                 ok = True
                 time.sleep(2)
                 break
             if any(g.process and g.process.poll() is not None and
-                   not contains(g.log, "DNIV-E2-PASS") for g in (ga, gb, gr)):
+                   not contains(g.log, "DNIV-E2-PASS") for g in (ga, gb)):
+                break
+            if gr.process and gr.process.poll() is not None:
                 break
             time.sleep(1)
     finally:
