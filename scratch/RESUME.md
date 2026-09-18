@@ -43,4 +43,6 @@ Routing codecs, route state, update ingestion and Ethernet forwarding are implem
 
 ## Next action
 
+Exact-head acceptance is blocked only by the continuity gate requiring `docs/PROJECT_STATE.md` to retain its `## Resume point` section; restore that required section and rerun acceptance.
+
 Run and close exact-SHA E2 acceptance on amd64 and ARM64. Fix only concrete defects found by that gate, then proceed to E3 alternate-path convergence. Do not reopen Phase 3 behavior without concrete regression evidence.

@@ -86,6 +86,10 @@ Implementation order:
 | E1 controller budget | amd64 300s; ARM64 360s |
 | Compact evidence retention | 30 days maximum |
 
+## Resume point
+
+Phase 4 is active on main. Routing codecs, route-state primitives, adjacency-backed routing update ingestion, native Ethernet forwarding, visit-count enforcement and the E2 forced-router harness are implemented. E2 exact-SHA amd64/ARM64 acceptance is the current gate.
+
 ## Next action
 
 Phase 4 routing codecs, route state, adjacency-backed update ingestion and native Ethernet data forwarding are implemented. Short/long data headers are validated, forwarding uses L1/L2 route lookup, only UP-adjacency link sources are accepted, and visit count 31 is the loop-prevention ceiling. The E2 three-VM/two-LAN forced-router harness is implemented with bidirectional payload evidence, exact forwarded visit=1 checks and max-visit negative checks. The exact-head acceptance dispatcher now runs both E1 regression and E2; exact amd64/ARM64 E2 acceptance is still pending. The VM workflow keeps the existing source-independent foundation guard path explicit for both E1 and E2.
