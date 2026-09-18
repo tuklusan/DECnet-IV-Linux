@@ -740,9 +740,118 @@ static void dniv_handle_valid_routing(int ifindex,
     }
 }
 
+
+static int dniv_data_source_allowed(int ifindex,
+                                    const __u8 source[ETH_ALEN])
+{
+    struct dniv_adj_entry *adj;
+    unsigned long flags;
+    __u16 address;
+    int allowed = 0;
+
+    if (dniv_wire_address_from_mac(source, &address) != 0)
+        return 0;
+
+    spin_lock_irqsave(&dniv_adj_lock, flags);
+    adj = dniv_find_adj_locked(ifindex, address);
+    if (adj && adj->state == DNIV_ADJ_STATE_UP)
+        allowed = 1;
+    spin_unlock_irqrestore(&dniv_adj_lock, flags);
+    return allowed;
+}
+
+static int dniv_xmit_data(struct net_device *dev, __u16 next_hop,
+                          const __u8 *payload, __u16 payload_len)
+{
+    struct sk_buff *skb;
+    struct ethhdr *eth;
+    __u8 src[ETH_ALEN];
+    __u8 dst[ETH_ALEN];
+    __u8 *length;
+    int ret;
+
+    if (!dev || !payload || payload_len == 0U ||
+        payload_len > DNIV_WIRE_BLOCK_SIZE)
+        return -EINVAL;
+
+    skb = alloc_skb(LL_RESERVED_SPACE(dev) + ETH_HLEN +
+                    DNIV_ETH_LENGTH_LEN + payload_len, GFP_ATOMIC);
+    if (!skb)
+        return -ENOMEM;
+
+    skb_reserve(skb, LL_RESERVED_SPACE(dev));
+    skb_reset_mac_header(skb);
+    eth = skb_put(skb, ETH_HLEN);
+    dniv_wire_mac_from_address(READ_ONCE(dniv_local_address), src);
+    dniv_wire_mac_from_address(next_hop, dst);
+    ether_addr_copy(eth->h_dest, dst);
+    ether_addr_copy(eth->h_source, src);
+    eth->h_proto = cpu_to_be16(ETH_P_DNA_RT);
+    length = skb_put(skb, DNIV_ETH_LENGTH_LEN);
+    dniv_wire_put_le16(length, payload_len);
+    memcpy(skb_put(skb, payload_len), payload, payload_len);
+    skb->dev = dev;
+    skb->protocol = eth->h_proto;
+    skb_set_network_header(skb, ETH_HLEN + DNIV_ETH_LENGTH_LEN);
+
+    ret = dev_queue_xmit(skb);
+    return ret == NET_XMIT_SUCCESS || ret == NET_XMIT_CN ? 0 : -EIO;
+}
+
+static void dniv_handle_valid_data(struct sk_buff *skb,
+                                   __u16 payload_len,
+                                   const struct dniv_wire_data *data)
+{
+    struct dniv_route_result route;
+    struct net_device *output;
+    __u16 local = READ_ONCE(dniv_local_address);
+    __u16 destination;
+    __u8 level;
+    __u8 *payload;
+
+    if (!data || data->destination == local ||
+        dniv_local_node_type == DNIV_NODE_TYPE_ENDNODE)
+        return;
+
+    if (DNIV_ADDR_AREA(data->destination) == DNIV_ADDR_AREA(local)) {
+        level = 1U;
+        destination = DNIV_ADDR_NODE(data->destination);
+    } else {
+        if (dniv_local_node_type != DNIV_NODE_TYPE_L2_ROUTER)
+            return;
+        level = 2U;
+        destination = DNIV_ADDR_AREA(data->destination);
+    }
+
+    if (dniv_route_lookup(level, destination, &route) != 0 ||
+        route.ifindex <= 0 || route.next_hop == 0U)
+        return;
+
+    output = dev_get_by_index(&init_net, route.ifindex);
+    if (!output)
+        return;
+    if (output->type != ARPHRD_ETHER || !(output->flags & IFF_UP) ||
+        !netif_running(output)) {
+        dev_put(output);
+        return;
+    }
+
+    payload = kmemdup(skb->data + DNIV_ETH_LENGTH_LEN, payload_len,
+                      GFP_ATOMIC);
+    if (!payload) {
+        dev_put(output);
+        return;
+    }
+    if (dniv_wire_data_increment_visit(payload, payload_len, data) == 0)
+        dniv_xmit_data(output, route.next_hop, payload, payload_len);
+    kfree(payload);
+    dev_put(output);
+}
+
 static int dniv_packet_rcv(struct sk_buff *skb, struct net_device *dev,
                            struct packet_type *pt, struct net_device *orig_dev)
 {
+    struct dniv_wire_data data;
     struct dniv_wire_hello hello;
     struct dniv_wire_route_message route;
     struct ethhdr *eth;
@@ -771,7 +880,8 @@ static int dniv_packet_rcv(struct sk_buff *skb, struct net_device *dev,
     if (first != DNIV_WIRE_ROUTER_HELLO &&
         first != DNIV_WIRE_ENDNODE_HELLO &&
         first != DNIV_WIRE_L1_ROUTING &&
-        first != DNIV_WIRE_L2_ROUTING && !(first & 0x80U))
+        first != DNIV_WIRE_L2_ROUTING &&
+        !dniv_wire_is_data_flag(first) && !(first & 0x80U))
         goto out;
     if (!pskb_may_pull(skb, (unsigned int)payload_len + DNIV_ETH_LENGTH_LEN)) {
         atomic64_inc(&dniv_hello_errors);
@@ -800,20 +910,28 @@ static int dniv_packet_rcv(struct sk_buff *skb, struct net_device *dev,
 
     parsed = dniv_wire_parse_hello(skb->data + DNIV_ETH_LENGTH_LEN,
                                    payload_len, &hello);
-    if (parsed == DNIV_WIRE_NOT_HELLO)
+    if (parsed == DNIV_WIRE_OK) {
+        dniv_wire_mac_from_address(hello.address, expected_source);
+        if (!ether_addr_equal(eth->h_source, expected_source)) {
+            atomic64_inc(&dniv_hello_errors);
+            goto out;
+        }
+        dniv_handle_valid_hello(dev->ifindex, eth->h_source, eth->h_dest,
+                                &hello);
         goto out;
-    if (parsed != DNIV_WIRE_OK) {
+    }
+    if (parsed == DNIV_WIRE_MALFORMED) {
         atomic64_inc(&dniv_hello_errors);
         goto out;
     }
 
-    dniv_wire_mac_from_address(hello.address, expected_source);
-    if (!ether_addr_equal(eth->h_source, expected_source)) {
-        atomic64_inc(&dniv_hello_errors);
+    parsed = dniv_wire_parse_data(skb->data + DNIV_ETH_LENGTH_LEN,
+                                  payload_len, &data);
+    if (parsed != DNIV_WIRE_OK)
         goto out;
-    }
-
-    dniv_handle_valid_hello(dev->ifindex, eth->h_source, eth->h_dest, &hello);
+    if (!dniv_data_source_allowed(dev->ifindex, eth->h_source))
+        goto out;
+    dniv_handle_valid_data(skb, payload_len, &data);
 
 out:
     kfree_skb(skb);

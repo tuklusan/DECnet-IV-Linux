@@ -39,8 +39,8 @@ Temporary Phase 3 Route20 crash instrumentation and the temporary tagging workfl
 
 ## Phase 4 entry
 
-Routing codecs, route-state primitives and adjacency-backed routing update ingestion are implemented. Valid L1/L2 updates are accepted only from matching UP router adjacencies and correct Ethernet destinations/source MACs; metrics include the configured Ethernet circuit cost. Direct adjacency routes refresh on hello, unreachable advertisements withdraw individual candidates, and adjacency loss withdraws every candidate learned through that peer. Next implement forwarding/visit-count enforcement, then E2/E3/E4.
+Routing codecs, route state, update ingestion and Ethernet forwarding are implemented. Short and long Phase IV data headers are parsed with deterministic vectors. Routers forward by L1 node or L2 area lookup, require the incoming link source to be an UP adjacency, rewrite only the Ethernet next hop, preserve the Routing Layer source/destination, increment visit count, and refuse forwarding at visit 31. Next prove the path in E2, then E3/E4.
 
 ## Next action
 
-Implement data forwarding and visit-count/loop prevention using the populated route state, then build E2. Do not reopen Phase 3 behavior without concrete regression evidence.
+Build the E2 two-LAN forced-router VM topology and prove bidirectional forwarding plus visit-count negative behavior on amd64 and ARM64. Do not reopen Phase 3 behavior without concrete regression evidence.

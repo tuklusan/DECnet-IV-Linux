@@ -62,7 +62,7 @@ Implementation order:
 1. deterministic routing-packet codecs, checksums and malformed-input rejection — complete;
 2. kernel route-state primitives, metrics and aging — complete;
 3. adjacency-backed routing update ingestion — complete;
-4. forwarding and visit-count/loop prevention;
+4. forwarding and visit-count/loop prevention — complete;
 5. E2 two-LAN forced-router topology;
 6. E3 alternate-path convergence;
 7. E4 multi-area L1/L2 behavior;
@@ -88,4 +88,4 @@ Implementation order:
 
 ## Next action
 
-Phase 4 routing codecs, route-state primitives and adjacency-backed L1/L2 routing update ingestion are implemented. Direct adjacency routes are refreshed by hellos and all learned routes are withdrawn when the adjacency drops. Next implement data forwarding and visit-count/loop prevention, then extend the lab toward E2.
+Phase 4 routing codecs, route state, adjacency-backed update ingestion and native Ethernet data forwarding are implemented. Short/long data headers are validated, forwarding uses L1/L2 route lookup, only UP-adjacency link sources are accepted, and visit count 31 is the loop-prevention ceiling. Next build the E2 two-LAN forced-router topology and prove this path in independent VMs.
