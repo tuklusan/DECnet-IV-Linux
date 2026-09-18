@@ -541,12 +541,10 @@ e4)
                 candidate=${path##*/}
                 [ "$candidate" = lo ] || ip link set "$candidate" up
             done
-            # Six-guest hosted boots are intentionally unsynchronized. Keep
-            # transit routing alive through route propagation and endpoint
-            # evidence instead of racing a short fixed lifetime.
+            echo "DNIV-E4-ROUTER-READY session=$session node=$name"
             # The E4 controller owns transit-router teardown after both
-            # endpoint evidence markers. Six ARM64 TCG guests can have large
-            # boot skew, so no router may disappear on a short local timer.
+            # endpoint evidence markers. Slow ARM64 TCG boot must not remove
+            # a router before the forwarding proof is complete.
             sleep 600
             poweroff_pass "DNIV-E4-PASS session=$session node=$name"
             ;;

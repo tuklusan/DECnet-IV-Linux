@@ -274,8 +274,33 @@ def main() -> int:
             [l2a.taps[1], l2b.taps[0]],
             [b.taps[0], l1b.taps[0], l2b.taps[1]],
         ])
-        for guest in (l2a, l2b, l1a, l1b, a, b):
+        routers = (l2a, l2b, l1a, l1b)
+        for guest in routers:
             lab.start(guest)
+
+        router_deadline = time.monotonic() + min(timeout, 600)
+        while time.monotonic() < router_deadline:
+            ready = all(
+                contains(g.log,
+                         f"DNIV-E4-ROUTER-READY session={session} node={g.name}")
+                for g in routers)
+            if ready:
+                break
+            for router in routers:
+                if router.process and router.process.poll() is not None:
+                    raise RuntimeError(
+                        f"E4 router exited before readiness: {router.name}")
+            time.sleep(1)
+        else:
+            raise RuntimeError("E4 routers did not all reach readiness")
+
+        # Allow L1<->L2 and inter-area L2 vectors to settle before introducing
+        # endpoint traffic. This makes the test exercise forwarding, not guest
+        # boot order under slow ARM64 TCG.
+        time.sleep(10)
+        lab.start(a)
+        lab.start(b)
+
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             endpoints_done = all(
