@@ -52,6 +52,8 @@ Exact-head acceptance parent `35302394291` dispatched interop run `35302422684`.
 
 Acceptance on `a7dd9892dd72f5632da5eb9d05851dbc5b537e06` was green through repository policy, project state, native amd64/ARM64 builds, both reference baselines and both E1 jobs. Route20 routing again reproduced the independent null-IP crash on both architectures, but the diagnostic result marker was still absent when the host's 30-second post-failure allowance ended. The diagnostic Route20 launcher is therefore backgrounded, its survival/exited marker is emitted immediately after the bounded 15-second observation and before secondary evidence collection, and the host waits up to 60 seconds for diagnostic completion. This changes only diagnostic control flow after normal pinned Route20 has already failed.
 
+Exact-head acceptance for `3a62f37e3aa8957573ed22ec28c602ed7486924c` cleared repository policy, project state, native amd64/ARM64 builds, both reference baselines and both E1 jobs. In interop run `35304828824`, amd64 Route20 routing emitted the expected normal `reference-exited` failure and then `DNIV-REF-DIAG-RESULT ... session-init-bounds=survived`. ARM64 emitted the same normal failure, but the host ended its fixed 60-second post-failure wait while the diagnostic was still running after its backtrace-start marker. Because the 15-second diagnostic observation runs on guest time under slower ARM64 emulation, the host completion allowance is now 60 seconds on amd64 and 180 seconds on ARM64. The diagnostic observation remains 15 seconds; no protocol behavior is changed.
+
 Repository license validation now excludes `__pycache__` and `.git` directories in the Git enumeration command itself for both exact-tree and staged scans, at any depth, so generated caches and repository metadata never reach the validator.
 
 | Field | Current value |
@@ -87,4 +89,4 @@ Acceptance lineage for `38c5b49e53c648f6514f52ebff84a93331a4732a`: repository-po
 
 ## Next action
 
-Run exact-head acceptance on `main`. Require repository policy, project state, native amd64/ARM64 builds, both pinned reference baselines and both E1 jobs. Follow the amd64 and ARM64 Route20 routing jobs and require `DNIV-REF-DIAG-RESULT ... session-init-bounds=survived` on both after the normal pinned binary has already emitted `reference-exited`. Only that two-architecture confirmation permits the minimal Route20 fork loop-bound fix and a new pin.
+Run exact-head acceptance on `main`. Require repository policy, project state, native amd64/ARM64 builds, both pinned reference baselines and both E1 jobs. Follow the amd64 and ARM64 Route20 routing jobs and require the normal pinned binary to emit `reference-exited` first, followed by `DNIV-REF-DIAG-RESULT ... session-init-bounds=survived` after the complete 15-second diagnostic observation on both architectures. Only that two-architecture confirmation permits the minimal Route20 fork loop-bound fix and a new pin.

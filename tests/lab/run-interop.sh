@@ -123,8 +123,10 @@ kill -0 "$TCPDUMP_PID"
 
 host_arch=$(uname -m)
 reference_ready_seconds=180
+diagnostic_completion_seconds=60
 if [[ "$host_arch" == aarch64 ]]; then
     reference_ready_seconds=360
+    diagnostic_completion_seconds=180
 fi
 accel=tcg
 if [[ -e /dev/kvm && -r /dev/kvm && -w /dev/kvm ]]; then accel=kvm; fi
@@ -212,7 +214,7 @@ wait_candidate_marker() {
     while (( SECONDS < deadline )); do
         if grep -Fq "$fail_marker" "$reference_log" 2>/dev/null; then
             if [[ "$reference" == route20 ]]; then
-                local diag_deadline=$((SECONDS + 60))
+                local diag_deadline=$((SECONDS + diagnostic_completion_seconds))
                 while (( SECONDS < diag_deadline )); do
                     grep -Fq "$diag_done" "$reference_log" 2>/dev/null && break
                     kill -0 "$reference_pid" 2>/dev/null || break
