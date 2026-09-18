@@ -56,7 +56,7 @@ Exact-head acceptance for `3a62f37e3aa8957573ed22ec28c602ed7486924c` cleared rep
 
 The first policy run on `bf99b70d7bea0fd4aac258e077f0303dfff6fc1a` failed only because `test_interop_reference_ready.py` still matched the ARM64 readiness block as though it contained a single assignment. The regression now explicitly requires the ARM64 readiness and diagnostic-completion assignments together. No harness runtime or protocol behavior changed.
 
-Exact-head acceptance for `85d0be73f4b498a4ebb2801c8664de3c339d132f` closed the Route20 root-cause experiment on both architectures. Interop run `35311688614` produced normal `reference-exited` first on amd64 job `105497613995` and ARM64 job `105497614140`; the bounds-corrected diagnostic then survived the full 15-second observation on both. The Route20 fork was minimally fixed at `ea144b2e9978c7d216bc7c171b22fe47ca555567` and this project now pins that commit. The interop diagnostic copy no longer patches `session.c`; it keeps only the crash shim for post-failure evidence.
+Exact-head acceptance for `85d0be73f4b498a4ebb2801c8664de3c339d132f` closed the Route20 root-cause experiment on both architectures. Interop run `35311688614` produced normal `reference-exited` first on amd64 job `105497613995` and ARM64 job `105497614140`; the bounds-corrected diagnostic then survived the full 15-second observation on both. The Route20 fork was minimally fixed at `ea144b2e9978c7d216bc7c171b22fe47ca555567` and this project now pins that commit. The temporary Route20 post-failure diagnostic build and crash shim were removed after Phase 3 closure; ordinary peer-failure syslog/kernel evidence remains.
 
 Repository license validation now excludes `__pycache__` and `.git` directories in the Git enumeration command itself for both exact-tree and staged scans, at any depth, so generated caches and repository metadata never reach the validator.
 
@@ -77,7 +77,7 @@ Repository license validation now excludes `__pycache__` and `.git` directories 
 | Compact evidence retention | 30 days maximum |
 | Acceptance child binding | parent run ID + exact expected SHA |
 | VM controller budget | amd64 300s; ARM64 360s |
-| Infrastructure status | Phase 3 exact-green across policy/build/state/reference/E1/interop; Phase 4 routing work active |
+| Infrastructure status | Phase 3 exact-green; temporary Phase 3 diagnostics removed; reusable interop/lab foundation retained for Phase 4 |
 
 ## Persistent run index
 

@@ -12,7 +12,7 @@
 # patent, trademark, and governing-law provisions.
 # ============================================================================
 
-name: Phase 3 Independent Interoperability
+name: Independent Ethernet Interoperability
 
 on:
   workflow_dispatch:
@@ -260,16 +260,8 @@ jobs:
               bundle="$RUNNER_TEMP/bundle-route20"
               mkdir -p "$bundle"
               cp "$work/Route20/route20" "$bundle/route20"
-              cp tests/lab/route20-diagnostic-shim.c "$work/Route20/route20_diagnostic_shim.c"
-              sed -i 's/          update.c/          update.c \\\n          route20_diagnostic_shim.c/' "$work/Route20/makefile"
-              rm -f "$work/Route20/route20"
-              make -C "$work/Route20" \
-                CFLAGS_G='-g3 -fno-omit-frame-pointer' \
-                LDFLAGS_O='-rdynamic' 2>&1 | \
-                tee "$DNIV_SCRATCH_DIR/route20-diagnostic-build.log"
-              cp "$work/Route20/route20" "$bundle/route20-diagnostic"
               printf 'REFERENCE=route20\nREFERENCE_SHA=%s\n' "$ROUTE20_REF" > "$bundle/manifest.env"
-              (cd "$bundle" && sha256sum route20 route20-diagnostic > SHA256SUMS)
+              (cd "$bundle" && sha256sum route20 > SHA256SUMS)
               printf 'ROUTE20_REF=%s\n' "$ROUTE20_REF" > "$DNIV_SCRATCH_DIR/references.env"
               ;;
             pydecnet)
@@ -292,7 +284,7 @@ jobs:
               ;;
           esac
 
-      - name: Run bounded live Phase 3 interoperability suite
+      - name: Run bounded live interoperability suite
         shell: bash
         run: |
           set -euo pipefail
@@ -309,7 +301,7 @@ jobs:
               tee "$DNIV_SCRATCH_DIR/interop-${reference}-${scenario}.log"
           done
           python3 tools/scratch_state.py mark --dir "$DNIV_SCRATCH_DIR" \
-            --status interop-suite-green --note 'bounded independent Phase 3 suite passed'
+            --status interop-suite-green --note 'bounded independent interoperability suite passed'
 
       - name: Verify exact tree after interoperability gate
         shell: bash

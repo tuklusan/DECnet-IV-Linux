@@ -31,7 +31,6 @@ def main() -> int:
     arm = re.findall(
         r'if \[\[ "\$host_arch" == aarch64 \]\]; then\n'
         r"\s*reference_ready_seconds=(\d+)\n"
-        r"\s*diagnostic_completion_seconds=\d+\n"
         r"fi",
         SCRIPT,
         re.MULTILINE,
@@ -44,36 +43,6 @@ def main() -> int:
         raise SystemExit("interop-ready regression: ARM64 bound must exceed default")
     if int(arm[0]) > 420:
         raise SystemExit("interop-ready regression: ARM64 reference-ready bound is excessive")
-
-    diagnostic_default = re.findall(
-        r"^diagnostic_completion_seconds=(\d+)$", SCRIPT, re.MULTILINE
-    )
-    diagnostic_arm = re.findall(
-        r'if \[\[ "\$host_arch" == aarch64 \]\]; then\n'
-        r"\s*reference_ready_seconds=\d+\n"
-        r"\s*diagnostic_completion_seconds=(\d+)\n"
-        r"fi",
-        SCRIPT,
-        re.MULTILINE,
-    )
-    if diagnostic_default != ["60"]:
-        raise SystemExit(
-            "interop-ready regression: amd64/default diagnostic bound changed: "
-            f"{diagnostic_default}"
-        )
-    if diagnostic_arm != ["180"]:
-        raise SystemExit(
-            "interop-ready regression: ARM64 diagnostic bound changed: "
-            f"{diagnostic_arm}"
-        )
-    if int(diagnostic_arm[0]) <= int(diagnostic_default[0]):
-        raise SystemExit(
-            "interop-ready regression: ARM64 diagnostic bound must exceed default"
-        )
-    if int(diagnostic_arm[0]) > int(arm[0]):
-        raise SystemExit(
-            "interop-ready regression: diagnostic bound must not exceed reference-ready bound"
-        )
 
     executable_paths = [
         ROOT / "tests/lab/prepare-reference-image.sh",
@@ -141,33 +110,7 @@ def main() -> int:
             "before candidate success during convergence"
         )
 
-    required_route20_diagnostics = [
-        "route20-diagnostic",
-        "route20-diagnostic-shim.c",
-        "-rdynamic",
-        "DNIV-ROUTE20-SIGNAL",
-        "DNIV-ROUTE20-EVENT",
-        "diag_launcher_pid=$!",
-        "diagnostic=survived",
-        "diag_deadline=$((SECONDS + diagnostic_completion_seconds))",
-        "DNIV-REF-DIAG-DONE session=$session reference=route20",
-        "wait_candidate_marker",
-    ]
-    combined = SCRIPT + "\n" + REFERENCE_IMAGE + "\n" + (
-        ROOT / ".github/workflows/interop.yml"
-    ).read_text(encoding="utf-8") + "\n" + (
-        ROOT / "tests/lab/dniv-reference-peer.sh"
-    ).read_text(encoding="utf-8") + "\n" + (
-        ROOT / "tests/lab/route20-diagnostic-shim.c"
-    ).read_text(encoding="utf-8")
-    for fragment in required_route20_diagnostics:
-        if fragment not in combined:
-            raise SystemExit(
-                "interop-ready regression: Route20 post-failure backtrace path incomplete: "
-                f"{fragment!r}"
-            )
-
-    print("interop-ready regression passed: ready-amd64=180s ready-arm64=360s diag-amd64=60s diag-arm64=180s")
+    print("interop-ready regression passed: ready-amd64=180s ready-arm64=360s")
     return 0
 
 

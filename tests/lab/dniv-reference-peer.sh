@@ -117,38 +117,6 @@ dump_route20_diagnostics() {
 }
 
 
-run_route20_diagnostic() {
-    diag_bin=/usr/local/libexec/dniv-route20-diagnostic
-    install -m 0755 /mnt/reference/route20-diagnostic "$diag_bin"
-    rm -f /var/run/route20.pid /run/reference/route20-backtrace.log /run/reference/route20-diagnostic-launch.log
-    echo "DNIV-REF-DIAG session=$session reference=route20 source=backtrace begin"
-    "$diag_bin" /run/reference/route20.ini >/run/reference/route20-diagnostic-launch.log 2>&1 &
-    diag_launcher_pid=$!
-    i=0
-    diag_pid=
-    while [ "$i" -lt 50 ] && [ ! -s /var/run/route20.pid ]; do
-        i=$((i + 1))
-        sleep 0.1
-    done
-    [ ! -s /var/run/route20.pid ] || diag_pid=$(cat /var/run/route20.pid)
-    i=0
-    while [ -n "$diag_pid" ] && kill -0 "$diag_pid" 2>/dev/null && [ "$i" -lt 150 ]; do
-        i=$((i + 1))
-        sleep 0.1
-    done
-    if [ -n "$diag_pid" ] && kill -0 "$diag_pid" 2>/dev/null; then
-        echo "DNIV-REF-DIAG-RESULT session=$session reference=route20 diagnostic=survived"
-        kill "$diag_pid" 2>/dev/null || true
-    else
-        echo "DNIV-REF-DIAG-RESULT session=$session reference=route20 diagnostic=exited"
-    fi
-    [ ! -f /run/reference/route20-diagnostic-launch.log ] || cat /run/reference/route20-diagnostic-launch.log
-    [ ! -f /run/reference/route20-backtrace.log ] || cat /run/reference/route20-backtrace.log
-    journalctl -b -k --no-pager -n 80 2>&1 | \
-        grep -Ei 'route20|dniv-route20|segfault|general protection|invalid opcode' || true
-    echo "DNIV-REF-DIAG session=$session reference=route20 source=backtrace end"
-    echo "DNIV-REF-DIAG-DONE session=$session reference=route20"
-}
 
 probe_loop() {
     i=0
@@ -225,7 +193,6 @@ done
 if [ "$reference" = route20 ]; then
     dump_route20_diagnostics
     echo "DNIV-REF-FAIL session=$session reason=reference-exited"
-    run_route20_diagnostic
 else
     echo "DNIV-REF-FAIL session=$session reason=reference-exited"
 fi

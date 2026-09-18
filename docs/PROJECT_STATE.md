@@ -83,7 +83,7 @@ Exact-head acceptance for `3a62f37e3aa8957573ed22ec28c602ed7486924c` cleared rep
 
 The first exact-head policy run for `bf99b70d7bea0fd4aac258e077f0303dfff6fc1a` stopped in the interop-readiness regression because that test's ARM64 readiness regex still assumed the architecture block contained only `reference_ready_seconds`; adding the new diagnostic bound made the parser return no ARM readiness value. The regression now requires both ARM64 assignments in that block. Runtime behavior is unchanged.
 
-Exact-head acceptance for `85d0be73f4b498a4ebb2801c8664de3c339d132f` closed the Route20 root-cause experiment on both architectures. Interop run `35311688614` showed normal pinned Route20 emit `reason=reference-exited` first on amd64 job `105497613995` and ARM64 job `105497614140`; the diagnostic copy with only corrected `SessionInitialise()` bounds then survived the complete 15-second observation on both. The Route20 fork was therefore fixed minimally at `ea144b2e9978c7d216bc7c171b22fe47ca555567`, changing only those two loop bounds. This project now pins that exact fork commit. The interop diagnostic build no longer rewrites `session.c`; it retains only the low-perturbation crash shim for post-failure evidence.
+Exact-head acceptance for `85d0be73f4b498a4ebb2801c8664de3c339d132f` closed the Route20 root-cause experiment on both architectures. Interop run `35311688614` showed normal pinned Route20 emit `reason=reference-exited` first on amd64 job `105497613995` and ARM64 job `105497614140`; the diagnostic copy with only corrected `SessionInitialise()` bounds then survived the complete 15-second observation on both. The Route20 fork was therefore fixed minimally at `ea144b2e9978c7d216bc7c171b22fe47ca555567`, changing only those two loop bounds. This project now pins that exact fork commit. The temporary post-failure Route20 diagnostic build and crash shim were removed after Phase 3 closure. Unexpected independent-peer exits still retain bounded syslog and kernel evidence without carrying the root-cause instrumentation into Phase 4.
 
 Repository policy and acceptance dispatch remain isolated from protocol-lab runner concurrency. Release-image construction remains a separate exact-source gate and is not inferred from the cached protocol foundation.
 
@@ -103,7 +103,7 @@ Phase 3 is closed. Exact candidate `608ed2077e9651d6c050f4fc790d538b2d8ee529` pa
 
 ### Phase 4
 
-Active. Implement Phase IV routing in dependency order: routing packet codecs and validation, route state/aging and metrics, forwarding with visit-count enforcement, then multi-LAN L1/L2 convergence and independent interoperability.
+Active. Phase 3-only Route20 crash instrumentation has been removed; the reusable independent-peer harness, settled-guest readiness policy and failure evidence remain. Implement Phase IV routing in dependency order: routing packet codecs and validation, route state/aging and metrics, forwarding with visit-count enforcement, then multi-LAN L1/L2 convergence and independent interoperability.
 
 ## Next action
 

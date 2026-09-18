@@ -123,10 +123,8 @@ kill -0 "$TCPDUMP_PID"
 
 host_arch=$(uname -m)
 reference_ready_seconds=180
-diagnostic_completion_seconds=60
 if [[ "$host_arch" == aarch64 ]]; then
     reference_ready_seconds=360
-    diagnostic_completion_seconds=180
 fi
 accel=tcg
 if [[ -e /dev/kvm && -r /dev/kvm && -w /dev/kvm ]]; then accel=kvm; fi
@@ -210,17 +208,8 @@ wait_candidate_marker() {
     local log=$1 marker=$2 seconds=$3 candidate_pid=$4 reference_pid=$5 reference_log=$6
     local deadline=$((SECONDS + seconds))
     local fail_marker="DNIV-REF-FAIL session=$session"
-    local diag_done="DNIV-REF-DIAG-DONE session=$session reference=route20"
     while (( SECONDS < deadline )); do
         if grep -Fq "$fail_marker" "$reference_log" 2>/dev/null; then
-            if [[ "$reference" == route20 ]]; then
-                local diag_deadline=$((SECONDS + diagnostic_completion_seconds))
-                while (( SECONDS < diag_deadline )); do
-                    grep -Fq "$diag_done" "$reference_log" 2>/dev/null && break
-                    kill -0 "$reference_pid" 2>/dev/null || break
-                    sleep 1
-                done
-            fi
             return 1
         fi
         grep -Fq "$marker" "$log" 2>/dev/null && return 0

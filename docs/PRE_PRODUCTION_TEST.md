@@ -28,7 +28,7 @@ Repository state, `docs/HANDOVER.md`, `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`,
 
 | Reference | Revision | Acceptance use |
 | --- | --- | --- |
-| Route20 | `b94115b2615c6463d1f006924ceeadde8e2d4367` | independent Ethernet/routing behavior and live peer |
+| Route20 | `ea144b2e9978c7d216bc7c171b22fe47ca555567` | independent Ethernet/routing behavior and live peer |
 | PyDECnet behavior/live | `a7194be8d72dea6f9eb4f77083f056f53e80df58` | independent live peer |
 | PyDECnet tests | `9a844987bf3a1450632dee8d37e60a23a453bad3` | protocol vectors/state machines and native reference baseline |
 | LinuxDECnet | `ff39eef045d1e4b7b72a3d40111e89c07a473398` | userspace/API and VAX-data conversion comparison |
@@ -258,7 +258,7 @@ This is not a cryptographic-security claim. It requires bounded parsing and corr
 
 ### Route20
 
-At `b94115b2615c6463d1f006924ceeadde8e2d4367`, no standalone path named as a test suite was found in the pinned tree. Build is PP-00; live Ethernet/routing behavior maps to PP-04/PP-05 and later DDCMP behavior maps when used. Any subsequently discovered native test at this pin is classified before release.
+At `ea144b2e9978c7d216bc7c171b22fe47ca555567`, no standalone path named as a test suite was found in the pinned tree. Build is PP-00; live Ethernet/routing behavior maps to PP-04/PP-05 and later DDCMP behavior maps when used. Any subsequently discovered native test at this pin is classified before release.
 
 ### PyDECnet
 
