@@ -378,7 +378,9 @@ e2)
                 candidate=${path##*/}
                 [ "$candidate" = lo ] || ip link set "$candidate" up
             done
-            sleep 20
+            # Endnodes boot later than the router on hosted QEMU. Keep the
+            # forwarding node alive through both endpoint evidence windows.
+            sleep 120
             poweroff_pass "DNIV-E2-PASS session=$session node=$name"
             ;;
         *)

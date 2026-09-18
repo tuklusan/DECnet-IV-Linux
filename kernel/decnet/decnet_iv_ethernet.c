@@ -88,6 +88,8 @@ static DECLARE_DELAYED_WORK(dniv_age_work, dniv_age_workfn);
 static DECLARE_DELAYED_WORK(dniv_route_work, dniv_route_workfn);
 static __u64 dniv_last_route_generation;
 static unsigned long dniv_last_route_full;
+static __u16 dniv_route_l1_snapshot[1024];
+static __u16 dniv_route_l2_snapshot[64];
 
 static struct dniv_adj_entry *dniv_find_adj_locked(int ifindex, __u16 address)
 {
@@ -474,8 +476,6 @@ static void dniv_send_l2_updates(struct net_device *dev,
 
 static void dniv_route_workfn(struct work_struct *work)
 {
-    __u16 l1[1024];
-    __u16 l2[64];
     struct net_device *dev;
     __u64 generation;
     unsigned long now = jiffies;
@@ -493,7 +493,8 @@ static void dniv_route_workfn(struct work_struct *work)
         goto out_schedule;
 
     if (dniv_route_snapshot(1U, DNIV_ADDR_NODE(dniv_local_address),
-                            l1, ARRAY_SIZE(l1)) != 0)
+                            dniv_route_l1_snapshot,
+                            ARRAY_SIZE(dniv_route_l1_snapshot)) != 0)
         goto out_schedule;
     if (dniv_local_node_type == DNIV_NODE_TYPE_L2_ROUTER) {
         __u16 local_area = DNIV_ADDR_AREA(dniv_local_address);
@@ -501,7 +502,7 @@ static void dniv_route_workfn(struct work_struct *work)
         if (dniv_route_snapshot(2U, local_area, l2, ARRAY_SIZE(l2)) != 0)
             goto out_schedule;
         if (dniv_route_area_attached(local_area))
-            l1[0] = 0U;
+            dniv_route_l1_snapshot[0] = 0U;
     }
 
     rtnl_lock();
@@ -509,9 +510,9 @@ static void dniv_route_workfn(struct work_struct *work)
         if (dev->type != ARPHRD_ETHER || (dev->flags & IFF_LOOPBACK) ||
             !(dev->flags & IFF_UP) || !netif_running(dev))
             continue;
-        dniv_send_l1_updates(dev, l1);
+        dniv_send_l1_updates(dev, dniv_route_l1_snapshot);
         if (dniv_local_node_type == DNIV_NODE_TYPE_L2_ROUTER)
-            dniv_send_l2_updates(dev, l2);
+            dniv_send_l2_updates(dev, dniv_route_l2_snapshot);
     }
     rtnl_unlock();
 
