@@ -121,7 +121,7 @@ int dniv_route_update(__u8 level, __u16 destination, __u16 next_hop,
                       unsigned long expires)
 {
     struct dniv_route_candidate *candidate;
-    struct dniv_route_candidate *allocated = NULL;
+    struct dniv_route_candidate *allocated;
     struct hlist_head *head;
     unsigned long flags;
 
@@ -130,15 +130,9 @@ int dniv_route_update(__u8 level, __u16 destination, __u16 next_hop,
         !dniv_route_metric_valid(cost, hops))
         return -EINVAL;
 
-    spin_lock_irqsave(&dniv_route_lock, flags);
-    candidate = dniv_route_find_locked(head, next_hop, ifindex);
-    spin_unlock_irqrestore(&dniv_route_lock, flags);
-
-    if (!candidate) {
-        allocated = kmalloc(sizeof(*allocated), GFP_ATOMIC);
-        if (!allocated)
-            return -ENOMEM;
-    }
+    allocated = kmalloc(sizeof(*allocated), GFP_ATOMIC);
+    if (!allocated)
+        return -ENOMEM;
 
     spin_lock_irqsave(&dniv_route_lock, flags);
     candidate = dniv_route_find_locked(head, next_hop, ifindex);

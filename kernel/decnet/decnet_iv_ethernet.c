@@ -671,7 +671,8 @@ static int dniv_routing_destination_valid(
     return 0;
 }
 
-static int dniv_routing_source_allowed(int ifindex, __u16 source, __u8 level)
+static int dniv_routing_source_allowed(int ifindex, __u16 source, __u8 level,
+                                       unsigned long *expires)
 {
     struct dniv_adj_entry *adj;
     unsigned long flags;
@@ -689,12 +690,15 @@ static int dniv_routing_source_allowed(int ifindex, __u16 source, __u8 level)
         allowed = dniv_local_node_type == DNIV_NODE_TYPE_L2_ROUTER &&
                   adj->node_type == DNIV_NODE_TYPE_L2_ROUTER;
     }
+    if (allowed && expires)
+        *expires = adj->expires;
 out:
     spin_unlock_irqrestore(&dniv_adj_lock, flags);
     return allowed;
 }
 
 static void dniv_handle_valid_routing(int ifindex,
+                                      unsigned long expires,
                                       const struct dniv_wire_route_message *msg)
 {
     struct dniv_wire_route_segment_view seg;
@@ -735,7 +739,7 @@ static void dniv_handle_valid_routing(int ifindex,
                 continue;
             }
             dniv_route_update(msg->level, destination, msg->source, ifindex,
-                              metric.cost, metric.hops, 0);
+                              metric.cost, metric.hops, expires);
         }
     }
 }
@@ -859,6 +863,7 @@ static int dniv_packet_rcv(struct sk_buff *skb, struct net_device *dev,
     __u8 length[DNIV_ETH_LENGTH_LEN];
     __u8 first;
     __u16 payload_len;
+    unsigned long route_expires = 0;
     int parsed;
 
     (void)pt;
@@ -900,9 +905,9 @@ static int dniv_packet_rcv(struct sk_buff *skb, struct net_device *dev,
         if (!ether_addr_equal(eth->h_source, expected_source))
             goto out;
         if (!dniv_routing_source_allowed(dev->ifindex, route.source,
-                                         route.level))
+                                         route.level, &route_expires))
             goto out;
-        dniv_handle_valid_routing(dev->ifindex, &route);
+        dniv_handle_valid_routing(dev->ifindex, route_expires, &route);
         goto out;
     }
     if (parsed == DNIV_WIRE_MALFORMED)
