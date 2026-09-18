@@ -36,6 +36,7 @@ Temporary Phase 3 Route20 crash instrumentation and the temporary tagging workfl
 - READY bounds: amd64 180s, ARM64 360s.
 - E1 controller bounds: amd64 300s, ARM64 360s.
 - Remote branch invariant: only `refs/heads/main`.
+- Acceptance workflow and architecture-runner concurrency are exact-SHA scoped; superseded candidates cannot hold the current candidate behind stale queued jobs.
 
 ## Phase 4 entry
 

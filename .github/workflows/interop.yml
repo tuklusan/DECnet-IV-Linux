@@ -27,7 +27,7 @@ on:
         type: string
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.sha }}
   queue: max
   cancel-in-progress: false
 
@@ -100,7 +100,7 @@ jobs:
             scenarios: "endnode router-endnode"
     runs-on: ${{ matrix.runner }}
     concurrency:
-      group: dniv-runner-${{ matrix.slot }}
+      group: dniv-runner-${{ matrix.slot }}-${{ github.sha }}
       queue: max
       cancel-in-progress: false
     timeout-minutes: 75
