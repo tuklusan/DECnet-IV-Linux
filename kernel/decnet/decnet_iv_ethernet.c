@@ -996,6 +996,7 @@ static void dniv_handle_valid_data(int input_ifindex,
     __u16 destination;
     __u8 level;
     __u8 *payload;
+    bool generated_return = false;
     int forwarded_len;
 
     if (!data || dniv_local_node_type == DNIV_NODE_TYPE_ENDNODE)
@@ -1050,7 +1051,7 @@ retry:
     }
     forwarded_len = dniv_wire_build_forwarded_long(
         payload, DNIV_WIRE_BLOCK_SIZE, &packet,
-        route.ifindex == input_ifindex ? 1U : 0U);
+        !generated_return && route.ifindex == input_ifindex ? 1U : 0U);
     if (forwarded_len > 0)
         dniv_xmit_data(output, route.next_hop, payload,
                        (__u16)forwarded_len);
@@ -1059,8 +1060,10 @@ retry:
     return;
 
 return_to_sender:
-    if (dniv_wire_data_make_return(&packet) == 0)
+    if (dniv_wire_data_make_return(&packet) == 0) {
+        generated_return = true;
         goto retry;
+    }
 }
 
 static int dniv_packet_rcv(struct sk_buff *skb, struct net_device *dev,

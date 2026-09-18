@@ -107,7 +107,7 @@ def pcap_rts_returns(path: Path, marker: str, router_mac: str,
             continue
         route = frame[16:16 + plen]
         if (len(route) >= 21 and (route[0] & 0xc7) == 0x06 and
-                (route[0] & 0x18) == 0x10 and
+                (route[0] & 0x38) == 0x10 and
                 int.from_bytes(route[7:9], "little") == destination and
                 int.from_bytes(route[15:17], "little") == source):
             visits.append(route[18])
