@@ -39,8 +39,8 @@ Temporary Phase 3 Route20 crash instrumentation and the temporary tagging workfl
 
 ## Phase 4 entry
 
-Routing message wire formats/validation and kernel route-state primitives are implemented. Route state keeps independent per-adjacency candidates, applies Phase IV cost/hop limits, deterministically chooses equal-cost routes by higher next-hop address, supports adjacency withdrawal, and ages expiring candidates. Next integrate received updates with adjacency state and forwarding/visit-count enforcement, then E2/E3/E4.
+Routing codecs, route-state primitives and adjacency-backed routing update ingestion are implemented. Valid L1/L2 updates are accepted only from matching UP router adjacencies and correct Ethernet destinations/source MACs; metrics include the configured Ethernet circuit cost. Direct adjacency routes refresh on hello, unreachable advertisements withdraw individual candidates, and adjacency loss withdraws every candidate learned through that peer. Next implement forwarding/visit-count enforcement, then E2/E3/E4.
 
 ## Next action
 
-Integrate received L1/L2 routing updates with adjacency-backed route state, then implement forwarding and visit-count/loop prevention. Do not reopen Phase 3 behavior without concrete regression evidence.
+Implement data forwarding and visit-count/loop prevention using the populated route state, then build E2. Do not reopen Phase 3 behavior without concrete regression evidence.

@@ -23,6 +23,7 @@
 #include <linux/uaccess.h>
 
 #include <linux/decnet_iv.h>
+#include <decnet_iv_route_metric.h>
 #include <decnet_iv_wire.h>
 #include "decnet_iv_ethernet.h"
 #include "decnet_iv_route.h"
@@ -52,6 +53,10 @@ MODULE_PARM_DESC(router_priority, "DECnet Ethernet router priority (0-127)");
 static unsigned short hello_interval = 10;
 module_param(hello_interval, ushort, 0444);
 MODULE_PARM_DESC(hello_interval, "DECnet Ethernet hello interval in seconds (1-65535)");
+
+static unsigned short ethernet_cost = 4;
+module_param(ethernet_cost, ushort, 0444);
+MODULE_PARM_DESC(ethernet_cost, "DECnet Ethernet circuit cost (1-1022)");
 
 static DEFINE_MUTEX(dniv_identity_lock);
 static struct dniv_identity dniv_identity;
@@ -186,7 +191,8 @@ static int __init dniv_init(void)
         default_node < 1 || default_node > 1023 ||
         !dniv_name_valid(default_name) ||
         !dniv_wire_node_type_valid(default_node_type) ||
-        router_priority > 127 || hello_interval == 0) {
+        router_priority > 127 || hello_interval == 0 ||
+        ethernet_cost == 0 || ethernet_cost > DNIV_ROUTE_MAX_COST) {
         pr_err("decnet_iv: invalid default configuration\n");
         return -EINVAL;
     }
@@ -208,7 +214,8 @@ static int __init dniv_init(void)
     }
 
     err = dniv_eth_init(dniv_identity.address, (__u8)default_node_type,
-                        (__u8)router_priority, (__u16)hello_interval);
+                        (__u8)router_priority, (__u16)hello_interval,
+                        (__u16)ethernet_cost);
     if (err) {
         dniv_route_exit();
         misc_deregister(&dniv_miscdev);

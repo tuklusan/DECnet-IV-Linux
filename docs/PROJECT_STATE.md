@@ -61,11 +61,12 @@ Implementation order:
 
 1. deterministic routing-packet codecs, checksums and malformed-input rejection — complete;
 2. kernel route-state primitives, metrics and aging — complete;
-3. forwarding and visit-count/loop prevention;
-4. E2 two-LAN forced-router topology;
-5. E3 alternate-path convergence;
-6. E4 multi-area L1/L2 behavior;
-7. independent Route20/PyDECnet routing interoperability on amd64 and ARM64.
+3. adjacency-backed routing update ingestion — complete;
+4. forwarding and visit-count/loop prevention;
+5. E2 two-LAN forced-router topology;
+6. E3 alternate-path convergence;
+7. E4 multi-area L1/L2 behavior;
+8. independent Route20/PyDECnet routing interoperability on amd64 and ARM64.
 
 ## Current infrastructure
 
@@ -87,4 +88,4 @@ Implementation order:
 
 ## Next action
 
-Phase 4 routing packet codecs plus kernel route-state primitives, metric arithmetic, deterministic equal-cost selection and route aging are implemented. Next integrate routing updates with adjacency state and forwarding/visit-count enforcement, then extend the lab toward E2.
+Phase 4 routing codecs, route-state primitives and adjacency-backed L1/L2 routing update ingestion are implemented. Direct adjacency routes are refreshed by hellos and all learned routes are withdrawn when the adjacency drops. Next implement data forwarding and visit-count/loop prevention, then extend the lab toward E2.

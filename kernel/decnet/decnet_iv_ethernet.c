@@ -26,8 +26,10 @@
 #include <linux/workqueue.h>
 #include <net/net_namespace.h>
 
+#include <decnet_iv_route_metric.h>
 #include <decnet_iv_wire.h>
 #include "decnet_iv_ethernet.h"
+#include "decnet_iv_route.h"
 
 #define DNIV_MAX_ADJACENCIES 64U
 #define DNIV_MAX_DR_STATES 64U
@@ -63,6 +65,7 @@ static struct dniv_adj_entry dniv_adjacencies[DNIV_MAX_ADJACENCIES];
 static struct dniv_dr_state dniv_dr_states[DNIV_MAX_DR_STATES];
 static __u16 dniv_local_address;
 static __u16 dniv_hello_interval;
+static __u16 dniv_eth_cost;
 static __u8 dniv_local_node_type;
 static __u8 dniv_local_priority;
 
@@ -151,9 +154,29 @@ static void dniv_drop_adj_locked(struct dniv_adj_entry *adj)
 {
     if (!adj || !adj->used)
         return;
+    dniv_route_withdraw_adjacency(adj->address, adj->ifindex);
     if (adj->state == DNIV_ADJ_STATE_UP)
         atomic64_inc(&dniv_adjacency_down);
     memset(adj, 0, sizeof(*adj));
+}
+
+static void dniv_refresh_direct_routes_locked(const struct dniv_adj_entry *adj)
+{
+    __u16 local_area;
+
+    if (!adj || !adj->used || adj->state != DNIV_ADJ_STATE_UP ||
+        dniv_local_node_type == DNIV_NODE_TYPE_ENDNODE)
+        return;
+
+    local_area = DNIV_ADDR_AREA(dniv_local_address);
+    if (DNIV_ADDR_AREA(adj->address) == local_area) {
+        dniv_route_update(1U, DNIV_ADDR_NODE(adj->address), adj->address,
+                          adj->ifindex, dniv_eth_cost, 1U, adj->expires);
+    } else if (dniv_local_node_type == DNIV_NODE_TYPE_L2_ROUTER &&
+               adj->node_type == DNIV_NODE_TYPE_L2_ROUTER) {
+        dniv_route_update(2U, DNIV_ADDR_AREA(adj->address), adj->address,
+                          adj->ifindex, dniv_eth_cost, 1U, adj->expires);
+    }
 }
 
 static struct dniv_adj_entry *dniv_alloc_router_adj_locked(
@@ -615,8 +638,10 @@ static void dniv_handle_valid_hello(int ifindex, const __u8 source[ETH_ALEN],
     }
 
     if (adj->state != new_state) {
-        if (adj->state == DNIV_ADJ_STATE_UP)
+        if (adj->state == DNIV_ADJ_STATE_UP) {
+            dniv_route_withdraw_adjacency(adj->address, adj->ifindex);
             atomic64_inc(&dniv_adjacency_down);
+        }
         if (new_state == DNIV_ADJ_STATE_UP)
             atomic64_inc(&dniv_adjacency_up);
         adj->state = new_state;
@@ -625,15 +650,101 @@ static void dniv_handle_valid_hello(int ifindex, const __u8 source[ETH_ALEN],
     adj->hello_timer = hello->timer ? hello->timer : dniv_hello_interval;
     adj->expires = dniv_listen_expires(hello->timer);
     ether_addr_copy(adj->mac, source);
+    dniv_refresh_direct_routes_locked(adj);
 
 out_unlock:
     spin_unlock_irqrestore(&dniv_adj_lock, flags);
+}
+
+static int dniv_routing_destination_valid(
+    __u8 level, const __u8 destination[ETH_ALEN])
+{
+    __u8 local_mac[ETH_ALEN];
+
+    dniv_wire_mac_from_address(READ_ONCE(dniv_local_address), local_mac);
+    if (ether_addr_equal(destination, local_mac))
+        return 1;
+    if (level == 1U)
+        return ether_addr_equal(destination, dniv_all_routers);
+    if (level == 2U)
+        return ether_addr_equal(destination, dniv_all_level2_routers);
+    return 0;
+}
+
+static int dniv_routing_source_allowed(int ifindex, __u16 source, __u8 level)
+{
+    struct dniv_adj_entry *adj;
+    unsigned long flags;
+    int allowed = 0;
+
+    spin_lock_irqsave(&dniv_adj_lock, flags);
+    adj = dniv_find_adj_locked(ifindex, source);
+    if (!adj || adj->state != DNIV_ADJ_STATE_UP ||
+        adj->node_type == DNIV_NODE_TYPE_ENDNODE)
+        goto out;
+    if (level == 1U) {
+        allowed = DNIV_ADDR_AREA(source) ==
+                  DNIV_ADDR_AREA(dniv_local_address);
+    } else if (level == 2U) {
+        allowed = dniv_local_node_type == DNIV_NODE_TYPE_L2_ROUTER &&
+                  adj->node_type == DNIV_NODE_TYPE_L2_ROUTER;
+    }
+out:
+    spin_unlock_irqrestore(&dniv_adj_lock, flags);
+    return allowed;
+}
+
+static void dniv_handle_valid_routing(int ifindex,
+                                      const struct dniv_wire_route_message *msg)
+{
+    struct dniv_wire_route_segment_view seg;
+    struct dniv_route_metric metric;
+    __u16 local = READ_ONCE(dniv_local_address);
+    __u16 si;
+
+    if (!msg)
+        return;
+
+    for (si = 0; si < msg->segment_count; si++) {
+        __u16 ei;
+
+        if (dniv_wire_route_segment_at(msg, si, &seg) != 0)
+            return;
+        for (ei = 0; ei < seg.count; ei++) {
+            __u16 raw = dniv_wire_route_entry(&seg, ei);
+            __u16 destination = (__u16)(seg.start + ei);
+            __u16 cost = (__u16)(raw & 0x03ffU);
+            __u8 hops = (__u8)(raw >> 10);
+
+            if ((msg->level == 1U &&
+                 destination == DNIV_ADDR_NODE(local)) ||
+                (msg->level == 2U &&
+                 destination == DNIV_ADDR_AREA(local)))
+                continue;
+
+            if (cost >= DNIV_ROUTE_INFINITY_COST ||
+                hops >= DNIV_ROUTE_INFINITY_HOPS) {
+                dniv_route_withdraw(msg->level, destination, msg->source,
+                                    ifindex);
+                continue;
+            }
+
+            if (dniv_route_metric_add(cost, hops, dniv_eth_cost, &metric) != 0) {
+                dniv_route_withdraw(msg->level, destination, msg->source,
+                                    ifindex);
+                continue;
+            }
+            dniv_route_update(msg->level, destination, msg->source, ifindex,
+                              metric.cost, metric.hops, 0);
+        }
+    }
 }
 
 static int dniv_packet_rcv(struct sk_buff *skb, struct net_device *dev,
                            struct packet_type *pt, struct net_device *orig_dev)
 {
     struct dniv_wire_hello hello;
+    struct dniv_wire_route_message route;
     struct ethhdr *eth;
     __u8 expected_source[ETH_ALEN];
     __u8 length[DNIV_ETH_LENGTH_LEN];
@@ -658,12 +769,34 @@ static int dniv_packet_rcv(struct sk_buff *skb, struct net_device *dev,
     if (skb_copy_bits(skb, DNIV_ETH_LENGTH_LEN, &first, 1) != 0)
         goto out;
     if (first != DNIV_WIRE_ROUTER_HELLO &&
-        first != DNIV_WIRE_ENDNODE_HELLO && !(first & 0x80U))
+        first != DNIV_WIRE_ENDNODE_HELLO &&
+        first != DNIV_WIRE_L1_ROUTING &&
+        first != DNIV_WIRE_L2_ROUTING && !(first & 0x80U))
         goto out;
     if (!pskb_may_pull(skb, (unsigned int)payload_len + DNIV_ETH_LENGTH_LEN)) {
         atomic64_inc(&dniv_hello_errors);
         goto out;
     }
+
+    eth = eth_hdr(skb);
+
+    parsed = dniv_wire_parse_routing(skb->data + DNIV_ETH_LENGTH_LEN,
+                                     payload_len, &route);
+    if (parsed == DNIV_WIRE_OK) {
+        if (!dniv_wire_address_valid(route.source) ||
+            !dniv_routing_destination_valid(route.level, eth->h_dest))
+            goto out;
+        dniv_wire_mac_from_address(route.source, expected_source);
+        if (!ether_addr_equal(eth->h_source, expected_source))
+            goto out;
+        if (!dniv_routing_source_allowed(dev->ifindex, route.source,
+                                         route.level))
+            goto out;
+        dniv_handle_valid_routing(dev->ifindex, &route);
+        goto out;
+    }
+    if (parsed == DNIV_WIRE_MALFORMED)
+        goto out;
 
     parsed = dniv_wire_parse_hello(skb->data + DNIV_ETH_LENGTH_LEN,
                                    payload_len, &hello);
@@ -674,7 +807,6 @@ static int dniv_packet_rcv(struct sk_buff *skb, struct net_device *dev,
         goto out;
     }
 
-    eth = eth_hdr(skb);
     dniv_wire_mac_from_address(hello.address, expected_source);
     if (!ether_addr_equal(eth->h_source, expected_source)) {
         atomic64_inc(&dniv_hello_errors);
@@ -694,7 +826,7 @@ static struct packet_type dniv_packet_type __read_mostly = {
 };
 
 int dniv_eth_init(__u16 address, __u8 node_type, __u8 priority,
-                  __u16 hello_interval)
+                  __u16 hello_interval, __u16 ethernet_cost)
 {
     int err;
 
@@ -702,6 +834,7 @@ int dniv_eth_init(__u16 address, __u8 node_type, __u8 priority,
     dniv_local_node_type = node_type;
     dniv_local_priority = priority;
     dniv_hello_interval = hello_interval;
+    dniv_eth_cost = ethernet_cost;
     memset(dniv_adjacencies, 0, sizeof(dniv_adjacencies));
     memset(dniv_dr_states, 0, sizeof(dniv_dr_states));
 
