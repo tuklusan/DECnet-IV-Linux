@@ -49,7 +49,7 @@ Foundation complete: pinned Ubuntu Base 26.04.1 amd64/arm64 rootfs files and pac
 
 ### Phase 3
 
-Implementation remains active. Router/endnode hello generation/parsing, periodic hello, per-interface adjacencies, 3.1x listen expiry, DR election, router-router INIT/UP behavior, endnode admission/router selection, L2 cross-area behavior, 33-router/interface admission, protocol source MACs, DECnet unicast filters and primary-MAC-change survival are implemented and covered by the E1/interop harnesses.
+Complete on exact candidate `608ed2077e9651d6c050f4fc790d538b2d8ee529`. Router/endnode hello generation/parsing, periodic hello, per-interface adjacencies, 3.1x listen expiry, DR election, router-router INIT/UP behavior, endnode admission/router selection, L2 cross-area behavior, 33-router/interface admission, protocol source MACs, DECnet unicast filters and primary-MAC-change survival are implemented and covered by the E1/interop harnesses.
 
 The VM persistence architecture is closed. Source-independent `outer-v2-<arch>-<foundation-fingerprint>` foundations contain Ubuntu userspace, the pinned guest kernel/initrd, headers/compiler and independent-reference runtime dependencies, but no candidate source or SHA. `tests/lab/prepare-candidate-image.sh` and `tests/lab/prepare-reference-image.sh` derive disposable exact-candidate/reference images without package installation. `tests/lab/dniv_lab.py` launches direct QEMU guests, TAP/bridge networking, packet capture and serial evidence, and removes disposable disks and sockets after each run.
 
@@ -99,10 +99,12 @@ Ordinary lab addressing remains area 31, nodes 70 through 79, names DN70 through
 
 ## Resume point
 
-Phase 3 is the active workstream. Repository policy, native builds, project continuity, reference baselines, ARM64 direct boot, coherent counter sampling, controller budget and two-architecture E1 behavior are closed on the current lineage. The current harness change separates guest boot from peer startup: the reference VM must reach `multi-user.target`, idle for 60 seconds, and only then launch the pinned peer. READY budgets are 180 seconds on amd64 and 360 seconds on ARM64 to cover boot plus this settle interval; kernel and DECnet behavior are unchanged.
+Phase 3 is closed. Exact candidate `608ed2077e9651d6c050f4fc790d538b2d8ee529` passed all six acceptance workflows on 2026-09-18: Repository Policy `35343324826`, Build Bootstrap `35343357536`, Project State Gate `35343359444`, External Reference Baselines `35343361139`, Python QEMU VM Lab `35343362922`, and Phase 3 Independent Interoperability `35343364812`. The interoperability run completed all eight amd64/ARM64 Route20/PyDECnet routing, endnode and role jobs successfully, including job `105614011596`.
 
-The Route20 startup corruption is now fixed in the pinned fork after independent amd64/ARM64 confirmation. The next blocker is exact-head validation of that corrected reference across baseline, routing and endnode interoperability without changing candidate DECnet protocol behavior.
+### Phase 4
+
+Active. Implement Phase IV routing in dependency order: routing packet codecs and validation, route state/aging and metrics, forwarding with visit-count enforcement, then multi-LAN L1/L2 convergence and independent interoperability.
 
 ## Next action
 
-Run exact-head acceptance on the corrected Route20 pin. Require repository policy, project state, both native builds, both reference baselines, both E1 architectures and full amd64/ARM64 independent interoperability. Route20 routing and endnode cases must run the fixed normal binary without `reference-exited`; any new reference failure must be diagnosed independently rather than masked by candidate protocol changes.
+Begin Phase 4 with deterministic routing-packet codec/validation coverage and kernel route-state primitives. Preserve the Phase 3 exact-green baseline and extend the lab toward the E2 two-LAN forced-router topology before adding alternate-path or multi-area behavior.

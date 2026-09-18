@@ -16,7 +16,7 @@
 
 ## Current checkpoint
 
-Phase 3 remains active and all substantive work stays on `main`. Candidate promotion is controlled only by exact-SHA mechanical, build, VM, reference, protocol and interoperability gates.
+Phase 3 is complete on exact candidate `608ed2077e9651d6c050f4fc790d538b2d8ee529`; Phase 4 is active and all substantive work stays on `main`. Candidate promotion is controlled only by exact-SHA mechanical, build, VM, reference, protocol and interoperability gates.
 
 Reference discipline is now explicit at repository root in `references/`: Digital DNA Phase IV functional specifications are normative, pinned PyDECnet/Route20 are implementation cross-checks, pinned LinuxDECnet defines Linux-facing compatibility expectations, and pinned SIMH plus genuine DEC operating systems provide interoperability evidence. The reference directory contains project-authored distilled notes and pointers rather than unverified wholesale copies of third-party manuals.
 
@@ -62,7 +62,7 @@ Repository license validation now excludes `__pycache__` and `.git` directories 
 
 | Field | Current value |
 | --- | --- |
-| Protocol phase | Phase 3 |
+| Protocol phase | Phase 4 |
 | Working ref | `main` only |
 | Remote branch invariant | only `refs/heads/main` |
 | Hosted job ceiling | 75 minutes |
@@ -77,7 +77,7 @@ Repository license validation now excludes `__pycache__` and `.git` directories 
 | Compact evidence retention | 30 days maximum |
 | Acceptance child binding | parent run ID + exact expected SHA |
 | VM controller budget | amd64 300s; ARM64 360s |
-| Infrastructure status | architecture/direct boot/stats sampling/controller budget/E1 closed; corrected Route20 pin awaiting exact baseline/interop acceptance |
+| Infrastructure status | Phase 3 exact-green across policy/build/state/reference/E1/interop; Phase 4 routing work active |
 
 ## Persistent run index
 
@@ -91,6 +91,8 @@ Acceptance lineage for `a04d2a4ec8687f21fafce1950d339b983f15c973`: repository-po
 
 Acceptance lineage for `38c5b49e53c648f6514f52ebff84a93331a4732a`: repository-policy/dispatcher `35265712742` was green and ARM64 native build in `35265752902` passed. VM lab `35265759834` proved the sampling fix with bidirectional unicast `delta=40`, DN71 silence and DN70 expiry; its ARM64 job failed only because the 300-second host controller deadline preceded the planned DN71 restart/recovery completion.
 
+Exact candidate `608ed2077e9651d6c050f4fc790d538b2d8ee529` closed Phase 3 on 2026-09-18. Repository Policy `35343324826`, Build Bootstrap `35343357536`, Project State Gate `35343359444`, External Reference Baselines `35343361139`, Python QEMU VM Lab `35343362922`, and Phase 3 Independent Interoperability `35343364812` all completed successfully. The interoperability run's eight amd64/ARM64 Route20/PyDECnet jobs were green, including final job `105614011596`.
+
 ## Next action
 
-Run exact-head acceptance on the corrected Route20 pin. Require repository policy, project state, both native builds, both reference baselines, both E1 architectures and full amd64/ARM64 interoperability. The fixed normal Route20 binary must remain alive through routing and endnode scenarios; any fresh reference fault is diagnostic evidence, not a reason to alter candidate protocol semantics.
+Begin Phase 4 with deterministic routing-packet codec/validation tests and kernel route-state primitives, then extend the VM lab to the E2 two-LAN forced-router topology.
