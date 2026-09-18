@@ -24,6 +24,8 @@ ALL_L2 = bytes.fromhex("09002b020000")
 ETHERTYPE = 0x6003
 ROUTER_HELLO = 0x0B
 ENDNODE_HELLO = 0x0D
+L1_ROUTING = 0x07
+L2_ROUTING = 0x09
 MAX_BLOCK = 1498
 
 
@@ -89,6 +91,57 @@ def router_entries(payload: bytes) -> list[tuple[bytes, int, bool]]:
     return entries
 
 
+
+def route_checksum(words: bytes) -> int:
+    total = 1
+    for off in range(0, len(words), 2):
+        total += int.from_bytes(words[off:off + 2], "little")
+    total = (total & 0xFFFF) + (total >> 16)
+    total = (total & 0xFFFF) + (total >> 16)
+    return total & 0xFFFF
+
+
+def validate_routing_update(payload: bytes, expected_source: bytes,
+                            level: int, self_index: int) -> bool:
+    flag = L1_ROUTING if level == 1 else L2_ROUTING
+    if len(payload) < 12 or payload[0] != flag or payload[3] != 0:
+        return False
+    if payload[1:3] != expected_source[4:6]:
+        raise ValueError("routing update embedded source mismatch")
+    body = payload[4:-2]
+    if len(body) < 6 or len(body) % 2:
+        raise ValueError("malformed routing update length")
+    expected = int.from_bytes(payload[-2:], "little")
+    if route_checksum(body) != expected:
+        raise ValueError("routing update checksum mismatch")
+
+    pos = 0
+    self_seen = False
+    while pos < len(body):
+        if pos + 4 > len(body):
+            raise ValueError("truncated routing segment")
+        count = int.from_bytes(body[pos:pos + 2], "little")
+        start = int.from_bytes(body[pos + 2:pos + 4], "little")
+        pos += 4
+        if count == 0 or pos + 2 * count > len(body):
+            raise ValueError("malformed routing segment bounds")
+        if level == 1 and start + count > 1024:
+            raise ValueError("L1 routing segment out of range")
+        if level == 2 and (start < 1 or start + count > 64):
+            raise ValueError("L2 routing segment out of range")
+        for index in range(count):
+            entry = int.from_bytes(body[pos + 2 * index:pos + 2 * index + 2],
+                                   "little")
+            if entry & 0x8000:
+                raise ValueError("routing entry reserved bit set")
+            if start + index == self_index:
+                self_seen = True
+                if entry != 0:
+                    raise ValueError("routing update self metric is not zero")
+        pos += 2 * count
+    return self_seen
+
+
 def validate_endnode(payload: bytes, source: bytes, destination: bytes, who: str) -> None:
     if len(payload) < 32 or payload[4:10] != source:
         raise ValueError(f"malformed {who} endnode hello")
@@ -120,6 +173,8 @@ def main() -> int:
         "reference_lists_candidate": 0,
         "candidate_l2": 0,
         "reference_l2": 0,
+        "candidate_l1_updates": 0,
+        "candidate_l2_updates": 0,
         "probes": 0,
     }
     bad_hello_hw = 0
@@ -131,6 +186,20 @@ def main() -> int:
         dst, src, payload = parsed
         if src == args.reference_hw and dst == args.candidate_mac and payload and payload[0] not in (ROUTER_HELLO, ENDNODE_HELLO):
             counts["probes"] += 1
+        if payload and src == args.candidate_mac and payload[0] == L1_ROUTING:
+            if dst != ALL_ROUTERS:
+                raise ValueError("candidate L1 update used wrong multicast")
+            if validate_routing_update(payload, args.candidate_mac, 1,
+                                       int.from_bytes(args.candidate_mac[4:6], "little") & 0x03FF):
+                counts["candidate_l1_updates"] += 1
+            continue
+        if payload and src == args.candidate_mac and payload[0] == L2_ROUTING:
+            if dst not in (ALL_ROUTERS, ALL_L2):
+                raise ValueError("candidate L2 update used wrong multicast")
+            area = int.from_bytes(args.candidate_mac[4:6], "little") >> 10
+            if validate_routing_update(payload, args.candidate_mac, 2, area):
+                counts["candidate_l2_updates"] += 1
+            continue
         if not payload or payload[0] not in (ROUTER_HELLO, ENDNODE_HELLO):
             continue
         if src in (args.candidate_hw, args.candidate_changed_hw, args.reference_hw):
@@ -186,6 +255,10 @@ def main() -> int:
                 raise SystemExit("interop pcap: insufficient candidate router hellos")
             if counts["candidate_lists_reference"] < 1 or counts["reference_lists_candidate"] < 1:
                 raise SystemExit("interop pcap: missing two-way router-list evidence")
+            if args.scenario == "l1" and counts["candidate_l1_updates"] < 1:
+                raise SystemExit("interop pcap: candidate emitted no valid L1 routing update")
+            if args.scenario == "l2" and counts["candidate_l2_updates"] < 1:
+                raise SystemExit("interop pcap: candidate emitted no valid L2 routing update")
     if args.scenario == "l2":
         if counts["candidate_l2"] < 1:
             raise SystemExit("interop pcap: candidate missed All-Level-2-Routers multicast transmission")
