@@ -13,24 +13,53 @@
 // ============================================================================
 
 #define _GNU_SOURCE
+#include <dlfcn.h>
 #include <execinfo.h>
 #include <fcntl.h>
 #include <signal.h>
 #include <stdio.h>
+#include <stdint.h>
 #include <stdlib.h>
+#include <ucontext.h>
 #include <unistd.h>
+
+static void dniv_log_site(int fd, uintptr_t site)
+{
+    Dl_info symbol;
+    const char *name = "?";
+    uintptr_t offset = 0;
+
+    if (site != 0 && dladdr((void *)site, &symbol) != 0) {
+        if (symbol.dli_sname != NULL)
+            name = symbol.dli_sname;
+        if (symbol.dli_saddr != NULL)
+            offset = site - (uintptr_t)symbol.dli_saddr;
+    }
+    dprintf(fd, "DNIV-ROUTE20-CALLSITE address=%p symbol=%s offset=0x%lx\n",
+            (void *)site, name, (unsigned long)offset);
+}
 
 static void dniv_route20_crash(int sig, siginfo_t *info, void *context)
 {
+    ucontext_t *uc = (ucontext_t *)context;
     void *frames[64];
+    uintptr_t site = 0;
     int fd;
     int count;
-    (void)context;
+
+#if defined(__x86_64__)
+    uintptr_t sp = (uintptr_t)uc->uc_mcontext.gregs[REG_RSP];
+    if (sp != 0)
+        site = *(uintptr_t *)sp;
+#elif defined(__aarch64__)
+    site = (uintptr_t)uc->uc_mcontext.regs[30];
+#endif
 
     fd = open("/run/reference/route20-backtrace.log",
               O_WRONLY | O_CREAT | O_TRUNC, 0600);
     if (fd >= 0) {
         dprintf(fd, "DNIV-ROUTE20-SIGNAL sig=%d addr=%p\n", sig, info->si_addr);
+        dniv_log_site(fd, site);
         count = backtrace(frames, (int)(sizeof(frames) / sizeof(frames[0])));
         backtrace_symbols_fd(frames, count, fd);
         fsync(fd);
