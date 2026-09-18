@@ -122,6 +122,8 @@ def main() -> int:
         ROOT / ".github/workflows/interop.yml"
     ).read_text(encoding="utf-8") + "\n" + (
         ROOT / "tests/lab/dniv-reference-peer.sh"
+    ).read_text(encoding="utf-8") + "\n" + (
+        ROOT / "tests/lab/route20-diagnostic-shim.c"
     ).read_text(encoding="utf-8")
     for fragment in required_route20_diagnostics:
         if fragment not in combined:
