@@ -140,7 +140,10 @@ run_route20_diagnostic() {
     journalctl -b -k --no-pager -n 80 2>&1 | \
         grep -Ei 'route20|dniv-route20|segfault|general protection|invalid opcode' || true
     if [ -n "$diag_pid" ] && kill -0 "$diag_pid" 2>/dev/null; then
+        echo "DNIV-REF-DIAG-RESULT session=$session reference=route20 session-init-bounds=survived"
         kill "$diag_pid" 2>/dev/null || true
+    else
+        echo "DNIV-REF-DIAG-RESULT session=$session reference=route20 session-init-bounds=exited"
     fi
     echo "DNIV-REF-DIAG session=$session reference=route20 source=backtrace end"
     echo "DNIV-REF-DIAG-DONE session=$session reference=route20"

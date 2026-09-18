@@ -262,6 +262,36 @@ jobs:
               cp "$work/Route20/route20" "$bundle/route20"
               cp tests/lab/route20-diagnostic-shim.c "$work/Route20/route20_diagnostic_shim.c"
               sed -i 's/          update.c/          update.c \\\n          route20_diagnostic_shim.c/' "$work/Route20/makefile"
+              python3 - "$work/Route20/session.c" <<'PY_ROUTE20_SESSION_FIX'
+              from pathlib import Path
+              import sys
+
+              path = Path(sys.argv[1])
+              text = path.read_text(encoding="utf-8")
+              old = """    for (i = 0; i < MAX_SESSIONS; i++)
+                  {
+                      memset(&ObjectRegistrationTable[i], 0, sizeof(object_registration_t));
+                  }
+
+                  for (i = 0; i < MAX_OBJECTS; i++)
+                  {
+                      memset(&SessionTable[i], 0, sizeof(session_t));
+                  }"""
+              new = """    for (i = 0; i < MAX_OBJECTS; i++)
+                  {
+                      memset(&ObjectRegistrationTable[i], 0, sizeof(object_registration_t));
+                  }
+
+                  for (i = 0; i < MAX_SESSIONS; i++)
+                  {
+                      memset(&SessionTable[i], 0, sizeof(session_t));
+                  }"""
+              if text.count(old) != 1:
+                  raise SystemExit("Route20 diagnostic session-bound patch anchor mismatch")
+              path.write_text(text.replace(old, new), encoding="utf-8")
+              PY_ROUTE20_SESSION_FIX
+              printf 'diagnostic-only Route20 SessionInitialise bounds corrected\n' > \
+                "$DNIV_SCRATCH_DIR/route20-diagnostic-session-fix.txt"
               rm -f "$work/Route20/route20"
               make -C "$work/Route20" \
                 CFLAGS_G='-g3 -fno-omit-frame-pointer' \
