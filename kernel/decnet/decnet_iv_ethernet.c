@@ -850,7 +850,8 @@ static int dniv_routing_destination_valid(
     if (level == 1U)
         return ether_addr_equal(destination, dniv_all_routers);
     if (level == 2U)
-        return ether_addr_equal(destination, dniv_all_level2_routers);
+        return ether_addr_equal(destination, dniv_all_routers) ||
+               ether_addr_equal(destination, dniv_all_level2_routers);
     return 0;
 }
 

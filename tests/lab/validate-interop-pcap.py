@@ -175,6 +175,8 @@ def main() -> int:
         "reference_l2": 0,
         "candidate_l1_updates": 0,
         "candidate_l2_updates": 0,
+        "candidate_l2_allrouters": 0,
+        "candidate_l2_alll2": 0,
         "probes": 0,
     }
     bad_hello_hw = 0
@@ -199,6 +201,10 @@ def main() -> int:
             area = int.from_bytes(args.candidate_mac[4:6], "little") >> 10
             if validate_routing_update(payload, args.candidate_mac, 2, area):
                 counts["candidate_l2_updates"] += 1
+                if dst == ALL_ROUTERS:
+                    counts["candidate_l2_allrouters"] += 1
+                elif dst == ALL_L2:
+                    counts["candidate_l2_alll2"] += 1
             continue
         if not payload or payload[0] not in (ROUTER_HELLO, ENDNODE_HELLO):
             continue
@@ -257,8 +263,11 @@ def main() -> int:
                 raise SystemExit("interop pcap: missing two-way router-list evidence")
             if args.scenario == "l1" and counts["candidate_l1_updates"] < 1:
                 raise SystemExit("interop pcap: candidate emitted no valid L1 routing update")
-            if args.scenario == "l2" and counts["candidate_l2_updates"] < 1:
-                raise SystemExit("interop pcap: candidate emitted no valid L2 routing update")
+            if args.scenario == "l2":
+                if counts["candidate_l2_updates"] < 1:
+                    raise SystemExit("interop pcap: candidate emitted no valid L2 routing update")
+                if counts["candidate_l2_allrouters"] < 1 or counts["candidate_l2_alll2"] < 1:
+                    raise SystemExit("interop pcap: candidate L2 update missing one Phase IV multicast target")
     if args.scenario == "l2":
         if counts["candidate_l2"] < 1:
             raise SystemExit("interop pcap: candidate missed All-Level-2-Routers multicast transmission")
