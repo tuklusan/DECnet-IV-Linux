@@ -117,7 +117,9 @@ def main() -> int:
         "DNIV-ROUTE20-SIGNAL",
         "DNIV-ROUTE20-EVENT",
         "Route20 diagnostic session-bound patch anchor mismatch",
+        "diag_launcher_pid=$!",
         "session-init-bounds=survived",
+        "diag_deadline=$((SECONDS + 60))",
         "DNIV-REF-DIAG-DONE session=$session reference=route20",
         "wait_candidate_marker",
     ]

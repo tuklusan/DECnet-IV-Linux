@@ -50,6 +50,8 @@ Exact-head run `35286846863` exposed that readiness was still coupled to guest b
 
 Exact-head acceptance parent `35302394291` dispatched interop run `35302422684`. The amd64 Route20 routing job `105467646000` did not reach the peer: the diagnostic session-bound patch used a Python here-document whose body and terminator inherited the shell `case` indentation, so the runner reported an unterminated `PY_ROUTE20_SESSION_FIX` document. The here-document is now dedented to the YAML block-scalar base so its Python body and terminator reach shell column zero. No candidate or reference protocol semantics changed.
 
+Acceptance on `a7dd9892dd72f5632da5eb9d05851dbc5b537e06` was green through repository policy, project state, native amd64/ARM64 builds, both reference baselines and both E1 jobs. Route20 routing again reproduced the independent null-IP crash on both architectures, but the diagnostic result marker was still absent when the host's 30-second post-failure allowance ended. The diagnostic Route20 launcher is therefore backgrounded, its survival/exited marker is emitted immediately after the bounded 15-second observation and before secondary evidence collection, and the host waits up to 60 seconds for diagnostic completion. This changes only diagnostic control flow after normal pinned Route20 has already failed.
+
 Repository license validation now excludes `__pycache__` and `.git` directories in the Git enumeration command itself for both exact-tree and staged scans, at any depth, so generated caches and repository metadata never reach the validator.
 
 | Field | Current value |
@@ -85,4 +87,4 @@ Acceptance lineage for `38c5b49e53c648f6514f52ebff84a93331a4732a`: repository-po
 
 ## Next action
 
-Run exact-head acceptance for current `main`. Require the new interop-readiness regression and the already-proven two-architecture E1 gates. Reference startup is post-boot/post-settle: 180 seconds on amd64 and 360 seconds on ARM64, including the required 60-second idle interval after `multi-user.target`. If Route20 then exits after READY, diagnose the pinned reference runtime independently and alter candidate protocol code only for separately demonstrated defects.
+Run exact-head acceptance on `main`. Require repository policy, project state, native amd64/ARM64 builds, both pinned reference baselines and both E1 jobs. Follow the amd64 and ARM64 Route20 routing jobs and require `DNIV-REF-DIAG-RESULT ... session-init-bounds=survived` on both after the normal pinned binary has already emitted `reference-exited`. Only that two-architecture confirmation permits the minimal Route20 fork loop-bound fix and a new pin.

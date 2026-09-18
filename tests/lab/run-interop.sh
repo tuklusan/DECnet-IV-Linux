@@ -212,7 +212,7 @@ wait_candidate_marker() {
     while (( SECONDS < deadline )); do
         if grep -Fq "$fail_marker" "$reference_log" 2>/dev/null; then
             if [[ "$reference" == route20 ]]; then
-                local diag_deadline=$((SECONDS + 30))
+                local diag_deadline=$((SECONDS + 60))
                 while (( SECONDS < diag_deadline )); do
                     grep -Fq "$diag_done" "$reference_log" 2>/dev/null && break
                     kill -0 "$reference_pid" 2>/dev/null || break
