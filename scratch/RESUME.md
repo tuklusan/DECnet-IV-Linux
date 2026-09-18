@@ -54,6 +54,8 @@ Acceptance on `a7dd9892dd72f5632da5eb9d05851dbc5b537e06` was green through repos
 
 Exact-head acceptance for `3a62f37e3aa8957573ed22ec28c602ed7486924c` cleared repository policy, project state, native amd64/ARM64 builds, both reference baselines and both E1 jobs. In interop run `35304828824`, amd64 Route20 routing emitted the expected normal `reference-exited` failure and then `DNIV-REF-DIAG-RESULT ... session-init-bounds=survived`. ARM64 emitted the same normal failure, but the host ended its fixed 60-second post-failure wait while the diagnostic was still running after its backtrace-start marker. Because the 15-second diagnostic observation runs on guest time under slower ARM64 emulation, the host completion allowance is now 60 seconds on amd64 and 180 seconds on ARM64. The diagnostic observation remains 15 seconds; no protocol behavior is changed.
 
+The first policy run on `bf99b70d7bea0fd4aac258e077f0303dfff6fc1a` failed only because `test_interop_reference_ready.py` still matched the ARM64 readiness block as though it contained a single assignment. The regression now explicitly requires the ARM64 readiness and diagnostic-completion assignments together. No harness runtime or protocol behavior changed.
+
 Repository license validation now excludes `__pycache__` and `.git` directories in the Git enumeration command itself for both exact-tree and staged scans, at any depth, so generated caches and repository metadata never reach the validator.
 
 | Field | Current value |

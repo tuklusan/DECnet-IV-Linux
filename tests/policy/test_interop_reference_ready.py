@@ -31,6 +31,7 @@ def main() -> int:
     arm = re.findall(
         r'if \[\[ "\$host_arch" == aarch64 \]\]; then\n'
         r"\s*reference_ready_seconds=(\d+)\n"
+        r"\s*diagnostic_completion_seconds=\d+\n"
         r"fi",
         SCRIPT,
         re.MULTILINE,
