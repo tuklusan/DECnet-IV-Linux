@@ -355,12 +355,14 @@ e2)
                 echo "DNIV-E2-FAIL session=$session node=$name reason=no-router"
                 exit 1
             fi
-            sleep 3
-            # The two endpoint guests need not finish boot at the same instant.
-            # Send a convergence window, while the host gate still requires at
-            # least five forwarded packets in each direction.
+            # Give the far endpoint time to attach to the router before
+            # sampling. Hosted amd64 showed one direction with only 3/10
+            # forwarded packets when the peer came up late.
+            sleep 10
+            # Keep a wide sampling window; the host still requires at least
+            # five correct forwarded packets in each direction.
             i=0
-            while [ "$i" -lt 10 ]; do
+            while [ "$i" -lt 20 ]; do
                 i=$((i + 1))
                 /usr/local/sbin/dnraw --short "$iface" "$peer" "$area.$node" "$dest_node" 0 \
                     "DNIV-E2-$session-$name-$i"
