@@ -22,89 +22,69 @@ Build a complete native DECnet Phase IV stack for maintained Linux as an out-of-
 
 ## References and licensing
 
-Preferred exact reference pins remain Route20 `ea144b2e9978c7d216bc7c171b22fe47ca555567`, PyDECnet live `a7194be8d72dea6f9eb4f77083f056f53e80df58`, PyDECnet tests `9a844987bf3a1450632dee8d37e60a23a453bad3`, LinuxDECnet `ff39eef045d1e4b7b72a3d40111e89c07a473398`, and SIMH `5b73b1032b52d19bf80752ea4d9cbbdc92e7b5e0`. The product license is the canonical root `LICENSE`; the kernel reports `MODULE_LICENSE("Proprietary")`.
+Preferred exact reference pins are Route20 `ea144b2e9978c7d216bc7c171b22fe47ca555567`, PyDECnet live `a7194be8d72dea6f9eb4f77083f056f53e80df58`, PyDECnet tests `9a844987bf3a1450632dee8d37e60a23a453bad3`, LinuxDECnet `ff39eef045d1e4b7b72a3d40111e89c07a473398`, and SIMH `5b73b1032b52d19bf80752ea4d9cbbdc92e7b5e0`.
 
-The root `references/` directory records the development source-of-truth hierarchy and distilled protocol/reference index. Digital DNA Phase IV functional specifications are normative; PyDECnet and Route20 are independent implementation cross-checks; LinuxDECnet is the Linux ABI/userspace compatibility reference; SIMH plus genuine DEC operating systems are interoperability oracles. Third-party documents and code retain their original licenses.
+Digital DNA Phase IV functional specifications are normative. PyDECnet and Route20 are independent implementation cross-checks; LinuxDECnet is the Linux ABI/userspace compatibility reference; SIMH plus genuine DEC operating systems are interoperability oracles. Third-party material retains its original license.
 
 ## Repository discipline
 
-- Work directly on `main`; do not create or use feature branches.
+- Work directly on `main`; no feature branches.
 - The remote branch invariant is exactly `refs/heads/main`.
-- Every substantive commit updates this file and `scratch/RESUME.md` in the same commit.
-- Acceptance applies only to one exact unchanged `main` commit and children are bound to parent run ID plus exact expected SHA.
-- Hosted jobs have explicit timeouts of at most 75 minutes; protocol concurrency uses architecture-specific `dniv-runner-*` slots with `queue: max` and `cancel-in-progress: false`.
-- GitHub-owned actions remain pinned to immutable full SHAs.
-- Compact evidence retention is at most 30 days. Transient candidate images, VM overlays and QMP sockets are never acceptance state.
-- Candidate promotion is determined only by documented exact-SHA mechanical, build, VM, reference, protocol and interoperability gates.
+- Every substantive commit updates this file and `scratch/RESUME.md` together.
+- Acceptance applies only to one exact unchanged `main` commit.
+- Hosted jobs are bounded; protocol jobs use architecture-specific runner serialization.
+- Persistent VM input is limited to verified source-independent architecture foundations.
+- Exact candidate/reference images, VM overlays and QMP sockets are disposable.
+- Compact evidence retention is at most 30 days.
 
 ## Phase status
 
 ### Phase 1
 
-Foundation complete: UAPI v2, `decnet_iv.ko`, configurable identity, Routing Layer EtherType registration/counters, `dnctl`, centralized test addressing, unit tests and native x86_64/aarch64 build gates.
+Complete: UAPI v2, `decnet_iv.ko`, configurable identity, Routing Layer EtherType handling/counters, `dnctl`, centralized addressing, unit tests and native x86_64/aarch64 builds.
 
 ### Phase 2
 
-Foundation complete: pinned Ubuntu Base 26.04.1 amd64/arm64 rootfs files and package snapshot `20260915T000000Z`, deterministic ext4/QCOW2 construction, exact guest kernel/module/userspace build, direct kernel/initrd boot, independent VMs, packet capture and serial evidence. Release-image integrity retains `qemu-img check` and logical RAW/QCOW2 equality.
+Complete: pinned Ubuntu Base 26.04.1 amd64/arm64 foundations, deterministic image construction, exact guest kernel/module/userspace build, direct kernel/initrd boot, independent VMs, packet capture and serial evidence.
 
 ### Phase 3
 
-Complete on exact candidate `608ed2077e9651d6c050f4fc790d538b2d8ee529`. Router/endnode hello generation/parsing, periodic hello, per-interface adjacencies, 3.1x listen expiry, DR election, router-router INIT/UP behavior, endnode admission/router selection, L2 cross-area behavior, 33-router/interface admission, protocol source MACs, DECnet unicast filters and primary-MAC-change survival are implemented and covered by the E1/interop harnesses.
+Complete. The accepted Phase 3 baseline is tagged `PHASE-3-COMPLETE` at commit `ae1bcb82a1539ccadda0661664205e360bd760b7`. Its exact protocol candidate `608ed2077e9651d6c050f4fc790d538b2d8ee529` passed repository policy, native amd64/ARM64 builds, project state, pinned reference baselines, both E1 VM architectures and all eight amd64/ARM64 Route20/PyDECnet interoperability jobs in run `35343364812`.
 
-The VM persistence architecture is closed. Source-independent `outer-v2-<arch>-<foundation-fingerprint>` foundations contain Ubuntu userspace, the pinned guest kernel/initrd, headers/compiler and independent-reference runtime dependencies, but no candidate source or SHA. `tests/lab/prepare-candidate-image.sh` and `tests/lab/prepare-reference-image.sh` derive disposable exact-candidate/reference images without package installation. `tests/lab/dniv_lab.py` launches direct QEMU guests, TAP/bridge networking, packet capture and serial evidence, and removes disposable disks and sockets after each run.
-
-Exact-head candidate `5f4fdc5b3d1bcef87e56ac64b8c3b287f504eddb` proved the persistence architecture was no longer the blocker: repository policy, project state and native amd64/arm64 builds were green, and amd64 Python E1 passed from a restored foundation. ARM64 restored and injected the candidate but produced no serial output while QEMU remained alive, isolating the fault to the direct-boot kernel artifact/loader boundary. That run also exposed two reference-runtime defects: Route20 could not execute from `/run`, and pinned PyDECnet required `git` at startup. Route20 is now installed under `/usr/local/libexec`; `git` is a legitimate foundation dependency.
-
-Candidate `317deebe5a916ca28e576074fab7e310b15b5d37` then passed repository policy, project state, native builds and reference baselines. Its ARM64 VM path failed while normalizing Ubuntu 26.04's `7.0.0-31-generic` boot artifact because the helper recognized raw Image and EFI-zboot but not the additional wrapper presented by that package. The amd64 Route20 L1 interoperability job advanced far enough to prove the reference emitted a valid router INIT for node 31.71 and the candidate parsed it, but Route20 exited about 3.5 seconds after its READY marker before a stable adjacency formed. The captured LAN trace shows the Route20 INIT followed by loss of reference traffic; this is reference-runtime evidence, not yet a candidate adjacency defect.
-
-The ARM64 normalizer now treats the kernel artifact as a bounded chain of recognized containers. It accepts a raw ARM64 Linux Image, whole-file gzip or Zstd, EFI-zboot gzip/Zstd, and a structurally valid PE/COFF wrapper with exactly one bounded `.linux` section. Each extracted layer is re-evaluated, nesting is bounded, and success still requires the raw Linux `ARM\x64` magic at offset 56. Unknown or malformed wrappers are rejected. Both image builders remain bound to the exact helper SHA-256, so changing the helper intentionally changes the foundation fingerprint and forces one foundation rebuild per architecture.
-
-The Route20 reference launcher now preserves failure evidence instead of merely reporting `reference-exited`: on an unexpected Route20 death it emits the Route20 syslog tail and relevant kernel crash lines into the serial log. It does not patch, wrap or otherwise alter the pinned Route20 implementation. The captured amd64 L1 evidence from interop run `35262772964`, job `105342341317`, now identifies the reference failure: Route20 completes Ethernet/circuit startup and then the kernel reports `dniv-route20-re[285]: segfault at 0 ip 0000000000000000 ... error 14`. Candidate protocol code must not be changed for that demonstrated reference-runtime crash; the pinned Route20 startup/callback path must be diagnosed separately.
-
-Exact-head candidate `a04d2a4ec8687f21fafce1950d339b983f15c973` cleared the ARM64 boot boundary in VM run `35262769735`: the real Ubuntu 26.04 kernel normalized through `pe-linux+efi-zboot:zstd+raw`, the foundation and candidate injection completed, and both routers reached UP adjacency after the runtime primary-MAC change. The amd64 E1 job passed. ARM64 then failed in the harness because `Routing frames received` and `Hello frames received` were sampled by separate `dnctl stats` calls; a hello arriving between calls manufactured `hello > routing` and DN70 exited before its unicast transmit loop, after which DN71 correctly observed zero unicast receive delta.
-
-Exact-head candidate `38c5b49e53c648f6514f52ebff84a93331a4732a` proved the coherent counter-snapshot repair. Acceptance parent `35265712742`, its dispatcher, the host-side stats regression and the ARM64 native build were green. In VM run `35265759834`, both ARM routers completed the unicast stage with `delta=40`; DN71 entered the intentional silent interval and DN70 expired adjacency 31.71 correctly. The only failure was the host controller's 300-second deadline: DN71 began the prescribed module restart at guest uptime about 302 seconds, immediately after the controller deadline had elapsed, so the VMs were terminated before restart adjacency/recovery markers could occur. This is a bounded test-duration defect, not a DECnet protocol failure.
-
-The VM lab therefore keeps amd64 at a 300-second controller budget and gives ARM64 360 seconds. The observed restart point plus the existing 30-second bounded adjacency wait, five-second recovery observation and shutdown margin fit inside 360 seconds while the enclosing job remains capped at 40 minutes. No guest behavior, kernel code or protocol timing is relaxed.
-
-Exact-head `31fc8e00d1c46ffd5cc74c6663c287753a0b7e5d` then completed the guest-side ARM64 E1 sequence in VM run `35266940092`: both nodes reached bidirectional unicast `delta=40`, DN70 expired DN71, restart INIT was observed, adjacency recovered and both guests emitted `DNIV-E1-PASS`. amd64 E1 was green. The ARM64 job failed only in host PCAP validation because DN70 emitted one All-End-Nodes hello during DN71 silence. The harness comment required DN71 to return after listener expiry but before DR eligibility, yet its 12-second silence exceeded the implemented 2-second hello × 3.1 listener multiplier plus 5-second DR delay = 11.2 seconds. The negative DR assertion was therefore self-contradictory on slower ARM execution.
-
-The E1 silence interval is now 7 seconds. A host regression derives listener expiry and DR delay from the actual wire/kernel constants and requires `expiry < silence < expiry + DR delay`; it rejects the former 12-second interval. Acceptance run `35285482332` proved the updated license scanner and all earlier policy checks green, then exposed a regression-test bug: the smoke script contains two valid L1-router `hello_interval=2` module-load sites. The regression now requires all router interval occurrences to agree instead of requiring exactly one. No kernel or DECnet protocol behavior is changed.
-
-Exact-head acceptance for `e7ee147f40bcea7525f9a25499fa9f59974cb9b6` closed the E1 gate: repository policy/dispatcher, both native builds, project state, both pinned reference baselines, and both amd64/ARM64 E1 VM jobs were green. ARM64 reported `e1-silence regression passed: expiry=6.2s silence=7s dr=11.2s` and `python-lab: E1 pass on aarch64 ... captured 442 DECnet frames`. Interop run `35285622023` then exposed a separate ARM64 harness bound: the Route20 reference VM was terminated by the host's hardcoded 90-second READY deadline while still finishing normal boot, reaching root-filesystem handoff only around guest uptime 80 seconds. Route20 had not started, so this failure is neither the known Route20 null-IP crash nor a candidate protocol defect.
-
-Exact-head run `35286846863` showed the deeper harness issue: the reference service was allowed to start while the guest was still converging on `multi-user.target`, and ARM64 could still be in early systemd startup at the host deadline. Reference guests now reach `multi-user.target` first, then remain idle for a full 60 seconds before the independent peer process starts. `DNIV-REF-READY` is therefore a post-boot, post-settle peer marker rather than a boot-race marker. Host readiness budgets cover boot plus that deliberate settle interval: 180 seconds on amd64 and 360 seconds on ARM64, for both initial and restart reference boots. The first settle commit accidentally dropped the executable bit from `tests/lab/prepare-reference-image.sh`; exact-head interop run `35288608187` caught this identically on amd64 and ARM64 with exit 126 before any reference image was built. The reference-image builder executable mode was restored, then exact-head interop run `35289321970` reached the live-suite invocation and found the same accidental mode loss on `tests/lab/run-interop.sh` (`Permission denied`, exit 126) on both architectures. Both harness entry points are now required executable by the readiness regression. Exact-head interop run `35290104080` then proved the post-boot settle policy works: Route20 reached READY at guest uptime about 132s on amd64 and 297s on ARM64. The same run exposed an independent interop counter-sampling race against PyDECnet: `dniv-interop-smoke.sh` sampled routing and hello counters with separate `dnctl stats` calls and could report `bad-hello-stats` after adjacency had already reached UP. Interop now uses the same bounded coherent single-snapshot method already proven by E1, with regression coverage. The Route20 jobs also exposed a false wait: after a post-READY reference death, candidate convergence watched only the candidate QEMU PID and could burn the full 420-second bound against a dead peer. Watching candidate and reference QEMU PIDs alone was not sufficient because a failed reference service leaves the reference VM itself alive. The current harness therefore treats `DNIV-REF-FAIL` in the reference serial log as the terminal condition during initial convergence and post-restart recovery; candidate progress after that marker is never accepted. Route20 diagnostics are now stronger without changing normal peer semantics: the exact pinned SHA is first built and run normally. The first ASan/UBSan diagnostic copy failed to reproduce the null jump on amd64—remaining alive through the bounded diagnostic window—so sanitizer instrumentation was too perturbative to identify the crash. The diagnostic copy now uses the same pinned Route20 sources and optimization defaults plus only debug/frame-pointer symbols, `-rdynamic`, and a constructor-linked project shim that records SIGSEGV/SIGBUS/SIGILL backtraces to `/run/reference/route20-backtrace.log`. The first two shim commits were rejected by repository policy before build because the C scanner requires the canonical `//`-style project header byte-for-byte; the shim now uses the exact header form accepted on existing project C sources. Repository policy then exposed a regression-test omission: the backtrace regression searched for the shim marker but had not included the shim source in its combined input. The regression now reads the shim explicitly. Exact-head amd64 interop run `35297925504`, job `105454224287`, then proved the low-perturbation diagnostic reproduces the real failure: normal Route20 died at `ip=0`, and the diagnostic copy caught `SIGSEGV addr=(nil)`. Ordinary unwinding stopped at the signal handler because the faulting PC is zero. The shim now extracts the x86_64 return address from the saved signal stack (or ARM64 LR) and resolves it with `dladdr`, yielding the null indirect-call site as a symbol plus offset. Exact-head interop run `35298702244` resolved the caller independently on both architectures: amd64 job `105458932534` reported `ProcessEvents+0x2a4`, while ARM64 job `105458932692` reported `ProcessEvents+0x268`; both diagnostic copies caught `SIGSEGV addr=(nil)` immediately after Route20 circuit-up. In the pinned Linux `ProcessEvents` implementation, the only indirect call in that loop is `eventHandlers[h].eventHandler(eventHandlers[h].context)`. The diagnostic shim now dumps the complete registered event-handler table at the crash so the null entry can be identified directly before changing the Route20 fork. Exact-head run `35300441821` then showed the same table corruption on both architectures: amd64 job `105463690703` and ARM64 job `105463690599` each had `count=1 changed=1` but event slot 0 was entirely zero (`handle=0 context=(nil) handler=(nil) name=?`). The pinned startup sequence registers the pcap handler in `DecnetInitialise()` and then calls `SessionInitialise()`. In pinned `session.c`, `SessionInitialise()` reverses its bounds: it clears `ObjectRegistrationTable[MAX_OBJECTS=3]` with `MAX_SESSIONS=5`, writing two 32-byte `object_registration_t` records past the array, then clears only three of five session slots. That 64-byte zero overrun exactly matches the observed post-registration zeroing class. The post-failure diagnostic copy now corrects only those two loop bounds, while the normal pinned Route20 binary remains byte-identical. A 15-second survival marker tests this root-cause hypothesis under the same live candidate traffic before any fork pin is changed. It is invoked only after the normal Route20 process has already emitted `reference-exited`. Candidate convergence treats that failure marker as terminal, waits only for a bounded diagnostic completion marker, and never accepts progress made by the diagnostic process. The policy regression now verifies the failure-marker test occurs before the candidate-success test inside `wait_candidate_marker`, preventing a future false-green reorder. Candidate and normal reference protocol semantics are unchanged.
-
-Exact-head acceptance parent `35302394291` dispatched interop run `35302422684`. Its amd64 Route20 routing job `105467646000` stopped before Route20 execution because the newly added diagnostic Python here-document was indented with the shell `case` body; the runner therefore never recognized `PY_ROUTE20_SESSION_FIX` as the delimiter. The diagnostic here-document body and delimiter now begin at the YAML block-scalar base indentation so the generated shell places them at column zero. This is an interoperability-harness correction only; candidate and pinned-reference protocol behavior are unchanged.
-
-Exact-head acceptance for `a7dd9892dd72f5632da5eb9d05851dbc5b537e06` cleared repository policy, project state, both native builds, both pinned reference baselines and both E1 architectures. Interop run `35303057664` again reproduced the normal pinned Route20 null-IP death on both architectures. Its amd64 routing job `105470865538` and ARM64 routing job `105470865773` each reached the post-failure diagnostic start, but neither emitted `DNIV-REF-DIAG-RESULT` before the host's 30-second diagnostic-completion allowance expired. The diagnostic launcher is now asynchronous so the harness cannot block waiting for Route20's self-daemonizing parent, the 15-second survival result is emitted before secondary log collection, and the host completion allowance is 60 seconds. Normal pinned Route20 still runs first and remains byte-identical; candidate protocol behavior is unchanged.
-
-Exact-head acceptance for `3a62f37e3aa8957573ed22ec28c602ed7486924c` cleared repository policy, project state, both native builds, both pinned reference baselines and both E1 architectures. Interop run `35304828824` proved the corrected diagnostic control flow on amd64: normal pinned Route20 emitted `reason=reference-exited`, then the bounds-corrected diagnostic emitted `session-init-bounds=survived`. ARM64 again emitted the normal pinned failure but its diagnostic had only reached the backtrace start when the host exhausted the fixed 60-second post-failure allowance. The guest-side diagnostic uses a 15-second observation measured inside the emulated guest, so a fixed host-wall allowance is not portable to slower ARM64 TCG. The host diagnostic-completion allowance is now architecture-specific: 60 seconds on amd64 and 180 seconds on ARM64. The diagnostic observation itself remains exactly 15 seconds and candidate/reference protocol behavior is unchanged.
-
-The first exact-head policy run for `bf99b70d7bea0fd4aac258e077f0303dfff6fc1a` stopped in the interop-readiness regression because that test's ARM64 readiness regex still assumed the architecture block contained only `reference_ready_seconds`; adding the new diagnostic bound made the parser return no ARM readiness value. The regression now requires both ARM64 assignments in that block. Runtime behavior is unchanged.
-
-Exact-head acceptance for `85d0be73f4b498a4ebb2801c8664de3c339d132f` closed the Route20 root-cause experiment on both architectures. Interop run `35311688614` showed normal pinned Route20 emit `reason=reference-exited` first on amd64 job `105497613995` and ARM64 job `105497614140`; the diagnostic copy with only corrected `SessionInitialise()` bounds then survived the complete 15-second observation on both. The Route20 fork was therefore fixed minimally at `ea144b2e9978c7d216bc7c171b22fe47ca555567`, changing only those two loop bounds. This project now pins that exact fork commit. The temporary post-failure Route20 diagnostic build and crash shim were removed after Phase 3 closure. Unexpected independent-peer exits still retain bounded syslog and kernel evidence without carrying the root-cause instrumentation into Phase 4.
-
-Repository policy and acceptance dispatch remain isolated from protocol-lab runner concurrency. Release-image construction remains a separate exact-source gate and is not inferred from the cached protocol foundation.
-
-The license scanner prunes `__pycache__` and `.git` directories at Git enumeration time for both exact-tree and staged scans, at any depth. Their contents never enter header/license validation; ordinary tracked files and symlink blobs remain in scope.
-
-## Test addressing
-
-Ordinary lab addressing remains area 31, nodes 70 through 79, names DN70 through DN79. The live L2 interoperability case deliberately uses an independent peer in area 32.
-
-## Pre-production acceptance
-
-`docs/PRE_PRODUCTION_TEST.md` is the consolidated production procedure. Required tests must execute with complete evidence; documentation alone is never green. Long campaigns reuse immutable source-independent architecture foundations while keeping exact-candidate and writable guest state disposable.
-
-## Resume point
-
-Phase 3 is closed. Exact candidate `608ed2077e9651d6c050f4fc790d538b2d8ee529` passed all six acceptance workflows on 2026-09-18: Repository Policy `35343324826`, Build Bootstrap `35343357536`, Project State Gate `35343359444`, External Reference Baselines `35343361139`, Python QEMU VM Lab `35343362922`, and Phase 3 Independent Interoperability `35343364812`. The interoperability run completed all eight amd64/ARM64 Route20/PyDECnet routing, endnode and role jobs successfully, including job `105614011596`.
+Phase 3-only Route20 crash instrumentation has been removed. The fixed Route20 pin, independent-peer harness, post-boot 60-second reference settling, bounded readiness, failure logging, E1 coverage and source-independent VM foundations remain as reusable infrastructure.
 
 ### Phase 4
 
-Active. Phase 3-only Route20 crash instrumentation has been removed; the reusable independent-peer harness, settled-guest readiness policy and failure evidence remain. Implement Phase IV routing in dependency order: routing packet codecs and validation, route state/aging and metrics, forwarding with visit-count enforcement, then multi-LAN L1/L2 convergence and independent interoperability.
+Active. Deliver endnode behavior, Level 1 and Level 2 routing, route/forwarding databases, metrics, visit-count enforcement, route aging, convergence and multi-LAN VM topologies.
+
+Implementation order:
+
+1. deterministic routing-packet codecs, checksums and malformed-input rejection;
+2. kernel route-state primitives, metrics and aging;
+3. forwarding and visit-count/loop prevention;
+4. E2 two-LAN forced-router topology;
+5. E3 alternate-path convergence;
+6. E4 multi-area L1/L2 behavior;
+7. independent Route20/PyDECnet routing interoperability on amd64 and ARM64.
+
+## Current infrastructure
+
+| Field | Current value |
+| --- | --- |
+| Protocol phase | Phase 4 |
+| Working ref | `main` only |
+| Remote branches | only `refs/heads/main` |
+| Phase 3 tag | `PHASE-3-COMPLETE` |
+| Phase 3 tag commit | `ae1bcb82a1539ccadda0661664205e360bd760b7` |
+| Route20 pin | `ea144b2e9978c7d216bc7c171b22fe47ca555567` |
+| VM lifecycle | direct QEMU/QMP |
+| Persistent VM state | source-independent amd64/arm64 foundations |
+| Candidate/reference images | disposable |
+| Reference settle interval | 60 seconds after `multi-user.target` |
+| Reference READY bounds | amd64 180s; ARM64 360s |
+| E1 controller budget | amd64 300s; ARM64 360s |
+| Compact evidence retention | 30 days maximum |
 
 ## Next action
 
-Begin Phase 4 with deterministic routing-packet codec/validation coverage and kernel route-state primitives. Preserve the Phase 3 exact-green baseline and extend the lab toward the E2 two-LAN forced-router topology before adding alternate-path or multi-area behavior.
+Implement Phase 4 routing packet codecs and deterministic validation tests first, then add kernel route-state primitives. Preserve the tagged Phase 3 baseline unchanged and extend the lab toward E2 rather than modifying Phase 3 protocol behavior.
