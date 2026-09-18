@@ -79,6 +79,7 @@ Implementation order:
 | Phase 3 tag | `PHASE-3-COMPLETE` |
 | Phase 3 tag commit | `ae1bcb82a1539ccadda0661664205e360bd760b7` |
 | Phase 4 accepted protocol candidate | `6c185b6d01f8a57ee9f0ea6a6c37d7112ddb77d2` |
+| Phase 4 closure commit | `571333bfd7aaa8b2fcc88715c1d61442af151f3c` |
 | Route20 pin | `ea144b2e9978c7d216bc7c171b22fe47ca555567` |
 | VM lifecycle | direct QEMU/QMP |
 | Persistent VM state | source-independent amd64/arm64 foundations |
@@ -89,6 +90,8 @@ Implementation order:
 | Compact evidence retention | 30 days maximum |
 
 ## Resume point
+
+A temporary one-shot tag workflow is active only to create annotated tag `PHASE-4-COMPLETE` on closure commit `571333bfd7aaa8b2fcc88715c1d61442af151f3c`; it must be removed immediately after tag verification.
 
 Phase 4 is closed on exact protocol candidate `6c185b6d01f8a57ee9f0ea6a6c37d7112ddb77d2`. Its exact-SHA acceptance completed green on 2026-09-18: Repository Policy `35393330920`, Build Bootstrap `35393363966`, Project State Gate `35393366433`, External Reference Baselines `35393368425`, E1 `35393370633`, E2 `35393372626`, E3 `35393374453`, E4 `35393376465`, and Independent Ethernet Interoperability `35393378666`. E1-E4 passed amd64 and ARM64; the interoperability run completed the full Route20/PyDECnet routing matrix successfully.
 

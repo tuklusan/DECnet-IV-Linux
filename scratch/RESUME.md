@@ -16,6 +16,8 @@
 
 ## Current checkpoint
 
+A temporary one-shot workflow is creating annotated tag `PHASE-4-COMPLETE` on closure commit `571333bfd7aaa8b2fcc88715c1d61442af151f3c`; remove it immediately after verification.
+
 Phase 4 is complete on exact protocol candidate `6c185b6d01f8a57ee9f0ea6a6c37d7112ddb77d2`; Phase 5 is active on `main`. Phase 3 remains frozen at tag `PHASE-3-COMPLETE` on commit `ae1bcb82a1539ccadda0661664205e360bd760b7`.
 
 The final Phase 3 acceptance set was green: Repository Policy `35343324826`, Build Bootstrap `35343357536`, Project State Gate `35343359444`, External Reference Baselines `35343361139`, Python QEMU VM Lab `35343362922`, and Independent Ethernet Interoperability run `35343364812`. The interoperability matrix passed all eight amd64/ARM64 Route20/PyDECnet routing/endnode role jobs.
