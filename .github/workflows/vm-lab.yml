@@ -26,6 +26,7 @@ on:
           - phase2
           - e1
           - e2
+          - e3
       parent_run_id:
         description: Parent acceptance workflow run ID; blank for direct dispatch
         required: false
@@ -213,6 +214,9 @@ jobs:
           set +e
           if [[ "${DNIV_LAB_MODE}" == e2 ]]; then
             python3 tests/lab/dniv_e2.py "$DNIV_LAB_BASE" "$DNIV_LAB_KERNEL" "$DNIV_LAB_INITRD" 2>&1 | \
+              tee "$DNIV_SCRATCH_DIR/two-node.log"
+          elif [[ "${DNIV_LAB_MODE}" == e3 ]]; then
+            python3 tests/lab/dniv_e3.py "$DNIV_LAB_BASE" "$DNIV_LAB_KERNEL" "$DNIV_LAB_INITRD" 2>&1 | \
               tee "$DNIV_SCRATCH_DIR/two-node.log"
           else
             python3 tests/lab/dniv_lab.py "$DNIV_LAB_BASE" "$DNIV_LAB_KERNEL" "$DNIV_LAB_INITRD" 2>&1 | \

@@ -262,6 +262,7 @@ jobs:
             printf 'REFERENCES=reference-baselines.yml\n'
             printf 'VM_LAB_E1=vm-lab.yml:e1\n'
             printf 'VM_LAB_E2=vm-lab.yml:e2\n'
+            printf 'VM_LAB_E3=vm-lab.yml:e3\n'
             printf 'INTEROP=interop.yml\n'
           } > "$DNIV_SCRATCH_DIR/dispatch.env"
           gh workflow run build.yml --repo "$GITHUB_REPOSITORY" --ref main \
@@ -274,6 +275,8 @@ jobs:
             -f lab_mode=e1 -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
           gh workflow run vm-lab.yml --repo "$GITHUB_REPOSITORY" --ref main \
             -f lab_mode=e2 -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
+          gh workflow run vm-lab.yml --repo "$GITHUB_REPOSITORY" --ref main \
+            -f lab_mode=e3 -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
           gh workflow run interop.yml --repo "$GITHUB_REPOSITORY" --ref main \
             -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
 

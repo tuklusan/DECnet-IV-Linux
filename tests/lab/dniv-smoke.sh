@@ -152,6 +152,8 @@ role=$(get_arg dniv.role || printf 'A')
 mode=$(get_arg dniv.mode || printf 'phase2')
 session=$(get_arg dniv.session || printf 'local')
 dest_node=$(get_arg dniv.dest_node || true)
+alt_peer=$(get_arg dniv.alt_peer || true)
+alt_peer_node=$(get_arg dniv.alt_peer_node || true)
 
 iface=$(find_iface || true)
 if [ -z "$iface" ]; then
@@ -379,6 +381,91 @@ e2)
             ;;
         *)
             echo "DNIV-E2-FAIL session=$session node=$name reason=bad-role"
+            exit 1
+            ;;
+    esac
+    ;;
+
+
+e3)
+    case "$role" in
+        A|B)
+            if [ -z "$peer" ] || [ -z "$peer_node" ] ||
+               [ -z "$alt_peer" ] || [ -z "$alt_peer_node" ] ||
+               [ -z "$dest_node" ]; then
+                echo "DNIV-E3-FAIL session=$session node=$name reason=missing-args"
+                exit 1
+            fi
+            modprobe decnet_iv default_area="$area" default_node="$node" default_name="$name" \
+                default_node_type=3 hello_interval=2
+            /usr/local/sbin/dnctl set "$area.$node" "$name"
+            ip link set "$iface" up
+            if ! wait_any_adjacency_up "$peer_node" 320; then
+                echo "DNIV-E3-FAIL session=$session node=$name reason=no-primary"
+                exit 1
+            fi
+            echo "DNIV-E3-PRIMARY session=$session node=$name router=$peer_node"
+            i=0
+            while [ "$i" -lt 5 ]; do
+                i=$((i + 1))
+                /usr/local/sbin/dnraw --short "$iface" "$peer" "$area.$node" "$dest_node" 0 \
+                    "DNIV-E3-PRE-$session-$name-$i"
+                sleep 0.2
+            done
+
+            switched=0
+            i=0
+            while [ "$i" -lt 480 ]; do
+                output=$(/usr/local/sbin/dnctl adjacencies 2>/dev/null || true)
+                printf '%s\n' "$output"
+                if ! printf '%s\n' "$output" | grep -Fq "$peer_node via " &&
+                   printf '%s\n' "$output" | grep -F "$alt_peer_node via " | grep -Fq ' UP '; then
+                    switched=1
+                    break
+                fi
+                i=$((i + 1))
+                sleep 0.25
+            done
+            if [ "$switched" -ne 1 ]; then
+                echo "DNIV-E3-FAIL session=$session node=$name reason=no-alternate"
+                exit 1
+            fi
+            echo "DNIV-E3-ALTERNATE session=$session node=$name router=$alt_peer_node"
+            i=0
+            while [ "$i" -lt 5 ]; do
+                i=$((i + 1))
+                /usr/local/sbin/dnraw --short "$iface" "$alt_peer" "$area.$node" "$dest_node" 0 \
+                    "DNIV-E3-POST-$session-$name-$i"
+                sleep 0.2
+            done
+            sleep 3
+            poweroff_pass "DNIV-E3-PASS session=$session node=$name"
+            ;;
+        R1)
+            modprobe decnet_iv default_area="$area" default_node="$node" default_name="$name" \
+                default_node_type=2 router_priority=64 hello_interval=2 ethernet_cost=4
+            /usr/local/sbin/dnctl set "$area.$node" "$name"
+            for path in /sys/class/net/*; do
+                candidate=${path##*/}
+                [ "$candidate" = lo ] || ip link set "$candidate" up
+            done
+            sleep 65
+            poweroff_pass "DNIV-E3-PASS session=$session node=$name"
+            ;;
+        R2)
+            modprobe decnet_iv default_area="$area" default_node="$node" default_name="$name" \
+                default_node_type=2 router_priority=96 hello_interval=2 ethernet_cost=4
+            /usr/local/sbin/dnctl set "$area.$node" "$name"
+            for path in /sys/class/net/*; do
+                candidate=${path##*/}
+                [ "$candidate" = lo ] || ip link set "$candidate" up
+            done
+            sleep 25
+            echo "DNIV-E3-PRIMARY-DOWN session=$session node=$name"
+            poweroff_pass "DNIV-E3-PASS session=$session node=$name"
+            ;;
+        *)
+            echo "DNIV-E3-FAIL session=$session node=$name reason=bad-role"
             exit 1
             ;;
     esac
