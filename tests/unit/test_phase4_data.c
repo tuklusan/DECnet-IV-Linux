@@ -91,6 +91,34 @@ static void test_forwarded_long(void)
 }
 
 
+static void test_local_long(void)
+{
+    const __u8 payload[] = {'n','s','p'};
+    __u8 out[64];
+    struct dniv_wire_data data;
+    int len;
+
+    len = dniv_wire_build_local_long(
+        out, sizeof(out), DNIV_ADDR(31, 70), DNIV_ADDR(31, 71),
+        payload, sizeof(payload), 1U);
+    assert(len == DNIV_WIRE_LONG_DATA_LEN + (int)sizeof(payload));
+    assert(dniv_wire_parse_data(out, (__u32)len, &data) == DNIV_WIRE_OK);
+    assert(data.source == DNIV_ADDR(31, 70));
+    assert(data.destination == DNIV_ADDR(31, 71));
+    assert(data.visit == 0U);
+    assert(data.flags == (DNIV_WIRE_LONG_DATA | DNIV_WIRE_DATA_RQR));
+    assert(data.payload_len == sizeof(payload));
+    assert(memcmp(data.payload, payload, sizeof(payload)) == 0);
+
+    assert(dniv_wire_build_local_long(
+        out, DNIV_WIRE_LONG_DATA_LEN - 1U,
+        DNIV_ADDR(31, 70), DNIV_ADDR(31, 71),
+        NULL, 0U, 0U) == 0);
+    assert(dniv_wire_build_local_long(
+        out, sizeof(out), 0U, DNIV_ADDR(31, 71),
+        payload, sizeof(payload), 0U) == 0);
+}
+
 static void test_return_to_sender(void)
 {
     __u8 request_buf[] = {0x0a,0x63,0x7c,0x46,0x7c,0x1f,'r'};
@@ -174,6 +202,7 @@ int main(void)
     test_short_data();
     test_long_data();
     test_forwarded_long();
+    test_local_long();
     test_return_to_sender();
     test_padding_and_limit();
     puts("phase4 data packet tests passed");

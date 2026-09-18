@@ -52,5 +52,6 @@ int dniv_nsp_retransmit_due(__u16 local_link, unsigned long now,
                             __u16 *sequence, __u8 *wire, __u16 capacity,
                             __u16 *wire_len);
 int dniv_nsp_receive(__u16 remote_node, const __u8 *wire, __u16 wire_len);
+int dniv_nsp_transmit(__u16 remote_node, const __u8 *wire, __u16 wire_len);
 
 #endif

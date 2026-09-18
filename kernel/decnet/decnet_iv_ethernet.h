@@ -25,5 +25,7 @@ int dniv_eth_set_address(__u16 address);
 void dniv_eth_get_stats(struct dniv_stats *stats);
 void dniv_eth_reset_stats(void);
 int dniv_eth_get_adjacency(__u32 index, struct dniv_adjacency *adjacency);
+int dniv_eth_send_payload(__u16 destination, const __u8 *payload,
+                          __u16 payload_len);
 
 #endif /* _DECNET_IV_ETHERNET_H */

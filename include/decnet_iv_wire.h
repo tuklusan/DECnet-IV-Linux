@@ -535,6 +535,40 @@ static inline int dniv_wire_parse_data(const __u8 *buf, __u32 len,
     return DNIV_WIRE_OK;
 }
 
+static inline int dniv_wire_build_local_long(
+    __u8 *buf, __u32 capacity, __u16 source, __u16 destination,
+    const __u8 *payload, __u32 payload_len, __u8 request_return)
+{
+    __u32 len;
+
+    if (!buf || !dniv_wire_address_valid(source) ||
+        !dniv_wire_address_valid(destination) ||
+        payload_len > DNIV_WIRE_BLOCK_SIZE - DNIV_WIRE_LONG_DATA_LEN ||
+        (payload_len && !payload))
+        return 0;
+    len = DNIV_WIRE_LONG_DATA_LEN + payload_len;
+    if (capacity < len)
+        return 0;
+
+    dniv_wire_zero(buf, len);
+    buf[0] = (__u8)(DNIV_WIRE_LONG_DATA |
+                    (request_return ? DNIV_WIRE_DATA_RQR : 0U));
+    buf[3] = 0xaaU;
+    buf[4] = 0x00U;
+    buf[5] = 0x04U;
+    buf[6] = 0x00U;
+    dniv_wire_put_le16(buf + 7U, destination);
+    buf[11] = 0xaaU;
+    buf[12] = 0x00U;
+    buf[13] = 0x04U;
+    buf[14] = 0x00U;
+    dniv_wire_put_le16(buf + 15U, source);
+    buf[18] = 0U;
+    if (payload_len)
+        __builtin_memcpy(buf + DNIV_WIRE_LONG_DATA_LEN, payload, payload_len);
+    return (int)len;
+}
+
 static inline __u8 dniv_wire_data_visit_limit(
     const struct dniv_wire_data *data)
 {

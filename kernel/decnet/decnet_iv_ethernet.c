@@ -989,6 +989,110 @@ static int dniv_xmit_data(struct net_device *dev, __u16 next_hop,
     return ret == NET_XMIT_SUCCESS || ret == NET_XMIT_CN ? 0 : -EIO;
 }
 
+static int dniv_endnode_route(__u16 destination,
+                              struct dniv_route_result *route)
+{
+    struct dniv_adj_entry *fallback = NULL;
+    unsigned long flags;
+    unsigned int i;
+    __u16 local = READ_ONCE(dniv_local_address);
+
+    spin_lock_irqsave(&dniv_adj_lock, flags);
+    for (i = 0; i < DNIV_MAX_ADJACENCIES; i++) {
+        struct dniv_adj_entry *adj = &dniv_adjacencies[i];
+
+        if (!adj->used || adj->state != DNIV_ADJ_STATE_UP ||
+            adj->node_type == DNIV_NODE_TYPE_ENDNODE)
+            continue;
+        if (DNIV_ADDR_AREA(adj->address) != DNIV_ADDR_AREA(local))
+            continue;
+        if (!fallback)
+            fallback = adj;
+        if (adj->address == destination) {
+            fallback = adj;
+            break;
+        }
+    }
+    if (!fallback) {
+        spin_unlock_irqrestore(&dniv_adj_lock, flags);
+        return -ENETUNREACH;
+    }
+    route->next_hop = fallback->address;
+    route->ifindex = fallback->ifindex;
+    route->level = 1U;
+    route->destination = DNIV_ADDR_NODE(destination);
+    route->cost = 0U;
+    route->hops = 1U;
+    spin_unlock_irqrestore(&dniv_adj_lock, flags);
+    return 0;
+}
+
+int dniv_eth_send_payload(__u16 destination, const __u8 *payload,
+                          __u16 payload_len)
+{
+    struct dniv_route_result route;
+    struct net_device *dev;
+    __u8 *wire;
+    __u16 local = READ_ONCE(dniv_local_address);
+    __u16 lookup_destination;
+    __u8 level;
+    int len;
+    int ret;
+
+    if (!dniv_wire_address_valid(destination) || !payload || !payload_len ||
+        payload_len > DNIV_WIRE_BLOCK_SIZE - DNIV_WIRE_LONG_DATA_LEN)
+        return -EINVAL;
+    if (destination == local)
+        return dniv_nsp_receive(local, payload, payload_len);
+
+    if (dniv_local_node_type == DNIV_NODE_TYPE_ENDNODE) {
+        ret = dniv_endnode_route(destination, &route);
+        if (ret)
+            return ret;
+    } else {
+        if (DNIV_ADDR_AREA(destination) == DNIV_ADDR_AREA(local)) {
+            level = 1U;
+            lookup_destination = DNIV_ADDR_NODE(destination);
+        } else if (dniv_local_node_type == DNIV_NODE_TYPE_L2_ROUTER) {
+            level = 2U;
+            lookup_destination = DNIV_ADDR_AREA(destination);
+        } else {
+            level = 1U;
+            lookup_destination = 0U;
+        }
+        ret = dniv_route_lookup(level, lookup_destination, &route);
+        if (ret)
+            return ret;
+    }
+
+    dev = dev_get_by_index(&init_net, route.ifindex);
+    if (!dev)
+        return -ENODEV;
+    if (dev->type != ARPHRD_ETHER || !(dev->flags & IFF_UP) ||
+        !netif_running(dev)) {
+        dev_put(dev);
+        return -ENETDOWN;
+    }
+
+    wire = kmalloc(DNIV_WIRE_BLOCK_SIZE, GFP_ATOMIC);
+    if (!wire) {
+        dev_put(dev);
+        return -ENOMEM;
+    }
+    len = dniv_wire_build_local_long(
+        wire, DNIV_WIRE_BLOCK_SIZE, local, destination,
+        payload, payload_len, 1U);
+    if (len <= 0) {
+        kfree(wire);
+        dev_put(dev);
+        return -EMSGSIZE;
+    }
+    ret = dniv_xmit_data(dev, route.next_hop, wire, (__u16)len);
+    kfree(wire);
+    dev_put(dev);
+    return ret;
+}
+
 static void dniv_handle_valid_data(int input_ifindex,
                                    const struct dniv_wire_data *data)
 {

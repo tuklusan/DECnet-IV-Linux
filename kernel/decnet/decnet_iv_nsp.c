@@ -20,6 +20,7 @@
 #include <linux/string.h>
 
 #include <decnet_iv_nsp_wire.h>
+#include "decnet_iv_ethernet.h"
 #include "decnet_iv_nsp.h"
 
 struct dniv_nsp_retransmit {
@@ -508,4 +509,15 @@ int dniv_nsp_receive(__u16 remote_node, const __u8 *wire, __u16 wire_len)
 
     spin_unlock_irqrestore(&dniv_nsp_lock, flags);
     return 0;
+}
+
+
+int dniv_nsp_transmit(__u16 remote_node, const __u8 *wire, __u16 wire_len)
+{
+    struct dniv_nsp_packet pkt;
+
+    if (!remote_node || !wire || !wire_len ||
+        dniv_nsp_parse(wire, wire_len, &pkt) != DNIV_NSP_OK)
+        return -EINVAL;
+    return dniv_eth_send_payload(remote_node, wire, wire_len);
 }
