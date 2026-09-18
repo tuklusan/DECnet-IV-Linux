@@ -356,8 +356,11 @@ e2)
                 exit 1
             fi
             sleep 3
+            # The two endpoint guests need not finish boot at the same instant.
+            # Send a convergence window, while the host gate still requires at
+            # least five forwarded packets in each direction.
             i=0
-            while [ "$i" -lt 5 ]; do
+            while [ "$i" -lt 10 ]; do
                 i=$((i + 1))
                 /usr/local/sbin/dnraw --short "$iface" "$peer" "$area.$node" "$dest_node" 0 \
                     "DNIV-E2-$session-$name-$i"
