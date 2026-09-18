@@ -39,8 +39,8 @@ Temporary Phase 3 Route20 crash instrumentation and the temporary tagging workfl
 
 ## Phase 4 entry
 
-Routing message wire formats and deterministic validation are implemented with permanent unit coverage for legal vectors, count/start/range boundaries, malformed segments and checksum failure. Next implement route tables/metrics/aging, then forwarding/visit-count enforcement and the E2, E3 and E4 lab topologies.
+Routing message wire formats/validation and kernel route-state primitives are implemented. Route state keeps independent per-adjacency candidates, applies Phase IV cost/hop limits, deterministically chooses equal-cost routes by higher next-hop address, supports adjacency withdrawal, and ages expiring candidates. Next integrate received updates with adjacency state and forwarding/visit-count enforcement, then E2/E3/E4.
 
 ## Next action
 
-Implement kernel route-state primitives, metrics and aging on top of the completed Phase IV routing packet codecs. Do not reopen Phase 3 behavior without concrete regression evidence.
+Integrate received L1/L2 routing updates with adjacency-backed route state, then implement forwarding and visit-count/loop prevention. Do not reopen Phase 3 behavior without concrete regression evidence.

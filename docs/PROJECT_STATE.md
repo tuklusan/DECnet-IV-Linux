@@ -60,7 +60,7 @@ Active. Deliver endnode behavior, Level 1 and Level 2 routing, route/forwarding 
 Implementation order:
 
 1. deterministic routing-packet codecs, checksums and malformed-input rejection — complete;
-2. kernel route-state primitives, metrics and aging;
+2. kernel route-state primitives, metrics and aging — complete;
 3. forwarding and visit-count/loop prevention;
 4. E2 two-LAN forced-router topology;
 5. E3 alternate-path convergence;
@@ -87,4 +87,4 @@ Implementation order:
 
 ## Next action
 
-Phase 4 routing packet codecs and deterministic validation tests are implemented. Next add kernel route-state primitives, metrics and aging. Preserve the tagged Phase 3 baseline unchanged and extend the lab toward E2 rather than modifying Phase 3 protocol behavior.
+Phase 4 routing packet codecs plus kernel route-state primitives, metric arithmetic, deterministic equal-cost selection and route aging are implemented. Next integrate routing updates with adjacency state and forwarding/visit-count enforcement, then extend the lab toward E2.
