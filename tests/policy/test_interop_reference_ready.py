@@ -80,6 +80,18 @@ def main() -> int:
     if re.search(r'DNIV-REF-READY[^\n]*" [0-9]+ "\$REFERENCE_PID"', SCRIPT):
         raise SystemExit("interop-ready regression: hardcoded readiness wait remains")
 
+
+    convergence_watches = [
+        r'DNIV-INTEROP-READY-STOP[^\n]*"\$CANDIDATE_PID" "\$REFERENCE_PID"',
+        r'DNIV-INTEROP-PASS[^\n]*"\$CANDIDATE_PID" "\$REFERENCE_PID"',
+    ]
+    for pattern in convergence_watches:
+        if not re.search(pattern, SCRIPT):
+            raise SystemExit(
+                "interop-ready regression: candidate convergence must fail fast "
+                "when the reference VM exits"
+            )
+
     print("interop-ready regression passed: amd64=180s arm64=360s")
     return 0
 

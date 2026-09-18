@@ -188,11 +188,14 @@ start_reference() {
 }
 
 wait_marker() {
-    local log=$1 marker=$2 seconds=$3 pid=${4:-}
+    local log=$1 marker=$2 seconds=$3 pid=${4:-} peer_pid=${5:-}
     local deadline=$((SECONDS + seconds))
     while (( SECONDS < deadline )); do
         grep -Fq "$marker" "$log" 2>/dev/null && return 0
         if [[ -n "$pid" ]] && ! kill -0 "$pid" 2>/dev/null; then
+            return 1
+        fi
+        if [[ -n "$peer_pid" ]] && ! kill -0 "$peer_pid" 2>/dev/null; then
             return 1
         fi
         sleep 1
@@ -208,7 +211,7 @@ fi
 
 candidate_common="root=LABEL=dniv-root rootfstype=ext4 rw dniv.interop=1 dniv.area=$area dniv.node=$node dniv.name=$name dniv.peer_node=$ref_area.$ref_node dniv.scenario=$scenario dniv.session=$session"
 start_vm "candidate-$scenario" "$candidate_disk" "$tap_candidate" "$candidate_hw" "$candidate_log" "$candidate_common" & CANDIDATE_PID=$!
-if ! wait_marker "$candidate_log" "DNIV-INTEROP-READY-STOP session=$session scenario=$scenario" "$timeout_seconds" "$CANDIDATE_PID"; then
+if ! wait_marker "$candidate_log" "DNIV-INTEROP-READY-STOP session=$session scenario=$scenario" "$timeout_seconds" "$CANDIDATE_PID" "$REFERENCE_PID"; then
     tail -220 "$candidate_log" >&2 || true
     tail -160 "$ref1_log" >&2 || true
     exit 1
@@ -227,7 +230,7 @@ if ! wait_marker "$ref2_log" "DNIV-REF-READY session=$session reference=$referen
     tail -160 "$ref2_log" >&2 || true
     exit 1
 fi
-if ! wait_marker "$candidate_log" "DNIV-INTEROP-PASS session=$session scenario=$scenario" 180 "$CANDIDATE_PID"; then
+if ! wait_marker "$candidate_log" "DNIV-INTEROP-PASS session=$session scenario=$scenario" 180 "$CANDIDATE_PID" "$REFERENCE_PID"; then
     tail -220 "$candidate_log" >&2 || true
     tail -160 "$ref2_log" >&2 || true
     exit 1
