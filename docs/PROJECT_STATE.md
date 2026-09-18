@@ -22,7 +22,7 @@ Build a complete native DECnet Phase IV stack for maintained Linux as an out-of-
 
 ## References and licensing
 
-Preferred exact reference pins remain Route20 `b94115b2615c6463d1f006924ceeadde8e2d4367`, PyDECnet live `a7194be8d72dea6f9eb4f77083f056f53e80df58`, PyDECnet tests `9a844987bf3a1450632dee8d37e60a23a453bad3`, LinuxDECnet `ff39eef045d1e4b7b72a3d40111e89c07a473398`, and SIMH `5b73b1032b52d19bf80752ea4d9cbbdc92e7b5e0`. The product license is the canonical root `LICENSE`; the kernel reports `MODULE_LICENSE("Proprietary")`.
+Preferred exact reference pins remain Route20 `ea144b2e9978c7d216bc7c171b22fe47ca555567`, PyDECnet live `a7194be8d72dea6f9eb4f77083f056f53e80df58`, PyDECnet tests `9a844987bf3a1450632dee8d37e60a23a453bad3`, LinuxDECnet `ff39eef045d1e4b7b72a3d40111e89c07a473398`, and SIMH `5b73b1032b52d19bf80752ea4d9cbbdc92e7b5e0`. The product license is the canonical root `LICENSE`; the kernel reports `MODULE_LICENSE("Proprietary")`.
 
 The root `references/` directory records the development source-of-truth hierarchy and distilled protocol/reference index. Digital DNA Phase IV functional specifications are normative; PyDECnet and Route20 are independent implementation cross-checks; LinuxDECnet is the Linux ABI/userspace compatibility reference; SIMH plus genuine DEC operating systems are interoperability oracles. Third-party documents and code retain their original licenses.
 
@@ -83,6 +83,8 @@ Exact-head acceptance for `3a62f37e3aa8957573ed22ec28c602ed7486924c` cleared rep
 
 The first exact-head policy run for `bf99b70d7bea0fd4aac258e077f0303dfff6fc1a` stopped in the interop-readiness regression because that test's ARM64 readiness regex still assumed the architecture block contained only `reference_ready_seconds`; adding the new diagnostic bound made the parser return no ARM readiness value. The regression now requires both ARM64 assignments in that block. Runtime behavior is unchanged.
 
+Exact-head acceptance for `85d0be73f4b498a4ebb2801c8664de3c339d132f` closed the Route20 root-cause experiment on both architectures. Interop run `35311688614` showed normal pinned Route20 emit `reason=reference-exited` first on amd64 job `105497613995` and ARM64 job `105497614140`; the diagnostic copy with only corrected `SessionInitialise()` bounds then survived the complete 15-second observation on both. The Route20 fork was therefore fixed minimally at `ea144b2e9978c7d216bc7c171b22fe47ca555567`, changing only those two loop bounds. This project now pins that exact fork commit. The interop diagnostic build no longer rewrites `session.c`; it retains only the low-perturbation crash shim for post-failure evidence.
+
 Repository policy and acceptance dispatch remain isolated from protocol-lab runner concurrency. Release-image construction remains a separate exact-source gate and is not inferred from the cached protocol foundation.
 
 The license scanner prunes `__pycache__` and `.git` directories at Git enumeration time for both exact-tree and staged scans, at any depth. Their contents never enter header/license validation; ordinary tracked files and symlink blobs remain in scope.
@@ -99,8 +101,8 @@ Ordinary lab addressing remains area 31, nodes 70 through 79, names DN70 through
 
 Phase 3 is the active workstream. Repository policy, native builds, project continuity, reference baselines, ARM64 direct boot, coherent counter sampling, controller budget and two-architecture E1 behavior are closed on the current lineage. The current harness change separates guest boot from peer startup: the reference VM must reach `multi-user.target`, idle for 60 seconds, and only then launch the pinned peer. READY budgets are 180 seconds on amd64 and 360 seconds on ARM64 to cover boot plus this settle interval; kernel and DECnet behavior are unchanged.
 
-The next independent blocker is Route20 stability: the retained diagnostics now show a null-instruction-pointer userspace segfault immediately after Route20 circuit startup. That reference-runtime crash must be diagnosed in the exact pinned Route20 fork before any candidate DECnet protocol change is considered for those failed interop cases.
+The Route20 startup corruption is now fixed in the pinned fork after independent amd64/ARM64 confirmation. The next blocker is exact-head validation of that corrected reference across baseline, routing and endnode interoperability without changing candidate DECnet protocol behavior.
 
 ## Next action
 
-Run exact-head acceptance for current `main`. Require repository policy, project state, both native builds, both pinned reference baselines and both E1 architectures. In the amd64 and ARM64 Route20 routing jobs require normal pinned Route20 to emit `reason=reference-exited` first, then require `DNIV-REF-DIAG-RESULT ... session-init-bounds=survived` after the complete 15-second diagnostic observation. Only that two-architecture confirmation permits the minimal two-loop-bound Route20 fork fix and a new pin.
+Run exact-head acceptance on the corrected Route20 pin. Require repository policy, project state, both native builds, both reference baselines, both E1 architectures and full amd64/ARM64 independent interoperability. Route20 routing and endnode cases must run the fixed normal binary without `reference-exited`; any new reference failure must be diagnosed independently rather than masked by candidate protocol changes.

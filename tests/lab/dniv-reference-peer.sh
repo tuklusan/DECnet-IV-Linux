@@ -137,10 +137,10 @@ run_route20_diagnostic() {
         sleep 0.1
     done
     if [ -n "$diag_pid" ] && kill -0 "$diag_pid" 2>/dev/null; then
-        echo "DNIV-REF-DIAG-RESULT session=$session reference=route20 session-init-bounds=survived"
+        echo "DNIV-REF-DIAG-RESULT session=$session reference=route20 diagnostic=survived"
         kill "$diag_pid" 2>/dev/null || true
     else
-        echo "DNIV-REF-DIAG-RESULT session=$session reference=route20 session-init-bounds=exited"
+        echo "DNIV-REF-DIAG-RESULT session=$session reference=route20 diagnostic=exited"
     fi
     [ ! -f /run/reference/route20-diagnostic-launch.log ] || cat /run/reference/route20-diagnostic-launch.log
     [ ! -f /run/reference/route20-backtrace.log ] || cat /run/reference/route20-backtrace.log

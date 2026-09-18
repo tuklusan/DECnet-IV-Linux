@@ -56,6 +56,8 @@ Exact-head acceptance for `3a62f37e3aa8957573ed22ec28c602ed7486924c` cleared rep
 
 The first policy run on `bf99b70d7bea0fd4aac258e077f0303dfff6fc1a` failed only because `test_interop_reference_ready.py` still matched the ARM64 readiness block as though it contained a single assignment. The regression now explicitly requires the ARM64 readiness and diagnostic-completion assignments together. No harness runtime or protocol behavior changed.
 
+Exact-head acceptance for `85d0be73f4b498a4ebb2801c8664de3c339d132f` closed the Route20 root-cause experiment on both architectures. Interop run `35311688614` produced normal `reference-exited` first on amd64 job `105497613995` and ARM64 job `105497614140`; the bounds-corrected diagnostic then survived the full 15-second observation on both. The Route20 fork was minimally fixed at `ea144b2e9978c7d216bc7c171b22fe47ca555567` and this project now pins that commit. The interop diagnostic copy no longer patches `session.c`; it keeps only the crash shim for post-failure evidence.
+
 Repository license validation now excludes `__pycache__` and `.git` directories in the Git enumeration command itself for both exact-tree and staged scans, at any depth, so generated caches and repository metadata never reach the validator.
 
 | Field | Current value |
@@ -75,7 +77,7 @@ Repository license validation now excludes `__pycache__` and `.git` directories 
 | Compact evidence retention | 30 days maximum |
 | Acceptance child binding | parent run ID + exact expected SHA |
 | VM controller budget | amd64 300s; ARM64 360s |
-| Infrastructure status | architecture/direct boot/stats sampling/controller budget/E1 closed; ARM64 interop reference-ready bound awaiting exact acceptance |
+| Infrastructure status | architecture/direct boot/stats sampling/controller budget/E1 closed; corrected Route20 pin awaiting exact baseline/interop acceptance |
 
 ## Persistent run index
 
@@ -91,4 +93,4 @@ Acceptance lineage for `38c5b49e53c648f6514f52ebff84a93331a4732a`: repository-po
 
 ## Next action
 
-Run exact-head acceptance on `main`. Require repository policy, project state, native amd64/ARM64 builds, both pinned reference baselines and both E1 jobs. Follow the amd64 and ARM64 Route20 routing jobs and require the normal pinned binary to emit `reference-exited` first, followed by `DNIV-REF-DIAG-RESULT ... session-init-bounds=survived` after the complete 15-second diagnostic observation on both architectures. Only that two-architecture confirmation permits the minimal Route20 fork loop-bound fix and a new pin.
+Run exact-head acceptance on the corrected Route20 pin. Require repository policy, project state, both native builds, both reference baselines, both E1 architectures and full amd64/ARM64 interoperability. The fixed normal Route20 binary must remain alive through routing and endnode scenarios; any fresh reference fault is diagnostic evidence, not a reason to alter candidate protocol semantics.
