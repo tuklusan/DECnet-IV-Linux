@@ -803,8 +803,7 @@ static int dniv_xmit_data(struct net_device *dev, __u16 next_hop,
     return ret == NET_XMIT_SUCCESS || ret == NET_XMIT_CN ? 0 : -EIO;
 }
 
-static void dniv_handle_valid_data(struct sk_buff *skb,
-                                   __u16 payload_len,
+static void dniv_handle_valid_data(int input_ifindex,
                                    const struct dniv_wire_data *data)
 {
     struct dniv_route_result route;
@@ -813,6 +812,7 @@ static void dniv_handle_valid_data(struct sk_buff *skb,
     __u16 destination;
     __u8 level;
     __u8 *payload;
+    int forwarded_len;
 
     if (!data || data->destination == local ||
         dniv_local_node_type == DNIV_NODE_TYPE_ENDNODE)
@@ -841,14 +841,17 @@ static void dniv_handle_valid_data(struct sk_buff *skb,
         return;
     }
 
-    payload = kmemdup(skb->data + DNIV_ETH_LENGTH_LEN, payload_len,
-                      GFP_ATOMIC);
+    payload = kmalloc(DNIV_WIRE_BLOCK_SIZE, GFP_ATOMIC);
     if (!payload) {
         dev_put(output);
         return;
     }
-    if (dniv_wire_data_increment_visit(payload, payload_len, data) == 0)
-        dniv_xmit_data(output, route.next_hop, payload, payload_len);
+    forwarded_len = dniv_wire_build_forwarded_long(
+        payload, DNIV_WIRE_BLOCK_SIZE, data,
+        route.ifindex == input_ifindex ? 1U : 0U);
+    if (forwarded_len > 0)
+        dniv_xmit_data(output, route.next_hop, payload,
+                       (__u16)forwarded_len);
     kfree(payload);
     dev_put(output);
 }
@@ -937,7 +940,7 @@ static int dniv_packet_rcv(struct sk_buff *skb, struct net_device *dev,
         goto out;
     if (!dniv_data_source_allowed(dev->ifindex, eth->h_source))
         goto out;
-    dniv_handle_valid_data(skb, payload_len, &data);
+    dniv_handle_valid_data(dev->ifindex, &data);
 
 out:
     kfree_skb(skb);

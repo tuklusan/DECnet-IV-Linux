@@ -51,6 +51,7 @@
 #define DNIV_WIRE_SHORT_DATA_LEN 6U
 #define DNIV_WIRE_LONG_DATA_LEN 21U
 #define DNIV_WIRE_MAX_VISIT 31U
+#define DNIV_WIRE_MAX_RETURN_VISIT 62U
 
 #define DNIV_WIRE_OK 0
 #define DNIV_WIRE_NOT_HELLO 1
@@ -88,6 +89,7 @@ struct dniv_wire_data {
     __u16 destination;
     __u16 header_len;
     __u16 visit_offset;
+    __u8 flags;
     __u8 visit;
     __u8 is_long;
     const __u8 *payload;
@@ -482,6 +484,7 @@ static inline int dniv_wire_parse_data(const __u8 *buf, __u32 len,
             return DNIV_WIRE_MALFORMED;
     }
 
+    data->flags = buf[0];
     flags = (__u8)(buf[0] & DNIV_WIRE_DATA_CLASS_MASK);
     if (flags == DNIV_WIRE_SHORT_DATA) {
         if (len < DNIV_WIRE_SHORT_DATA_LEN ||
@@ -523,10 +526,21 @@ static inline int dniv_wire_parse_data(const __u8 *buf, __u32 len,
     return DNIV_WIRE_OK;
 }
 
+static inline __u8 dniv_wire_data_visit_limit(
+    const struct dniv_wire_data *data)
+{
+    if (!data)
+        return 0U;
+    return (data->flags & 0x10U) ? DNIV_WIRE_MAX_RETURN_VISIT
+                                 : DNIV_WIRE_MAX_VISIT;
+}
+
 static inline int dniv_wire_data_increment_visit(
     __u8 *buf, __u32 len, const struct dniv_wire_data *data)
 {
-    if (!buf || !data || data->visit >= DNIV_WIRE_MAX_VISIT ||
+    __u8 limit = dniv_wire_data_visit_limit(data);
+
+    if (!buf || !data || data->visit >= limit ||
         data->visit_offset >= len)
         return -1;
 
@@ -538,6 +552,42 @@ static inline int dniv_wire_data_increment_visit(
                    ((__u8)(data->visit + 1U) & 0x3fU));
     }
     return 0;
+}
+
+static inline int dniv_wire_build_forwarded_long(
+    __u8 *buf, __u32 capacity, const struct dniv_wire_data *data,
+    __u8 intra_ethernet)
+{
+    __u32 len;
+
+    if (!buf || !data || !dniv_wire_address_valid(data->destination) ||
+        !dniv_wire_address_valid(data->source) ||
+        data->visit >= dniv_wire_data_visit_limit(data) ||
+        data->payload_len > DNIV_WIRE_BLOCK_SIZE - DNIV_WIRE_LONG_DATA_LEN)
+        return 0;
+
+    len = DNIV_WIRE_LONG_DATA_LEN + data->payload_len;
+    if (capacity < len)
+        return 0;
+
+    dniv_wire_zero(buf, len);
+    buf[0] = (__u8)(DNIV_WIRE_LONG_DATA | (data->flags & 0x18U) |
+                    (intra_ethernet ? 0x20U : 0U));
+    buf[3] = 0xaaU;
+    buf[4] = 0x00U;
+    buf[5] = 0x04U;
+    buf[6] = 0x00U;
+    dniv_wire_put_le16(buf + 7U, data->destination);
+    buf[11] = 0xaaU;
+    buf[12] = 0x00U;
+    buf[13] = 0x04U;
+    buf[14] = 0x00U;
+    dniv_wire_put_le16(buf + 15U, data->source);
+    buf[18] = (__u8)(data->visit + 1U);
+    if (data->payload_len)
+        __builtin_memcpy(buf + DNIV_WIRE_LONG_DATA_LEN,
+                         data->payload, data->payload_len);
+    return (int)len;
 }
 
 static inline int dniv_wire_route_source_valid(__u16 source)

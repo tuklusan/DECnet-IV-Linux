@@ -48,7 +48,7 @@ def contains(path: Path, text: str) -> bool:
     return path.exists() and text in path.read_text(errors="replace")
 
 
-def pcap_short_visits(path: Path, marker: str) -> list[int]:
+def pcap_forwarded_long_visits(path: Path, marker: str) -> list[int]:
     data = path.read_bytes()
     if len(data) < 24:
         return []
@@ -73,8 +73,8 @@ def pcap_short_visits(path: Path, marker: str) -> list[int]:
         if 16 + plen > len(frame):
             continue
         route = frame[16:16 + plen]
-        if route and (route[0] & 0xc7) == 0x02 and len(route) >= 6:
-            visits.append(route[5] & 0x3f)
+        if route and (route[0] & 0xc7) == 0x06 and len(route) >= 21:
+            visits.append(route[18])
     return visits
 
 
@@ -279,8 +279,8 @@ def main() -> int:
 
     ab_marker = f"DNIV-E2-{session}-DN70-"
     ba_marker = f"DNIV-E2-{session}-DN71-"
-    ab_visits = pcap_short_visits(lab.pcaps[1], ab_marker)
-    ba_visits = pcap_short_visits(lab.pcaps[0], ba_marker)
+    ab_visits = pcap_forwarded_long_visits(lab.pcaps[1], ab_marker)
+    ba_visits = pcap_forwarded_long_visits(lab.pcaps[0], ba_marker)
     if len(ab_visits) < 5 or any(v != 1 for v in ab_visits):
         raise SystemExit(f"E2 bad A->B forwarding/visit evidence: {ab_visits}")
     if len(ba_visits) < 5 or any(v != 1 for v in ba_visits):

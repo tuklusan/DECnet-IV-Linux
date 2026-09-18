@@ -23,6 +23,7 @@ static void test_short_data(void)
     struct dniv_wire_data data;
 
     assert(dniv_wire_parse_data(buf, sizeof(buf), &data) == DNIV_WIRE_OK);
+    assert(data.flags == 0x02U);
     assert(data.destination == DNIV_ADDR(1, 3));
     assert(data.source == DNIV_ADDR(2, 1));
     assert(data.visit == 17);
@@ -49,6 +50,41 @@ static void test_long_data(void)
     assert(data.payload_len == 1U && data.payload[0] == 'x');
     assert(dniv_wire_data_increment_visit(buf, sizeof(buf), &data) == 0);
     assert(buf[18] == 18U);
+}
+
+
+static void test_forwarded_long(void)
+{
+    __u8 short_buf[] = {0x0a,0x03,0x04,0x01,0x08,0x00,'a','b','c'};
+    __u8 return_buf[] = {0x12,0x03,0x04,0x01,0x08,0x3d,'r'};
+    __u8 out[64];
+    struct dniv_wire_data data;
+    struct dniv_wire_data forwarded;
+    int len;
+
+    assert(dniv_wire_parse_data(short_buf, sizeof(short_buf), &data) ==
+           DNIV_WIRE_OK);
+    len = dniv_wire_build_forwarded_long(out, sizeof(out), &data, 0U);
+    assert(len == DNIV_WIRE_LONG_DATA_LEN + 3);
+    assert(out[0] == 0x0eU);
+    assert(dniv_wire_parse_data(out, (__u32)len, &forwarded) == DNIV_WIRE_OK);
+    assert(forwarded.is_long == 1U);
+    assert(forwarded.visit == 1U);
+    assert(forwarded.source == DNIV_ADDR(2, 1));
+    assert(forwarded.destination == DNIV_ADDR(1, 3));
+    assert(forwarded.payload_len == 3U);
+    assert(memcmp(forwarded.payload, "abc", 3) == 0);
+
+    len = dniv_wire_build_forwarded_long(out, sizeof(out), &data, 1U);
+    assert(len > 0 && out[0] == 0x2eU);
+
+    assert(dniv_wire_parse_data(return_buf, sizeof(return_buf), &data) ==
+           DNIV_WIRE_OK);
+    assert(dniv_wire_data_visit_limit(&data) == DNIV_WIRE_MAX_RETURN_VISIT);
+    len = dniv_wire_build_forwarded_long(out, sizeof(out), &data, 0U);
+    assert(len > 0 && out[18] == 62U);
+    data.visit = DNIV_WIRE_MAX_RETURN_VISIT;
+    assert(dniv_wire_build_forwarded_long(out, sizeof(out), &data, 0U) == 0);
 }
 
 static void test_padding_and_limit(void)
@@ -91,6 +127,7 @@ int main(void)
 {
     test_short_data();
     test_long_data();
+    test_forwarded_long();
     test_padding_and_limit();
     puts("phase4 data packet tests passed");
     return 0;
