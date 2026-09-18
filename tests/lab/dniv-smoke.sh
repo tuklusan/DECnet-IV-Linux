@@ -414,6 +414,9 @@ e3)
                 exit 1
             fi
             echo "DNIV-E3-PRIMARY session=$session node=$name router=$peer_node"
+            # Both endpoint VMs must be attached before the pre-failure
+            # forwarding sample. ARM64 TCG can skew endpoint boot by >10s.
+            sleep 20
             i=0
             while [ "$i" -lt 10 ]; do
                 i=$((i + 1))
@@ -491,7 +494,9 @@ e3)
                 output=$(/usr/local/sbin/dnctl adjacencies 2>/dev/null || true)
                 ends=$(printf '%s\n' "$output" | grep -F ' endnode UP ' | wc -l)
                 if [ "$ends" -ge 2 ]; then
-                    sleep 5
+                    # Preserve a pre-failure sampling window after both
+                    # endpoint adjacencies exist.
+                    sleep 30
                     echo "DNIV-E3-PRIMARY-DOWN session=$session node=$name"
                     poweroff_pass "DNIV-E3-PASS session=$session node=$name"
                 fi
