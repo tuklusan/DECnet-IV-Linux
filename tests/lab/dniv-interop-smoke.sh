@@ -41,9 +41,28 @@ find_iface() {
     return 1
 }
 
-stat_value() {
-    label=$1
-    /usr/local/sbin/dnctl stats | sed -n "s/^$label = //p"
+stats_snapshot() {
+    tries=${1:-8}
+    dnctl=${DNIV_DNCTL:-/usr/local/sbin/dnctl}
+    i=0
+    while [ "$i" -lt "$tries" ]; do
+        stats=$("$dnctl" stats 2>/dev/null || true)
+        routing=$(printf '%s\n' "$stats" | sed -n 's/^Routing frames received[[:space:]]*=[[:space:]]*//p')
+        hello=$(printf '%s\n' "$stats" | sed -n 's/^Hello frames received[[:space:]]*=[[:space:]]*//p')
+        valid=1
+        for value in "$routing" "$hello"; do
+            case "$value" in
+                ''|*[!0-9]*) valid=0 ;;
+            esac
+        done
+        if [ "$valid" -eq 1 ] && [ "$routing" -ge "$hello" ]; then
+            printf '%s %s\n' "$routing" "$hello"
+            return 0
+        fi
+        i=$((i + 1))
+        sleep 0.02
+    done
+    return 1
 }
 
 wait_peer_up() {
@@ -80,10 +99,9 @@ wait_post_change_hello() {
     i=0
     while [ "$i" -lt "$tries" ]; do
         output=$(/usr/local/sbin/dnctl adjacencies 2>/dev/null || true)
-        hello_now=$(stat_value 'Hello frames received')
-        case "$hello_now" in
-            ''|*[!0-9]*) return 1 ;;
-        esac
+        snapshot=$(stats_snapshot 8) || return 1
+        set -- $snapshot
+        hello_now=$2
         if [ "$hello_now" -gt "$hello_baseline" ] && \
            printf '%s\n' "$output" | grep -F "$peer_address via " | \
                grep -Fq " $peer_kind UP "; then
@@ -96,15 +114,9 @@ wait_post_change_hello() {
 }
 
 nonhello_value() {
-    routing=$(stat_value 'Routing frames received')
-    hello=$(stat_value 'Hello frames received')
-    for value in "$routing" "$hello"; do
-        case "$value" in
-            ''|*[!0-9]*) return 1 ;;
-        esac
-    done
-    [ "$routing" -ge "$hello" ] || return 1
-    printf '%s\n' "$((routing - hello))"
+    snapshot=$(stats_snapshot 8) || return 1
+    set -- $snapshot
+    printf '%s\n' "$(($1 - $2))"
 }
 
 wait_unicast_delta() {
@@ -133,6 +145,11 @@ poweroff_pass() {
     poweroff -f
     exit 0
 }
+
+if [ "${1:-}" = --stats-selftest ]; then
+    stats_snapshot "${2:-8}"
+    exit $?
+fi
 
 area=$(get_arg dniv.area || printf '31')
 node=$(get_arg dniv.node || printf '70')
@@ -165,10 +182,12 @@ if ! wait_peer_up "$peer_node" "$peer_kind" DNIV-INTEROP-INITIAL 600; then
 fi
 echo "DNIV-INTEROP-UP session=$session scenario=$scenario node=$name peer=$peer_node"
 
-hello_before=$(stat_value 'Hello frames received')
-case "$hello_before" in
-    ''|*[!0-9]*) echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario reason=bad-hello-stats"; exit 1 ;;
-esac
+snapshot=$(stats_snapshot 8) || {
+    echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario reason=bad-hello-stats"
+    exit 1
+}
+set -- $snapshot
+hello_before=$2
 address=$((area * 1024 + node))
 changed_mac=$(printf '52:54:01:00:%02x:%02x' \
     "$((address & 255))" "$(((address >> 8) & 255))")

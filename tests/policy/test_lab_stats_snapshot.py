@@ -25,6 +25,7 @@ from pathlib import Path
 override = os.environ.get("DNIV_TEST_ROOT")
 ROOT = Path(override) if override else Path(__file__).resolve().parents[2]
 SMOKE = ROOT / "tests/lab/dniv-smoke.sh"
+INTEROP = ROOT / "tests/lab/dniv-interop-smoke.sh"
 
 
 def fake_dnctl(directory: Path, coherent_after: int | None) -> tuple[Path, Path]:
@@ -61,11 +62,11 @@ def fake_dnctl(directory: Path, coherent_after: int | None) -> tuple[Path, Path]
     return script, counter
 
 
-def run_selftest(fake: Path, tries: int) -> subprocess.CompletedProcess[str]:
+def run_selftest(script: Path, fake: Path, tries: int) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env["DNIV_DNCTL"] = str(fake)
     return subprocess.run(
-        ["sh", str(SMOKE), "--stats-selftest", str(tries)],
+        ["sh", str(script), "--stats-selftest", str(tries)],
         text=True,
         capture_output=True,
         env=env,
@@ -77,7 +78,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         directory = Path(tmp)
         fake, counter = fake_dnctl(directory, coherent_after=2)
-        result = run_selftest(fake, 4)
+        result = run_selftest(SMOKE, fake, 4)
         if result.returncode != 0 or result.stdout.strip() != "6 5 2":
             raise SystemExit(
                 "lab-stats regression: transient inconsistent sample was not retried: "
@@ -89,11 +90,32 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         directory = Path(tmp)
         fake, counter = fake_dnctl(directory, coherent_after=None)
-        result = run_selftest(fake, 3)
+        result = run_selftest(SMOKE, fake, 3)
         if result.returncode == 0:
             raise SystemExit("lab-stats regression: persistent inconsistent counters must fail")
         if counter.read_text(encoding="utf-8").strip() != "3":
             raise SystemExit("lab-stats regression: retry bound was not enforced")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        directory = Path(tmp)
+        fake, counter = fake_dnctl(directory, coherent_after=2)
+        result = run_selftest(INTEROP, fake, 4)
+        if result.returncode != 0 or result.stdout.strip() != "6 5":
+            raise SystemExit(
+                "lab-stats regression: interop transient inconsistent sample was not retried: "
+                f"rc={result.returncode} stdout={result.stdout!r} stderr={result.stderr!r}"
+            )
+        if counter.read_text(encoding="utf-8").strip() != "2":
+            raise SystemExit("lab-stats regression: interop expected exactly two counter snapshots")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        directory = Path(tmp)
+        fake, counter = fake_dnctl(directory, coherent_after=None)
+        result = run_selftest(INTEROP, fake, 3)
+        if result.returncode == 0:
+            raise SystemExit("lab-stats regression: interop persistent inconsistent counters must fail")
+        if counter.read_text(encoding="utf-8").strip() != "3":
+            raise SystemExit("lab-stats regression: interop retry bound was not enforced")
 
     print("lab-stats regression passed")
     return 0
