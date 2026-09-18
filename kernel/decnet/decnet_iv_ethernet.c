@@ -499,7 +499,8 @@ static void dniv_route_workfn(struct work_struct *work)
     if (dniv_local_node_type == DNIV_NODE_TYPE_L2_ROUTER) {
         __u16 local_area = DNIV_ADDR_AREA(dniv_local_address);
 
-        if (dniv_route_snapshot(2U, local_area, l2, ARRAY_SIZE(l2)) != 0)
+        if (dniv_route_snapshot(2U, local_area, dniv_route_l2_snapshot,
+                                ARRAY_SIZE(dniv_route_l2_snapshot)) != 0)
             goto out_schedule;
         if (dniv_route_area_attached(local_area))
             dniv_route_l1_snapshot[0] = 0U;
