@@ -17,6 +17,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 
@@ -42,6 +43,12 @@ def main() -> int:
         raise SystemExit("interop-ready regression: ARM64 bound must exceed default")
     if int(arm[0]) > 420:
         raise SystemExit("interop-ready regression: ARM64 reference-ready bound is excessive")
+
+    reference_image_path = ROOT / "tests/lab/prepare-reference-image.sh"
+    if not os.access(reference_image_path, os.X_OK):
+        raise SystemExit(
+            "interop-ready regression: reference image builder must remain executable"
+        )
 
     required_service_fragments = [
         "After=multi-user.target systemd-udev-settle.service",
