@@ -44,7 +44,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     concurrency:
-      group: dniv-runner-x64-${{ github.sha }}
+      group: dniv-reference-${{ github.run_id }}-${{ github.job }}
       queue: max
       cancel-in-progress: false
     env:
@@ -132,7 +132,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     concurrency:
-      group: dniv-runner-x64-${{ github.sha }}
+      group: dniv-reference-${{ github.run_id }}-${{ github.job }}
       queue: max
       cancel-in-progress: false
     env:

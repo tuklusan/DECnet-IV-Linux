@@ -39,7 +39,7 @@ jobs:
   live-interop:
     strategy:
       fail-fast: false
-      max-parallel: 2
+      max-parallel: 8
       matrix:
         include:
           - runner: ubuntu-24.04
@@ -100,7 +100,7 @@ jobs:
             scenarios: "endnode router-endnode"
     runs-on: ${{ matrix.runner }}
     concurrency:
-      group: dniv-runner-${{ matrix.slot }}-${{ github.sha }}
+      group: dniv-interop-${{ github.run_id }}-${{ matrix.slot }}-${{ matrix.suite }}
       queue: max
       cancel-in-progress: false
     timeout-minutes: 75

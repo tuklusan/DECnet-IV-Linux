@@ -38,7 +38,7 @@ on:
         type: string
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.sha }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.sha }}-${{ inputs.lab_mode }}
   queue: max
   cancel-in-progress: false
 
@@ -64,7 +64,7 @@ jobs:
             lab_timeout: 360
     runs-on: ${{ matrix.runner }}
     concurrency:
-      group: dniv-runner-${{ matrix.slot }}-${{ github.sha }}
+      group: dniv-vm-${{ github.run_id }}-${{ matrix.slot }}-${{ inputs.lab_mode }}
       queue: max
       cancel-in-progress: false
     timeout-minutes: 40

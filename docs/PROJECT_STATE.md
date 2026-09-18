@@ -32,7 +32,7 @@ Digital DNA Phase IV functional specifications are normative. PyDECnet and Route
 - The remote branch invariant is exactly `refs/heads/main`.
 - Every substantive commit updates this file and `scratch/RESUME.md` together.
 - Acceptance applies only to one exact unchanged `main` commit.
-- Hosted jobs are bounded; protocol jobs use architecture-specific runner serialization scoped to the exact candidate SHA, so stale superseded candidates cannot block current acceptance.
+- Hosted jobs are bounded and isolated per GitHub-hosted runner. Acceptance no longer serializes independent architectures/scenarios globally: E1-E4 modes may execute concurrently, all eight interop matrix jobs may execute concurrently, and independent reference jobs may execute concurrently. Exact-SHA/parent binding remains unchanged.
 - Persistent VM input is limited to verified source-independent architecture foundations.
 - Exact candidate/reference images, VM overlays and QMP sockets are disposable.
 - Compact evidence retention is at most 30 days.
