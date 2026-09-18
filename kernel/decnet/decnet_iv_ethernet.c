@@ -1100,8 +1100,7 @@ static int dniv_packet_rcv(struct sk_buff *skb, struct net_device *dev,
         goto out;
     if (first != DNIV_WIRE_ROUTER_HELLO &&
         first != DNIV_WIRE_ENDNODE_HELLO &&
-        first != DNIV_WIRE_L1_ROUTING &&
-        first != DNIV_WIRE_L2_ROUTING &&
+        !dniv_wire_is_routing_flag(first) &&
         !dniv_wire_is_data_flag(first) && !(first & 0x80U))
         goto out;
     if (!pskb_may_pull(skb, (unsigned int)payload_len + DNIV_ETH_LENGTH_LEN)) {

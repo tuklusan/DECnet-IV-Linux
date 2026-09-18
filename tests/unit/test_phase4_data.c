@@ -151,7 +151,7 @@ static void test_padding_and_limit(void)
     assert(data.visit == 1U);
     assert(dniv_wire_parse_data(short_future_flag,
                                 sizeof(short_future_flag), &data) ==
-           DNIV_WIRE_MALFORMED);
+           DNIV_WIRE_NOT_ROUTING);
     assert(dniv_wire_parse_data(short_reserved_visit,
                                 sizeof(short_reserved_visit), &data) ==
            DNIV_WIRE_OK);

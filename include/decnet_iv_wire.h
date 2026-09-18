@@ -461,6 +461,14 @@ static inline int dniv_wire_endnode_test_valid(const struct dniv_wire_hello *hel
 
 
 
+static inline int dniv_wire_is_routing_flag(__u8 flags)
+{
+    __u8 route_class = (__u8)(flags & 0x0fU);
+
+    return route_class == DNIV_WIRE_L1_ROUTING ||
+           route_class == DNIV_WIRE_L2_ROUTING;
+}
+
 static inline int dniv_wire_is_data_flag(__u8 flags)
 {
     __u8 data_class = (__u8)(flags & DNIV_WIRE_DATA_CLASS_MASK);
