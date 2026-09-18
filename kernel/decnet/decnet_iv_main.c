@@ -26,6 +26,7 @@
 #include <decnet_iv_route_metric.h>
 #include <decnet_iv_wire.h>
 #include "decnet_iv_ethernet.h"
+#include "decnet_iv_nsp.h"
 #include "decnet_iv_route.h"
 
 #define DNIV_DEVICE_NAME "decnet_iv"
@@ -133,6 +134,7 @@ static long dniv_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
         err = dniv_eth_set_address(identity.address);
         if (!err) {
             dniv_route_reset();
+            dniv_nsp_reset();
             dniv_identity = identity;
         }
         mutex_unlock(&dniv_identity_lock);
@@ -213,10 +215,18 @@ static int __init dniv_init(void)
         return err;
     }
 
+    err = dniv_nsp_init();
+    if (err) {
+        dniv_route_exit();
+        misc_deregister(&dniv_miscdev);
+        return err;
+    }
+
     err = dniv_eth_init(dniv_identity.address, (__u8)default_node_type,
                         (__u8)router_priority, (__u16)hello_interval,
                         (__u16)ethernet_cost);
     if (err) {
+        dniv_nsp_exit();
         dniv_route_exit();
         misc_deregister(&dniv_miscdev);
         return err;
@@ -232,6 +242,7 @@ static int __init dniv_init(void)
 static void __exit dniv_exit(void)
 {
     dniv_eth_exit();
+    dniv_nsp_exit();
     dniv_route_exit();
     misc_deregister(&dniv_miscdev);
     pr_info("decnet_iv: unloaded\n");

@@ -48,4 +48,4 @@ Phase 4 delivered routing codecs/checksums, adjacency-backed L1/L2 route state, 
 
 ## Next action
 
-Phase 5 is active. NSP wire/state primitives are now present with canonical project headers: ACK Data/Other/Connect, Data, Interrupt, Link Service, CI/RCI, CC, DI/DC parsing/building, optional ACK qualifiers, 12-bit sequence wrap/order helpers and baseline NSP timer constants, all tied to exact PyDECnet packet vectors. Next implement kernel connection allocation/state transitions and retransmit queues, then flow control and native socket/UAPI integration. Do not reopen Phase 4 without concrete regression evidence.
+Phase 5 is active. NSP wire/state primitives now have a kernel connection foundation: validated CI/CD/CR/CC/RUN/DI transitions, bounded connection allocation with generation-spaced local link IDs, bounded retransmit queues, cumulative modulo-4096 ACK retirement and due-retransmit lookup. Next wire local Routing Layer delivery into NSP dispatch, add protocol timers and data/interrupt flow control, then native socket/UAPI integration. Do not reopen Phase 4 without concrete regression evidence.

@@ -29,6 +29,16 @@ enum dniv_nsp_rx_order {
     DNIV_NSP_RX_DUPLICATE = 2,
 };
 
+enum dniv_nsp_conn_state {
+    DNIV_NSP_ST_CLOSED = 0,
+    DNIV_NSP_ST_CI,
+    DNIV_NSP_ST_CD,
+    DNIV_NSP_ST_CR,
+    DNIV_NSP_ST_CC,
+    DNIV_NSP_ST_RUN,
+    DNIV_NSP_ST_DI,
+};
+
 static inline __u16 dniv_nsp_seq_norm(__u32 v)
 {
     return (__u16)(v & 0x0fffU);
@@ -49,6 +59,42 @@ dniv_nsp_seq_order(__u16 expected, __u16 received)
     if (delta < DNIV_NSP_SEQ_HALF)
         return DNIV_NSP_RX_FUTURE;
     return DNIV_NSP_RX_DUPLICATE;
+}
+
+static inline int dniv_nsp_seq_acked(__u16 sequence, __u16 ack)
+{
+    return dniv_nsp_seq_norm((__u32)ack - sequence) < DNIV_NSP_SEQ_HALF;
+}
+
+static inline int
+dniv_nsp_state_transition_valid(enum dniv_nsp_conn_state from,
+                                enum dniv_nsp_conn_state to)
+{
+    if (from == to)
+        return 1;
+
+    switch (from) {
+    case DNIV_NSP_ST_CLOSED:
+        return to == DNIV_NSP_ST_CI || to == DNIV_NSP_ST_CR;
+    case DNIV_NSP_ST_CI:
+        return to == DNIV_NSP_ST_CD || to == DNIV_NSP_ST_RUN ||
+               to == DNIV_NSP_ST_DI || to == DNIV_NSP_ST_CLOSED;
+    case DNIV_NSP_ST_CD:
+        return to == DNIV_NSP_ST_RUN || to == DNIV_NSP_ST_DI ||
+               to == DNIV_NSP_ST_CLOSED;
+    case DNIV_NSP_ST_CR:
+        return to == DNIV_NSP_ST_CC || to == DNIV_NSP_ST_DI ||
+               to == DNIV_NSP_ST_CLOSED;
+    case DNIV_NSP_ST_CC:
+        return to == DNIV_NSP_ST_RUN || to == DNIV_NSP_ST_DI ||
+               to == DNIV_NSP_ST_CLOSED;
+    case DNIV_NSP_ST_RUN:
+        return to == DNIV_NSP_ST_DI || to == DNIV_NSP_ST_CLOSED;
+    case DNIV_NSP_ST_DI:
+        return to == DNIV_NSP_ST_CLOSED;
+    default:
+        return 0;
+    }
 }
 
 #endif

@@ -104,4 +104,4 @@ Initial NSP foundation is implemented and repository-policy headers are canonica
 
 ## Next action
 
-NSP wire/state primitives and pinned PyDECnet exact vectors are now covered by unit tests. Next implement kernel NSP connection allocation/state transitions and retransmit queues, then flow control and the socket/UAPI boundary. Preserve the exact-green Phase 4 candidate and extend independent interoperability only as NSP-capable peer coverage becomes available.
+NSP wire/state primitives, validated connection-state transitions, a bounded kernel connection table, generation-spaced local link allocation and bounded retransmit queues are implemented. Next wire local Routing Layer delivery into NSP dispatch, add response/connect/inactivity timers and data/interrupt flow control, then expose the native socket/UAPI boundary. Preserve the exact-green Phase 4 candidate and extend independent interoperability only as NSP-capable peer coverage becomes available.
