@@ -78,6 +78,42 @@ def pcap_forwarded_long_visits(path: Path, marker: str) -> list[int]:
     return visits
 
 
+
+def pcap_rts_returns(path: Path, marker: str, router_mac: str,
+                     destination: int, source: int) -> list[int]:
+    data = path.read_bytes()
+    if len(data) < 24:
+        return []
+    if data[:4] == b"\xd4\xc3\xb2\xa1":
+        endian = "<"
+    elif data[:4] == b"\xa1\xb2\xc3\xd4":
+        endian = ">"
+    else:
+        raise RuntimeError(f"unsupported pcap magic in {path}")
+    expected_link_source = bytes.fromhex(router_mac.replace(":", ""))
+    needle = marker.encode()
+    visits: list[int] = []
+    off = 24
+    while off + 16 <= len(data):
+        _, _, incl, _ = struct.unpack_from(endian + "IIII", data, off)
+        off += 16
+        frame = data[off:off + incl]
+        off += incl
+        if (len(frame) < 37 or frame[12:14] != b"\x60\x03" or
+                frame[6:12] != expected_link_source or needle not in frame):
+            continue
+        plen = int.from_bytes(frame[14:16], "little")
+        if 16 + plen > len(frame):
+            continue
+        route = frame[16:16 + plen]
+        if (len(route) >= 21 and (route[0] & 0xc7) == 0x06 and
+                (route[0] & 0x18) == 0x10 and
+                int.from_bytes(route[7:9], "little") == destination and
+                int.from_bytes(route[15:17], "little") == source):
+            visits.append(route[18])
+    return visits
+
+
 def pcap_text_count(path: Path, marker: str) -> int:
     r = sudo("tcpdump", "-A", "-nn", "-s0", "-r", str(path),
              "ether proto 0x6003", check=False, capture=True)
@@ -289,6 +325,16 @@ def main() -> int:
         raise SystemExit("E2 visit-count ceiling failed A->B")
     if pcap_text_count(lab.pcaps[0], f"DNIV-E2-MAXVISIT-{session}-DN71") != 0:
         raise SystemExit("E2 visit-count ceiling failed B->A")
+    a_rts = pcap_rts_returns(
+        lab.pcaps[0], f"DNIV-E2-RTS-{session}-DN70", router_mac,
+        (area << 10) | 70, (area << 10) | 99)
+    b_rts = pcap_rts_returns(
+        lab.pcaps[1], f"DNIV-E2-RTS-{session}-DN71", router_mac,
+        (area << 10) | 71, (area << 10) | 99)
+    if not a_rts or any(v != 1 for v in a_rts):
+        raise SystemExit(f"E2 bad A return-to-sender evidence: {a_rts}")
+    if not b_rts or any(v != 1 for v in b_rts):
+        raise SystemExit(f"E2 bad B return-to-sender evidence: {b_rts}")
     print(f"python-lab: E2 pass on {lab.arch}, forced router 31.70<->31.72<->31.71")
     return 0
 

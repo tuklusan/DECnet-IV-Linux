@@ -72,14 +72,18 @@ int main(int argc, char **argv)
     unsigned short dst_addr = 0;
     unsigned int visit = 0;
     int short_mode = 0;
+    int rqr_mode = 0;
     size_t payload_len;
     size_t frame_len;
     int fd;
     int ifindex;
     ssize_t sent;
 
-    if (argc == 8 && strcmp(argv[1], "--short") == 0) {
+    if (argc == 8 &&
+        (strcmp(argv[1], "--short") == 0 ||
+         strcmp(argv[1], "--short-rqr") == 0)) {
         short_mode = 1;
+        rqr_mode = strcmp(argv[1], "--short-rqr") == 0;
         iface = argv[2];
         if (parse_mac(argv[3], dst) < 0 ||
             parse_decnet(argv[4], &src_addr) < 0 ||
@@ -99,6 +103,7 @@ int main(int argc, char **argv)
     } else {
         fprintf(stderr, "usage: %s IFACE DEST-MAC PAYLOAD\n", argv[0]);
         fprintf(stderr, "       %s --short IFACE LINK-DEST SRC DST VISIT PAYLOAD\n", argv[0]);
+        fprintf(stderr, "       %s --short-rqr IFACE LINK-DEST SRC DST VISIT PAYLOAD\n", argv[0]);
         return 2;
     }
     payload_len = strlen(payload);
@@ -147,7 +152,7 @@ int main(int argc, char **argv)
         }
         frame[14] = (unsigned char)(route_len & 0xffU);
         frame[15] = (unsigned char)(route_len >> 8);
-        route[0] = 0x02;
+        route[0] = (unsigned char)(rqr_mode ? 0x0a : 0x02);
         route[1] = (unsigned char)(dst_addr & 0xffU);
         route[2] = (unsigned char)(dst_addr >> 8);
         route[3] = (unsigned char)(src_addr & 0xffU);

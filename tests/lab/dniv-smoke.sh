@@ -365,6 +365,8 @@ e2)
             done
             /usr/local/sbin/dnraw --short "$iface" "$peer" "$area.$node" "$dest_node" 31 \
                 "DNIV-E2-MAXVISIT-$session-$name"
+            /usr/local/sbin/dnraw --short-rqr "$iface" "$peer" "$area.$node" "$area.99" 0 \
+                "DNIV-E2-RTS-$session-$name"
             sleep 5
             poweroff_pass "DNIV-E2-PASS session=$session node=$name"
             ;;

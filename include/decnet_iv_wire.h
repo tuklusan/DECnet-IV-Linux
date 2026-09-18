@@ -50,6 +50,9 @@
 #define DNIV_WIRE_DATA_CLASS_MASK 0xc7U
 #define DNIV_WIRE_SHORT_DATA_LEN 6U
 #define DNIV_WIRE_LONG_DATA_LEN 21U
+#define DNIV_WIRE_DATA_RQR 0x08U
+#define DNIV_WIRE_DATA_RTS 0x10U
+#define DNIV_WIRE_DATA_IE 0x20U
 #define DNIV_WIRE_MAX_VISIT 31U
 #define DNIV_WIRE_MAX_RETURN_VISIT 62U
 
@@ -531,8 +534,8 @@ static inline __u8 dniv_wire_data_visit_limit(
 {
     if (!data)
         return 0U;
-    return (data->flags & 0x10U) ? DNIV_WIRE_MAX_RETURN_VISIT
-                                 : DNIV_WIRE_MAX_VISIT;
+    return (data->flags & DNIV_WIRE_DATA_RTS) ?
+           DNIV_WIRE_MAX_RETURN_VISIT : DNIV_WIRE_MAX_VISIT;
 }
 
 static inline int dniv_wire_data_increment_visit(
@@ -554,6 +557,23 @@ static inline int dniv_wire_data_increment_visit(
     return 0;
 }
 
+static inline int dniv_wire_data_make_return(struct dniv_wire_data *data)
+{
+    __u16 swap;
+
+    if (!data || !(data->flags & DNIV_WIRE_DATA_RQR) ||
+        (data->flags & DNIV_WIRE_DATA_RTS))
+        return -1;
+
+    swap = data->destination;
+    data->destination = data->source;
+    data->source = swap;
+    data->flags = (__u8)((data->flags &
+                          ~(__u8)(DNIV_WIRE_DATA_RQR | DNIV_WIRE_DATA_IE)) |
+                         DNIV_WIRE_DATA_RTS);
+    return 0;
+}
+
 static inline int dniv_wire_build_forwarded_long(
     __u8 *buf, __u32 capacity, const struct dniv_wire_data *data,
     __u8 intra_ethernet)
@@ -571,8 +591,10 @@ static inline int dniv_wire_build_forwarded_long(
         return 0;
 
     dniv_wire_zero(buf, len);
-    buf[0] = (__u8)(DNIV_WIRE_LONG_DATA | (data->flags & 0x18U) |
-                    (intra_ethernet ? 0x20U : 0U));
+    buf[0] = (__u8)(DNIV_WIRE_LONG_DATA |
+                    (data->flags & (DNIV_WIRE_DATA_RQR |
+                                    DNIV_WIRE_DATA_RTS)) |
+                    (intra_ethernet ? DNIV_WIRE_DATA_IE : 0U));
     buf[3] = 0xaaU;
     buf[4] = 0x00U;
     buf[5] = 0x04U;

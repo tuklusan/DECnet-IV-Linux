@@ -87,6 +87,35 @@ static void test_forwarded_long(void)
     assert(dniv_wire_build_forwarded_long(out, sizeof(out), &data, 0U) == 0);
 }
 
+
+static void test_return_to_sender(void)
+{
+    __u8 request_buf[] = {0x0a,0x63,0x7c,0x46,0x7c,0x1f,'r'};
+    __u8 out[64];
+    struct dniv_wire_data data;
+    struct dniv_wire_data returned;
+    int len;
+
+    assert(dniv_wire_parse_data(request_buf, sizeof(request_buf), &data) ==
+           DNIV_WIRE_OK);
+    assert(data.flags & DNIV_WIRE_DATA_RQR);
+    assert(!(data.flags & DNIV_WIRE_DATA_RTS));
+    assert(dniv_wire_data_make_return(&data) == 0);
+    assert(data.destination == DNIV_ADDR(31, 70));
+    assert(data.source == DNIV_ADDR(31, 99));
+    assert(!(data.flags & DNIV_WIRE_DATA_RQR));
+    assert(data.flags & DNIV_WIRE_DATA_RTS);
+    assert(dniv_wire_data_visit_limit(&data) == DNIV_WIRE_MAX_RETURN_VISIT);
+    len = dniv_wire_build_forwarded_long(out, sizeof(out), &data, 0U);
+    assert(len > 0);
+    assert(dniv_wire_parse_data(out, (__u32)len, &returned) == DNIV_WIRE_OK);
+    assert(returned.destination == DNIV_ADDR(31, 70));
+    assert(returned.source == DNIV_ADDR(31, 99));
+    assert(returned.visit == 32U);
+    assert(returned.flags == (DNIV_WIRE_LONG_DATA | DNIV_WIRE_DATA_RTS));
+    assert(dniv_wire_data_make_return(&returned) < 0);
+}
+
 static void test_padding_and_limit(void)
 {
     __u8 padded[] = {0x82,0x00,0x02,0x03,0x04,0x01,0x08,0x1f};
@@ -128,6 +157,7 @@ int main(void)
     test_short_data();
     test_long_data();
     test_forwarded_long();
+    test_return_to_sender();
     test_padding_and_limit();
     puts("phase4 data packet tests passed");
     return 0;
