@@ -650,6 +650,7 @@ static void dniv_handle_valid_hello(int ifindex, const __u8 source[ETH_ALEN],
     adj->hello_timer = hello->timer ? hello->timer : dniv_hello_interval;
     adj->expires = dniv_listen_expires(hello->timer);
     ether_addr_copy(adj->mac, source);
+    dniv_route_refresh_adjacency(adj->address, adj->ifindex, adj->expires);
     dniv_refresh_direct_routes_locked(adj);
 
 out_unlock:

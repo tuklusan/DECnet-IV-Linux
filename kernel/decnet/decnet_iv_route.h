@@ -34,6 +34,8 @@ int dniv_route_update(__u8 level, __u16 destination, __u16 next_hop,
                       unsigned long expires);
 void dniv_route_withdraw(__u8 level, __u16 destination, __u16 next_hop,
                          __s32 ifindex);
+void dniv_route_refresh_adjacency(__u16 next_hop, __s32 ifindex,
+                                  unsigned long expires);
 void dniv_route_withdraw_adjacency(__u16 next_hop, __s32 ifindex);
 int dniv_route_lookup(__u8 level, __u16 destination,
                       struct dniv_route_result *result);

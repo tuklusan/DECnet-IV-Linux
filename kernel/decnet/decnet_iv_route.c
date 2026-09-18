@@ -130,6 +130,17 @@ int dniv_route_update(__u8 level, __u16 destination, __u16 next_hop,
         !dniv_route_metric_valid(cost, hops))
         return -EINVAL;
 
+    spin_lock_irqsave(&dniv_route_lock, flags);
+    candidate = dniv_route_find_locked(head, next_hop, ifindex);
+    if (candidate) {
+        candidate->cost = cost;
+        candidate->hops = hops;
+        candidate->expires = expires;
+        spin_unlock_irqrestore(&dniv_route_lock, flags);
+        return 0;
+    }
+    spin_unlock_irqrestore(&dniv_route_lock, flags);
+
     allocated = kmalloc(sizeof(*allocated), GFP_ATOMIC);
     if (!allocated)
         return -ENOMEM;
@@ -168,6 +179,38 @@ void dniv_route_withdraw(__u8 level, __u16 destination, __u16 next_hop,
     if (candidate) {
         hlist_del(&candidate->node);
         kfree(candidate);
+    }
+    spin_unlock_irqrestore(&dniv_route_lock, flags);
+}
+
+
+void dniv_route_refresh_adjacency(__u16 next_hop, __s32 ifindex,
+                                  unsigned long expires)
+{
+    unsigned long flags;
+    unsigned int i;
+
+    if (next_hop == 0U || ifindex <= 0)
+        return;
+
+    spin_lock_irqsave(&dniv_route_lock, flags);
+    for (i = 0; i < DNIV_ROUTE_L1_BUCKETS; i++) {
+        struct dniv_route_candidate *candidate;
+
+        hlist_for_each_entry(candidate, &dniv_l1_routes[i], node) {
+            if (candidate->next_hop == next_hop &&
+                candidate->ifindex == ifindex)
+                candidate->expires = expires;
+        }
+    }
+    for (i = 1; i < DNIV_ROUTE_L2_BUCKETS; i++) {
+        struct dniv_route_candidate *candidate;
+
+        hlist_for_each_entry(candidate, &dniv_l2_routes[i], node) {
+            if (candidate->next_hop == next_hop &&
+                candidate->ifindex == ifindex)
+                candidate->expires = expires;
+        }
     }
     spin_unlock_irqrestore(&dniv_route_lock, flags);
 }
