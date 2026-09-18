@@ -557,6 +557,14 @@ static inline int dniv_wire_data_increment_visit(
     return 0;
 }
 
+static inline __u8 dniv_wire_data_forward_ie(
+    const struct dniv_wire_data *data, __u8 same_circuit)
+{
+    if (!data || !same_circuit)
+        return 0U;
+    return (data->flags & DNIV_WIRE_DATA_IE) ? 1U : 0U;
+}
+
 static inline int dniv_wire_data_make_return(struct dniv_wire_data *data)
 {
     __u16 swap;

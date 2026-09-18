@@ -1051,7 +1051,9 @@ retry:
     }
     forwarded_len = dniv_wire_build_forwarded_long(
         payload, DNIV_WIRE_BLOCK_SIZE, &packet,
-        !generated_return && route.ifindex == input_ifindex ? 1U : 0U);
+        generated_return ? 0U :
+        dniv_wire_data_forward_ie(&packet,
+                                  route.ifindex == input_ifindex ? 1U : 0U));
     if (forwarded_len > 0)
         dniv_xmit_data(output, route.next_hop, payload,
                        (__u16)forwarded_len);

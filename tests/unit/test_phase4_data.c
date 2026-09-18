@@ -29,6 +29,7 @@ static void test_short_data(void)
     assert(data.visit == 17);
     assert(data.payload_len == 3);
     assert(memcmp(data.payload, "abc", 3) == 0);
+    assert(dniv_wire_data_forward_ie(&data, 1U) == 0U);
     assert(dniv_wire_data_increment_visit(buf, sizeof(buf), &data) == 0);
     assert((buf[5] & 0x3fU) == 18U);
 }
@@ -48,6 +49,8 @@ static void test_long_data(void)
     assert(data.visit == 17);
     assert(data.is_long == 1U);
     assert(data.payload_len == 1U && data.payload[0] == 'x');
+    assert(dniv_wire_data_forward_ie(&data, 1U) == 1U);
+    assert(dniv_wire_data_forward_ie(&data, 0U) == 0U);
     assert(dniv_wire_data_increment_visit(buf, sizeof(buf), &data) == 0);
     assert(buf[18] == 18U);
 }
@@ -105,6 +108,7 @@ static void test_return_to_sender(void)
     assert(data.source == DNIV_ADDR(31, 99));
     assert(!(data.flags & DNIV_WIRE_DATA_RQR));
     assert(data.flags & DNIV_WIRE_DATA_RTS);
+    assert(dniv_wire_data_forward_ie(&data, 1U) == 0U);
     assert(dniv_wire_data_visit_limit(&data) == DNIV_WIRE_MAX_RETURN_VISIT);
     len = dniv_wire_build_forwarded_long(out, sizeof(out), &data, 0U);
     assert(len > 0);
