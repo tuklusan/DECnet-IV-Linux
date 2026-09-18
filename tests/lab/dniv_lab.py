@@ -90,6 +90,7 @@ def pcap_count(path: Path, expression: str) -> int:
 
 
 def pcap_router_init_seen(path: Path, mac_a: str, mac_b: str) -> bool:
+    """Require an unlisted router hello followed later by a reciprocal listing."""
     data = path.read_bytes()
     if len(data) < 24:
         return False
@@ -106,10 +107,13 @@ def pcap_router_init_seen(path: Path, mac_a: str, mac_b: str) -> bool:
 
     endpoints = {mac_bytes(mac_a): mac_bytes(mac_b),
                  mac_bytes(mac_b): mac_bytes(mac_a)}
+    saw_unlisted: set[bytes] = set()
     off = 24
     while off + 16 <= len(data):
         _, _, incl, _ = struct.unpack_from(endian + "IIII", data, off)
         off += 16
+        if incl > len(data) - off:
+            return False
         frame = data[off:off + incl]
         off += incl
         if len(frame) < 43 or frame[12:14] != b"\x60\x03":
@@ -125,17 +129,21 @@ def pcap_router_init_seen(path: Path, mac_a: str, mac_b: str) -> bool:
             route = route[pad:]
         if len(route) < 27 or route[0] != 0x0b:
             continue
-        peer = endpoints.get(frame[6:12])
+
+        source = frame[6:12]
+        peer = endpoints.get(source)
         if peer is None:
             continue
         rslen = route[26]
         if rslen % 7 or 27 + rslen > len(route):
             continue
-        if all(route[pos:pos + 6] != peer
-               for pos in range(27, 27 + rslen, 7)):
+        listed = any(route[pos:pos + 6] == peer
+                     for pos in range(27, 27 + rslen, 7))
+        if listed and source in saw_unlisted:
             return True
+        if not listed:
+            saw_unlisted.add(source)
     return False
-
 
 def contains(path: Path, needle: str) -> bool:
     try:
