@@ -22,6 +22,7 @@ from pathlib import Path
 import platform
 import shutil
 import socket
+import struct
 import subprocess
 import sys
 import time
@@ -45,6 +46,36 @@ def decnet_mac(area: int, node: int) -> str:
 
 def contains(path: Path, text: str) -> bool:
     return path.exists() and text in path.read_text(errors="replace")
+
+
+def pcap_short_visits(path: Path, marker: str) -> list[int]:
+    data = path.read_bytes()
+    if len(data) < 24:
+        return []
+    magic = data[:4]
+    if magic == b"\xd4\xc3\xb2\xa1":
+        endian = "<"
+    elif magic == b"\xa1\xb2\xc3\xd4":
+        endian = ">"
+    else:
+        raise RuntimeError(f"unsupported pcap magic in {path}")
+    off = 24
+    visits: list[int] = []
+    needle = marker.encode()
+    while off + 16 <= len(data):
+        _, _, incl, _ = struct.unpack_from(endian + "IIII", data, off)
+        off += 16
+        frame = data[off:off + incl]
+        off += incl
+        if len(frame) < 22 or frame[12:14] != b"\x60\x03" or needle not in frame:
+            continue
+        plen = int.from_bytes(frame[14:16], "little")
+        if 16 + plen > len(frame):
+            continue
+        route = frame[16:16 + plen]
+        if route and (route[0] & 0xc7) == 0x02 and len(route) >= 6:
+            visits.append(route[5] & 0x3f)
+    return visits
 
 
 def pcap_text_count(path: Path, marker: str) -> int:
@@ -246,10 +277,14 @@ def main() -> int:
                       file=sys.stderr)
         return 1
 
-    if pcap_text_count(lab.pcaps[1], f"DNIV-E2-{session}-DN70-") < 5:
-        raise SystemExit("E2 missing A->B forwarded payloads")
-    if pcap_text_count(lab.pcaps[0], f"DNIV-E2-{session}-DN71-") < 5:
-        raise SystemExit("E2 missing B->A forwarded payloads")
+    ab_marker = f"DNIV-E2-{session}-DN70-"
+    ba_marker = f"DNIV-E2-{session}-DN71-"
+    ab_visits = pcap_short_visits(lab.pcaps[1], ab_marker)
+    ba_visits = pcap_short_visits(lab.pcaps[0], ba_marker)
+    if len(ab_visits) < 5 or any(v != 1 for v in ab_visits):
+        raise SystemExit(f"E2 bad A->B forwarding/visit evidence: {ab_visits}")
+    if len(ba_visits) < 5 or any(v != 1 for v in ba_visits):
+        raise SystemExit(f"E2 bad B->A forwarding/visit evidence: {ba_visits}")
     if pcap_text_count(lab.pcaps[1], f"DNIV-E2-MAXVISIT-{session}-DN70") != 0:
         raise SystemExit("E2 visit-count ceiling failed A->B")
     if pcap_text_count(lab.pcaps[0], f"DNIV-E2-MAXVISIT-{session}-DN71") != 0:

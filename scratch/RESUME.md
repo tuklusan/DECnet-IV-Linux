@@ -39,7 +39,7 @@ Temporary Phase 3 Route20 crash instrumentation and the temporary tagging workfl
 
 ## Phase 4 entry
 
-Routing codecs, route state, update ingestion and Ethernet forwarding are implemented. Short and long Phase IV data headers are parsed with deterministic vectors. Routers forward by L1 node or L2 area lookup, require the incoming link source to be an UP adjacency, rewrite only the Ethernet next hop, preserve the Routing Layer source/destination, increment visit count, and refuse forwarding at visit 31. The E2 harness now runs endnode 31.70 -- router 31.72 -- endnode 31.71 across two isolated LANs and checks bidirectional forwarding plus visit=31 non-forwarding.
+Routing codecs, route state, update ingestion and Ethernet forwarding are implemented. Short and long Phase IV data headers are parsed with deterministic vectors. Routers forward by L1 node or L2 area lookup, require the incoming link source to be an UP adjacency, rewrite only the Ethernet next hop, preserve the Routing Layer source/destination, increment visit count, and refuse forwarding at visit 31. The E2 harness now runs endnode 31.70 -- router 31.72 -- endnode 31.71 across two isolated LANs, checks bidirectional forwarding with forwarded visit=1, and proves visit=31 packets do not cross the router. Exact-head acceptance dispatch now includes both E1 and E2 VM runs.
 
 ## Next action
 
