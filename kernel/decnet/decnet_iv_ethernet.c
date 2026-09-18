@@ -495,10 +495,14 @@ static void dniv_route_workfn(struct work_struct *work)
     if (dniv_route_snapshot(1U, DNIV_ADDR_NODE(dniv_local_address),
                             l1, ARRAY_SIZE(l1)) != 0)
         goto out_schedule;
-    if (dniv_local_node_type == DNIV_NODE_TYPE_L2_ROUTER &&
-        dniv_route_snapshot(2U, DNIV_ADDR_AREA(dniv_local_address),
-                            l2, ARRAY_SIZE(l2)) != 0)
-        goto out_schedule;
+    if (dniv_local_node_type == DNIV_NODE_TYPE_L2_ROUTER) {
+        __u16 local_area = DNIV_ADDR_AREA(dniv_local_address);
+
+        if (dniv_route_snapshot(2U, local_area, l2, ARRAY_SIZE(l2)) != 0)
+            goto out_schedule;
+        if (dniv_route_area_attached(local_area))
+            l1[0] = 0U;
+    }
 
     rtnl_lock();
     for_each_netdev(&init_net, dev) {
@@ -999,11 +1003,14 @@ static void dniv_handle_valid_data(int input_ifindex,
     if (DNIV_ADDR_AREA(data->destination) == DNIV_ADDR_AREA(local)) {
         level = 1U;
         destination = DNIV_ADDR_NODE(data->destination);
-    } else {
-        if (dniv_local_node_type != DNIV_NODE_TYPE_L2_ROUTER)
-            return;
+    } else if (dniv_local_node_type == DNIV_NODE_TYPE_L2_ROUTER) {
         level = 2U;
         destination = DNIV_ADDR_AREA(data->destination);
+    } else if (dniv_local_node_type == DNIV_NODE_TYPE_L1_ROUTER) {
+        level = 1U;
+        destination = 0U;
+    } else {
+        return;
     }
 
     if (dniv_route_lookup(level, destination, &route) != 0 ||

@@ -39,6 +39,35 @@ static struct hlist_head dniv_l1_routes[DNIV_ROUTE_L1_BUCKETS];
 static struct hlist_head dniv_l2_routes[DNIV_ROUTE_L2_BUCKETS];
 static __u64 dniv_route_generation;
 
+
+bool dniv_route_area_attached(__u16 local_area)
+{
+    unsigned long flags;
+    unsigned int area;
+    bool attached = false;
+
+    if (local_area < 1U || local_area >= DNIV_ROUTE_L2_BUCKETS)
+        return false;
+
+    spin_lock_irqsave(&dniv_route_lock, flags);
+    for (area = 1U; area < DNIV_ROUTE_L2_BUCKETS; area++) {
+        struct dniv_route_candidate *candidate;
+
+        if (area == local_area)
+            continue;
+        hlist_for_each_entry(candidate, &dniv_l2_routes[area], node) {
+            if (!candidate->expires ||
+                time_before(jiffies, candidate->expires)) {
+                attached = true;
+                goto out;
+            }
+        }
+    }
+out:
+    spin_unlock_irqrestore(&dniv_route_lock, flags);
+    return attached;
+}
+
 static void dniv_route_age_workfn(struct work_struct *work);
 static DECLARE_DELAYED_WORK(dniv_route_age_work, dniv_route_age_workfn);
 

@@ -43,5 +43,6 @@ unsigned int dniv_route_age(unsigned long now);
 __u64 dniv_route_get_generation(void);
 int dniv_route_snapshot(__u8 level, __u16 local_destination,
                         __u16 *entries, __u16 count);
+bool dniv_route_area_attached(__u16 local_area);
 
 #endif /* _DECNET_IV_ROUTE_H */
