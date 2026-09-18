@@ -44,11 +44,16 @@ def main() -> int:
     if int(arm[0]) > 420:
         raise SystemExit("interop-ready regression: ARM64 reference-ready bound is excessive")
 
-    reference_image_path = ROOT / "tests/lab/prepare-reference-image.sh"
-    if not os.access(reference_image_path, os.X_OK):
-        raise SystemExit(
-            "interop-ready regression: reference image builder must remain executable"
-        )
+    executable_paths = [
+        ROOT / "tests/lab/prepare-reference-image.sh",
+        ROOT / "tests/lab/run-interop.sh",
+    ]
+    for executable_path in executable_paths:
+        if not os.access(executable_path, os.X_OK):
+            raise SystemExit(
+                "interop-ready regression: interop harness executable bit missing: "
+                f"{executable_path.relative_to(ROOT)}"
+            )
 
     required_service_fragments = [
         "After=multi-user.target systemd-udev-settle.service",
