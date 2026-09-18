@@ -315,8 +315,23 @@ def main() -> int:
                 time.sleep(2)
                 break
             for guest in guests:
-                if guest.process and guest.process.poll() is not None:
-                    raise RuntimeError(f"E4 guest exited early: {guest.name}")
+                if not guest.process or guest.process.poll() is None:
+                    continue
+                if guest in (a, b):
+                    # poweroff_pass writes the PASS marker immediately before
+                    # QEMU exits. On slow ARM64 runners the serial file can
+                    # become visible a fraction later than process exit.
+                    passed = contains(
+                        guest.log,
+                        f"DNIV-E4-PASS session={session} node={guest.name}")
+                    if not passed:
+                        time.sleep(2)
+                        passed = contains(
+                            guest.log,
+                            f"DNIV-E4-PASS session={session} node={guest.name}")
+                    if passed:
+                        continue
+                raise RuntimeError(f"E4 guest exited early: {guest.name}")
             time.sleep(1)
     except RuntimeError as exc:
         print(str(exc), file=sys.stderr)
