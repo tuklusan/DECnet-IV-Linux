@@ -229,7 +229,7 @@ def main() -> int:
 
     area = 31
     session = os.environ.get("DNIV_LAB_SESSION_ID", f"e3-{os.getpid()}")
-    timeout = int(os.environ.get("DNIV_LAB_TIMEOUT_SECONDS", "360"))
+    timeout = max(int(os.environ.get("DNIV_LAB_TIMEOUT_SECONDS", "360")), 600)
     artifacts = Path(os.environ.get("DNIV_LAB_ARTIFACTS",
                                     "tests/lab/artifacts"))
     work = artifacts / session
@@ -265,8 +265,28 @@ def main() -> int:
             [ga.taps[0], r1.taps[0], r2.taps[0]],
             [gb.taps[0], r1.taps[1], r2.taps[1]],
         ])
-        for guest in (r1, r2, ga, gb):
+        routers = (r1, r2)
+        for guest in routers:
             lab.start(guest, area)
+
+        router_deadline = time.monotonic() + min(timeout, 480)
+        while time.monotonic() < router_deadline:
+            if all(contains(g.log,
+                            f"DNIV-E3-ROUTER-READY session={session} node={g.name}")
+                   for g in routers):
+                break
+            for router in routers:
+                if router.process and router.process.poll() is not None:
+                    raise RuntimeError(
+                        f"E3 router exited before readiness: {router.name}")
+            time.sleep(1)
+        else:
+            raise RuntimeError("E3 routers did not both reach readiness")
+
+        time.sleep(5)
+        lab.start(ga, area)
+        lab.start(gb, area)
+
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             if all(contains(g.log,

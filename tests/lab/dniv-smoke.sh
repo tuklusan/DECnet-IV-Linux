@@ -415,7 +415,7 @@ e3)
             fi
             echo "DNIV-E3-PRIMARY session=$session node=$name router=$peer_node"
             i=0
-            while [ "$i" -lt 5 ]; do
+            while [ "$i" -lt 10 ]; do
                 i=$((i + 1))
                 /usr/local/sbin/dnraw --short "$iface" "$peer" "$area.$node" "$dest_node" 0 \
                     "DNIV-E3-PRE-$session-$name-$i"
@@ -441,7 +441,7 @@ e3)
             fi
             echo "DNIV-E3-ALTERNATE session=$session node=$name router=$alt_peer_node"
             i=0
-            while [ "$i" -lt 5 ]; do
+            while [ "$i" -lt 10 ]; do
                 i=$((i + 1))
                 /usr/local/sbin/dnraw --short "$iface" "$alt_peer" "$area.$node" "$dest_node" 0 \
                     "DNIV-E3-POST-$session-$name-$i"
@@ -458,6 +458,7 @@ e3)
                 candidate=${path##*/}
                 [ "$candidate" = lo ] || ip link set "$candidate" up
             done
+            echo "DNIV-E3-ROUTER-READY session=$session node=$name"
             # Stay up until both endnodes have attached and the preferred
             # router has disappeared, then leave a post-convergence window.
             i=0
@@ -482,6 +483,7 @@ e3)
                 candidate=${path##*/}
                 [ "$candidate" = lo ] || ip link set "$candidate" up
             done
+            echo "DNIV-E3-ROUTER-READY session=$session node=$name"
             # Do not start the failure clock until both endpoint adjacencies
             # are actually present; guest boot order is deliberately free.
             i=0
@@ -556,6 +558,7 @@ e4)
                 candidate=${path##*/}
                 [ "$candidate" = lo ] || ip link set "$candidate" up
             done
+            echo "DNIV-E4-ROUTER-READY session=$session node=$name"
             # Six-guest hosted boots are intentionally unsynchronized. Keep
             # transit routing alive through route propagation and endpoint
             # evidence instead of racing a short fixed lifetime.
