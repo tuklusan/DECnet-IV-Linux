@@ -35,6 +35,9 @@
 #define DNIV_MAX_DR_STATES 64U
 #define DNIV_DR_DELAY_SECONDS 5U
 #define DNIV_ETH_LENGTH_LEN 2U
+#define DNIV_ROUTE_L1_BATCH_SIZE 64U
+#define DNIV_ROUTE_TRIGGER_SECONDS 1U
+#define DNIV_ROUTE_PERIOD_SECONDS 180U
 
 static const __u8 dniv_all_routers[ETH_ALEN] = {0xab, 0x00, 0x00, 0x03, 0x00, 0x00};
 static const __u8 dniv_all_level2_routers[ETH_ALEN] = {0x09, 0x00, 0x2b, 0x02, 0x00, 0x00};
@@ -79,8 +82,12 @@ static atomic64_t dniv_adjacency_down = ATOMIC64_INIT(0);
 
 static void dniv_hello_workfn(struct work_struct *work);
 static void dniv_age_workfn(struct work_struct *work);
+static void dniv_route_workfn(struct work_struct *work);
 static DECLARE_DELAYED_WORK(dniv_hello_work, dniv_hello_workfn);
 static DECLARE_DELAYED_WORK(dniv_age_work, dniv_age_workfn);
+static DECLARE_DELAYED_WORK(dniv_route_work, dniv_route_workfn);
+static __u64 dniv_last_route_generation;
+static unsigned long dniv_last_route_full;
 
 static struct dniv_adj_entry *dniv_find_adj_locked(int ifindex, __u16 address)
 {
@@ -341,6 +348,177 @@ static int dniv_netdev_event(struct notifier_block *nb, unsigned long event,
 static struct notifier_block dniv_netdev_notifier = {
     .notifier_call = dniv_netdev_event,
 };
+
+
+static int dniv_xmit_routing(struct net_device *dev,
+                             const __u8 dst[ETH_ALEN],
+                             const __u8 *payload, unsigned int payload_len)
+{
+    struct sk_buff *skb;
+    struct ethhdr *eth;
+    __u8 src[ETH_ALEN];
+    __u8 *length;
+    int ret;
+
+    if (!dev || !dst || !payload || payload_len == 0U ||
+        payload_len > DNIV_WIRE_BLOCK_SIZE)
+        return -EINVAL;
+
+    skb = alloc_skb(LL_RESERVED_SPACE(dev) + ETH_HLEN +
+                    DNIV_ETH_LENGTH_LEN + payload_len, GFP_KERNEL);
+    if (!skb)
+        return -ENOMEM;
+
+    skb_reserve(skb, LL_RESERVED_SPACE(dev));
+    skb_reset_mac_header(skb);
+    eth = skb_put(skb, ETH_HLEN);
+    dniv_wire_mac_from_address(READ_ONCE(dniv_local_address), src);
+    ether_addr_copy(eth->h_dest, dst);
+    ether_addr_copy(eth->h_source, src);
+    eth->h_proto = cpu_to_be16(ETH_P_DNA_RT);
+    length = skb_put(skb, DNIV_ETH_LENGTH_LEN);
+    dniv_wire_put_le16(length, (__u16)payload_len);
+    memcpy(skb_put(skb, payload_len), payload, payload_len);
+    skb->dev = dev;
+    skb->protocol = eth->h_proto;
+    skb_set_network_header(skb, ETH_HLEN + DNIV_ETH_LENGTH_LEN);
+
+    ret = dev_queue_xmit(skb);
+    return ret == NET_XMIT_SUCCESS || ret == NET_XMIT_CN ? 0 : -EIO;
+}
+
+static bool dniv_has_up_router_adjacency(int ifindex, __u8 level)
+{
+    unsigned long flags;
+    __u16 local_area;
+    bool found = false;
+    unsigned int i;
+
+    local_area = DNIV_ADDR_AREA(READ_ONCE(dniv_local_address));
+    spin_lock_irqsave(&dniv_adj_lock, flags);
+    for (i = 0; i < DNIV_MAX_ADJACENCIES; i++) {
+        const struct dniv_adj_entry *adj = &dniv_adjacencies[i];
+
+        if (!adj->used || adj->ifindex != ifindex ||
+            adj->state != DNIV_ADJ_STATE_UP ||
+            adj->node_type == DNIV_NODE_TYPE_ENDNODE)
+            continue;
+        if (level == 1U && DNIV_ADDR_AREA(adj->address) == local_area) {
+            found = true;
+            break;
+        }
+        if (level == 2U && adj->node_type == DNIV_NODE_TYPE_L2_ROUTER) {
+            found = true;
+            break;
+        }
+    }
+    spin_unlock_irqrestore(&dniv_adj_lock, flags);
+    return found;
+}
+
+static void dniv_send_l1_updates(struct net_device *dev,
+                                 const __u16 *entries)
+{
+    __u8 payload[DNIV_WIRE_ROUTE_HEADER_LEN +
+                 DNIV_WIRE_ROUTE_SEGMENT_HEADER_LEN +
+                 DNIV_ROUTE_L1_BATCH_SIZE * DNIV_WIRE_ROUTE_ENTRY_LEN +
+                 DNIV_WIRE_ROUTE_CHECKSUM_LEN];
+    struct dniv_wire_route_segment segment;
+    __u16 start;
+
+    if (!dniv_has_up_router_adjacency(dev->ifindex, 1U))
+        return;
+
+    for (start = 0U; start < 1024U; start += DNIV_ROUTE_L1_BATCH_SIZE) {
+        int len;
+
+        segment.start = start;
+        segment.count = DNIV_ROUTE_L1_BATCH_SIZE;
+        segment.entries = entries + start;
+        len = dniv_wire_build_routing(
+            payload, sizeof(payload), READ_ONCE(dniv_local_address), 1U,
+            &segment, 1U);
+        if (len > 0)
+            dniv_xmit_routing(dev, dniv_all_routers, payload,
+                              (unsigned int)len);
+    }
+}
+
+static void dniv_send_l2_updates(struct net_device *dev,
+                                 const __u16 *entries)
+{
+    __u8 payload[DNIV_WIRE_ROUTE_HEADER_LEN +
+                 DNIV_WIRE_ROUTE_SEGMENT_HEADER_LEN +
+                 63U * DNIV_WIRE_ROUTE_ENTRY_LEN +
+                 DNIV_WIRE_ROUTE_CHECKSUM_LEN];
+    struct dniv_wire_route_segment segment;
+    int len;
+
+    if (dniv_local_node_type != DNIV_NODE_TYPE_L2_ROUTER ||
+        !dniv_has_up_router_adjacency(dev->ifindex, 2U))
+        return;
+
+    segment.start = 1U;
+    segment.count = 63U;
+    segment.entries = entries + 1U;
+    len = dniv_wire_build_routing(
+        payload, sizeof(payload), READ_ONCE(dniv_local_address), 2U,
+        &segment, 1U);
+    if (len <= 0)
+        return;
+
+    dniv_xmit_routing(dev, dniv_all_routers, payload, (unsigned int)len);
+    dniv_xmit_routing(dev, dniv_all_level2_routers, payload,
+                      (unsigned int)len);
+}
+
+static void dniv_route_workfn(struct work_struct *work)
+{
+    __u16 l1[1024];
+    __u16 l2[64];
+    struct net_device *dev;
+    __u64 generation;
+    unsigned long now = jiffies;
+    bool periodic;
+
+    (void)work;
+    if (dniv_local_node_type == DNIV_NODE_TYPE_ENDNODE)
+        goto out_schedule;
+
+    generation = dniv_route_get_generation();
+    periodic = dniv_last_route_full == 0U ||
+               time_after_eq(now, dniv_last_route_full +
+                                  DNIV_ROUTE_PERIOD_SECONDS * HZ);
+    if (!periodic && generation == dniv_last_route_generation)
+        goto out_schedule;
+
+    if (dniv_route_snapshot(1U, DNIV_ADDR_NODE(dniv_local_address),
+                            l1, ARRAY_SIZE(l1)) != 0)
+        goto out_schedule;
+    if (dniv_local_node_type == DNIV_NODE_TYPE_L2_ROUTER &&
+        dniv_route_snapshot(2U, DNIV_ADDR_AREA(dniv_local_address),
+                            l2, ARRAY_SIZE(l2)) != 0)
+        goto out_schedule;
+
+    rtnl_lock();
+    for_each_netdev(&init_net, dev) {
+        if (dev->type != ARPHRD_ETHER || (dev->flags & IFF_LOOPBACK) ||
+            !(dev->flags & IFF_UP) || !netif_running(dev))
+            continue;
+        dniv_send_l1_updates(dev, l1);
+        if (dniv_local_node_type == DNIV_NODE_TYPE_L2_ROUTER)
+            dniv_send_l2_updates(dev, l2);
+    }
+    rtnl_unlock();
+
+    dniv_last_route_generation = generation;
+    if (periodic)
+        dniv_last_route_full = now;
+
+out_schedule:
+    schedule_delayed_work(&dniv_route_work,
+                          DNIV_ROUTE_TRIGGER_SECONDS * HZ);
+}
 
 static int dniv_xmit_hello(struct net_device *dev, const __u8 dst[ETH_ALEN],
                            const __u8 *payload, unsigned int payload_len)
@@ -964,6 +1142,8 @@ int dniv_eth_init(__u16 address, __u8 node_type, __u8 priority,
     dniv_eth_cost = ethernet_cost;
     memset(dniv_adjacencies, 0, sizeof(dniv_adjacencies));
     memset(dniv_dr_states, 0, sizeof(dniv_dr_states));
+    dniv_last_route_generation = 0U;
+    dniv_last_route_full = 0U;
 
     err = register_netdevice_notifier_net(&init_net, &dniv_netdev_notifier);
     if (err)
@@ -971,6 +1151,7 @@ int dniv_eth_init(__u16 address, __u8 node_type, __u8 priority,
     dev_add_pack(&dniv_packet_type);
     schedule_delayed_work(&dniv_hello_work, 0);
     schedule_delayed_work(&dniv_age_work, HZ);
+    schedule_delayed_work(&dniv_route_work, HZ);
     return 0;
 }
 
@@ -978,6 +1159,7 @@ void dniv_eth_exit(void)
 {
     cancel_delayed_work_sync(&dniv_hello_work);
     cancel_delayed_work_sync(&dniv_age_work);
+    cancel_delayed_work_sync(&dniv_route_work);
     dev_remove_pack(&dniv_packet_type);
     unregister_netdevice_notifier_net(&init_net, &dniv_netdev_notifier);
 }

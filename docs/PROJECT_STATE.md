@@ -63,10 +63,11 @@ Implementation order:
 2. kernel route-state primitives, metrics and aging — complete;
 3. adjacency-backed routing update ingestion — complete;
 4. forwarding and visit-count/loop prevention — complete;
-5. E2 two-LAN forced-router topology — harness implemented, acceptance pending;
-6. E3 alternate-path convergence;
-7. E4 multi-area L1/L2 behavior;
-8. independent Route20/PyDECnet routing interoperability on amd64 and ARM64.
+5. L1/L2 routing update transmission — complete baseline: one-second triggered full vectors plus 180-second broadcast refresh;
+6. E2 two-LAN forced-router topology — harness implemented, acceptance pending;
+7. E3 alternate-path convergence;
+8. E4 multi-area L1/L2 behavior;
+9. independent Route20/PyDECnet routing interoperability on amd64 and ARM64.
 
 ## Current infrastructure
 
@@ -88,8 +89,8 @@ Implementation order:
 
 ## Resume point
 
-Phase 4 is active on main. Routing codecs, route-state primitives, adjacency-backed routing update ingestion, native Ethernet forwarding, visit-count enforcement and the E2 forced-router harness are implemented. Route candidate insertion is race-safe, existing candidates update without allocation, and every valid peer hello refreshes the expiry of all routes learned through that adjacency. E2 exact-SHA amd64/ARM64 acceptance is the current gate.
+Phase 4 is active on main. Routing codecs, route-state primitives, adjacency-backed routing update ingestion, L1/L2 routing update transmission, native Ethernet forwarding, visit-count enforcement and the E2 forced-router harness are implemented. Route candidate insertion is race-safe, existing candidates update without allocation, and every valid peer hello refreshes the expiry of all routes learned through that adjacency. E2 exact-SHA amd64/ARM64 acceptance is the current gate.
 
 ## Next action
 
-Phase 4 routing codecs, route state, adjacency-backed update ingestion and native Ethernet data forwarding are implemented. Short/long data headers are validated including Phase IV reserved bits/bytes and the required AA-00-04-00 long-header address prefixes; forwarding uses L1/L2 route lookup, only UP-adjacency link sources are accepted, and Ethernet forwarding emits canonical long-data headers. Normal traffic stops at visit 31; return-to-sender traffic uses the Phase IV doubled ceiling of 62. The E2 three-VM/two-LAN forced-router harness is implemented with bidirectional payload evidence, canonical short-to-long forwarding, exact forwarded visit=1 checks and max-visit negative checks. ARM64 E1 on candidate `f3035cfd1e994764c1983dc7419ccc12e726ef12` completed the guest protocol sequence but missed the transient initial INIT in 250 ms guest polling; retained PCAP contained the router hello without the reciprocal RS entry. E1 now accepts direct wire evidence only when an unlisted router hello is followed later by a reciprocal listing, while retaining the guest marker path. A policy regression rejects unlisted-only and listed-only captures. A route-update concurrency race found during review is fixed with a lock/recheck insertion path. Existing candidates update without allocation, newly inserted candidates recheck after allocation, and peer hellos refresh every candidate learned through that adjacency so live routes do not age out while their neighbor remains live. Exact amd64/ARM64 E2 acceptance remains pending.
+Phase 4 routing codecs, route state, adjacency-backed update ingestion and native Ethernet data forwarding are implemented. Short/long data headers are validated including Phase IV reserved bits/bytes and the required AA-00-04-00 long-header address prefixes; forwarding uses L1/L2 route lookup, only UP-adjacency link sources are accepted, and Ethernet forwarding emits canonical long-data headers. Normal traffic stops at visit 31; return-to-sender traffic uses the Phase IV doubled ceiling of 62. The E2 three-VM/two-LAN forced-router harness is implemented with bidirectional payload evidence, canonical short-to-long forwarding, exact forwarded visit=1 checks and max-visit negative checks. ARM64 E1 on candidate `f3035cfd1e994764c1983dc7419ccc12e726ef12` completed the guest protocol sequence but missed the transient initial INIT in 250 ms guest polling; retained PCAP contained the router hello without the reciprocal RS entry. E1 now accepts direct wire evidence only when an unlisted router hello is followed later by a reciprocal listing, while retaining the guest marker path. A policy regression rejects unlisted-only and listed-only captures. A route-update concurrency race found during review is fixed with a lock/recheck insertion path. Existing candidates update without allocation, newly inserted candidates recheck after allocation, and peer hellos refresh every candidate learned through that adjacency so live routes do not age out while their neighbor remains live. Routers now advertise the selected L1/L2 vectors to UP router peers: route-state generation changes are coalesced to a one-second trigger, L1 is emitted in 64-node segments, L2 covers areas 1-63, and full broadcast refresh runs every 180 seconds. Exact amd64/ARM64 E2 acceptance remains pending.

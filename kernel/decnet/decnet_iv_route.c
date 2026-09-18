@@ -37,6 +37,7 @@ struct dniv_route_candidate {
 static DEFINE_SPINLOCK(dniv_route_lock);
 static struct hlist_head dniv_l1_routes[DNIV_ROUTE_L1_BUCKETS];
 static struct hlist_head dniv_l2_routes[DNIV_ROUTE_L2_BUCKETS];
+static __u64 dniv_route_generation;
 
 static void dniv_route_age_workfn(struct work_struct *work);
 static DECLARE_DELAYED_WORK(dniv_route_age_work, dniv_route_age_workfn);
@@ -71,6 +72,13 @@ static struct dniv_route_candidate *dniv_route_find_locked(
     return NULL;
 }
 
+static void dniv_route_generation_advance_locked(void)
+{
+    dniv_route_generation++;
+    if (dniv_route_generation == 0U)
+        dniv_route_generation = 1U;
+}
+
 static void dniv_route_clear_table_locked(struct hlist_head *table,
                                            unsigned int count)
 {
@@ -95,6 +103,7 @@ int dniv_route_init(void)
         INIT_HLIST_HEAD(&dniv_l1_routes[i]);
     for (i = 0; i < DNIV_ROUTE_L2_BUCKETS; i++)
         INIT_HLIST_HEAD(&dniv_l2_routes[i]);
+    dniv_route_generation = 1U;
 
     schedule_delayed_work(&dniv_route_age_work, HZ);
     return 0;
@@ -113,6 +122,7 @@ void dniv_route_reset(void)
     spin_lock_irqsave(&dniv_route_lock, flags);
     dniv_route_clear_table_locked(dniv_l1_routes, DNIV_ROUTE_L1_BUCKETS);
     dniv_route_clear_table_locked(dniv_l2_routes, DNIV_ROUTE_L2_BUCKETS);
+    dniv_route_generation_advance_locked();
     spin_unlock_irqrestore(&dniv_route_lock, flags);
 }
 
@@ -133,6 +143,8 @@ int dniv_route_update(__u8 level, __u16 destination, __u16 next_hop,
     spin_lock_irqsave(&dniv_route_lock, flags);
     candidate = dniv_route_find_locked(head, next_hop, ifindex);
     if (candidate) {
+        if (candidate->cost != cost || candidate->hops != hops)
+            dniv_route_generation_advance_locked();
         candidate->cost = cost;
         candidate->hops = hops;
         candidate->expires = expires;
@@ -153,6 +165,9 @@ int dniv_route_update(__u8 level, __u16 destination, __u16 next_hop,
         candidate->next_hop = next_hop;
         candidate->ifindex = ifindex;
         hlist_add_head(&candidate->node, head);
+        dniv_route_generation_advance_locked();
+    } else if (candidate->cost != cost || candidate->hops != hops) {
+        dniv_route_generation_advance_locked();
     }
     candidate->cost = cost;
     candidate->hops = hops;
@@ -179,6 +194,7 @@ void dniv_route_withdraw(__u8 level, __u16 destination, __u16 next_hop,
     if (candidate) {
         hlist_del(&candidate->node);
         kfree(candidate);
+        dniv_route_generation_advance_locked();
     }
     spin_unlock_irqrestore(&dniv_route_lock, flags);
 }
@@ -218,6 +234,7 @@ void dniv_route_refresh_adjacency(__u16 next_hop, __s32 ifindex,
 void dniv_route_withdraw_adjacency(__u16 next_hop, __s32 ifindex)
 {
     unsigned long flags;
+    unsigned int removed = 0;
     unsigned int i;
 
     spin_lock_irqsave(&dniv_route_lock, flags);
@@ -230,6 +247,7 @@ void dniv_route_withdraw_adjacency(__u16 next_hop, __s32 ifindex)
                 candidate->ifindex == ifindex) {
                 hlist_del(&candidate->node);
                 kfree(candidate);
+                removed++;
             }
         }
     }
@@ -242,9 +260,12 @@ void dniv_route_withdraw_adjacency(__u16 next_hop, __s32 ifindex)
                 candidate->ifindex == ifindex) {
                 hlist_del(&candidate->node);
                 kfree(candidate);
+                removed++;
             }
         }
     }
+    if (removed)
+        dniv_route_generation_advance_locked();
     spin_unlock_irqrestore(&dniv_route_lock, flags);
 }
 
@@ -321,8 +342,82 @@ unsigned int dniv_route_age(unsigned long now)
             }
         }
     }
+    if (removed)
+        dniv_route_generation_advance_locked();
     spin_unlock_irqrestore(&dniv_route_lock, flags);
     return removed;
+}
+
+__u64 dniv_route_get_generation(void)
+{
+    unsigned long flags;
+    __u64 generation;
+
+    spin_lock_irqsave(&dniv_route_lock, flags);
+    generation = dniv_route_generation;
+    spin_unlock_irqrestore(&dniv_route_lock, flags);
+    return generation;
+}
+
+int dniv_route_snapshot(__u8 level, __u16 local_destination,
+                        __u16 *entries, __u16 count)
+{
+    struct hlist_head *table;
+    unsigned int limit;
+    unsigned long flags;
+    unsigned int i;
+
+    if (!entries)
+        return -EINVAL;
+    if (level == 1U) {
+        table = dniv_l1_routes;
+        limit = DNIV_ROUTE_L1_BUCKETS;
+        if (count != DNIV_ROUTE_L1_BUCKETS ||
+            local_destination >= DNIV_ROUTE_L1_BUCKETS)
+            return -EINVAL;
+    } else if (level == 2U) {
+        table = dniv_l2_routes;
+        limit = DNIV_ROUTE_L2_BUCKETS;
+        if (count != DNIV_ROUTE_L2_BUCKETS ||
+            local_destination < 1U ||
+            local_destination >= DNIV_ROUTE_L2_BUCKETS)
+            return -EINVAL;
+    } else {
+        return -EINVAL;
+    }
+
+    spin_lock_irqsave(&dniv_route_lock, flags);
+    for (i = 0; i < limit; i++) {
+        struct dniv_route_candidate *candidate;
+        struct dniv_route_candidate *best = NULL;
+
+        if (i == local_destination) {
+            entries[i] = 0U;
+            continue;
+        }
+        if (level == 2U && i == 0U) {
+            entries[i] = (__u16)((DNIV_ROUTE_INFINITY_HOPS << 10) |
+                                 DNIV_ROUTE_INFINITY_COST);
+            continue;
+        }
+        hlist_for_each_entry(candidate, &table[i], node) {
+            if (candidate->expires &&
+                time_after_eq(jiffies, candidate->expires))
+                continue;
+            if (!best ||
+                dniv_route_candidate_better(
+                    candidate->cost, candidate->next_hop, candidate->ifindex,
+                    best->cost, best->next_hop, best->ifindex))
+                best = candidate;
+        }
+        if (best)
+            entries[i] = (__u16)(((__u16)best->hops << 10) | best->cost);
+        else
+            entries[i] = (__u16)((DNIV_ROUTE_INFINITY_HOPS << 10) |
+                                 DNIV_ROUTE_INFINITY_COST);
+    }
+    spin_unlock_irqrestore(&dniv_route_lock, flags);
+    return 0;
 }
 
 static void dniv_route_age_workfn(struct work_struct *work)
