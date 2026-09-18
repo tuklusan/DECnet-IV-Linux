@@ -25,6 +25,7 @@ on:
         options:
           - phase2
           - e1
+          - e2
       parent_run_id:
         description: Parent acceptance workflow run ID; blank for direct dispatch
         required: false
@@ -210,7 +211,11 @@ jobs:
           set -uo pipefail
           rm -rf "$DNIV_LAB_ARTIFACTS"
           set +e
-          python3 tests/lab/dniv_lab.py "$DNIV_LAB_BASE" "$DNIV_LAB_KERNEL" "$DNIV_LAB_INITRD" 2>&1 | \
+          lab_script=tests/lab/dniv_lab.py
+          if [[ "${DNIV_LAB_MODE}" == e2 ]]; then
+            lab_script=tests/lab/dniv_e2.py
+          fi
+          python3 "$lab_script" "$DNIV_LAB_BASE" "$DNIV_LAB_KERNEL" "$DNIV_LAB_INITRD" 2>&1 | \
             tee "$DNIV_SCRATCH_DIR/two-node.log"
           rc=${PIPESTATUS[0]}
           set -e

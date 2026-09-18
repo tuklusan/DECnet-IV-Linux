@@ -66,6 +66,22 @@ wait_adjacency_up() {
     return 1
 }
 
+wait_any_adjacency_up() {
+    peer_address=$1
+    tries=$2
+    i=0
+    while [ "$i" -lt "$tries" ]; do
+        output=$(/usr/local/sbin/dnctl adjacencies 2>/dev/null || true)
+        printf '%s\n' "$output"
+        if printf '%s\n' "$output" | grep -F "$peer_address via " | grep -Fq ' UP '; then
+            return 0
+        fi
+        i=$((i + 1))
+        sleep 0.25
+    done
+    return 1
+}
+
 stats_snapshot() {
     tries=${1:-8}
     dnctl=${DNIV_DNCTL:-/usr/local/sbin/dnctl}
@@ -135,6 +151,7 @@ peer_node=$(get_arg dniv.peer_node || true)
 role=$(get_arg dniv.role || printf 'A')
 mode=$(get_arg dniv.mode || printf 'phase2')
 session=$(get_arg dniv.session || printf 'local')
+dest_node=$(get_arg dniv.dest_node || true)
 
 iface=$(find_iface || true)
 if [ -z "$iface" ]; then
@@ -319,6 +336,52 @@ e1)
         sleep 0.25
     done
     echo "DNIV-E1-FAIL session=$session node=$name reason=no-expire-recover"
+    ;;
+
+e2)
+    case "$role" in
+        A|B)
+            if [ -z "$peer" ] || [ -z "$peer_node" ] || [ -z "$dest_node" ]; then
+                echo "DNIV-E2-FAIL session=$session node=$name reason=missing-args"
+                exit 1
+            fi
+            modprobe decnet_iv default_area="$area" default_node="$node" default_name="$name" \
+                default_node_type=3 hello_interval=2
+            /usr/local/sbin/dnctl set "$area.$node" "$name"
+            ip link set "$iface" up
+            if ! wait_any_adjacency_up "$peer_node" 160; then
+                echo "DNIV-E2-FAIL session=$session node=$name reason=no-router"
+                exit 1
+            fi
+            sleep 3
+            i=0
+            while [ "$i" -lt 5 ]; do
+                i=$((i + 1))
+                /usr/local/sbin/dnraw --short "$iface" "$peer" "$area.$node" "$dest_node" 0 \
+                    "DNIV-E2-$session-$name-$i"
+                sleep 0.2
+            done
+            /usr/local/sbin/dnraw --short "$iface" "$peer" "$area.$node" "$dest_node" 31 \
+                "DNIV-E2-MAXVISIT-$session-$name"
+            sleep 5
+            poweroff_pass "DNIV-E2-PASS session=$session node=$name"
+            ;;
+        R)
+            modprobe decnet_iv default_area="$area" default_node="$node" default_name="$name" \
+                default_node_type=2 router_priority=64 hello_interval=2 ethernet_cost=4
+            /usr/local/sbin/dnctl set "$area.$node" "$name"
+            for path in /sys/class/net/*; do
+                candidate=${path##*/}
+                [ "$candidate" = lo ] || ip link set "$candidate" up
+            done
+            sleep 20
+            poweroff_pass "DNIV-E2-PASS session=$session node=$name"
+            ;;
+        *)
+            echo "DNIV-E2-FAIL session=$session node=$name reason=bad-role"
+            exit 1
+            ;;
+    esac
     ;;
 
 *)

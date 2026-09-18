@@ -63,7 +63,7 @@ Implementation order:
 2. kernel route-state primitives, metrics and aging — complete;
 3. adjacency-backed routing update ingestion — complete;
 4. forwarding and visit-count/loop prevention — complete;
-5. E2 two-LAN forced-router topology;
+5. E2 two-LAN forced-router topology — harness implemented, acceptance pending;
 6. E3 alternate-path convergence;
 7. E4 multi-area L1/L2 behavior;
 8. independent Route20/PyDECnet routing interoperability on amd64 and ARM64.
@@ -88,4 +88,4 @@ Implementation order:
 
 ## Next action
 
-Phase 4 routing codecs, route state, adjacency-backed update ingestion and native Ethernet data forwarding are implemented. Short/long data headers are validated, forwarding uses L1/L2 route lookup, only UP-adjacency link sources are accepted, and visit count 31 is the loop-prevention ceiling. Next build the E2 two-LAN forced-router topology and prove this path in independent VMs.
+Phase 4 routing codecs, route state, adjacency-backed update ingestion and native Ethernet data forwarding are implemented. Short/long data headers are validated, forwarding uses L1/L2 route lookup, only UP-adjacency link sources are accepted, and visit count 31 is the loop-prevention ceiling. The E2 three-VM/two-LAN forced-router harness is implemented with bidirectional payload evidence and max-visit negative checks; exact amd64/ARM64 acceptance is still pending.
