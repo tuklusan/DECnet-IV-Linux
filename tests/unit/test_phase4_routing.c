@@ -139,7 +139,12 @@ static void test_malformed(void)
     memcpy(buf, good, sizeof(good));
     buf[3] = 1;
     assert(dniv_wire_parse_routing(buf, sizeof(good), &msg) ==
-           DNIV_WIRE_MALFORMED);
+           DNIV_WIRE_OK);
+
+    memcpy(buf, good, sizeof(good));
+    buf[0] |= 0x10U;
+    assert(dniv_wire_parse_routing(buf, sizeof(good), &msg) ==
+           DNIV_WIRE_OK);
 
     memcpy(buf, good, sizeof(good));
     buf[4] = 0;
@@ -171,7 +176,7 @@ static void test_malformed(void)
                            (sizeof(good) - DNIV_WIRE_ROUTE_HEADER_LEN -
                             DNIV_WIRE_ROUTE_CHECKSUM_LEN) / 2U));
     assert(dniv_wire_parse_routing(buf, sizeof(good), &msg) ==
-           DNIV_WIRE_MALFORMED);
+           DNIV_WIRE_OK);
 
     memcpy(buf, good, sizeof(good));
     buf[sizeof(good) - 1U] ^= 1U;

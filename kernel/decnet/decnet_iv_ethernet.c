@@ -902,7 +902,7 @@ static void dniv_handle_valid_routing(int ifindex,
             __u16 raw = dniv_wire_route_entry(&seg, ei);
             __u16 destination = (__u16)(seg.start + ei);
             __u16 cost = (__u16)(raw & 0x03ffU);
-            __u8 hops = (__u8)(raw >> 10);
+            __u8 hops = (__u8)((raw >> 10) & 0x1fU);
 
             if ((msg->level == 1U &&
                  destination == DNIV_ADDR_NODE(local)) ||

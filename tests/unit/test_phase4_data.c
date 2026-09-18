@@ -125,6 +125,7 @@ static void test_padding_and_limit(void)
     __u8 padded[] = {0x82,0x00,0x02,0x03,0x04,0x01,0x08,0x1f};
     __u8 bad_addr[] = {0x02,0x00,0x00,0x01,0x08,0x01};
     __u8 short_reserved_flag[] = {0x22,0x03,0x04,0x01,0x08,0x01};
+    __u8 short_future_flag[] = {0x42,0x03,0x04,0x01,0x08,0x01};
     __u8 short_reserved_visit[] = {0x02,0x03,0x04,0x01,0x08,0x41};
     __u8 long_reserved[] = {
         0x06,0x01,0x00,0xaa,0x00,0x04,0x00,0x03,0x04,
@@ -146,12 +147,24 @@ static void test_padding_and_limit(void)
            DNIV_WIRE_MALFORMED);
     assert(dniv_wire_parse_data(short_reserved_flag,
                                 sizeof(short_reserved_flag), &data) ==
+           DNIV_WIRE_OK);
+    assert(data.visit == 1U);
+    assert(dniv_wire_parse_data(short_future_flag,
+                                sizeof(short_future_flag), &data) ==
            DNIV_WIRE_MALFORMED);
     assert(dniv_wire_parse_data(short_reserved_visit,
                                 sizeof(short_reserved_visit), &data) ==
-           DNIV_WIRE_MALFORMED);
+           DNIV_WIRE_OK);
+    assert(data.visit == 1U);
     assert(dniv_wire_parse_data(long_reserved, sizeof(long_reserved), &data) ==
-           DNIV_WIRE_MALFORMED);
+           DNIV_WIRE_OK);
+    {
+        __u8 forwarded[64];
+        int forwarded_len = dniv_wire_build_forwarded_long(
+            forwarded, sizeof(forwarded), &data, 0U);
+        assert(forwarded_len == (int)sizeof(long_reserved));
+        assert(forwarded[1] == 1U);
+    }
     assert(dniv_wire_parse_data(long_bad_hi, sizeof(long_bad_hi), &data) ==
            DNIV_WIRE_MALFORMED);
 }

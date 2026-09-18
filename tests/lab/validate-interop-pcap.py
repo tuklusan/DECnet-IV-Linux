@@ -104,7 +104,7 @@ def route_checksum(words: bytes) -> int:
 def validate_routing_update(payload: bytes, expected_source: bytes,
                             level: int, self_index: int) -> bool:
     flag = L1_ROUTING if level == 1 else L2_ROUTING
-    if len(payload) < 12 or payload[0] != flag or payload[3] != 0:
+    if len(payload) < 12 or (payload[0] & 0x0F) != flag:
         return False
     if payload[1:3] != expected_source[4:6]:
         raise ValueError("routing update embedded source mismatch")
@@ -132,8 +132,6 @@ def validate_routing_update(payload: bytes, expected_source: bytes,
         for index in range(count):
             entry = int.from_bytes(body[pos + 2 * index:pos + 2 * index + 2],
                                    "little")
-            if entry & 0x8000:
-                raise ValueError("routing entry reserved bit set")
             if start + index == self_index:
                 self_seen = True
                 if entry != 0:

@@ -95,6 +95,7 @@ struct dniv_wire_data {
     __u8 flags;
     __u8 visit;
     __u8 is_long;
+    const __u8 *route_header;
     const __u8 *payload;
     __u32 payload_len;
 };
@@ -487,29 +488,26 @@ static inline int dniv_wire_parse_data(const __u8 *buf, __u32 len,
             return DNIV_WIRE_MALFORMED;
     }
 
+    data->route_header = buf;
     data->flags = buf[0];
     flags = (__u8)(buf[0] & DNIV_WIRE_DATA_CLASS_MASK);
     if (flags == DNIV_WIRE_SHORT_DATA) {
         if (len < DNIV_WIRE_SHORT_DATA_LEN ||
-            (buf[0] & 0x60U) != 0U ||
-            (buf[5] & 0xc0U) != 0U)
+            (buf[0] & 0x40U) != 0U)
             return DNIV_WIRE_MALFORMED;
         data->destination = dniv_wire_get_le16(buf + 1U);
         data->source = dniv_wire_get_le16(buf + 3U);
-        data->visit = buf[5];
+        data->visit = (__u8)(buf[5] & 0x3fU);
         data->header_len = DNIV_WIRE_SHORT_DATA_LEN;
         data->visit_offset = (__u16)(pad + 5U);
         data->is_long = 0U;
     } else if (flags == DNIV_WIRE_LONG_DATA) {
         if (len < DNIV_WIRE_LONG_DATA_LEN ||
             (buf[0] & 0x40U) != 0U ||
-            buf[1] != 0U || buf[2] != 0U ||
             buf[3] != 0xaaU || buf[4] != 0x00U ||
             buf[5] != 0x04U || buf[6] != 0x00U ||
-            buf[9] != 0U || buf[10] != 0U ||
             buf[11] != 0xaaU || buf[12] != 0x00U ||
-            buf[13] != 0x04U || buf[14] != 0x00U ||
-            buf[17] != 0U || buf[19] != 0U || buf[20] != 0U)
+            buf[13] != 0x04U || buf[14] != 0x00U)
             return DNIV_WIRE_MALFORMED;
         data->destination = dniv_wire_get_le16(buf + 7U);
         data->source = dniv_wire_get_le16(buf + 15U);
@@ -599,6 +597,15 @@ static inline int dniv_wire_build_forwarded_long(
         return 0;
 
     dniv_wire_zero(buf, len);
+    if (data->is_long && data->route_header) {
+        buf[1] = data->route_header[1];
+        buf[2] = data->route_header[2];
+        buf[9] = data->route_header[9];
+        buf[10] = data->route_header[10];
+        buf[17] = data->route_header[17];
+        buf[19] = data->route_header[19];
+        buf[20] = data->route_header[20];
+    }
     buf[0] = (__u8)(DNIV_WIRE_LONG_DATA |
                     (data->flags & (DNIV_WIRE_DATA_RQR |
                                     DNIV_WIRE_DATA_RTS)) |
@@ -740,7 +747,7 @@ static inline int dniv_wire_parse_routing(
             return DNIV_WIRE_MALFORMED;
     }
 
-    flags = buf[0];
+    flags = (__u8)(buf[0] & 0x0fU);
     if (flags == DNIV_WIRE_L1_ROUTING)
         level = 1U;
     else if (flags == DNIV_WIRE_L2_ROUTING)
@@ -753,7 +760,6 @@ static inline int dniv_wire_parse_routing(
               DNIV_WIRE_ROUTE_ENTRY_LEN +
               DNIV_WIRE_ROUTE_CHECKSUM_LEN ||
         ((len - DNIV_WIRE_ROUTE_HEADER_LEN) & 1U) != 0U ||
-        buf[3] != 0U ||
         !dniv_wire_route_source_valid(dniv_wire_get_le16(buf + 1)))
         return DNIV_WIRE_MALFORMED;
 
@@ -784,13 +790,7 @@ static inline int dniv_wire_parse_routing(
                  (__u32)count * DNIV_WIRE_ROUTE_ENTRY_LEN;
         if (seglen > end - off)
             return DNIV_WIRE_MALFORMED;
-        for (j = 0; j < count; j++) {
-            if (!dniv_wire_route_entry_valid(
-                    dniv_wire_get_le16(
-                        buf + off + DNIV_WIRE_ROUTE_SEGMENT_HEADER_LEN +
-                        (__u32)j * DNIV_WIRE_ROUTE_ENTRY_LEN)))
-                return DNIV_WIRE_MALFORMED;
-        }
+        (void)j;
         off += seglen;
         segcount++;
     }
