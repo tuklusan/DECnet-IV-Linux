@@ -30,6 +30,7 @@ import platform
 import re
 import shutil
 import socket
+import struct
 import subprocess
 import sys
 import time
@@ -85,6 +86,55 @@ def pcap_count(path: Path, expression: str) -> int:
     if result.returncode not in (0, 1):
         raise RuntimeError(result.stderr.strip() or f"tcpdump failed for {expression}")
     return sum(1 for line in result.stdout.splitlines() if line.strip())
+
+
+
+def pcap_router_init_seen(path: Path, mac_a: str, mac_b: str) -> bool:
+    data = path.read_bytes()
+    if len(data) < 24:
+        return False
+    magic = data[:4]
+    if magic == b"\xd4\xc3\xb2\xa1":
+        endian = "<"
+    elif magic == b"\xa1\xb2\xc3\xd4":
+        endian = ">"
+    else:
+        raise RuntimeError(f"unsupported pcap magic in {path}")
+
+    def mac_bytes(text: str) -> bytes:
+        return bytes(int(part, 16) for part in text.split(":"))
+
+    endpoints = {mac_bytes(mac_a): mac_bytes(mac_b),
+                 mac_bytes(mac_b): mac_bytes(mac_a)}
+    off = 24
+    while off + 16 <= len(data):
+        _, _, incl, _ = struct.unpack_from(endian + "IIII", data, off)
+        off += 16
+        frame = data[off:off + incl]
+        off += incl
+        if len(frame) < 43 or frame[12:14] != b"\x60\x03":
+            continue
+        plen = int.from_bytes(frame[14:16], "little")
+        if 16 + plen > len(frame):
+            continue
+        route = frame[16:16 + plen]
+        if route and route[0] & 0x80:
+            pad = route[0] & 0x7f
+            if pad == 0 or pad >= len(route):
+                continue
+            route = route[pad:]
+        if len(route) < 27 or route[0] != 0x0b:
+            continue
+        peer = endpoints.get(frame[6:12])
+        if peer is None:
+            continue
+        rslen = route[26]
+        if rslen % 7 or 27 + rslen > len(route):
+            continue
+        if all(route[pos:pos + 6] != peer
+               for pos in range(27, 27 + rslen, 7)):
+            return True
+    return False
 
 
 def contains(path: Path, needle: str) -> bool:
@@ -364,7 +414,9 @@ def main() -> int:
         for needle in required_b:
             if not contains(guest_b.log, needle):
                 raise SystemExit(f"python-lab: missing node B evidence: {needle}")
-        if not (contains(guest_a.log, f"DNIV-E1-INIT session={session}") or contains(guest_b.log, f"DNIV-E1-INIT session={session}")):
+        init_logged = (contains(guest_a.log, f"DNIV-E1-INIT session={session}") or
+                       contains(guest_b.log, f"DNIV-E1-INIT session={session}"))
+        if not init_logged and not pcap_router_init_seen(lab.pcap, mac_a, mac_b):
             raise SystemExit("python-lab: E1 initial INIT state was not observed")
         if not (contains(guest_a.log, f"DNIV-E1-RESTART-INIT session={session}") or contains(guest_b.log, f"DNIV-E1-RESTART-INIT session={session}")):
             raise SystemExit("python-lab: E1 restart INIT state was not observed")

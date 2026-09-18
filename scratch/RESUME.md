@@ -43,6 +43,4 @@ Routing codecs, route state, update ingestion and Ethernet forwarding are implem
 
 ## Next action
 
-Exact-head acceptance is blocked only by the continuity gate requiring `docs/PROJECT_STATE.md` to retain its `## Resume point` section; restore that required section and rerun acceptance.
-
-Run and close exact-SHA E2 acceptance on amd64 and ARM64. Fix only concrete defects found by that gate, then proceed to E3 alternate-path convergence. Do not reopen Phase 3 behavior without concrete regression evidence.
+Candidate `f3035cfd1e994764c1983dc7419ccc12e726ef12` passed build/project-state/reference gates and amd64 E1. ARM64 E1 guest behavior passed through restart/recovery, but the controller missed the very short initial INIT in its 250 ms polling; PCAP independently recorded a router hello omitting the peer from the RS list. The controller now treats either guest-observed INIT or that exact wire condition as valid evidence. Rerun exact-head E1/E2 acceptance, then proceed to E3 alternate-path convergence. Do not reopen Phase 3 behavior without concrete regression evidence.
