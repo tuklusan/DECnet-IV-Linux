@@ -93,6 +93,23 @@ def main() -> int:
             )
 
 
+
+    waiter = re.search(
+        r"wait_candidate_marker\(\) \{(?P<body>.*?)\n\}",
+        SCRIPT,
+        re.DOTALL,
+    )
+    if waiter is None:
+        raise SystemExit("interop-ready regression: wait_candidate_marker function missing")
+    body = waiter.group("body")
+    fail_check = body.find('grep -Fq "$fail_marker" "$reference_log"')
+    success_check = body.find('grep -Fq "$marker" "$log"')
+    if fail_check < 0 or success_check < 0 or fail_check > success_check:
+        raise SystemExit(
+            "interop-ready regression: reference failure marker must be checked "
+            "before candidate success during convergence"
+        )
+
     required_route20_diagnostics = [
         "route20-diagnostic",
         "-fsanitize=address,undefined",
