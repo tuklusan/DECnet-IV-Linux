@@ -456,8 +456,21 @@ e3)
                 candidate=${path##*/}
                 [ "$candidate" = lo ] || ip link set "$candidate" up
             done
-            sleep 65
-            poweroff_pass "DNIV-E3-PASS session=$session node=$name"
+            # Stay up until both endnodes have attached and the preferred
+            # router has disappeared, then leave a post-convergence window.
+            i=0
+            while [ "$i" -lt 800 ]; do
+                output=$(/usr/local/sbin/dnctl adjacencies 2>/dev/null || true)
+                ends=$(printf '%s\n' "$output" | grep -F ' endnode UP ' | wc -l)
+                if [ "$ends" -ge 2 ] && ! printf '%s\n' "$output" | grep -Fq '31.73 via '; then
+                    sleep 20
+                    poweroff_pass "DNIV-E3-PASS session=$session node=$name"
+                fi
+                i=$((i + 1))
+                sleep 0.25
+            done
+            echo "DNIV-E3-FAIL session=$session node=$name reason=standby-timeout"
+            exit 1
             ;;
         R2)
             modprobe decnet_iv default_area="$area" default_node="$node" default_name="$name" \
@@ -467,9 +480,22 @@ e3)
                 candidate=${path##*/}
                 [ "$candidate" = lo ] || ip link set "$candidate" up
             done
-            sleep 25
-            echo "DNIV-E3-PRIMARY-DOWN session=$session node=$name"
-            poweroff_pass "DNIV-E3-PASS session=$session node=$name"
+            # Do not start the failure clock until both endpoint adjacencies
+            # are actually present; guest boot order is deliberately free.
+            i=0
+            while [ "$i" -lt 800 ]; do
+                output=$(/usr/local/sbin/dnctl adjacencies 2>/dev/null || true)
+                ends=$(printf '%s\n' "$output" | grep -F ' endnode UP ' | wc -l)
+                if [ "$ends" -ge 2 ]; then
+                    sleep 5
+                    echo "DNIV-E3-PRIMARY-DOWN session=$session node=$name"
+                    poweroff_pass "DNIV-E3-PASS session=$session node=$name"
+                fi
+                i=$((i + 1))
+                sleep 0.25
+            done
+            echo "DNIV-E3-FAIL session=$session node=$name reason=primary-timeout"
+            exit 1
             ;;
         *)
             echo "DNIV-E3-FAIL session=$session node=$name reason=bad-role"
@@ -513,7 +539,10 @@ e4)
                 candidate=${path##*/}
                 [ "$candidate" = lo ] || ip link set "$candidate" up
             done
-            sleep 55
+            # Six-guest hosted boots are intentionally unsynchronized. Keep
+            # transit routing alive through route propagation and endpoint
+            # evidence instead of racing a short fixed lifetime.
+            sleep 120
             poweroff_pass "DNIV-E4-PASS session=$session node=$name"
             ;;
         L2)
@@ -524,7 +553,10 @@ e4)
                 candidate=${path##*/}
                 [ "$candidate" = lo ] || ip link set "$candidate" up
             done
-            sleep 55
+            # Six-guest hosted boots are intentionally unsynchronized. Keep
+            # transit routing alive through route propagation and endpoint
+            # evidence instead of racing a short fixed lifetime.
+            sleep 120
             poweroff_pass "DNIV-E4-PASS session=$session node=$name"
             ;;
         *)
