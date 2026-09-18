@@ -100,6 +100,8 @@ Phase 4 is closed on exact protocol candidate `6c185b6d01f8a57ee9f0ea6a6c37d7112
 
 Active. Implement NSP transport and the DECnet socket ABI without reopening Phase 4 unless concrete regression evidence requires it.
 
+Initial NSP foundation is implemented: deterministic Phase IV NSP packet codecs for ACK Data/Other/Connect, data segments, interrupt, Link Service, CI/RCI, CC, DI and DC; optional ACK/NAK/XACK/XNAK decoding; 12-bit sequence arithmetic; malformed-input rejection; and baseline response/connect/inactivity timer constants.
+
 ## Next action
 
-Begin Phase 5 with deterministic NSP packet/state-machine codecs and timers, then kernel NSP connection state, sequencing, retransmission, flow control and the socket/UAPI boundary. Preserve the exact-green Phase 4 candidate and extend independent interoperability only as NSP-capable peer coverage becomes available.
+NSP wire/state primitives and pinned PyDECnet exact vectors are now covered by unit tests. Next implement kernel NSP connection allocation/state transitions and retransmit queues, then flow control and the socket/UAPI boundary. Preserve the exact-green Phase 4 candidate and extend independent interoperability only as NSP-capable peer coverage becomes available.
