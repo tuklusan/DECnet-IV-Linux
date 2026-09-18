@@ -56,6 +56,8 @@ Deliver endnode behavior, Level 1 and Level 2 routing, routing/forwarding databa
 
 Exit criteria: traffic crosses forced router paths, failures converge, loops are prevented and independent interoperability works.
 
+Status: complete on exact protocol candidate `6c185b6d01f8a57ee9f0ea6a6c37d7112ddb77d2`; amd64/ARM64 E1-E4 and independent Route20/PyDECnet routing interoperability are green.
+
 ## Phase 5 - NSP transport and DECnet socket ABI
 
 Deliver NSP connection state, flow control, sequencing, retransmission, timers and native socket/UAPI integration.
