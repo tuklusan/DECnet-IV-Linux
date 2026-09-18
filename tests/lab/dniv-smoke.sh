@@ -471,6 +471,62 @@ e3)
     esac
     ;;
 
+
+e4)
+    case "$role" in
+        A|B)
+            if [ -z "$peer" ] || [ -z "$peer_node" ] || [ -z "$dest_node" ]; then
+                echo "DNIV-E4-FAIL session=$session node=$name reason=missing-args"
+                exit 1
+            fi
+            modprobe decnet_iv default_area="$area" default_node="$node" default_name="$name" \
+                default_node_type=3 hello_interval=2
+            /usr/local/sbin/dnctl set "$area.$node" "$name"
+            ip link set "$iface" up
+            if ! wait_any_adjacency_up "$peer_node" 320; then
+                echo "DNIV-E4-FAIL session=$session node=$name reason=no-l1-router"
+                exit 1
+            fi
+            sleep 5
+            i=0
+            while [ "$i" -lt 10 ]; do
+                i=$((i + 1))
+                /usr/local/sbin/dnraw --short "$iface" "$peer" "$area.$node" "$dest_node" 0 \
+                    "DNIV-E4-$session-$name-$i"
+                sleep 0.5
+            done
+            sleep 5
+            poweroff_pass "DNIV-E4-PASS session=$session node=$name"
+            ;;
+        L1)
+            modprobe decnet_iv default_area="$area" default_node="$node" default_name="$name" \
+                default_node_type=2 router_priority=96 hello_interval=2 ethernet_cost=4
+            /usr/local/sbin/dnctl set "$area.$node" "$name"
+            for path in /sys/class/net/*; do
+                candidate=${path##*/}
+                [ "$candidate" = lo ] || ip link set "$candidate" up
+            done
+            sleep 55
+            poweroff_pass "DNIV-E4-PASS session=$session node=$name"
+            ;;
+        L2)
+            modprobe decnet_iv default_area="$area" default_node="$node" default_name="$name" \
+                default_node_type=1 router_priority=64 hello_interval=2 ethernet_cost=4
+            /usr/local/sbin/dnctl set "$area.$node" "$name"
+            for path in /sys/class/net/*; do
+                candidate=${path##*/}
+                [ "$candidate" = lo ] || ip link set "$candidate" up
+            done
+            sleep 55
+            poweroff_pass "DNIV-E4-PASS session=$session node=$name"
+            ;;
+        *)
+            echo "DNIV-E4-FAIL session=$session node=$name reason=bad-role"
+            exit 1
+            ;;
+    esac
+    ;;
+
 *)
     echo "DNIV-LAB-FAIL session=$session node=$name reason=bad-mode"
     exit 1

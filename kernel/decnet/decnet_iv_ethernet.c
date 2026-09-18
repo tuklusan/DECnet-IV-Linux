@@ -1185,6 +1185,7 @@ int dniv_eth_set_address(__u16 address)
         return 0;
 
     cancel_delayed_work_sync(&dniv_hello_work);
+    cancel_delayed_work_sync(&dniv_route_work);
     dniv_wire_mac_from_address(old, old_mac);
     dniv_wire_mac_from_address(address, new_mac);
 
@@ -1208,6 +1209,7 @@ int dniv_eth_set_address(__u16 address)
         }
         rtnl_unlock();
         schedule_delayed_work(&dniv_hello_work, 0);
+        schedule_delayed_work(&dniv_route_work, HZ);
         return err;
     }
 
@@ -1224,6 +1226,7 @@ int dniv_eth_set_address(__u16 address)
     }
     rtnl_unlock();
     schedule_delayed_work(&dniv_hello_work, 0);
+    schedule_delayed_work(&dniv_route_work, HZ);
     return 0;
 }
 
