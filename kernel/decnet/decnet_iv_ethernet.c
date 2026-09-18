@@ -29,6 +29,7 @@
 #include <decnet_iv_route_metric.h>
 #include <decnet_iv_wire.h>
 #include "decnet_iv_ethernet.h"
+#include "decnet_iv_nsp.h"
 #include "decnet_iv_route.h"
 
 #define DNIV_MAX_ADJACENCIES 64U
@@ -1001,13 +1002,19 @@ static void dniv_handle_valid_data(int input_ifindex,
     bool generated_return = false;
     int forwarded_len;
 
-    if (!data || dniv_local_node_type == DNIV_NODE_TYPE_ENDNODE)
+    if (!data)
         return;
 
     packet = *data;
 
 retry:
-    if (packet.destination == local)
+    if (packet.destination == local) {
+        if (packet.payload_len <= 0xffffU)
+            dniv_nsp_receive(packet.source, packet.payload,
+                             (__u16)packet.payload_len);
+        return;
+    }
+    if (dniv_local_node_type == DNIV_NODE_TYPE_ENDNODE)
         return;
 
     if (DNIV_ADDR_AREA(packet.destination) == DNIV_ADDR_AREA(local)) {

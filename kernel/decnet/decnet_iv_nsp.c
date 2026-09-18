@@ -19,6 +19,7 @@
 #include <linux/spinlock.h>
 #include <linux/string.h>
 
+#include <decnet_iv_nsp_wire.h>
 #include "decnet_iv_nsp.h"
 
 struct dniv_nsp_retransmit {
@@ -54,6 +55,22 @@ static struct dniv_nsp_connection *dniv_nsp_find_locked(__u16 local_link)
     for (i = 0; i < DNIV_NSP_MAX_CONNECTIONS; i++) {
         if (dniv_nsp_connections[i].used &&
             dniv_nsp_connections[i].local_link == local_link)
+            return &dniv_nsp_connections[i];
+    }
+    return NULL;
+}
+
+static struct dniv_nsp_connection *
+dniv_nsp_find_remote_locked(__u16 remote_node, __u16 remote_link)
+{
+    unsigned int i;
+
+    if (!remote_node || !remote_link)
+        return NULL;
+    for (i = 0; i < DNIV_NSP_MAX_CONNECTIONS; i++) {
+        if (dniv_nsp_connections[i].used &&
+            dniv_nsp_connections[i].remote_node == remote_node &&
+            dniv_nsp_connections[i].remote_link == remote_link)
             return &dniv_nsp_connections[i];
     }
     return NULL;
@@ -291,6 +308,11 @@ int dniv_nsp_retransmit_queue(__u16 local_link, __u16 sequence,
         kfree(entry);
         return -ENOSPC;
     }
+    if (entry->sequence != conn->tx_next) {
+        spin_unlock_irqrestore(&dniv_nsp_lock, flags);
+        kfree(entry);
+        return -EINVAL;
+    }
     list_add_tail(&entry->link, &conn->retransmit);
     conn->retransmit_count++;
     conn->tx_next = dniv_nsp_seq_next(entry->sequence);
@@ -314,7 +336,7 @@ unsigned int dniv_nsp_retransmit_ack(__u16 local_link, __u16 ack)
     }
     list_for_each_entry_safe(entry, tmp, &conn->retransmit, link) {
         if (!dniv_nsp_seq_acked(entry->sequence, ack))
-            continue;
+            break;
         list_del(&entry->link);
         kfree(entry);
         conn->retransmit_count--;
@@ -358,4 +380,132 @@ int dniv_nsp_retransmit_due(__u16 local_link, unsigned long now,
 out:
     spin_unlock_irqrestore(&dniv_nsp_lock, flags);
     return ret;
+}
+
+
+int dniv_nsp_receive(__u16 remote_node, const __u8 *wire, __u16 wire_len)
+{
+    struct dniv_nsp_packet pkt;
+    struct dniv_nsp_connection *conn;
+    unsigned long flags;
+    enum dniv_nsp_rx_order order;
+
+    if (!remote_node || !wire || !wire_len ||
+        dniv_nsp_parse(wire, wire_len, &pkt) != DNIV_NSP_OK)
+        return -EINVAL;
+
+    spin_lock_irqsave(&dniv_nsp_lock, flags);
+
+    if (pkt.type == DNIV_NSP_CI || pkt.type == DNIV_NSP_RCI) {
+        unsigned int i;
+        __u16 link;
+
+        if (!pkt.src) {
+            spin_unlock_irqrestore(&dniv_nsp_lock, flags);
+            return -EINVAL;
+        }
+        conn = dniv_nsp_find_remote_locked(remote_node, pkt.src);
+        if (conn) {
+            spin_unlock_irqrestore(&dniv_nsp_lock, flags);
+            return 0;
+        }
+        conn = NULL;
+        for (i = 0; i < DNIV_NSP_MAX_CONNECTIONS; i++) {
+            if (!dniv_nsp_connections[i].used) {
+                conn = &dniv_nsp_connections[i];
+                break;
+            }
+        }
+        if (!conn) {
+            spin_unlock_irqrestore(&dniv_nsp_lock, flags);
+            return -ENOSPC;
+        }
+        link = dniv_nsp_take_link_locked(i);
+        if (!link) {
+            spin_unlock_irqrestore(&dniv_nsp_lock, flags);
+            return -ENOSPC;
+        }
+        memset(conn, 0, sizeof(*conn));
+        INIT_LIST_HEAD(&conn->retransmit);
+        conn->used = true;
+        conn->local_link = link;
+        conn->remote_link = pkt.src;
+        conn->remote_node = remote_node;
+        conn->state = DNIV_NSP_ST_CR;
+        spin_unlock_irqrestore(&dniv_nsp_lock, flags);
+        return 0;
+    }
+
+    conn = dniv_nsp_find_locked(pkt.dst);
+    if (!conn || conn->remote_node != remote_node ||
+        (pkt.type != DNIV_NSP_ACK_CONN && conn->remote_link != pkt.src)) {
+        spin_unlock_irqrestore(&dniv_nsp_lock, flags);
+        return -ENOENT;
+    }
+
+    switch (pkt.type) {
+    case DNIV_NSP_ACK_CONN:
+        if (conn->state != DNIV_NSP_ST_CI) {
+            spin_unlock_irqrestore(&dniv_nsp_lock, flags);
+            return -EINVAL;
+        }
+        conn->state = DNIV_NSP_ST_CD;
+        break;
+    case DNIV_NSP_CC:
+        if (conn->state != DNIV_NSP_ST_CI &&
+            conn->state != DNIV_NSP_ST_CD) {
+            spin_unlock_irqrestore(&dniv_nsp_lock, flags);
+            return -EINVAL;
+        }
+        conn->state = DNIV_NSP_ST_RUN;
+        break;
+    case DNIV_NSP_DI:
+        if (!dniv_nsp_state_transition_valid(conn->state, DNIV_NSP_ST_DI)) {
+            spin_unlock_irqrestore(&dniv_nsp_lock, flags);
+            return -EINVAL;
+        }
+        conn->state = DNIV_NSP_ST_DI;
+        break;
+    case DNIV_NSP_DC:
+        dniv_nsp_purge_locked(conn);
+        memset(conn, 0, sizeof(*conn));
+        INIT_LIST_HEAD(&conn->retransmit);
+        break;
+    case DNIV_NSP_DATA:
+    case DNIV_NSP_INT:
+    case DNIV_NSP_LINK_SVC:
+    case DNIV_NSP_ACK_DATA:
+    case DNIV_NSP_ACK_OTHER:
+        if (conn->state == DNIV_NSP_ST_CC)
+            conn->state = DNIV_NSP_ST_RUN;
+        if (conn->state != DNIV_NSP_ST_RUN) {
+            spin_unlock_irqrestore(&dniv_nsp_lock, flags);
+            return -EINVAL;
+        }
+        if (pkt.ack1.present && !dniv_nsp_ack_cross(&pkt.ack1)) {
+            struct dniv_nsp_retransmit *entry;
+            struct dniv_nsp_retransmit *tmp;
+
+            list_for_each_entry_safe(entry, tmp, &conn->retransmit, link) {
+                if (!dniv_nsp_seq_acked(entry->sequence, pkt.ack1.num))
+                    break;
+                list_del(&entry->link);
+                kfree(entry);
+                conn->retransmit_count--;
+            }
+        }
+        if (pkt.type == DNIV_NSP_DATA || pkt.type == DNIV_NSP_INT ||
+            pkt.type == DNIV_NSP_LINK_SVC) {
+            order = dniv_nsp_seq_order(conn->rx_next, pkt.segnum);
+            if (order == DNIV_NSP_RX_EXPECTED)
+                conn->rx_next = dniv_nsp_seq_next(conn->rx_next);
+        }
+        break;
+    default:
+        spin_unlock_irqrestore(&dniv_nsp_lock, flags);
+        return -EINVAL;
+    }
+
+    spin_unlock_irqrestore(&dniv_nsp_lock, flags);
+    return 0;
 }
