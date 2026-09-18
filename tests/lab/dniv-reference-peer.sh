@@ -116,6 +116,37 @@ dump_route20_diagnostics() {
     echo "DNIV-REF-DIAG session=$session reference=route20 source=kernel end"
 }
 
+
+run_route20_diagnostic() {
+    diag_bin=/usr/local/libexec/dniv-route20-diagnostic
+    install -m 0755 /mnt/reference/route20-diagnostic "$diag_bin"
+    rm -f /var/run/route20.pid /run/reference/route20-asan.*
+    echo "DNIV-REF-DIAG session=$session reference=route20 source=sanitizer begin"
+    ASAN_OPTIONS='abort_on_error=1:detect_leaks=0:log_path=/run/reference/route20-asan' \
+    UBSAN_OPTIONS='print_stacktrace=1:halt_on_error=1' \
+        "$diag_bin" /run/reference/route20.ini >/dev/null 2>&1 || true
+    i=0
+    diag_pid=
+    while [ "$i" -lt 50 ] && [ ! -s /var/run/route20.pid ]; do
+        i=$((i + 1))
+        sleep 0.1
+    done
+    [ ! -s /var/run/route20.pid ] || diag_pid=$(cat /var/run/route20.pid)
+    i=0
+    while [ -n "$diag_pid" ] && kill -0 "$diag_pid" 2>/dev/null && [ "$i" -lt 150 ]; do
+        i=$((i + 1))
+        sleep 0.1
+    done
+    for log in /run/reference/route20-asan.*; do
+        [ -f "$log" ] && cat "$log"
+    done
+    if [ -n "$diag_pid" ] && kill -0 "$diag_pid" 2>/dev/null; then
+        kill "$diag_pid" 2>/dev/null || true
+    fi
+    echo "DNIV-REF-DIAG session=$session reference=route20 source=sanitizer end"
+    echo "DNIV-REF-DIAG-DONE session=$session reference=route20"
+}
+
 probe_loop() {
     i=0
     while :; do
@@ -190,6 +221,9 @@ done
 
 if [ "$reference" = route20 ]; then
     dump_route20_diagnostics
+    echo "DNIV-REF-FAIL session=$session reason=reference-exited"
+    run_route20_diagnostic
+else
+    echo "DNIV-REF-FAIL session=$session reason=reference-exited"
 fi
-echo "DNIV-REF-FAIL session=$session reason=reference-exited"
 exit 1

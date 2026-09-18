@@ -203,6 +203,32 @@ wait_marker() {
     return 1
 }
 
+
+wait_candidate_marker() {
+    local log=$1 marker=$2 seconds=$3 candidate_pid=$4 reference_pid=$5 reference_log=$6
+    local deadline=$((SECONDS + seconds))
+    local fail_marker="DNIV-REF-FAIL session=$session"
+    local diag_done="DNIV-REF-DIAG-DONE session=$session reference=route20"
+    while (( SECONDS < deadline )); do
+        if grep -Fq "$fail_marker" "$reference_log" 2>/dev/null; then
+            if [[ "$reference" == route20 ]]; then
+                local diag_deadline=$((SECONDS + 30))
+                while (( SECONDS < diag_deadline )); do
+                    grep -Fq "$diag_done" "$reference_log" 2>/dev/null && break
+                    kill -0 "$reference_pid" 2>/dev/null || break
+                    sleep 1
+                done
+            fi
+            return 1
+        fi
+        grep -Fq "$marker" "$log" 2>/dev/null && return 0
+        kill -0 "$candidate_pid" 2>/dev/null || return 1
+        kill -0 "$reference_pid" 2>/dev/null || return 1
+        sleep 1
+    done
+    return 1
+}
+
 start_reference "$ref1_disk" "$ref1_log" & REFERENCE_PID=$!
 if ! wait_marker "$ref1_log" "DNIV-REF-READY session=$session reference=$reference sha=$expected_sha scenario=$scenario" "$reference_ready_seconds" "$REFERENCE_PID"; then
     tail -160 "$ref1_log" >&2 || true
@@ -211,7 +237,7 @@ fi
 
 candidate_common="root=LABEL=dniv-root rootfstype=ext4 rw dniv.interop=1 dniv.area=$area dniv.node=$node dniv.name=$name dniv.peer_node=$ref_area.$ref_node dniv.scenario=$scenario dniv.session=$session"
 start_vm "candidate-$scenario" "$candidate_disk" "$tap_candidate" "$candidate_hw" "$candidate_log" "$candidate_common" & CANDIDATE_PID=$!
-if ! wait_marker "$candidate_log" "DNIV-INTEROP-READY-STOP session=$session scenario=$scenario" "$timeout_seconds" "$CANDIDATE_PID" "$REFERENCE_PID"; then
+if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-READY-STOP session=$session scenario=$scenario" "$timeout_seconds" "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
     tail -220 "$candidate_log" >&2 || true
     tail -160 "$ref1_log" >&2 || true
     exit 1
@@ -230,7 +256,7 @@ if ! wait_marker "$ref2_log" "DNIV-REF-READY session=$session reference=$referen
     tail -160 "$ref2_log" >&2 || true
     exit 1
 fi
-if ! wait_marker "$candidate_log" "DNIV-INTEROP-PASS session=$session scenario=$scenario" 180 "$CANDIDATE_PID" "$REFERENCE_PID"; then
+if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-PASS session=$session scenario=$scenario" 180 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref2_log"; then
     tail -220 "$candidate_log" >&2 || true
     tail -160 "$ref2_log" >&2 || true
     exit 1

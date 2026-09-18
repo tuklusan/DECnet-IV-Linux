@@ -92,6 +92,25 @@ def main() -> int:
                 "when the reference VM exits"
             )
 
+
+    required_route20_diagnostics = [
+        "route20-diagnostic",
+        "-fsanitize=address,undefined",
+        "DNIV-REF-DIAG-DONE session=$session reference=route20",
+        "wait_candidate_marker",
+    ]
+    combined = SCRIPT + "\n" + REFERENCE_IMAGE + "\n" + (
+        ROOT / ".github/workflows/interop.yml"
+    ).read_text(encoding="utf-8") + "\n" + (
+        ROOT / "tests/lab/dniv-reference-peer.sh"
+    ).read_text(encoding="utf-8")
+    for fragment in required_route20_diagnostics:
+        if fragment not in combined:
+            raise SystemExit(
+                "interop-ready regression: Route20 post-failure diagnostic path incomplete: "
+                f"{fragment!r}"
+            )
+
     print("interop-ready regression passed: amd64=180s arm64=360s")
     return 0
 

@@ -260,8 +260,14 @@ jobs:
               bundle="$RUNNER_TEMP/bundle-route20"
               mkdir -p "$bundle"
               cp "$work/Route20/route20" "$bundle/route20"
+              rm -f "$work/Route20/route20"
+              make -C "$work/Route20" \
+                CFLAGS_G='-g3 -fno-omit-frame-pointer -fsanitize=address,undefined' \
+                LDFLAGS_O='-fsanitize=address,undefined' 2>&1 | \
+                tee "$DNIV_SCRATCH_DIR/route20-diagnostic-build.log"
+              cp "$work/Route20/route20" "$bundle/route20-diagnostic"
               printf 'REFERENCE=route20\nREFERENCE_SHA=%s\n' "$ROUTE20_REF" > "$bundle/manifest.env"
-              (cd "$bundle" && sha256sum route20 > SHA256SUMS)
+              (cd "$bundle" && sha256sum route20 route20-diagnostic > SHA256SUMS)
               printf 'ROUTE20_REF=%s\n' "$ROUTE20_REF" > "$DNIV_SCRATCH_DIR/references.env"
               ;;
             pydecnet)
