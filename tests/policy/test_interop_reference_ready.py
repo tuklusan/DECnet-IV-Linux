@@ -112,7 +112,9 @@ def main() -> int:
 
     required_route20_diagnostics = [
         "route20-diagnostic",
-        "-fsanitize=address,undefined",
+        "route20-diagnostic-shim.c",
+        "-rdynamic",
+        "DNIV-ROUTE20-SIGNAL",
         "DNIV-REF-DIAG-DONE session=$session reference=route20",
         "wait_candidate_marker",
     ]
@@ -124,7 +126,7 @@ def main() -> int:
     for fragment in required_route20_diagnostics:
         if fragment not in combined:
             raise SystemExit(
-                "interop-ready regression: Route20 post-failure diagnostic path incomplete: "
+                "interop-ready regression: Route20 post-failure backtrace path incomplete: "
                 f"{fragment!r}"
             )
 

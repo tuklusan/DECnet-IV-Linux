@@ -260,10 +260,12 @@ jobs:
               bundle="$RUNNER_TEMP/bundle-route20"
               mkdir -p "$bundle"
               cp "$work/Route20/route20" "$bundle/route20"
+              cp tests/lab/route20-diagnostic-shim.c "$work/Route20/route20_diagnostic_shim.c"
+              sed -i 's/          update.c/          update.c \\\n          route20_diagnostic_shim.c/' "$work/Route20/makefile"
               rm -f "$work/Route20/route20"
               make -C "$work/Route20" \
-                CFLAGS_G='-g3 -fno-omit-frame-pointer -fsanitize=address,undefined' \
-                LDFLAGS_O='-fsanitize=address,undefined' 2>&1 | \
+                CFLAGS_G='-g3 -fno-omit-frame-pointer' \
+                LDFLAGS_O='-rdynamic' 2>&1 | \
                 tee "$DNIV_SCRATCH_DIR/route20-diagnostic-build.log"
               cp "$work/Route20/route20" "$bundle/route20-diagnostic"
               printf 'REFERENCE=route20\nREFERENCE_SHA=%s\n' "$ROUTE20_REF" > "$bundle/manifest.env"
