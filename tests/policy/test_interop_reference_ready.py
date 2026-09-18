@@ -115,6 +115,7 @@ def main() -> int:
         "route20-diagnostic-shim.c",
         "-rdynamic",
         "DNIV-ROUTE20-SIGNAL",
+        "DNIV-ROUTE20-EVENT",
         "DNIV-REF-DIAG-DONE session=$session reference=route20",
         "wait_candidate_marker",
     ]

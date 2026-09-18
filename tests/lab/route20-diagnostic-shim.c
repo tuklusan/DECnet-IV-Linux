@@ -23,6 +23,8 @@
 #include <ucontext.h>
 #include <unistd.h>
 
+#include "route20.h"
+
 static void dniv_log_site(int fd, uintptr_t site)
 {
     Dl_info symbol;
@@ -37,6 +39,23 @@ static void dniv_log_site(int fd, uintptr_t site)
     }
     dprintf(fd, "DNIV-ROUTE20-CALLSITE address=%p symbol=%s offset=0x%lx\n",
             (void *)site, name, (unsigned long)offset);
+}
+
+static void dniv_log_event_handlers(int fd)
+{
+    int i;
+
+    dprintf(fd, "DNIV-ROUTE20-EVENTS count=%d changed=%d\n",
+            numEventHandlers, eventHandlersChanged);
+    for (i = 0; i < numEventHandlers; i++) {
+        dprintf(fd,
+                "DNIV-ROUTE20-EVENT index=%d handle=%u context=%p handler=%p name=%s\n",
+                i,
+                eventHandlers[i].waitHandle,
+                eventHandlers[i].context,
+                (void *)eventHandlers[i].eventHandler,
+                eventHandlers[i].name != NULL ? eventHandlers[i].name : "?");
+    }
 }
 
 static void dniv_route20_crash(int sig, siginfo_t *info, void *context)
@@ -60,6 +79,7 @@ static void dniv_route20_crash(int sig, siginfo_t *info, void *context)
     if (fd >= 0) {
         dprintf(fd, "DNIV-ROUTE20-SIGNAL sig=%d addr=%p\n", sig, info->si_addr);
         dniv_log_site(fd, site);
+        dniv_log_event_handlers(fd);
         count = backtrace(frames, (int)(sizeof(frames) / sizeof(frames[0])));
         backtrace_symbols_fd(frames, count, fd);
         fsync(fd);
