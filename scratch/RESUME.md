@@ -16,7 +16,7 @@
 
 ## Current checkpoint
 
-A temporary one-shot workflow is creating annotated tag `PHASE-4-COMPLETE` on closure commit `571333bfd7aaa8b2fcc88715c1d61442af151f3c`; remove it immediately after verification.
+Annotated tag `PHASE-4-COMPLETE` is verified on closure commit `571333bfd7aaa8b2fcc88715c1d61442af151f3c`; the temporary tag workflow has been removed.
 
 Phase 4 is complete on exact protocol candidate `6c185b6d01f8a57ee9f0ea6a6c37d7112ddb77d2`; Phase 5 is active on `main`. Phase 3 remains frozen at tag `PHASE-3-COMPLETE` on commit `ae1bcb82a1539ccadda0661664205e360bd760b7`.
 
