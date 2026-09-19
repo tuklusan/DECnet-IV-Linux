@@ -76,18 +76,14 @@ Implement as protocol dependencies become ready: `ncp`; `sethost`/`dnlogin`; DAP
 
 Exit criteria: the useful DECnet/Linux command environment works on the new kernel stack and against independent peers.
 
-## Phase 8 - DDCMP
+## Phase 8 - distributed VDE2, MULTINET and HECnet interoperability
 
-Deliver kernel DDCMP framing/state, CRC, ACK/NAK/REP, sequencing, retransmission, timers, restart handling, CI byte-stream transport plumbing and later physical serial/synchronous testing.
+Deliver rootless VDE2 Ethernet fabrics for local and cross-runner labs, a configurable user-space MULTINET TCP gateway based on the proven PyDECnet implementation, and controlled Area-31 HECnet connectivity.
 
-Exit criteria: normal and fault-injected links recover correctly and expose correct counters.
+Exit criteria: VDE2 and MULTINET pass separate positive, negative, restart and stress proofs; then an exact candidate routes successfully between local VDE lab nodes and explicitly selected HECnet peers without one-off protocol patches.
 
-## Phase 9 - mixed-media routing
+## Phase 9 - scale, portability, real peers and release images
 
-Required topology includes `Ethernet -> DECnet router -> DDCMP -> DECnet router -> Ethernet`. Exercise higher layers across the path as they become available.
+Deliver 4/8/16-node routed topologies across one or more runners, both CPU architectures and mixed directions, maintained distro portability, HECnet and real DEC peers, physical mixed-CPU testing, self-booting QCOW2/RAW images, checksums and reproducible manifests.
 
-## Phase 10 - scale, portability, real peers and release images
-
-Deliver 4/8/16-node routed topologies, both CPU architectures and mixed directions, maintained distro portability, real DEC peers, physical mixed-CPU testing, self-booting QCOW2/RAW images, checksums and reproducible manifests.
-
-Exit criteria: the release candidate passes `docs/PRE_PRODUCTION_TEST.md`, including all applicable external conformance, virtual topology, mixed-media, positive/negative, stress/endurance, false-green, real-peer and upgrade/rollback gates.
+Exit criteria: the release candidate passes `docs/PRE_PRODUCTION_TEST.md`, including all applicable external conformance, virtual/distributed topology, VDE2/MULTINET transport, positive/negative, stress/endurance, false-green, real-peer and upgrade/rollback gates.

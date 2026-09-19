@@ -1,0 +1,50 @@
+# ============================================================================
+# Copyright (c) 2026 Supratim Sanyal of SANYALnet Labs.
+# Proprietary rights reserved except as expressly licensed herein.
+#
+# DECnet-IV-Linux
+# This file is governed by the SANYALnet Labs Non-Commercial License in the
+# root LICENSE file. Non-Commercial use is permitted; Commercial Use and use
+# for AI/ML model training are prohibited unless separately authorized.
+#
+# Attribution is required: "Based on original work by Supratim Sanyal of
+# SANYALnet Labs." See LICENSE for full terms, warranty disclaimer, termination,
+# patent, trademark, and governing-law provisions.
+# ============================================================================
+
+name: VDE2 Transport Proof
+
+on:
+  workflow_dispatch:
+  issues:
+    types: [opened, reopened]
+
+permissions:
+  contents: read
+  issues: read
+
+concurrency:
+  group: dniv-vde2-proof
+  cancel-in-progress: false
+
+jobs:
+  prove-vde2:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.issue.title == 'DNIV VDE2 proof' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out exact repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+
+      - name: Install VDE2 proof dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y build-essential libpcap-dev vde2 libvdeplug-dev python3-venv
+
+      - name: Prove VDE2 transport and independent adjacency
+        shell: bash
+        run: tests/lab/prove-vde2.sh

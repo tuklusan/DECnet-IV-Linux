@@ -21,7 +21,6 @@ This is the minimum protocol-document set for the current project goal. The repo
 | Layer | Digital specification | Project use | Searchable source |
 | --- | --- | --- | --- |
 | Architecture | DECnet Digital Network Architecture (Phase IV) General Description, AA-N149A-TK | Layering, terminology and relationships between components | https://linux-decnet.sourceforge.net/docs/doc_index.html |
-| DDCMP | DNA DDCMP Functional Specification, Phase IV V4.1, AA-K175A-TK | Framing, CRC, startup, ACK/NAK/REP, sequencing, timers, maintenance mode | https://linux-decnet.sourceforge.net/docs/ddcmp.txt |
 | Ethernet data link | DNA Phase IV Ethernet Data Link Functional Specification, AA-Y298A-TK | DECnet-over-Ethernet conventions and link behavior | https://linux-decnet.sourceforge.net/docs/edatlin10.txt |
 | Routing | DNA Phase IV Routing Layer Functional Specification V2.0, AA-X435A-TK | Endnode, L1/L2 router behavior, initialization, routing updates, forwarding, visit count, adjacency | https://linux-decnet.sourceforge.net/docs/route20.txt |
 | NSP | DNA Phase IV Network Services Protocol Functional Specification V4.0, AA-X439A-TK | Logical links, sequencing, ACKs, retransmission, flow control and disconnect behavior | https://linux-decnet.sourceforge.net/docs/nsp401.txt |
@@ -45,4 +44,4 @@ Specifications are authoritative for protocol meaning. Implementations are evide
 - Phase 5 NSP/socket ABI: NSP V4.0 plus Session Control V1.0; LinuxDECnet is the Linux API compatibility reference.
 - Phase 6 management: Network Management V4.0/NICE plus PyDECnet NML and LinuxDECnet NML behavior.
 - Phase 7 file utilities: DAP V5.6 plus LinuxDECnet libdap/librms/FAL and PyDECnet FAL.
-- Phase 8 DDCMP: DDCMP V4.1 plus PyDECnet and DEC/SIMH peers.
+- Phase 8 distributed lab transport: VDE2/libvdeplug behavior plus PyDECnet MULTINET TCP and controlled HECnet Area-31 peers.

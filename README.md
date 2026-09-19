@@ -23,7 +23,7 @@ Based on original work by Supratim Sanyal of SANYALnet Labs. See `LICENSE` for t
 - Build DECnet Phase IV as a fresh out-of-tree Linux kernel module, not the removed legacy stack.
 - Provide a versioned kernel/userspace ABI and the useful DECnet/Linux tool environment.
 - Build reproducible x86_64 and aarch64 images.
-- Test on independent VMs, independent peers, routed/mixed-media topologies, faults and stress.
+- Test on independent VMs, independent peers, routed/distributed VDE2 and MULTINET topologies, faults and stress.
 
 ## Current baseline
 

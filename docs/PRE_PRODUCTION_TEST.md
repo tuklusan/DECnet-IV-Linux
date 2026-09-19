@@ -16,9 +16,9 @@
 
 ## Purpose
 
-This is the single pre-production acceptance procedure for DECnet-IV-Linux. It consolidates project tests, the existing E0-E4 and D0-D5 ladders, relevant behavior and native tests from the exact pinned Route20, PyDECnet, LinuxDECnet and SIMH references, plus Linux-kernel-specific lifecycle, concurrency, negative, stress, endurance, security and recovery testing.
+This is the single pre-production acceptance procedure for DECnet-IV-Linux. It consolidates project tests, the existing E0-E4 ladder, relevant behavior and native tests from the exact pinned Route20, PyDECnet, LinuxDECnet and SIMH references, plus Linux-kernel-specific lifecycle, concurrency, negative, stress, endurance, security and recovery testing.
 
-Tests progress from deterministic byte/vector checks to destructive routed and mixed-media endurance. Positive, negative, stress and recovery coverage are all mandatory when applicable. Self-to-self success is development evidence only; final interoperability requires independent implementations or real DEC peers.
+Tests progress from deterministic byte/vector checks to destructive routed and distributed-transport endurance. Positive, negative, stress and recovery coverage are all mandatory when applicable. Self-to-self success is development evidence only; final interoperability requires independent implementations or real DEC peers.
 
 A documented test that was not actually executed is not green. Manual and physical tests count only when their exact procedure, candidate identity and evidence are retained.
 
@@ -28,8 +28,8 @@ Repository state, `docs/HANDOVER.md`, `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`,
 
 | Reference | Revision | Acceptance use |
 | --- | --- | --- |
-| Route20 | `ea144b2e9978c7d216bc7c171b22fe47ca555567` | independent Ethernet/routing behavior and live peer |
-| PyDECnet behavior/live | `a7194be8d72dea6f9eb4f77083f056f53e80df58` | independent live peer |
+| Route20 | `564df0be75831aaf00590ce10152655460dd43dc` | independent Ethernet/routing behavior, live peer and native VDE reference |
+| PyDECnet behavior/live | `60778de8242793228ffb5ba6c9db23ae92620cb1` | independent live peer, native VDE and MULTINET authority |
 | PyDECnet tests | `9a844987bf3a1450632dee8d37e60a23a453bad3` | protocol vectors/state machines and native reference baseline |
 | LinuxDECnet | `ff39eef045d1e4b7b72a3d40111e89c07a473398` | userspace/API and VAX-data conversion comparison |
 | SIMH | `5b73b1032b52d19bf80752ea4d9cbbdc92e7b5e0` | real DEC operating-system host and simulator reference health |
@@ -40,7 +40,7 @@ A reference result proves that reference only. It does not prove this implementa
 
 Each semantic invariant has one canonical `PP-xx` home. Two cases are duplicates only when they prove the same invariant with the same failure meaning. The stronger canonical case wins: exact legal vectors plus boundaries plus malformed input plus recovery is preferred over a simple happy path.
 
-These are dimensions, not duplicates: x86_64/aarch64; 1/2/4/8 vCPU; endnode/L1/L2; Phase III/IV where supported; Ethernet/DDCMP; Linux/self versus independent peer; single LAN/routed/multi-area; first-start/restart/upgrade; clean/faulted transport; size/timer/table boundaries; kernel/toolchain/driver variants; and release-image versus development-image execution.
+These are dimensions, not duplicates: x86_64/aarch64; 1/2/4/8 vCPU; endnode/L1/L2; Phase III/IV where supported; Ethernet/VDE2/MULTINET transport; Linux/self versus independent peer; single LAN/routed/multi-area; first-start/restart/upgrade; clean/faulted transport; size/timer/table boundaries; kernel/toolchain/driver variants; and release-image versus development-image execution.
 
 Every upstream test is classified as one of:
 
@@ -87,10 +87,10 @@ For each negative test, pass requires all applicable outcomes: bounded/rejected 
 | Kernel/toolchain | oldest/newest supported maintained kernel lines; GCC and Clang where supported; clean rebuilds |
 | Kernel diagnostics | KASAN, KCSAN, UBSAN, lockdep, kmemleak and KFENCE subsets as applicable |
 | Node role | endnode, Level 1 router, Level 2 router |
-| Media | Ethernet, DDCMP, mixed Ethernet/DDCMP |
+| Transport | native Ethernet; rootless/distributed VDE2 Ethernet; MULTINET TCP gateway |
 | Peer | Linux, pinned Route20, pinned PyDECnet, applicable LinuxDECnet userspace, SIMH-hosted DEC OS, physical DEC peer where available |
 | Ethernet path | virtio plus at least one second emulated or physical driver; offloads on/off; multi-NIC |
-| Topology | one LAN, two-LAN router, alternate routers, multi-area, mixed media |
+| Topology | one LAN, two-LAN router, alternate routers, multi-area, cross-runner VDE2, controlled HECnet Area-31 |
 | Traffic | idle, quiet-after-burst, unidirectional, bidirectional, microburst, sustained bulk, many concurrent sessions |
 | Faults | each mandatory family alone, then selected overlapping faults under load |
 | Boot/lifecycle | cold boot, warm reboot, reload, late NIC, initially-down link, repeated restart, hard power loss |
@@ -131,16 +131,16 @@ Mandatory negatives: wrong/missing pin; partial/bad download; checksum mismatch;
 
 ### PP-01 — vectors, codecs, properties, models and differential checks
 
-Exercise UAPI layout/address composition, node MAC mapping, Ethernet length framing/padding, Phase III/IV packet forms as supported, router/endnode hellos, checksums, DDCMP CRC/framing, sequence arithmetic, NSP, Session Control, NICE/NML and DAP/RMS conversions when implemented. Run every exact boundary catalogue case.
+Exercise UAPI layout/address composition, node MAC mapping, Ethernet length framing/padding, Phase III/IV packet forms as supported, router/endnode hellos, checksums, sequence arithmetic, NSP, Session Control, NICE/NML and DAP/RMS conversions when implemented. Run every exact boundary catalogue case.
 
-Sources include local unit tests and the relevant PyDECnet `test_common`, `test_crc`, `test_modulo`, `test_packet`, `test_routingpacket`, `test_nsppacket`, `test_sessionpacket`, `test_nicepacket`, `test_framer` and `test_ddcmp` suites.
+Sources include local unit tests and the relevant PyDECnet `test_common`, `test_crc`, `test_modulo`, `test_packet`, `test_routingpacket`, `test_nsppacket`, `test_sessionpacket`, `test_nicepacket` and applicable transport/routing suites.
 
 Mandatory generated coverage:
 
 - retained deterministic fuzz corpus for every decoder/encoder and later UAPI/socket entry point;
 - one-bit and structured mutations around every known-good vector;
 - property checks such as legal encode→decode round trip and decoder non-mutation on rejected input;
-- model-based generation of adjacency, routing, NSP and DDCMP state transitions once those state machines exist;
+- model-based generation of adjacency, routing and NSP state transitions once those state machines exist;
 - differential generation against pinned independent references where both sides expose comparable encoding/parsing/state behavior;
 - mutation testing of the test suite: deliberately invert/remove representative parser/state-machine decisions and prove the relevant canonical test fails. The mutations are test artifacts, never production commits.
 
@@ -192,17 +192,19 @@ Consolidates relevant PyDECnet `test_session`, `test_sessionpacket`, `test_nicep
 
 Negatives include bad credentials/denial/unknown object; malformed Session/NICE input; daemon crash/restart; signals/cancellation; interrupted transfer; zero/one-byte/boundary/large/binary files with hashes; DEC record/attribute/conversion round trips; disk/inode/quota/read-only/permission changes; partial-output cleanup; peer restart; many clients; terminal interruption; locale/character handling where exposed; and no credential/secret leakage into ordinary evidence.
 
-### PP-08 — DDCMP D0-D5
+### PP-08 — VDE2 and MULTINET transport proofs
 
-D0 vectors; D1 two fresh-kernel VMs over emulated byte stream; D2 independent peer; D3 deterministic transport faults; D4 physical asynchronous serial; D5 physical synchronous circuit/compatible peer when claimed.
+VDE2 and MULTINET are proven independently before they are combined.
 
-Consolidates PyDECnet `test_ddcmp`, `test_framer`, `test_modulo` and point-to-point routing cases.
+VDE2 proof requires real libvdeplug frame delivery, multiple independent VDE endpoints, Route20/PyDECnet adjacency on the VDE fabric, switch/client restart, disconnect/reconnect, malformed/oversized frame rejection where applicable, and cross-host VDE joining over SSH before any multi-runner topology depends on it.
 
-Mandatory cases: bad header/data CRC; short/oversized/noisy frame; one-byte/randomized stream chunking; wrong station/address/type/control; duplicate/out-of-order/wrapped sequence; lost/repeated/delayed ACK/NAK/REP; address collision; long idle then traffic; disconnect/reconnect under data; maintenance/data misuse; and physical rate/baud/parity/break/carrier/flow-control/unplug behavior where supported.
+MULTINET proof uses the pinned PyDECnet implementation as the behavioral authority. Run its complete MULTINET test module, including TCP connect/listen, fragmented/coalesced framing, IPv4/IPv6 cases where supported, late listener, restart and reconnect. Add a live two-router TCP point-to-point adjacency/reconnect proof. UDP is not part of the supported project transport claim.
 
-### PP-09 — mixed-media routing
+Transport proofs are separate jobs and separate evidence sets. Neither may mask a failure in the other.
 
-Minimum end-to-end path: Ethernet endnode → router → DDCMP → router → Ethernet endnode. Add alternate paths, multiple areas and independent components as supported. Run NSP/application traffic, boundary payloads, route changes and recovery while injecting DDCMP loss/corruption, Ethernet failures, router restarts, asymmetric faults, MTU/path boundaries and repeated churn. No loop, duplicate application delivery or stale path after convergence is allowed.
+### PP-09 — distributed and HECnet routing
+
+After PP-08 is independently green, connect local DECnet-IV-Linux VMs through VDE2 to a PyDECnet-derived MULTINET gateway. Prove one controlled Area-31 HECnet adjacency first, then bidirectional routing to explicitly selected remote nodes. Exercise route establishment/withdrawal, peer and gateway restart, link interruption, reconnect, asymmetric failure, boundary NSP traffic and repeated churn. No loop, duplicate application delivery, leaked disposable node identity or stale path after convergence is allowed.
 
 ### PP-10 — harness/evidence false-green tests
 
@@ -218,9 +220,9 @@ Every requested fault records an injection count/event log and the test asserts 
 | S1 churn | 2-4 VMs; at least 100 combined module/interface/identity/peer/reboot/topology cycles under traffic |
 | S2 sustained faults | 4-8 VMs; at least 1 hour and at least 10,000 deterministic injected fault events |
 | S3 heavy | 8-16 VMs; at least 8 hours and 100,000 injected events with concurrent sessions/bulk/table pressure/SMP |
-| S4 release soak | 16 independent VMs; at least 24 hours; mixed architecture/media where available; busy and quiet windows; repeated peer/router/application restart |
+| S4 release soak | 16 independent VMs; at least 24 hours; mixed architecture and distributed transports where available; busy and quiet windows; repeated peer/router/application restart |
 | S5 endurance | 16 independent VMs on a persistent controller; at least 72 hours; mixed architectures, SMP subset, independent peers, alternating high load/fault and long quiet periods |
-| S6 first-production/core-change endurance | at least 168 hours/7 days for first production release and after material core state-machine, lifetime/concurrency, routing, NSP, DDCMP, major-kernel or NIC-driver-baseline changes |
+| S6 first-production/core-change endurance | at least 168 hours/7 days for first production release and after material core state-machine, lifetime/concurrency, routing, NSP, major-kernel or NIC-driver-baseline changes |
 
 Duration never substitutes for event/count coverage. Across endurance: repeat sequence wraps many times; drive tables/queues to limits and back; combine malformed/control floods with valid traffic; use microbursts, sustained load and long idle; cold boot/reboot/reload/hard-kill guests; pause/resume guests; move work across CPUs; repeatedly exercise SMP RX/timer/ioctl/device races; sample memory/slab/object/timer/work/adjacency/route/socket counts; quiesce after pressure and require return to baseline or predeclared bounded envelope with no monotonic growth.
 
@@ -258,7 +260,7 @@ This is not a cryptographic-security claim. It requires bounded parsing and corr
 
 ### Route20
 
-At `ea144b2e9978c7d216bc7c171b22fe47ca555567`, no standalone path named as a test suite was found in the pinned tree. Build is PP-00; live Ethernet/routing behavior maps to PP-04/PP-05 and later DDCMP behavior maps when used. Any subsequently discovered native test at this pin is classified before release.
+At `564df0be75831aaf00590ce10152655460dd43dc`, no standalone path named as a test suite was found in the pinned tree. Build is PP-00; live Ethernet/routing behavior maps to PP-04/PP-05 and native VDE Ethernet behavior maps to PP-08. Any subsequently discovered native test at this pin is classified before release.
 
 ### PyDECnet
 
@@ -273,23 +275,21 @@ The complete unmodified native discovery at `9a844987bf3a1450632dee8d37e60a23a45
 | `test_bridge.py` | reference-health; feature-gated if bridge behavior is claimed |
 | `test_common.py` | mapped PP-01 |
 | `test_config.py` | mapped PP-00/PP-02/PP-07 where applicable; remaining options reference-health/feature-gated |
-| `test_crc.py` | mapped PP-01/PP-08 for protocol CRC; generic machinery reference-health |
-| `test_ddcmp.py` | mapped PP-08 |
+| `test_crc.py` | mapped PP-01 for applicable protocol checksums/CRC machinery; generic machinery reference-health |
 | `test_ethernet.py` | mapped PP-01/PP-03/PP-05 |
 | `test_event.py` | mapped PP-07 when management events are claimed; otherwise feature-gated/reference-health |
-| `test_framer.py` | mapped PP-08 |
 | `test_gre.py` | reference-health; feature-gated if GRE is claimed |
 | `test_host.py` | mapped PP-07 |
 | `test_mirror.py` | mapped PP-07 |
-| `test_modulo.py` | mapped PP-01/PP-06/PP-08 |
+| `test_modulo.py` | mapped PP-01/PP-06/PP-08 where applicable |
 | `test_mop.py` | reference-health; feature-gated if MOP is claimed |
-| `test_multinet.py` | reference-health; feature-gated if MultiNet behavior is claimed |
+| `test_multinet.py` | mapped/blocking PP-08 for MULTINET TCP transport |
 | `test_nicepacket.py` | mapped PP-01/PP-07 |
 | `test_nsp.py` | mapped PP-06 |
 | `test_nsppacket.py` | mapped PP-01/PP-06 |
 | `test_packet.py` | mapped PP-01 for codec invariants; generic framework internals reference-health |
 | `test_route_eth.py` | mapped PP-03/PP-05 |
-| `test_route_ptp.py` | mapped PP-05/PP-08/PP-09 |
+| `test_route_ptp.py` | mapped PP-05/PP-08/PP-09 for MULTINET point-to-point routing |
 | `test_routing.py` | mapped PP-03/PP-05/PP-09 |
 | `test_routingpacket.py` | mapped PP-01/PP-05 |
 | `test_session.py` | mapped PP-07 |
@@ -313,13 +313,10 @@ SIMH is a simulator dependency, not a DECnet protocol oracle. At `5b73b1032b52d1
 | E2 two-LAN router | PP-05 |
 | E3 alternate routers | PP-05 |
 | E4 multi-area/L2 | PP-05 |
-| D0 vectors | PP-01/PP-08 |
-| D1 emulated serial | PP-08 |
-| D2 independent DDCMP peer | PP-08 |
-| D3 injected DDCMP faults | PP-08 |
-| D4 physical async | PP-08 |
-| D5 physical sync | PP-08 |
-| mixed Ethernet/DDCMP | PP-09 |
+| VDE2 local/independent proof | PP-08 |
+| MULTINET TCP framing/reconnect proof | PP-08 |
+| VDE2 cross-runner/SSH proof | PP-08 |
+| HECnet Area-31 controlled routing | PP-09 |
 | harness false-green | PP-10 |
 | 2→4→8→16 stress/endurance | PP-11 |
 | real DEC/release image | PP-12 |
@@ -329,7 +326,7 @@ Current `tests/lab/dniv-smoke.sh` and `run-two-node.sh` implement only the curre
 
 ## Evidence required for every run
 
-Retain exact source commit/tree; reference SHAs; kernel/compiler/configuration/harness version; image/kernel/initrd/module/userspace/overlay hashes; architecture/vCPU/driver/offload/MTU/topology/identity/media; canonical case and stress level; random/fuzz/fault seed; requested and actual injection counts; packet/DDCMP traces where wire behavior matters; complete serial/kernel/service/application logs; state/counter/resource snapshots before/during/after fault and after quiescence; fault/topology timeline; duration/packet/session/byte/restart/churn counts; measured distributions; diagnostic output; and explicit pass/fail for every canonical case/applicable negative family.
+Retain exact source commit/tree; reference SHAs; kernel/compiler/configuration/harness version; image/kernel/initrd/module/userspace/overlay hashes; architecture/vCPU/driver/offload/MTU/topology/identity/media; canonical case and stress level; random/fuzz/fault seed; requested and actual injection counts; packet/VDE2/MULTINET traces where transport behavior matters; complete serial/kernel/service/application logs; state/counter/resource snapshots before/during/after fault and after quiescence; fault/topology timeline; duration/packet/session/byte/restart/churn counts; measured distributions; diagnostic output; and explicit pass/fail for every canonical case/applicable negative family.
 
 Missing mandatory evidence invalidates the run.
 
@@ -346,6 +343,6 @@ After any code, test, image, workflow or acceptance-document change:
 
 ## Final pre-production gate
 
-A candidate is releasable only when every claimed feature has executed positive canonical tests; every applicable negative family has a real executed case; every upstream test has a disposition; required x86_64/aarch64, SMP, kernel/toolchain and driver entries are green; independent-peer, routed and mixed-media requirements are green; false-green harness tests are green; the required stress/endurance tier is green; PP-13 is green when an N-1 release exists; diagnostics have no blocking finding; all evidence belongs to the exact unchanged candidate; and every required exact-SHA acceptance gate is green.
+A candidate is releasable only when every claimed feature has executed positive canonical tests; every applicable negative family has a real executed case; every upstream test has a disposition; required x86_64/aarch64, SMP, kernel/toolchain and driver entries are green; independent-peer, routed and distributed VDE2/MULTINET requirements are green; false-green harness tests are green; the required stress/endurance tier is green; PP-13 is green when an N-1 release exists; diagnostics have no blocking finding; all evidence belongs to the exact unchanged candidate; and every required exact-SHA acceptance gate is green.
 
 Anything less is development evidence, not pre-production acceptance.

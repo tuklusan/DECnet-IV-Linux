@@ -26,8 +26,8 @@ Temporary Phase 3 Route20 crash instrumentation and the temporary tagging workfl
 
 ## Stable infrastructure
 
-- Route20: `ea144b2e9978c7d216bc7c171b22fe47ca555567`.
-- PyDECnet live: `a7194be8d72dea6f9eb4f77083f056f53e80df58`.
+- Route20: `564df0be75831aaf00590ce10152655460dd43dc` (native VDE Ethernet extension).
+- PyDECnet live: `60778de8242793228ffb5ba6c9db23ae92620cb1` (native VDE Ethernet; mature MULTINET retained).
 - PyDECnet tests: `9a844987bf3a1450632dee8d37e60a23a453bad3`.
 - LinuxDECnet: `ff39eef045d1e4b7b72a3d40111e89c07a473398`.
 - SIMH: `5b73b1032b52d19bf80752ea4d9cbbdc92e7b5e0`.
@@ -63,3 +63,7 @@ Repository Policy `35434792500` caught a Python syntax error in the new readines
 ARM64 PyDECnet routing in `35434888383` still timed out after the eight-second stable-adjacency guard. The guard is increased to forty continuous seconds (160 checks at 250 ms, bounded by 960 checks / 240 s), which exceeds the observed roughly 33-second PyDECnet processing blackout. Candidate protocol behavior is unchanged.
 
 PyDECnet settle guard raised from 40 to 60 continuously-UP seconds (240 quarter-second samples, still bounded by 960 samples / 240 s) to match the lab rule. Candidate protocol behavior is unchanged. VDE2 and MULTINET will be proven independently, not in the same acceptance run, before either is used for distributed scaling.
+
+Transport reconciliation: serial/synchronous datalink scope is removed. VDE2 is the rootless/distributed Ethernet fabric and MULTINET TCP is the user-space Internet point-to-point transport. They are deliberately proven in separate workflows before combination. Test scripts are persistent at `tests/lab/prove-vde2.sh` and `tests/lab/prove-multinet.sh`; the configurable Area-31 gateway is `userspace/dnmultinet/dnmultinet.py`. The HECnet path is optional interoperability evidence and never substitutes for local candidate acceptance.
+
+Next: finish exact-SHA acceptance, then VDE2 proof, then MULTINET proof, then resume Phase 5 inbound socket/listener work.

@@ -22,7 +22,7 @@ Build a complete native DECnet Phase IV stack for maintained Linux as an out-of-
 
 ## References and licensing
 
-Preferred exact reference pins are Route20 `ea144b2e9978c7d216bc7c171b22fe47ca555567`, PyDECnet live `a7194be8d72dea6f9eb4f77083f056f53e80df58`, PyDECnet tests `9a844987bf3a1450632dee8d37e60a23a453bad3`, LinuxDECnet `ff39eef045d1e4b7b72a3d40111e89c07a473398`, and SIMH `5b73b1032b52d19bf80752ea4d9cbbdc92e7b5e0`.
+Preferred exact reference pins are Route20 `564df0be75831aaf00590ce10152655460dd43dc`, PyDECnet live `60778de8242793228ffb5ba6c9db23ae92620cb1`, PyDECnet tests `9a844987bf3a1450632dee8d37e60a23a453bad3`, LinuxDECnet `ff39eef045d1e4b7b72a3d40111e89c07a473398`, and SIMH `5b73b1032b52d19bf80752ea4d9cbbdc92e7b5e0`.
 
 Digital DNA Phase IV functional specifications are normative. PyDECnet and Route20 are independent implementation cross-checks; LinuxDECnet is the Linux ABI/userspace compatibility reference; SIMH plus genuine DEC operating systems are interoperability oracles. Third-party material retains its original license.
 
@@ -81,7 +81,8 @@ Implementation order:
 | Phase 4 accepted protocol candidate | `6c185b6d01f8a57ee9f0ea6a6c37d7112ddb77d2` |
 | Phase 4 closure commit | `571333bfd7aaa8b2fcc88715c1d61442af151f3c` |
 | Phase 4 tag | `PHASE-4-COMPLETE` |
-| Route20 pin | `ea144b2e9978c7d216bc7c171b22fe47ca555567` |
+| Route20 pin | `564df0be75831aaf00590ce10152655460dd43dc` |
+| PyDECnet live pin | `60778de8242793228ffb5ba6c9db23ae92620cb1` |
 | VM lifecycle | direct QEMU/QMP |
 | Persistent VM state | source-independent amd64/arm64 foundations |
 | Candidate/reference images | disposable |
@@ -115,3 +116,9 @@ Repository Policy run `35434792500` rejected the first stable-readiness follow-u
 Independent Ethernet Interoperability run `35434888383` showed that an eight-second continuously-UP adjacency was still insufficient on ARM64 PyDECnet: MIRROR CI was emitted after the guard but the reference remained busy long enough for the 20-second NSP client timeout to expire. The readiness guard is therefore tightened to forty continuous seconds, exceeding the observed roughly 33-second reference processing blackout while remaining bounded to 240 seconds. Candidate protocol behavior remains unchanged; this is an independent-reference scheduling/convergence guard only.
 
 Per the lab settle requirement, the independent PyDECnet NSP proof now waits a full 60 seconds of continuously-UP adjacency before MIRROR rather than forty seconds. This remains a harness-only reference-settling allowance; candidate protocol behavior is unchanged. VDE2 and MULTINET are explicitly separate validation tracks: each must pass its own positive, negative, restart, fault, stress and multi-peer proof before it may be used as a scale/remote-lab transport.
+
+The project transport scope is reconciled: serial/synchronous datalink work has been removed from the roadmap and release gate. Distributed lab scale now uses rootless VDE2 Ethernet plus a separately proven MULTINET TCP gateway. The Route20 fork pin above adds native libvdeplug Ethernet; the PyDECnet live pin adds native VDE Ethernet while retaining its mature MULTINET implementation. Their original accepted routing/NSP roles remain independent references, and the transport extensions require their own proof before scale tests depend on them.
+
+VDE2 and MULTINET have separate proof scripts and workflows: `tests/lab/prove-vde2.sh` validates real VDE frame delivery and Route20/PyDECnet adjacency, while `tests/lab/prove-multinet.sh` runs the PyDECnet MULTINET test module plus live TCP adjacency/reconnect. `userspace/dnmultinet/dnmultinet.py` exposes the proven PyDECnet MULTINET engine as a configurable VDE-to-MULTINET Area-31 gateway. External HECnet peer endpoints are runtime-only and are not committed.
+
+Next sequence: finish exact-SHA acceptance of the current Phase 5 socket/routing candidate; prove VDE2; prove MULTINET separately; then resume Phase 5 socket work with inbound listen/accept, interrupt/OOB, classic socket options/access/connect data, stream mode and lifecycle negatives. HECnet Area-31 is an additional interoperability surface, not a replacement for local exact-SHA acceptance.

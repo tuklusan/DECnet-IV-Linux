@@ -20,8 +20,8 @@ This directory records the source material used to design and test DECnet-IV-Lin
 
 When references disagree, use this order for development decisions:
 
-1. **Digital Network Architecture Phase IV functional specifications — normative.** Use them for wire formats, state machines, timers, routing rules, NSP, Session Control, NICE/network management, DAP, DDCMP, MOP and Ethernet behavior.
-2. **`tuklusan/pydecnet` — strong whole-stack implementation cross-check.** Use it for independent behavior across routing, NSP, Session Control, NICE/NML, DAP/FAL, MOP and DDCMP, including useful edge cases.
+1. **Digital Network Architecture Phase IV functional specifications — normative.** Use them for wire formats, state machines, timers, routing rules, NSP, Session Control, NICE/network management, DAP, MOP and Ethernet behavior.
+2. **`tuklusan/pydecnet` — strong whole-stack implementation cross-check.** Use it for independent behavior across routing, NSP, Session Control, NICE/NML, DAP/FAL, MOP and MULTINET, including useful edge cases.
 3. **`tuklusan/Route20` — strong routing implementation cross-check.** Use it especially for Phase IV Ethernet initialization, Level 1/Level 2 routing, adjacency and forwarding behavior.
 4. **`tuklusan/LinuxDECnet` — primary Linux ABI/userspace compatibility reference.** Use it for AF_DECnet/socket expectations, DECnet/Linux userspace, NML, DAP/FAL/RMS, CTERM and utilities. Do not use its unsupported historical routing code as the authority for Phase IV routing.
 5. **`tuklusan/simh` plus genuine DEC operating systems — interoperability oracle.** Use simulated or real VMS/RSX/TOPS systems to establish observable peer behavior, particularly where a published specification is ambiguous or products contain compatibility quirks.
@@ -42,6 +42,6 @@ For NSP and Session Control, normally triangulate **Digital NSP/Session Control 
 
 For Linux sockets and classic utilities, normally triangulate **Digital wire specification -> LinuxDECnet ABI/userspace behavior -> PyDECnet/DEC peer on the wire**.
 
-For DDCMP, normally triangulate **Digital DDCMP V4.1 -> PyDECnet -> SIMH/DEC peer**.
+For distributed transport, prove **VDE2 independently**, prove **PyDECnet MULTINET TCP independently**, then combine them only for controlled Area-31/Hecnet routing tests.
 
 See `PROTOCOL_SPECS.md`, `IMPLEMENTATIONS.md` and `LICENSING.md` for the retained subset and exact pins.

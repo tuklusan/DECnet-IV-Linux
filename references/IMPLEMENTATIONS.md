@@ -19,18 +19,18 @@ These are implementation references, not substitutes for the Digital functional 
 ## Route20
 
 - Repository: https://github.com/tuklusan/Route20
-- Exact project pin: `b94115b2615c6463d1f006924ceeadde8e2d4367`
+- Exact project pin: `564df0be75831aaf00590ce10152655460dd43dc`
 - Upstream documentation at that pin states that Route20 implements version 2.0 of the DECnet routing specification.
-- Best use here: Ethernet routing initialization, L1/L2 routing, adjacency, forwarding and an independent routing peer.
+- Best use here: Ethernet routing initialization, L1/L2 routing, adjacency, forwarding, native VDE Ethernet and an independent routing peer.
 - Important limit: Route20 is narrower than a complete DECnet stack and its own documentation records historical test limitations. A Route20 failure is evidence to investigate, not permission to change candidate protocol behavior blindly.
 - License at the pin: Microsoft Public License (Ms-PL).
 
 ## PyDECnet
 
 - Repository: https://github.com/tuklusan/pydecnet
-- Exact live/reference pin: `a7194be8d72dea6f9eb4f77083f056f53e80df58`
+- Exact live/reference pin: `60778de8242793228ffb5ba6c9db23ae92620cb1`
 - Exact tests pin: `9a844987bf3a1450632dee8d37e60a23a453bad3`
-- Its README states that it is written to conform to published DNA Phase II, III and IV specifications and covers Ethernet, DDCMP, routing endnode/L1/L2, NSP, Session Control, NICE/NML, MOP and DAP/FAL.
+- Its README states that it is written to conform to published DNA Phase II, III and IV specifications and covers Ethernet, routing endnode/L1/L2, NSP, Session Control, NICE/NML, MOP, DAP/FAL and the MULTINET transport used by this project's Internet lab gateway.
 - Best use here: independent whole-stack cross-check, edge cases and interoperability.
 - Its `doc/protocols/` directory is explicitly different: those notes describe protocols seen in products but not officially specified and were reverse-engineered. Treat those notes as empirical evidence, not normative DNA.
 - License at the live pin: BSD 3-Clause.

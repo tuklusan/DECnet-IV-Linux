@@ -12,22 +12,19 @@
 # patent, trademark, and governing-law provisions.
 # ============================================================================
 
-.PHONY: all userspace unit kernel clean
+PYTHON ?= python3
 
-all: userspace unit
+.PHONY: all test clean
+all: test
 
-userspace:
-	$(MAKE) -C userspace/dnctl
-	$(MAKE) -C userspace/dnmultinet
-
-unit:
-	$(MAKE) -C tests/unit test
-
-kernel:
-	$(MAKE) -C kernel/decnet KDIR="$(KDIR)"
+test:
+	$(PYTHON) -m py_compile dnmultinet.py
+	$(PYTHON) dnmultinet.py --node 31.80 --name MNET80 --type l2router \
+		--vde vde:///tmp/dn31.ctl --mode connect \
+		--peer-host 127.0.0.1 --peer-port 700 --dry-run >/dev/null
+	$(PYTHON) dnmultinet.py --node 31.80 --name MNET80 --type l2router \
+		--vde vde:///tmp/dn31.ctl --mode listen --local-port 700 \
+		--dry-run >/dev/null
 
 clean:
-	$(MAKE) -C userspace/dnctl clean
-	$(MAKE) -C userspace/dnmultinet clean
-	$(MAKE) -C tests/unit clean
-	@if [ -n "$(KDIR)" ]; then $(MAKE) -C kernel/decnet KDIR="$(KDIR)" clean; fi
+	rm -rf __pycache__

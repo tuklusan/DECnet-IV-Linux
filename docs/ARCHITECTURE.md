@@ -23,16 +23,15 @@ Kernel scope grows in dependency order:
 1. native Ethernet and DECnet address/MAC handling;
 2. endnode, Level 1 and Level 2 routing plus adjacency/timers;
 3. NSP transport and native DECnet socket/UAPI support;
-4. Session Control support and NICE/NML management hooks/state;
-5. DDCMP framing, state machines, timers and routing integration.
+4. Session Control support and NICE/NML management hooks/state.
 
-Core routing, NSP and DDCMP state machines stay in kernel space. The versioned management UAPI is kept intentionally small. Phase 5 additionally provides the classic DECnet/Linux socket-facing `linux/dn.h` data structures, protocol numbers and socket-option constants so existing DECnet userspace can target the new implementation without reviving the historical kernel stack.
+Core routing and NSP state machines stay in kernel space. The versioned management UAPI is kept intentionally small. Phase 5 additionally provides the classic DECnet/Linux socket-facing `linux/dn.h` data structures, protocol numbers and socket-option constants so existing DECnet userspace can target the new implementation without reviving the historical kernel stack.
 
 ## Userspace
 
 Userspace is built against the new kernel ABI. The target is the useful DECnet/Linux environment: `ncp`, `sethost`/`dnlogin`, DAP/FAL/RMS copy/type/directory tools, PHONE, mail, task/object access, daemons, libraries, diagnostics and administration tools.
 
-Historical behavior is implemented, replaced by a documented modern equivalent, explicitly retired with justification, or deferred behind a tracked protocol dependency.
+Historical behavior is implemented, replaced by a documented modern equivalent, explicitly retired with justification, or deferred behind a tracked protocol dependency. Point-to-point Internet lab connectivity is a userspace concern: the supported path is PyDECnet-derived MULTINET TCP, normally fronting a VDE Ethernet segment.
 
 ## Distribution image
 
@@ -44,6 +43,6 @@ A graphical desktop is not part of the protocol acceptance path. Any later GUI l
 
 Acceptance nodes are independent VMs with independent kernels. Network namespaces or containers that share one kernel do not satisfy the VM gate.
 
-The test ladder grows from 2 to 4, 8 and 16 nodes and covers x86_64, aarch64, both mixed directions, routed multi-LAN topologies, deterministic faults, stress, independent Route20/PyDECnet peers, later SIMH-hosted real DEC systems, and eventually mixed Ethernet/DDCMP paths and physical hardware.
+The test ladder grows from 2 to 4, 8 and 16 nodes and covers x86_64, aarch64, both mixed directions, routed multi-LAN topologies, deterministic faults, stress, independent Route20/PyDECnet peers, later SIMH-hosted real DEC systems, plus rootless/distributed VDE2 Ethernet fabrics, MULTINET-backed Internet lab gateways, HECnet Area-31 interoperability and physical hardware.
 
 Self-to-self success is useful for development but never sufficient for final interoperability claims.

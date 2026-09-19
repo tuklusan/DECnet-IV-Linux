@@ -54,9 +54,15 @@ Route20 and PyDECnet remain pinned independent peers. Interoperability consumes 
 
 ## Scale and faults
 
-The Python controller is intentionally small enough to extend from two to 16 independent VMs. The target topology API should support multiple bridges/TAPs, mixed-media attachment, deterministic link down/up, delay/loss/corruption via `tc netem`, guest kill/restart, packet capture per segment and independent reference peers. Those extensions must preserve exact-SHA evidence and bounded hosted-job execution.
+The Python controller is intentionally small enough to extend from two to 16 independent VMs. The target topology API should support multiple local bridges/TAPs plus rootless VDE2 segments, deterministic link down/up, delay/loss/corruption, guest kill/restart, packet capture per segment and independent reference peers. Distributed runners may join user-owned VDE switches over SSH. Internet point-to-point attachment is provided separately through a MULTINET TCP gateway and must not be conflated with VDE2 proof. Those extensions must preserve exact-SHA evidence and bounded hosted-job execution.
 
 E4 router readiness is adjacency-backed rather than a boot marker: L1 routers must see their local L2 peer UP, and L2 routers must see both the local L1 and cross-area L2 peer UP before endpoints start. Endpoint probes remain active for a bounded 90-second convergence window so independent ARM64 TCG boot skew cannot turn a valid routed path into a one-direction sampling false failure. Host PCAP checks still require the correct router source MAC and visit count at transit and destination segments in both directions.
+
+## Distributed VDE2 and MULTINET
+
+VDE2 and MULTINET are independent transport test tracks. `tests/lab/prove-vde2.sh` proves real libvdeplug frame delivery plus Route20/PyDECnet adjacency. `tests/lab/prove-multinet.sh` runs PyDECnet's complete MULTINET unit module and a live TCP point-to-point adjacency/reconnect proof. These tracks are never combined to manufacture a pass.
+
+After both transport tracks are independently green, `userspace/dnmultinet/dnmultinet.py` may be used as a VDE-to-MULTINET routing gateway for controlled HECnet Area-31 tests. External peer endpoints and any credentials remain runtime-only. See `docs/HECNET_LAB.md`.
 
 ## Release-image separation
 
