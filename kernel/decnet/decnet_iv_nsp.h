@@ -29,6 +29,7 @@
 #define DNIV_NSP_MAX_INTERRUPT 16U
 #define DNIV_NSP_ACK_HOLDOFF_SECONDS 3U
 #define DNIV_NSP_MAX_MESSAGE 65023U
+#define DNIV_NSP_MAX_CI_PAYLOAD (DNIV_NSP_MAX_WIRE - 9U)
 
 struct dniv_nsp_rx_meta {
     enum dniv_nsp_channel channel;
@@ -40,6 +41,13 @@ struct dniv_nsp_rx_meta {
 };
 
 typedef void (*dniv_nsp_notify_fn)(__u16 local_link);
+
+struct dniv_nsp_ci_snapshot {
+    __u16 local_link;
+    __u16 remote_link;
+    __u16 remote_node;
+    __u16 payload_len;
+};
 
 struct dniv_nsp_conn_snapshot {
     __u16 local_link;
@@ -71,6 +79,9 @@ int dniv_nsp_conn_set_remote(__u16 local_link, __u16 remote_node,
                              __u16 remote_link);
 int dniv_nsp_conn_snapshot(__u16 local_link,
                            struct dniv_nsp_conn_snapshot *snapshot);
+int dniv_nsp_ci_snapshot(__u16 local_link,
+                         struct dniv_nsp_ci_snapshot *snapshot,
+                         __u8 *payload, __u16 capacity);
 int dniv_nsp_rx_ready(__u16 local_link, bool *normal, bool *interrupt);
 void dniv_nsp_set_notify(dniv_nsp_notify_fn notify);
 int dniv_nsp_retransmit_queue(__u16 local_link,

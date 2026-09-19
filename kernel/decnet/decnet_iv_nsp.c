@@ -72,6 +72,8 @@ struct dniv_nsp_connection {
     unsigned long connect_deadline;
     unsigned long inactivity_deadline;
     enum dniv_nsp_conn_state state;
+    __u16 ci_payload_len;
+    __u8 ci_payload[DNIV_NSP_MAX_CI_PAYLOAD];
     struct dniv_nsp_control_retransmit *control;
     struct list_head retransmit;
     struct list_head rx_pending[DNIV_NSP_CH_COUNT];
@@ -673,6 +675,43 @@ int dniv_nsp_conn_snapshot(__u16 local_link,
     return 0;
 }
 
+int dniv_nsp_ci_snapshot(__u16 local_link,
+                         struct dniv_nsp_ci_snapshot *snapshot,
+                         __u8 *payload, __u16 capacity)
+{
+    struct dniv_nsp_connection *conn;
+    unsigned long flags;
+    int ret = 0;
+
+    if (!snapshot || !payload)
+        return -EINVAL;
+
+    spin_lock_irqsave(&dniv_nsp_lock, flags);
+    conn = dniv_nsp_find_locked(local_link);
+    if (!conn) {
+        ret = -ENOENT;
+        goto out;
+    }
+    if (conn->state != DNIV_NSP_ST_CR) {
+        ret = -EINVAL;
+        goto out;
+    }
+    if (conn->ci_payload_len > capacity) {
+        ret = -EMSGSIZE;
+        goto out;
+    }
+
+    snapshot->local_link = conn->local_link;
+    snapshot->remote_link = conn->remote_link;
+    snapshot->remote_node = conn->remote_node;
+    snapshot->payload_len = conn->ci_payload_len;
+    if (conn->ci_payload_len)
+        memcpy(payload, conn->ci_payload, conn->ci_payload_len);
+out:
+    spin_unlock_irqrestore(&dniv_nsp_lock, flags);
+    return ret;
+}
+
 int dniv_nsp_rx_ready(__u16 local_link, bool *normal, bool *interrupt)
 {
     struct dniv_nsp_connection *conn;
@@ -829,21 +868,27 @@ int dniv_nsp_receive(__u16 remote_node, const __u8 *wire, __u16 wire_len)
         unsigned int i;
         __u16 link;
 
-        if (!pkt.src) {
+        if (!pkt.src || pkt.payload_len > DNIV_NSP_MAX_CI_PAYLOAD) {
             spin_unlock_irqrestore(&dniv_nsp_lock, flags);
             return -EINVAL;
         }
         conn = dniv_nsp_find_remote_locked(remote_node, pkt.src);
         if (conn) {
+            int ret;
+
+            link = conn->local_link;
             spin_unlock_irqrestore(&dniv_nsp_lock, flags);
             memset(&reply, 0, sizeof(reply));
             reply.type = DNIV_NSP_ACK_CONN;
             reply.dst = pkt.src;
             reply_len = dniv_nsp_build(reply_wire, sizeof(reply_wire), &reply);
-            if (reply_len > 0)
-                return dniv_nsp_transmit(remote_node, reply_wire,
-                                         (__u16)reply_len);
-            return -EINVAL;
+            if (reply_len <= 0)
+                return -EINVAL;
+            ret = dniv_nsp_transmit(remote_node, reply_wire,
+                                    (__u16)reply_len);
+            if (!ret)
+                dniv_nsp_notify_link(link);
+            return ret;
         }
         conn = NULL;
         for (i = 0; i < DNIV_NSP_MAX_CONNECTIONS; i++) {
@@ -867,6 +912,9 @@ int dniv_nsp_receive(__u16 remote_node, const __u8 *wire, __u16 wire_len)
         conn->local_link = link;
         conn->remote_link = pkt.src;
         conn->remote_node = remote_node;
+        conn->ci_payload_len = (__u16)pkt.payload_len;
+        if (pkt.payload_len)
+            memcpy(conn->ci_payload, pkt.payload, pkt.payload_len);
         conn->tx_next[DNIV_NSP_CH_DATA] = DNIV_NSP_INITIAL_SEQUENCE;
         conn->rx_next[DNIV_NSP_CH_DATA] = DNIV_NSP_INITIAL_SEQUENCE;
         conn->tx_next[DNIV_NSP_CH_OTHER] = DNIV_NSP_INITIAL_SEQUENCE;
@@ -878,9 +926,14 @@ int dniv_nsp_receive(__u16 remote_node, const __u8 *wire, __u16 wire_len)
         reply.type = DNIV_NSP_ACK_CONN;
         reply.dst = pkt.src;
         reply_len = dniv_nsp_build(reply_wire, sizeof(reply_wire), &reply);
-        if (reply_len > 0)
-            return dniv_nsp_transmit(remote_node, reply_wire,
-                                     (__u16)reply_len);
+        if (reply_len > 0) {
+            int ret = dniv_nsp_transmit(remote_node, reply_wire,
+                                        (__u16)reply_len);
+
+            if (!ret)
+                dniv_nsp_notify_link(link);
+            return ret;
+        }
         return -EINVAL;
     }
 
