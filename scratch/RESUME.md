@@ -67,3 +67,5 @@ PyDECnet settle guard raised from 40 to 60 continuously-UP seconds (240 quarter-
 Transport reconciliation: serial/synchronous datalink scope is removed. VDE2 is the rootless/distributed Ethernet fabric and MULTINET TCP is the user-space Internet point-to-point transport. They are deliberately proven in separate workflows before combination. Test scripts are persistent at `tests/lab/prove-vde2.sh` and `tests/lab/prove-multinet.sh`; the configurable Area-31 gateway is `userspace/dnmultinet/dnmultinet.py`. The HECnet path is optional interoperability evidence and never substitutes for local candidate acceptance.
 
 Next: finish exact-SHA acceptance, then VDE2 proof, then MULTINET proof, then resume Phase 5 inbound socket/listener work.
+
+Repository Policy `35436873179` caught missing `queue: max` declarations in the new VDE2 and MULTINET workflow concurrency blocks. The follow-up changes workflow policy only; protocol and transport behavior are unchanged.
