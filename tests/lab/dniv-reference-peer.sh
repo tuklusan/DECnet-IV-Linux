@@ -116,7 +116,24 @@ dump_route20_diagnostics() {
     echo "DNIV-REF-DIAG session=$session reference=route20 source=kernel end"
 }
 
+dump_pydecnet_diagnostics() {
+    echo "DNIV-REF-DIAG session=$session reference=pydecnet source=log begin"
+    [ ! -r /run/reference/pydecnet.log ] || cat /run/reference/pydecnet.log
+    echo "DNIV-REF-DIAG session=$session reference=pydecnet source=log end"
+}
 
+wait_pydecnet_ready() {
+    log=$1
+    tries=$2
+    i=0
+    while [ "$i" -lt "$tries" ]; do
+        grep -Fq 'DECnet/Python is running' "$log" 2>/dev/null && return 0
+        kill -0 "$peer_pid" 2>/dev/null || return 1
+        i=$((i + 1))
+        sleep 1
+    done
+    return 1
+}
 
 probe_loop() {
     i=0
@@ -168,13 +185,17 @@ node $area.$node $name
 node $peer_node DN70
 circuit ETH-0 Ethernet $iface --mode pcap --cost 3 --t3 2 --priority 64
 EOF_PYDECNET
+    : > /run/reference/pydecnet.log
     (
         cd /run/reference/pydecnet
-        exec env PYTHONPATH=. python3 -m decnet.main /run/reference/pydecnet.conf
-    ) &
+        exec env PYTHONPATH=. python3 -u -m decnet.main /run/reference/pydecnet.conf
+    ) > /run/reference/pydecnet.log 2>&1 &
     peer_pid=$!
-    sleep 3
-    kill -0 "$peer_pid" 2>/dev/null || { echo "DNIV-REF-FAIL session=$session reason=pydecnet-dead"; exit 1; }
+    if ! wait_pydecnet_ready /run/reference/pydecnet.log 300; then
+        dump_pydecnet_diagnostics
+        echo "DNIV-REF-FAIL session=$session reason=pydecnet-not-ready"
+        exit 1
+    fi
     ;;
 esac
 
@@ -194,6 +215,7 @@ if [ "$reference" = route20 ]; then
     dump_route20_diagnostics
     echo "DNIV-REF-FAIL session=$session reason=reference-exited"
 else
+    dump_pydecnet_diagnostics
     echo "DNIV-REF-FAIL session=$session reason=reference-exited"
 fi
 exit 1
