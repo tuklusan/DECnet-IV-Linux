@@ -27,6 +27,8 @@
 #define DNIV_NSP_MAX_RX_QUEUED 32U
 #define DNIV_NSP_MAX_WINDOW 20U
 #define DNIV_NSP_MAX_INTERRUPT 16U
+#define DNIV_NSP_ACK_HOLDOFF_SECONDS 3U
+#define DNIV_NSP_MAX_MESSAGE 65023U
 
 struct dniv_nsp_rx_meta {
     enum dniv_nsp_channel channel;
@@ -93,5 +95,7 @@ int dniv_nsp_send_interrupt(__u16 local_link, const __u8 *payload,
                             __u16 payload_len);
 int dniv_nsp_recv(__u16 local_link, struct dniv_nsp_rx_meta *meta,
                   __u8 *payload, __u16 capacity);
+int dniv_nsp_recv_message(__u16 local_link, __u8 *payload, __u32 capacity,
+                          __u32 *payload_len);
 
 #endif

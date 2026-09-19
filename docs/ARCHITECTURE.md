@@ -26,7 +26,7 @@ Kernel scope grows in dependency order:
 4. Session Control support and NICE/NML management hooks/state;
 5. DDCMP framing, state machines, timers and routing integration.
 
-Core routing, NSP and DDCMP state machines stay in kernel space. The versioned UAPI is kept intentionally small and is extended only when a userspace dependency requires it.
+Core routing, NSP and DDCMP state machines stay in kernel space. The versioned management UAPI is kept intentionally small. Phase 5 additionally provides the classic DECnet/Linux socket-facing `linux/dn.h` data structures, protocol numbers and socket-option constants so existing DECnet userspace can target the new implementation without reviving the historical kernel stack.
 
 ## Userspace
 
