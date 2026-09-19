@@ -18,11 +18,30 @@
 from __future__ import annotations
 
 import sys
+import time
 
 from decnet.connectors import SimpleApiConnector
 
 SOURCE_NAME = "PYDNIV"
 TESTS = ((240, b"numeric-inbound"), ("DNIVTEST", b"named-inbound"))
+ROUTE_READY_SECONDS = 20.0
+ROUTE_RETRY_SECONDS = 0.5
+
+
+def connect_with_route_wait(connector, system, destination, remote_user):
+    deadline = time.monotonic() + ROUTE_READY_SECONDS
+    while True:
+        connection, response = connector.connect(
+            system=system,
+            dest=destination,
+            remuser=remote_user,
+            localuser=SOURCE_NAME,
+        )
+        if connection is not None or getattr(response, "reason", None) != 39:
+            return connection, response
+        if time.monotonic() >= deadline:
+            return connection, response
+        time.sleep(ROUTE_RETRY_SECONDS)
 
 
 def main() -> int:
@@ -34,11 +53,8 @@ def main() -> int:
     connector = SimpleApiConnector(api_socket)
     try:
         for remote_user, payload in TESTS:
-            connection, response = connector.connect(
-                system=system,
-                dest=destination,
-                remuser=remote_user,
-                localuser=SOURCE_NAME,
+            connection, response = connect_with_route_wait(
+                connector, system, destination, remote_user
             )
             if connection is None or response.type != "accept":
                 raise RuntimeError(

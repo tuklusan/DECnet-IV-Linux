@@ -141,3 +141,6 @@ Repository Policy run `35464168645` caught that the prior corrective commit acci
 
 
 Exact-SHA interoperability run `35464251242` exposed a second harness-only PyDECnet API mismatch: pinned PyDECnet `DictConnector.connect()` accepts the source end-user selector as `localuser`, not `srcname`; the latter raised `TypeError` after the candidate listener became ready, leaving every PyDECnet job blocked until the 75-minute workflow timeout. The inbound driver now passes `localuser=PYDNIV`, preserving the intended source object identity and changing no candidate DECnet protocol behavior. Next: exact-SHA acceptance; stop when fully green.
+
+
+Exact-SHA interoperability run `35469380899` proved the `localuser` correction on amd64 PyDECnet routing and the first endnode scenario, then exposed a narrowly scoped readiness race in `router-endnode`: the PyDECnet endnode returned transient Session Control reason 39 (`Destination unreachable`) immediately after the candidate L1 router reported its endnode adjacency UP. The inbound driver now retries only reason 39 for at most 20 seconds (0.5-second interval), remaining inside the candidate listener's 30-second receive bound; all other rejects still fail immediately. This changes only independent-reference readiness handling, not candidate protocol behavior. Next: exact-SHA acceptance; stop when fully green.
