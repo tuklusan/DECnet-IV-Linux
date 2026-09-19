@@ -1369,6 +1369,11 @@ int dniv_eth_set_address(__u16 address)
     return 0;
 }
 
+__u16 dniv_eth_get_address(void)
+{
+    return READ_ONCE(dniv_local_address);
+}
+
 void dniv_eth_get_stats(struct dniv_stats *stats)
 {
     stats->uapi_version = DNIV_UAPI_VERSION;

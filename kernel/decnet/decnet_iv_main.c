@@ -28,6 +28,7 @@
 #include "decnet_iv_ethernet.h"
 #include "decnet_iv_nsp.h"
 #include "decnet_iv_route.h"
+#include "decnet_iv_socket.h"
 
 #define DNIV_DEVICE_NAME "decnet_iv"
 
@@ -232,6 +233,15 @@ static int __init dniv_init(void)
         return err;
     }
 
+    err = dniv_sock_init();
+    if (err) {
+        dniv_eth_exit();
+        dniv_nsp_exit();
+        dniv_route_exit();
+        misc_deregister(&dniv_miscdev);
+        return err;
+    }
+
     pr_info("decnet_iv: loaded as %u.%u (%s), type %u, UAPI %u\n",
             DNIV_ADDR_AREA(dniv_identity.address),
             DNIV_ADDR_NODE(dniv_identity.address), dniv_identity.name,
@@ -241,6 +251,7 @@ static int __init dniv_init(void)
 
 static void __exit dniv_exit(void)
 {
+    dniv_sock_exit();
     dniv_eth_exit();
     dniv_nsp_exit();
     dniv_route_exit();

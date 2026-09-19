@@ -26,4 +26,6 @@ The retained bootstrap provides:
 
 Phase 3 adds native DECnet Ethernet initialization: standard Phase IV address/MAC handling, router and endnode hello parsing/generation, periodic hello transmission, per-interface adjacency state and listen-time expiry, designated-router selection, extended counters and adjacency inspection through UAPI version 2.
 
-The character device is not the final application API. NSP will introduce the DECnet socket interface later. Compatibility behavior belongs primarily in userspace rather than freezing old implementation details into the kernel ABI.
+Phase 5 registers a native `AF_DECnet` / `SOCK_SEQPACKET` family backed by the in-kernel NSP connection table. The first socket boundary supports bind/getname, outbound connect by DECnet node plus object number/name, blocking and nonblocking connect, record send/receive with NSP segmentation/reassembly, poll wakeups, full shutdown and orderly close. Listener/accept, interrupt/OOB delivery, classic DECnet socket options and stream mode remain ordered Phase 5 follow-up work.
+
+The character device remains the diagnostic/control endpoint; DECnet applications use the native socket interface.

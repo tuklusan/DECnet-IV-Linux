@@ -12,6 +12,7 @@
 // patent, trademark, and governing-law provisions.
 // ============================================================================
 
+#include <linux/compiler.h>
 #include <linux/errno.h>
 #include <linux/jiffies.h>
 #include <linux/list.h>
@@ -80,6 +81,20 @@ struct dniv_nsp_connection {
 static DEFINE_SPINLOCK(dniv_nsp_lock);
 static struct dniv_nsp_connection dniv_nsp_connections[DNIV_NSP_MAX_CONNECTIONS];
 static __u16 dniv_nsp_next_link[DNIV_NSP_MAX_CONNECTIONS];
+static dniv_nsp_notify_fn dniv_nsp_notify;
+
+static void dniv_nsp_notify_link(__u16 local_link)
+{
+    dniv_nsp_notify_fn notify = READ_ONCE(dniv_nsp_notify);
+
+    if (notify)
+        notify(local_link);
+}
+
+void dniv_nsp_set_notify(dniv_nsp_notify_fn notify)
+{
+    WRITE_ONCE(dniv_nsp_notify, notify);
+}
 
 static void dniv_nsp_timer_workfn(struct work_struct *work);
 static DECLARE_DELAYED_WORK(dniv_nsp_timer_work, dniv_nsp_timer_workfn);
@@ -507,6 +522,7 @@ void dniv_nsp_reset(void)
         dniv_nsp_init_conn_lists(conn);
     }
     spin_unlock_irqrestore(&dniv_nsp_lock, flags);
+    dniv_nsp_notify_link(0U);
 }
 
 void dniv_nsp_exit(void)
@@ -577,6 +593,7 @@ int dniv_nsp_conn_release(__u16 local_link)
     memset(conn, 0, sizeof(*conn));
     dniv_nsp_init_conn_lists(conn);
     spin_unlock_irqrestore(&dniv_nsp_lock, flags);
+    dniv_nsp_notify_link(local_link);
     return 0;
 }
 
@@ -598,6 +615,7 @@ int dniv_nsp_conn_transition(__u16 local_link,
     }
     dniv_nsp_set_state_locked(conn, new_state, jiffies);
     spin_unlock_irqrestore(&dniv_nsp_lock, flags);
+    dniv_nsp_notify_link(local_link);
     return 0;
 }
 
@@ -653,6 +671,56 @@ int dniv_nsp_conn_snapshot(__u16 local_link,
     snapshot->state = conn->state;
     spin_unlock_irqrestore(&dniv_nsp_lock, flags);
     return 0;
+}
+
+int dniv_nsp_rx_ready(__u16 local_link, bool *normal, bool *interrupt)
+{
+    struct dniv_nsp_connection *conn;
+    struct dniv_nsp_rx_entry *entry;
+    unsigned long flags;
+    bool started = false;
+    int ret = 0;
+
+    if (!normal || !interrupt)
+        return -EINVAL;
+    *normal = false;
+    *interrupt = false;
+
+    spin_lock_irqsave(&dniv_nsp_lock, flags);
+    conn = dniv_nsp_find_locked(local_link);
+    if (!conn) {
+        ret = -ENOENT;
+        goto out;
+    }
+
+    list_for_each_entry(entry, &conn->rx_ready, link) {
+        if (entry->channel == DNIV_NSP_CH_OTHER &&
+            entry->type == DNIV_NSP_INT) {
+            *interrupt = true;
+            continue;
+        }
+        if (entry->channel != DNIV_NSP_CH_DATA ||
+            entry->type != DNIV_NSP_DATA)
+            continue;
+        if (!started) {
+            if (!entry->bom) {
+                *normal = true;
+                break;
+            }
+            started = true;
+        } else if (entry->bom) {
+            *normal = true;
+            break;
+        }
+        if (entry->eom) {
+            *normal = true;
+            break;
+        }
+    }
+
+out:
+    spin_unlock_irqrestore(&dniv_nsp_lock, flags);
+    return ret;
 }
 
 int dniv_nsp_retransmit_queue(__u16 local_link,
@@ -749,6 +817,7 @@ int dniv_nsp_receive(__u16 remote_node, const __u8 *wire, __u16 wire_len)
     struct dniv_nsp_packet reply;
     __u8 reply_wire[DNIV_NSP_MAX_WIRE];
     __u16 reply_node = 0U;
+    __u16 notify_link = 0U;
     int reply_len = 0;
 
     if (!remote_node || !wire || !wire_len ||
@@ -838,6 +907,7 @@ int dniv_nsp_receive(__u16 remote_node, const __u8 *wire, __u16 wire_len)
         }
     }
 
+    notify_link = conn->local_link;
     switch (pkt.type) {
     case DNIV_NSP_ACK_CONN:
         if (conn->state != DNIV_NSP_ST_CI) {
@@ -962,6 +1032,7 @@ int dniv_nsp_receive(__u16 remote_node, const __u8 *wire, __u16 wire_len)
     }
 
     spin_unlock_irqrestore(&dniv_nsp_lock, flags);
+    dniv_nsp_notify_link(notify_link);
     if (reply_len > 0)
         return dniv_nsp_transmit(reply_node, reply_wire, (__u16)reply_len);
     return 0;
@@ -1095,6 +1166,7 @@ static void dniv_nsp_timer_workfn(struct work_struct *work)
         __u8 wire[DNIV_NSP_MAX_WIRE];
         __u16 remote_node = 0U;
         __u16 wire_len = 0U;
+        __u16 notify_link = 0U;
         unsigned long flags;
         struct dniv_nsp_connection *conn;
         int ret;
@@ -1112,10 +1184,12 @@ static void dniv_nsp_timer_workfn(struct work_struct *work)
              conn->state == DNIV_NSP_ST_CD ||
              conn->state == DNIV_NSP_ST_CR ||
              conn->state == DNIV_NSP_ST_CC)) {
+            notify_link = conn->local_link;
             dniv_nsp_purge_locked(conn);
             memset(conn, 0, sizeof(*conn));
             dniv_nsp_init_conn_lists(conn);
             spin_unlock_irqrestore(&dniv_nsp_lock, flags);
+            dniv_nsp_notify_link(notify_link);
             continue;
         }
 
@@ -1125,10 +1199,12 @@ static void dniv_nsp_timer_workfn(struct work_struct *work)
             ret = dniv_nsp_prepare_retransmit_locked(
                 conn, now, &remote_node, wire, &wire_len);
         if (ret == -ETIMEDOUT) {
+            notify_link = conn->local_link;
             dniv_nsp_purge_locked(conn);
             memset(conn, 0, sizeof(*conn));
             dniv_nsp_init_conn_lists(conn);
             spin_unlock_irqrestore(&dniv_nsp_lock, flags);
+            dniv_nsp_notify_link(notify_link);
             continue;
         }
         if (ret == -EAGAIN)
@@ -1197,7 +1273,9 @@ static int dniv_nsp_send_control(__u16 local_link,
     dniv_nsp_set_state_locked(conn, next_state, jiffies);
     spin_unlock_irqrestore(&dniv_nsp_lock, flags);
 
-    return dniv_nsp_transmit(remote_node, wire, (__u16)len);
+    ret = dniv_nsp_transmit(remote_node, wire, (__u16)len);
+    dniv_nsp_notify_link(local_link);
+    return ret;
 }
 
 int dniv_nsp_connect(__u16 remote_node, const __u8 *payload,
