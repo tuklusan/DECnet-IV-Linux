@@ -507,7 +507,7 @@ static int dniv_sock_recvmsg(struct socket *sock, struct msghdr *msg,
     }
 
     copied = min_t(size_t, size, length);
-    if (copied && !copy_to_iter_full(data, copied, &msg->msg_iter)) {
+    if (copied && copy_to_iter(data, copied, &msg->msg_iter) != copied) {
         ret = -EFAULT;
         goto out;
     }

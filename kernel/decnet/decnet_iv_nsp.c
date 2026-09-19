@@ -335,7 +335,6 @@ static int dniv_nsp_rx_sequence_locked(
     enum dniv_nsp_channel channel, enum dniv_nsp_rx_order *rx_order)
 {
     struct dniv_nsp_rx_entry *entry;
-    enum dniv_nsp_rx_order order;
 
     if (!rx_order)
         return -EINVAL;
