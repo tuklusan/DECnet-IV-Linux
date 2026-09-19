@@ -79,3 +79,5 @@ VDE2 proof `35437051337` found that modern libvdeplug exports `vde_open_real`, n
 VDE2 proof `35440198290` got through modern ABI symbol resolution but libvdeplug returned `EINVAL` when given a zeroed open-args structure. Both fork adapters now pass NULL open args, and the proof first validates the switch `ctl` socket plus a native C/libvdeplug frame round trip before exercising PyDECnet. Rerun VDE2 alone; do not start MULTINET until it is green.
 
 Repository Policy `35440503013` caught the missing canonical project header on `tests/reference/pydecnet-in-scope-tests.txt`. The follow-up fixes only that policy defect; the in-scope module list is unchanged.
+
+VDE2 proof `35440502997` is green: real libvdeplug frame delivery, PyDECnet adapter and Route20/PyDECnet adjacency all passed. Proceed with MULTINET as a separate proof; only after both are green may they be combined for Area-31 distributed lab routing.
