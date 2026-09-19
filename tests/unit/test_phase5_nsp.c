@@ -165,6 +165,7 @@ static void test_sequence(void)
     assert(dniv_nsp_seq_in_window(4094U, 2U, 0U));
     assert(!dniv_nsp_seq_in_window(4094U, 2U, 3U));
     assert(DNIV_NSP_INITIAL_SEQUENCE == 1U);
+    assert(DNIV_NSP_MSS == 563U);
     assert(DNIV_NSP_DEFAULT_RESPONSE_SECONDS == 5U);
     assert(DNIV_NSP_CONNECT_TIMEOUT_SECONDS == 30U);
     assert(DNIV_NSP_INACTIVITY_SECONDS == 300U);

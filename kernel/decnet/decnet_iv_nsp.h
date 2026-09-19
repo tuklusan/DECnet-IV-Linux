@@ -17,11 +17,25 @@
 
 #include <linux/types.h>
 #include <decnet_iv_nsp_state.h>
+#include <decnet_iv_nsp_wire.h>
 
 #define DNIV_NSP_MAX_CONNECTIONS 256U
 #define DNIV_NSP_MAX_RETRANSMIT 64U
 #define DNIV_NSP_MAX_RETRANSMITS 5U
 #define DNIV_NSP_MAX_WIRE 1477U
+#define DNIV_NSP_MSS 563U
+#define DNIV_NSP_MAX_RX_QUEUED 32U
+#define DNIV_NSP_MAX_WINDOW 20U
+#define DNIV_NSP_MAX_INTERRUPT 16U
+
+struct dniv_nsp_rx_meta {
+    enum dniv_nsp_channel channel;
+    enum dniv_nsp_type type;
+    __u16 sequence;
+    __u16 payload_len;
+    __u8 bom;
+    __u8 eom;
+};
 
 struct dniv_nsp_conn_snapshot {
     __u16 local_link;
@@ -32,6 +46,9 @@ struct dniv_nsp_conn_snapshot {
     __u16 other_tx_next;
     __u16 other_rx_next;
     __u16 retransmit_count;
+    __u16 rx_queued;
+    __u16 interrupt_credit;
+    __u8 data_xon;
     unsigned long connect_deadline;
     unsigned long inactivity_deadline;
     enum dniv_nsp_conn_state state;
@@ -63,5 +80,18 @@ int dniv_nsp_retransmit_due(__u16 local_link,
                             __u8 *wire, __u16 capacity, __u16 *wire_len);
 int dniv_nsp_receive(__u16 remote_node, const __u8 *wire, __u16 wire_len);
 int dniv_nsp_transmit(__u16 remote_node, const __u8 *wire, __u16 wire_len);
+int dniv_nsp_connect(__u16 remote_node, const __u8 *payload,
+                     __u16 payload_len, __u16 *local_link);
+int dniv_nsp_accept(__u16 local_link, const __u8 *payload, __u16 payload_len);
+int dniv_nsp_reject(__u16 local_link, __u16 reason,
+                    const __u8 *payload, __u16 payload_len);
+int dniv_nsp_disconnect(__u16 local_link, __u16 reason,
+                        const __u8 *payload, __u16 payload_len);
+int dniv_nsp_send_data(__u16 local_link, const __u8 *payload,
+                       __u16 payload_len, __u8 bom, __u8 eom);
+int dniv_nsp_send_interrupt(__u16 local_link, const __u8 *payload,
+                            __u16 payload_len);
+int dniv_nsp_recv(__u16 local_link, struct dniv_nsp_rx_meta *meta,
+                  __u8 *payload, __u16 capacity);
 
 #endif
