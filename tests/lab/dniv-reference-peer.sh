@@ -93,6 +93,12 @@ manifest_sha=$(sed -n 's/^REFERENCE_SHA=//p' /mnt/reference/manifest.env | head 
 iface=$(find_iface || true)
 [ -n "$iface" ] || { echo "DNIV-REF-FAIL session=$session reason=no-interface"; exit 1; }
 ip link set "$iface" up
+if [ "$reference" = pydecnet ]; then
+    # libpcap requests promiscuous capture itself, but make the guest NIC
+    # state explicit before PyDECnet opens its handle.  ARM64 TCG has shown
+    # architecture-specific unicast loss when that receive state is delayed.
+    ip link set "$iface" promisc on
+fi
 
 probe_pid=
 peer_pid=

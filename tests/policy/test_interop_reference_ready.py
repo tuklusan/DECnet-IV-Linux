@@ -26,6 +26,7 @@ SCRIPT = (ROOT / "tests/lab/run-interop.sh").read_text(encoding="utf-8")
 REFERENCE_IMAGE = (ROOT / "tests/lab/prepare-reference-image.sh").read_text(encoding="utf-8")
 CANDIDATE_SMOKE = (ROOT / "tests/lab/dniv-interop-smoke.sh").read_text(encoding="utf-8")
 PCAP_VALIDATOR = (ROOT / "tests/lab/validate-interop-pcap.py").read_text(encoding="utf-8")
+REFERENCE_PEER = (ROOT / "tests/lab/dniv-reference-peer.sh").read_text(encoding="utf-8")
 
 
 def main() -> int:
@@ -133,6 +134,12 @@ def main() -> int:
             "interop-ready regression: PyDECnet reference NIC must use its "
             "DECnet logical MAC so ARM64 TCG does not depend on delayed "
             "promiscuous receive programming"
+        )
+    if 'if [ "$reference" = pydecnet ]; then\n' not in REFERENCE_PEER or \
+       'ip link set "$iface" promisc on' not in REFERENCE_PEER:
+        raise SystemExit(
+            "interop-ready regression: PyDECnet reference guest must explicitly "
+            "enable NIC promiscuous mode before opening its pcap handle"
         )
     if 'payload.startswith(b"DNIV-INTEROP-PROBE-")' not in PCAP_VALIDATOR:
         raise SystemExit(
