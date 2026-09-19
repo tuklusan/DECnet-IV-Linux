@@ -124,7 +124,7 @@ kill -0 "$TCPDUMP_PID"
 host_arch=$(uname -m)
 reference_ready_seconds=180
 if [[ "$host_arch" == aarch64 ]]; then
-    reference_ready_seconds=360
+    reference_ready_seconds=600
 fi
 accel=tcg
 if [[ -e /dev/kvm && -r /dev/kvm && -w /dev/kvm ]]; then accel=kvm; fi
