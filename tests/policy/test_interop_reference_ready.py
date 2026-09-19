@@ -83,8 +83,8 @@ def main() -> int:
 
 
     convergence_watches = [
-        r'DNIV-INTEROP-READY-STOP[^\n]*"\$CANDIDATE_PID" "\$REFERENCE_PID"',
-        r'DNIV-INTEROP-PASS[^\n]*"\$CANDIDATE_PID" "\$REFERENCE_PID"',
+        r'DNIV-SCRIPT-READY-STOP[^\n]*"\$CANDIDATE_PID" "\$REFERENCE_PID"',
+        r'DNIV-SCRIPT-PASS[^\n]*"\$CANDIDATE_PID" "\$REFERENCE_PID"',
     ]
     for pattern in convergence_watches:
         if not re.search(pattern, SCRIPT):
@@ -112,12 +112,12 @@ def main() -> int:
         )
 
 
-    if "timeout_seconds=720" not in INTEROP or 'if [[ "$(uname -m)" == aarch64 ]]; then' not in INTEROP:
+    if "timeout_seconds=720" not in SCRIPT or 'if [[ "$(uname -m)" == aarch64 ]]; then' not in SCRIPT:
         raise SystemExit(
             "interop-ready regression: ARM64 candidate-ready bound must be "
             "720 seconds after the full-minute PyDECnet settle requirement"
         )
-    if "DNIV_INTEROP_TIMEOUT_SECONDS:-}" not in INTEROP:
+    if "DNIV_SCRIPT_TIMEOUT_SECONDS:-}" not in SCRIPT:
         raise SystemExit(
             "interop-ready regression: explicit candidate timeout override must remain supported"
         )
