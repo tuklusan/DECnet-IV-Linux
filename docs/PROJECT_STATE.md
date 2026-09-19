@@ -109,7 +109,7 @@ Active. Implement NSP transport and the DECnet socket ABI without reopening Phas
 
 Initial NSP foundation is implemented and repository-policy headers are canonical: deterministic Phase IV NSP packet codecs for ACK Data/Other/Connect, data segments, interrupt, Link Service, CI/RCI, CC, DI and DC; optional ACK/NAK/XACK/XNAK decoding; 12-bit sequence arithmetic; malformed-input rejection; and baseline response/connect/inactivity timer constants.
 
-## Phase 5 progress and next action
+## Next action
 
 This section is an append-only chronology. Historical `Next:`/`next` statements describe the state at that entry and are superseded by later entries; the final entries below define the current resume point.
 
@@ -219,3 +219,5 @@ Immediate Phase 5 work resumes with interrupt/OOB delivery, classic DECnet socke
 Distributed-lab plan: the existing VDE2 proof is local/rootless only; cross-runner VDE2 still requires an actual two-host switch join. When Area-31 integration begins, keep its scripts/workflow in the repository and consume `MULTINET_REMOTE_HOST`, `MULTINET_REMOTE_PORT`, `VAX_ADDR`, `VAX_USERNAME` and `VAX_PASSWORD` only as runtime secrets. The workflow must detect missing secret names before remote activity and never print secret values. The MULTINET endpoint is one Area-31 area router; the VAX identified by `VAX_ADDR` is another area router reachable through it. Build reusable Linux/VAX test pairs under `tests/lab`, beginning with routing/NICE information and counters and expanding with NSP/Session and Phase 7 userspace features.
 
 Documentation reconciliation found and corrected stale phase status, listener/accept status, reference readiness wording, a stale Route20 pre-production pin, removed-transport references, cross-runner VDE2 overclaiming, Area-31/VAX planning gaps and the Phase 0 continuity wording. The documentation audit restarts from this disk tree; no protocol behavior changes in this commit.
+
+Repository Policy run `35474499903` caught that the documentation reconciliation had renamed the required `## Next action` continuity heading. The canonical heading is restored here and in `scratch/RESUME.md`; the append-only chronology rule remains unchanged. This is documentation/continuity only.

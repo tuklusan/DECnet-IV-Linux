@@ -49,7 +49,7 @@ Exact protocol candidate `6c185b6d01f8a57ee9f0ea6a6c37d7112ddb77d2` closed Phase
 
 Phase 4 delivered routing codecs/checksums, adjacency-backed L1/L2 route state, metrics/aging, triggered and periodic routing advertisements, deterministic best-route selection, short/long data forwarding, visit-count loop prevention, return-to-sender behavior, L1 destination-0 attached-area semantics, multi-LAN convergence and multi-area forwarding.
 
-## Phase 5 progress and next action
+## Next action
 
 This section is an append-only chronology. Historical `Next:`/`next` statements describe the state at that entry and are superseded by later entries; the final entries below define the current resume point.
 
@@ -161,3 +161,5 @@ Next Phase 5 work: interrupt/OOB delivery; classic socket options/access/connect
 Planned distributed work remains ordered behind its dependencies. The VDE2 proof currently covers one host only; prove a real cross-runner switch join before distributed scale depends on it. The future Area-31 workflow must be repository-tracked, use `MULTINET_REMOTE_HOST`, `MULTINET_REMOTE_PORT`, `VAX_ADDR`, `VAX_USERNAME`, and `VAX_PASSWORD` only as runtime secrets, check their presence before remote activity, and never emit values. The MULTINET peer is one Area-31 area router and the VAX target is another area router reachable through it. Preserve paired Linux/VAX scripts under `tests/lab` as routing/NICE counters, NSP/Session, login, DAP/FAL, PHONE, mail, task/object and later application tests become available.
 
 Documentation reconciliation corrected stale/cross-document status and continuity wording, including explicit local-only VDE2 proof status and the planned secret-backed Area-31/VAX test path. The zero-gap documentation audit restarts from this tree; protocol behavior is unchanged.
+
+Repository Policy run `35474499903` caught that the documentation reconciliation had renamed the required `## Next action` continuity heading. The canonical heading is restored in both continuity files; the append-only chronology rule remains unchanged. The zero-gap documentation audit restarts from this corrected tree.

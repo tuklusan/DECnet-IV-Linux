@@ -16,7 +16,7 @@
 
 This is the stable resume entry point for DECnet-IV-Linux.
 
-1. Read `docs/PROJECT_STATE.md` completely. Its `Resume point` and Phase 5 progress/next-action section describe the live protocol/repository state.
+1. Read `docs/PROJECT_STATE.md` completely. Its `Resume point` and `Next action` section describe the live protocol/repository state.
 2. Read `scratch/RESUME.md` completely. It records exact acceptance lineage and the persistent architecture-foundation model.
 3. Read `docs/ROADMAP.md` completely and confirm the next action follows the ordered dependency plan.
 4. Read `docs/ARCHITECTURE.md`, `docs/TEST_LAB.md`, `docs/HECNET_LAB.md` and `docs/PRE_PRODUCTION_TEST.md` before changing architecture, image construction, distributed transport or acceptance tests.
