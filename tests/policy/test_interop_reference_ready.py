@@ -71,16 +71,18 @@ def main() -> int:
                 f"after multi-user boot before peer startup; missing {fragment!r}"
             )
 
-    uses = re.findall(
-        r'wait_marker "\\$ref[12]_log" "\\$reference_ready_marker" '
-        r'"\\$reference_ready_seconds" "\\$REFERENCE_PID"',
-        SCRIPT,
+    readiness_uses = (
+        'wait_marker "$ref1_log" "$reference_ready_marker" '
+        '"$reference_ready_seconds" "$REFERENCE_PID"',
+        'wait_marker "$ref2_log" "$reference_ready_marker" '
+        '"$reference_ready_seconds" "$REFERENCE_PID"',
     )
-    if len(uses) != 2:
-        raise SystemExit(
-            "interop-ready regression: both initial and restart reference "
-            f"processes must use the bounded readiness marker/value; saw {len(uses)}"
-        )
+    for use in readiness_uses:
+        if SCRIPT.count(use) != 1:
+            raise SystemExit(
+                "interop-ready regression: initial and restart reference "
+                f"processes must use the bounded readiness marker/value: {use!r}"
+            )
     if re.search(r'wait_marker "\\$ref[12]_log"[^\\n]*" [0-9]+ "\\$REFERENCE_PID"', SCRIPT):
         raise SystemExit("interop-ready regression: hardcoded readiness wait remains")
 
