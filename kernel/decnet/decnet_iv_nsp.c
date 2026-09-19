@@ -620,13 +620,10 @@ int dniv_nsp_receive(__u16 remote_node, const __u8 *wire, __u16 wire_len)
             return -EINVAL;
         }
 
-        if (pkt.type == DNIV_NSP_DATA || pkt.type == DNIV_NSP_ACK_DATA) {
+        if (pkt.type == DNIV_NSP_DATA || pkt.type == DNIV_NSP_ACK_DATA)
             channel = DNIV_NSP_CH_DATA;
-            cross = DNIV_NSP_CH_OTHER;
-        } else {
+        else
             channel = DNIV_NSP_CH_OTHER;
-            cross = DNIV_NSP_CH_DATA;
-        }
 
         conn->inactivity_deadline =
             jiffies + DNIV_NSP_INACTIVITY_SECONDS * HZ;
