@@ -15,11 +15,13 @@
 #include <linux/errno.h>
 #include <linux/fs.h>
 #include <linux/kernel.h>
+#include <linux/list.h>
 #include <linux/module.h>
 #include <linux/net.h>
 #include <linux/poll.h>
 #include <linux/slab.h>
 #include <linux/socket.h>
+#include <linux/spinlock.h>
 #include <linux/uio.h>
 #include <linux/version.h>
 #include <linux/wait.h>
@@ -32,24 +34,232 @@
 #include "decnet_iv_nsp.h"
 #include "decnet_iv_socket.h"
 
+#define DNIV_SOCK_MAX_BACKLOG 64U
+
+#define DNIV_SC_MENU_ACCESS 0x01U
+#define DNIV_SC_MENU_USER   0x02U
+
+#define DNIV_REASON_INVALID_DESTINATION 4U
+#define DNIV_REASON_OBJECT_BUSY         6U
+#define DNIV_REASON_IMAGE_OVERFLOW      43U
+
 struct dniv_sock {
     struct sock sk;
     struct sockaddr_dn local;
     struct sockaddr_dn peer;
+    struct list_head listener_link;
+    __u16 pending[DNIV_SOCK_MAX_BACKLOG];
     __u16 local_link;
+    __u16 pending_head;
+    __u16 pending_tail;
+    __u16 pending_count;
     bool bound;
+    bool listening;
 };
 
 static DECLARE_WAIT_QUEUE_HEAD(dniv_sock_waitq);
+static DEFINE_SPINLOCK(dniv_listener_lock);
+static LIST_HEAD(dniv_listeners);
+
+static const struct proto_ops dniv_proto_ops;
+static struct proto dniv_proto;
 
 static inline struct dniv_sock *dniv_sk(struct sock *sk)
 {
     return container_of(sk, struct dniv_sock, sk);
 }
 
+static int dniv_enduser_decode(const __u8 *buf, __u16 length,
+                               bool destination, struct sockaddr_dn *addr,
+                               __u16 *used)
+{
+    __u16 prefix;
+    __u16 namelen;
+    __u8 format;
+
+    if (!buf || !addr || !used || length < 2U)
+        return -EPROTO;
+
+    memset(addr, 0, sizeof(*addr));
+    addr->sdn_family = AF_DECnet;
+    format = buf[0];
+
+    if (format == 0U) {
+        if (!buf[1])
+            return -EPROTO;
+        addr->sdn_objnum = buf[1];
+        *used = 2U;
+        return 0;
+    }
+
+    if (destination && format != 1U)
+        return -EPROTO;
+
+    switch (format) {
+    case 1U:
+        prefix = 2U;
+        break;
+    case 2U:
+        prefix = 6U;
+        break;
+    case 4U:
+        prefix = 10U;
+        break;
+    default:
+        return -EPROTO;
+    }
+
+    if (length <= prefix)
+        return -EPROTO;
+    namelen = buf[prefix];
+    if (!namelen || namelen > DN_MAXOBJL ||
+        length < prefix + 1U + namelen)
+        return -EPROTO;
+    if (format != 1U && namelen > 12U)
+        return -EPROTO;
+
+    addr->sdn_objnamel = cpu_to_le16(namelen);
+    memcpy(addr->sdn_objname, buf + prefix + 1U, namelen);
+    *used = (__u16)(prefix + 1U + namelen);
+    return 0;
+}
+
+static int dniv_counted_field_validate(const __u8 *buf, __u16 length,
+                                       __u16 maximum, __u16 *used)
+{
+    __u16 field_len;
+
+    if (!buf || !used || !length)
+        return -EPROTO;
+    field_len = buf[0];
+    if (field_len > maximum || length < field_len + 1U)
+        return -EPROTO;
+    *used = (__u16)(field_len + 1U);
+    return 0;
+}
+
+static int dniv_ci_decode(const __u8 *payload, __u16 payload_len,
+                          struct sockaddr_dn *target,
+                          struct sockaddr_dn *source)
+{
+    __u16 off = 0U;
+    __u16 used;
+    __u8 menu;
+    unsigned int i;
+    int ret;
+
+    ret = dniv_enduser_decode(payload, payload_len, true, target, &used);
+    if (ret)
+        return ret;
+    off += used;
+
+    ret = dniv_enduser_decode(payload + off, payload_len - off, false,
+                              source, &used);
+    if (ret)
+        return ret;
+    off += used;
+    if (off >= payload_len)
+        return -EPROTO;
+
+    menu = payload[off++];
+    if (menu & DNIV_SC_MENU_ACCESS) {
+        for (i = 0; i < 3U; i++) {
+            ret = dniv_counted_field_validate(
+                payload + off, payload_len - off, DN_MAXACCL - 1U, &used);
+            if (ret)
+                return ret;
+            off += used;
+        }
+    }
+    if (menu & DNIV_SC_MENU_USER) {
+        ret = dniv_counted_field_validate(
+            payload + off, payload_len - off, DN_MAXOPTL, &used);
+        if (ret)
+            return ret;
+    }
+    return 0;
+}
+
+static bool dniv_selector_match(const struct sockaddr_dn *listener,
+                                const struct sockaddr_dn *target)
+{
+    __u16 llen;
+    __u16 tlen;
+
+    if (listener->sdn_objnum || target->sdn_objnum)
+        return listener->sdn_objnum &&
+               listener->sdn_objnum == target->sdn_objnum;
+
+    llen = le16_to_cpu(listener->sdn_objnamel);
+    tlen = le16_to_cpu(target->sdn_objnamel);
+    return llen && llen == tlen &&
+           !memcmp(listener->sdn_objname, target->sdn_objname, llen);
+}
+
+static bool dniv_listener_contains_locked(const struct dniv_sock *dsk,
+                                          __u16 local_link)
+{
+    __u16 i;
+
+    for (i = 0U; i < dsk->pending_count; i++) {
+        __u16 slot = (__u16)((dsk->pending_head + i) %
+                             DNIV_SOCK_MAX_BACKLOG);
+
+        if (dsk->pending[slot] == local_link)
+            return true;
+    }
+    return false;
+}
+
 static void dniv_sock_notify(__u16 local_link)
 {
-    (void)local_link;
+    struct dniv_nsp_ci_snapshot ci;
+    struct sockaddr_dn target;
+    struct sockaddr_dn source;
+    struct dniv_sock *listener;
+    __u8 payload[DNIV_NSP_MAX_CI_PAYLOAD];
+    unsigned long flags;
+    __u16 reject_reason = 0U;
+    bool handled = false;
+
+    if (local_link &&
+        !dniv_nsp_ci_snapshot(local_link, &ci, payload, sizeof(payload))) {
+        if (dniv_ci_decode(payload, ci.payload_len, &target, &source)) {
+            reject_reason = DNIV_REASON_IMAGE_OVERFLOW;
+        } else {
+            spin_lock_irqsave(&dniv_listener_lock, flags);
+            list_for_each_entry(listener, &dniv_listeners, listener_link) {
+                unsigned int backlog;
+
+                if (!listener->listening ||
+                    !dniv_selector_match(&listener->local, &target))
+                    continue;
+                handled = true;
+                if (dniv_listener_contains_locked(listener, local_link))
+                    break;
+                backlog = min_t(unsigned int,
+                                listener->sk.sk_max_ack_backlog,
+                                DNIV_SOCK_MAX_BACKLOG);
+                if (!backlog || listener->pending_count >= backlog) {
+                    reject_reason = DNIV_REASON_OBJECT_BUSY;
+                    break;
+                }
+                listener->pending[listener->pending_tail] = local_link;
+                listener->pending_tail =
+                    (__u16)((listener->pending_tail + 1U) %
+                            DNIV_SOCK_MAX_BACKLOG);
+                listener->pending_count++;
+                listener->sk.sk_ack_backlog = listener->pending_count;
+                break;
+            }
+            spin_unlock_irqrestore(&dniv_listener_lock, flags);
+            if (!handled)
+                reject_reason = DNIV_REASON_INVALID_DESTINATION;
+        }
+
+        if (reject_reason)
+            dniv_nsp_reject(local_link, reject_reason, NULL, 0U);
+    }
     wake_up_interruptible_all(&dniv_sock_waitq);
 }
 
@@ -214,6 +424,33 @@ static int dniv_wait_running(struct sock *sk, long *timeo)
     }
 }
 
+static void dniv_listener_unregister(struct dniv_sock *dsk)
+{
+    __u16 pending[DNIV_SOCK_MAX_BACKLOG];
+    __u16 count = 0U;
+    unsigned long flags;
+
+    spin_lock_irqsave(&dniv_listener_lock, flags);
+    if (dsk->listening) {
+        list_del_init(&dsk->listener_link);
+        while (dsk->pending_count && count < DNIV_SOCK_MAX_BACKLOG) {
+            pending[count++] = dsk->pending[dsk->pending_head];
+            dsk->pending_head =
+                (__u16)((dsk->pending_head + 1U) %
+                        DNIV_SOCK_MAX_BACKLOG);
+            dsk->pending_count--;
+        }
+        dsk->pending_head = 0U;
+        dsk->pending_tail = 0U;
+        dsk->sk.sk_ack_backlog = 0;
+        dsk->listening = false;
+    }
+    spin_unlock_irqrestore(&dniv_listener_lock, flags);
+
+    while (count)
+        dniv_nsp_reject(pending[--count], DNIV_REASON_OBJECT_BUSY, NULL, 0U);
+}
+
 static int dniv_sock_release(struct socket *sock)
 {
     struct sock *sk = sock->sk;
@@ -223,6 +460,7 @@ static int dniv_sock_release(struct socket *sock)
         struct dniv_nsp_conn_snapshot snapshot;
 
         lock_sock(sk);
+        dniv_listener_unregister(dsk);
         if (dsk->local_link) {
             if (!dniv_nsp_conn_snapshot(dsk->local_link, &snapshot) &&
                 snapshot.state == DNIV_NSP_ST_RUN) {
@@ -534,6 +772,11 @@ static __poll_t dniv_sock_poll(struct file *file, struct socket *sock,
     __poll_t mask = 0;
 
     poll_wait(file, &dniv_sock_waitq, wait);
+    if (READ_ONCE(dsk->listening)) {
+        if (READ_ONCE(dsk->pending_count))
+            return EPOLLIN | EPOLLRDNORM;
+        return 0;
+    }
     if (!dsk->local_link)
         return 0;
     if (dniv_nsp_conn_snapshot(dsk->local_link, &snapshot))
@@ -574,24 +817,188 @@ static int dniv_sock_shutdown(struct socket *sock, int how)
     return ret;
 }
 
+static int dniv_sock_listen(struct socket *sock, int backlog)
+{
+    struct sock *sk = sock->sk;
+    struct dniv_sock *dsk = dniv_sk(sk);
+    struct dniv_sock *other;
+    unsigned long flags;
+    int ret = 0;
+
+    lock_sock(sk);
+    if (!dsk->bound || dsk->local_link ||
+        (!dsk->local.sdn_objnum &&
+         !le16_to_cpu(dsk->local.sdn_objnamel))) {
+        ret = -EINVAL;
+        goto out;
+    }
+
+    backlog = clamp_t(int, backlog, 1, DNIV_SOCK_MAX_BACKLOG);
+    spin_lock_irqsave(&dniv_listener_lock, flags);
+    if (!dsk->listening) {
+        list_for_each_entry(other, &dniv_listeners, listener_link) {
+            if (other->listening &&
+                dniv_selector_match(&other->local, &dsk->local)) {
+                ret = -EADDRINUSE;
+                break;
+            }
+        }
+        if (!ret) {
+            list_add_tail(&dsk->listener_link, &dniv_listeners);
+            dsk->listening = true;
+            dsk->pending_head = 0U;
+            dsk->pending_tail = 0U;
+            dsk->pending_count = 0U;
+        }
+    }
+    if (!ret) {
+        sk->sk_max_ack_backlog = backlog;
+        sk->sk_ack_backlog = dsk->pending_count;
+    }
+    spin_unlock_irqrestore(&dniv_listener_lock, flags);
+out:
+    release_sock(sk);
+    return ret;
+}
+
+static int dniv_listener_dequeue(struct dniv_sock *dsk, __u16 *local_link)
+{
+    unsigned long flags;
+    int ret = -EAGAIN;
+
+    spin_lock_irqsave(&dniv_listener_lock, flags);
+    if (!dsk->listening)
+        ret = -EINVAL;
+    else if (dsk->pending_count) {
+        *local_link = dsk->pending[dsk->pending_head];
+        dsk->pending_head =
+            (__u16)((dsk->pending_head + 1U) % DNIV_SOCK_MAX_BACKLOG);
+        dsk->pending_count--;
+        dsk->sk.sk_ack_backlog = dsk->pending_count;
+        ret = 0;
+    }
+    spin_unlock_irqrestore(&dniv_listener_lock, flags);
+    return ret;
+}
+
+static void dniv_accept_child_discard(struct socket *newsock,
+                                      struct sock *newsk, __u16 local_link)
+{
+    if (local_link)
+        dniv_nsp_conn_release(local_link);
+    sock_orphan(newsk);
+    newsock->sk = NULL;
+    newsk->sk_socket = NULL;
+    sock_put(newsk);
+}
+
+static int dniv_sock_accept_impl(struct socket *sock, struct socket *newsock,
+                                 int flags, bool kern)
+{
+    struct sock *sk = sock->sk;
+    struct dniv_sock *dsk = dniv_sk(sk);
+    struct dniv_nsp_ci_snapshot ci;
+    struct sockaddr_dn target;
+    struct sockaddr_dn source;
+    struct sock *newsk;
+    struct dniv_sock *newdsk;
+    __u8 payload[DNIV_NSP_MAX_CI_PAYLOAD];
+    __u16 link;
+    long timeo;
+    int ret;
+
+    lock_sock(sk);
+    timeo = sock_rcvtimeo(sk, flags & O_NONBLOCK);
+    for (;;) {
+        ret = dniv_listener_dequeue(dsk, &link);
+        if (!ret) {
+            ret = dniv_nsp_ci_snapshot(link, &ci, payload,
+                                       sizeof(payload));
+            if (ret)
+                continue;
+            ret = dniv_ci_decode(payload, ci.payload_len, &target, &source);
+            if (ret || !dniv_selector_match(&dsk->local, &target)) {
+                dniv_nsp_reject(link, DNIV_REASON_INVALID_DESTINATION,
+                                NULL, 0U);
+                continue;
+            }
+            break;
+        }
+        if (ret != -EAGAIN || !timeo)
+            goto out;
+        ret = wait_event_interruptible_timeout(
+            dniv_sock_waitq,
+            READ_ONCE(dsk->pending_count) || !READ_ONCE(dsk->listening),
+            timeo);
+        if (ret < 0)
+            goto out;
+        if (!ret) {
+            ret = -EAGAIN;
+            goto out;
+        }
+        timeo = ret;
+    }
+
+    newsk = sk_alloc(sock_net(sk), PF_DECnet, GFP_KERNEL, &dniv_proto, kern);
+    if (!newsk) {
+        dniv_nsp_reject(link, DNIV_REASON_OBJECT_BUSY, NULL, 0U);
+        ret = -ENOMEM;
+        goto out;
+    }
+    sock_init_data(newsock, newsk);
+    newsock->ops = &dniv_proto_ops;
+    newsk->sk_family = PF_DECnet;
+    newsk->sk_protocol = DNPROTO_NSP;
+
+    newdsk = dniv_sk(newsk);
+    memset(&newdsk->local, 0, sizeof(newdsk->local));
+    memset(&newdsk->peer, 0, sizeof(newdsk->peer));
+    INIT_LIST_HEAD(&newdsk->listener_link);
+    memset(newdsk->pending, 0, sizeof(newdsk->pending));
+    newdsk->local = dsk->local;
+    newdsk->peer = source;
+    dniv_sockaddr_set_node(&newdsk->peer, ci.remote_node);
+    newdsk->local_link = link;
+    newdsk->pending_head = 0U;
+    newdsk->pending_tail = 0U;
+    newdsk->pending_count = 0U;
+    newdsk->bound = true;
+    newdsk->listening = false;
+    newsock->state = SS_CONNECTING;
+
+    ret = dniv_nsp_accept(link, NULL, 0U);
+    if (ret) {
+        dniv_accept_child_discard(newsock, newsk, link);
+        goto out;
+    }
+
+    ret = dniv_wait_running(newsk, &timeo);
+    if (ret) {
+        dniv_accept_child_discard(newsock, newsk, link);
+        goto out;
+    }
+    newsock->state = SS_CONNECTED;
+out:
+    release_sock(sk);
+    return ret;
+}
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 10, 0)
 static int dniv_sock_accept(struct socket *sock, struct socket *newsock,
                             struct proto_accept_arg *arg)
+{
+    int ret = dniv_sock_accept_impl(sock, newsock, arg->flags, arg->kern);
+
+    arg->err = ret;
+    return ret;
+}
 #else
 static int dniv_sock_accept(struct socket *sock, struct socket *newsock,
                             int flags, bool kern)
-#endif
 {
-    (void)sock;
-    (void)newsock;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 10, 0)
-    (void)arg;
-#else
-    (void)flags;
-    (void)kern;
-#endif
-    return -EOPNOTSUPP;
+    return dniv_sock_accept_impl(sock, newsock, flags, kern);
 }
+#endif
 
 static int dniv_sock_setsockopt(struct socket *sock, int level, int optname,
                                 sockptr_t optval, unsigned int optlen)
@@ -626,7 +1033,7 @@ static const struct proto_ops dniv_proto_ops = {
     .getname = dniv_sock_getname,
     .poll = dniv_sock_poll,
     .ioctl = sock_no_ioctl,
-    .listen = sock_no_listen,
+    .listen = dniv_sock_listen,
     .shutdown = dniv_sock_shutdown,
     .setsockopt = dniv_sock_setsockopt,
     .getsockopt = dniv_sock_getsockopt,
@@ -669,8 +1076,14 @@ static int dniv_sock_create(struct net *net, struct socket *sock,
     memset(&dsk->peer, 0, sizeof(dsk->peer));
     dsk->local.sdn_family = AF_DECnet;
     dsk->peer.sdn_family = AF_DECnet;
+    INIT_LIST_HEAD(&dsk->listener_link);
+    memset(dsk->pending, 0, sizeof(dsk->pending));
     dsk->local_link = 0U;
+    dsk->pending_head = 0U;
+    dsk->pending_tail = 0U;
+    dsk->pending_count = 0U;
     dsk->bound = false;
+    dsk->listening = false;
     return 0;
 }
 
