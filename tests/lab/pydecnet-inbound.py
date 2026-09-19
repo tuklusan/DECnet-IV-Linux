@@ -38,7 +38,7 @@ def main() -> int:
                 system=system,
                 dest=destination,
                 remuser=remote_user,
-                srcname=SOURCE_NAME,
+                localuser=SOURCE_NAME,
             )
             if connection is None or response.type != "accept":
                 raise RuntimeError(

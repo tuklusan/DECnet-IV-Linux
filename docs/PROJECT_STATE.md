@@ -193,3 +193,6 @@ Exact-SHA interoperability run `35462953985` exposed a harness-only failure in e
 
 
 Repository Policy run `35464168645` caught that the prior corrective commit accidentally changed `tests/lab/run-interop.sh` from executable to non-executable while constructing the multi-file commit. Restore only the executable mode; the short PyDECnet AF_UNIX socket-path correction is unchanged. Next: exact-SHA acceptance; stop when fully green.
+
+
+Exact-SHA interoperability run `35464251242` exposed a second harness-only PyDECnet API mismatch: pinned PyDECnet `DictConnector.connect()` accepts the source end-user selector as `localuser`, not `srcname`; the latter raised `TypeError` after the candidate listener became ready, leaving every PyDECnet job blocked until the 75-minute workflow timeout. The inbound driver now passes `localuser=PYDNIV`, preserving the intended source object identity and changing no candidate DECnet protocol behavior. Next: exact-SHA acceptance; stop when fully green.
