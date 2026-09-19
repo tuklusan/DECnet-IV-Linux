@@ -135,3 +135,6 @@ The next Phase 5 candidate adds direct inbound socket interoperability. Each PyD
 
 
 Exact-SHA interoperability run `35462953985` exposed a harness-only failure in every PyDECnet job: the new Unix API socket path lived under the deeply nested per-run artifact directory and exceeded the platform AF_UNIX pathname limit (`OSError: AF_UNIX path too long`). Route20 jobs were unaffected. The direct-TAP PyDECnet API socket now uses a short per-session hashed `/tmp/dniv-api-*.sock` path with cleanup, while all inbound socket protocol checks remain unchanged. Next: exact-SHA acceptance of this narrowly corrective successor; stop when the complete acceptance set is green.
+
+
+Repository Policy run `35464168645` caught that the prior corrective commit accidentally changed `tests/lab/run-interop.sh` from executable to non-executable while constructing the multi-file commit. Restore only the executable mode; the short PyDECnet AF_UNIX socket-path correction is unchanged. Next: exact-SHA acceptance; stop when fully green.
