@@ -56,6 +56,8 @@ Route20 and PyDECnet remain pinned independent peers. Interoperability consumes 
 
 The Python controller is intentionally small enough to extend from two to 16 independent VMs. The target topology API should support multiple bridges/TAPs, mixed-media attachment, deterministic link down/up, delay/loss/corruption via `tc netem`, guest kill/restart, packet capture per segment and independent reference peers. Those extensions must preserve exact-SHA evidence and bounded hosted-job execution.
 
+E4 router readiness is adjacency-backed rather than a boot marker: L1 routers must see their local L2 peer UP, and L2 routers must see both the local L1 and cross-area L2 peer UP before endpoints start. Endpoint probes remain active for a bounded 90-second convergence window so independent ARM64 TCG boot skew cannot turn a valid routed path into a one-direction sampling false failure. Host PCAP checks still require the correct router source MAC and visit count at transit and destination segments in both directions.
+
 ## Release-image separation
 
 `image/ubuntu-base/build-image.sh` remains the canonical full exact-source release/test image path. `image/ubuntu-base/build-foundation.sh` exists only to amortize expensive package/kernel preparation for protocol acceptance. Release-image correctness remains an independent gate and is not inferred from a cached foundation.

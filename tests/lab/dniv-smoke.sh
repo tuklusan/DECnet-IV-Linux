@@ -532,8 +532,11 @@ e4)
                 exit 1
             fi
             sleep 5
+            # Both endpoint VMs boot independently. Keep probes active across
+            # the worst observed ARM64 TCG attachment/route-propagation skew.
+            probe_count=180
             i=0
-            while [ "$i" -lt 10 ]; do
+            while [ "$i" -lt "$probe_count" ]; do
                 i=$((i + 1))
                 /usr/local/sbin/dnraw --short "$iface" "$peer" "$area.$node" "$dest_node" 0 \
                     "DNIV-E4-$session-$name-$i"
@@ -550,6 +553,10 @@ e4)
                 candidate=${path##*/}
                 [ "$candidate" = lo ] || ip link set "$candidate" up
             done
+            if ! wait_any_adjacency_up "$peer_node" 640; then
+                echo "DNIV-E4-FAIL session=$session node=$name reason=l1-not-ready"
+                exit 1
+            fi
             echo "DNIV-E4-ROUTER-READY session=$session node=$name"
             # The E4 controller owns transit-router teardown after both
             # endpoint evidence markers. Slow ARM64 TCG boot must not remove
@@ -565,6 +572,14 @@ e4)
                 candidate=${path##*/}
                 [ "$candidate" = lo ] || ip link set "$candidate" up
             done
+            if ! wait_any_adjacency_up "$peer_node" 640; then
+                echo "DNIV-E4-FAIL session=$session node=$name reason=local-l1-not-ready"
+                exit 1
+            fi
+            if ! wait_any_adjacency_up "$dest_node" 640; then
+                echo "DNIV-E4-FAIL session=$session node=$name reason=remote-l2-not-ready"
+                exit 1
+            fi
             echo "DNIV-E4-ROUTER-READY session=$session node=$name"
             # Six-guest hosted boots are intentionally unsynchronized. Keep
             # transit routing alive through route propagation and endpoint

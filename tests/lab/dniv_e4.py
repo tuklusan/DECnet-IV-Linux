@@ -251,12 +251,12 @@ def main() -> int:
                 work/"l2-a.serial.log", work/"l2-a.qmp",
                 [f"e4a{suffix}2", f"e4t{suffix}1"],
                 ["52:54:02:31:00:73", "52:54:03:31:00:73"],
-                l1a_mac, "31.72", "31.73")
+                l1a_mac, "31.72", "32.73")
     l2b = Guest("L2B", 32, 73, "L2", lab.overlay("l2-b"),
                 work/"l2-b.serial.log", work/"l2-b.qmp",
                 [f"e4t{suffix}2", f"e4b{suffix}2"],
                 ["52:54:03:32:00:73", "52:54:02:32:00:73"],
-                l1b_mac, "32.72", "32.73")
+                l1b_mac, "32.72", "31.73")
     l1b = Guest("L1B", 32, 72, "L1", lab.overlay("l1-b"),
                 work/"l1-b.serial.log", work/"l1-b.qmp",
                 [f"e4b{suffix}1"], ["52:54:01:32:00:72"],
@@ -294,9 +294,9 @@ def main() -> int:
         else:
             raise RuntimeError("E4 routers did not all reach readiness")
 
-        # Allow L1<->L2 and inter-area L2 vectors to settle before introducing
-        # endpoint traffic. This makes the test exercise forwarding, not guest
-        # boot order under slow ARM64 TCG.
+        # Each router READY marker now proves its required local/cross-area
+        # adjacency. Retain a small route-update propagation margin before
+        # independently booting the two endpoints.
         time.sleep(10)
         lab.start(a)
         lab.start(b)

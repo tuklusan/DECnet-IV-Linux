@@ -89,6 +89,12 @@ jobs:
           set -euo pipefail
           python3 tools/repo_policy.py 2>&1 | tee "$DNIV_SCRATCH_DIR/repository-policy.log"
 
+      - name: Guard E4 convergence sampling
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/e4_convergence_regression.py
+
       - name: Verify exact event tree after policy
         shell: bash
         run: |
