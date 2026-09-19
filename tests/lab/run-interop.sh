@@ -63,8 +63,10 @@ printf -v candidate_changed_hw '52:54:01:00:%02x:%02x' "$((addr & 255))" "$(((ad
 printf -v reference_hw '52:54:00:00:%02x:%02x' "$((ref_addr & 255))" "$(((ref_addr >> 8) & 255))"
 # PyDECnet's independent peer uses its native Linux TAP backend directly on
 # the host bridge, avoiding the architecture-sensitive guest virtio+pcap path.
-# Give that TAP the DECnet logical MAC. Route20 retains a distinct emulated
-# hardware MAC and its independent guest/pcap path.
+# Keep the TAP device's Linux MAC distinct from the DECnet logical MAC: making
+# them identical creates a local bridge FDB entry and traps DECnet unicast in
+# the host instead of delivering it to the TAP queue. Route20 retains the
+# independent guest/pcap path.
 if [[ "$reference" == pydecnet ]]; then
     reference_hw=$reference_mac
 fi
@@ -126,9 +128,6 @@ sudo ip link add "$bridge" type bridge
 sudo ip link set "$bridge" up
 for tap in "$tap_candidate" "$tap_reference"; do
     sudo ip tuntap add dev "$tap" mode tap user "$(id -un)"
-    if [[ "$reference" == pydecnet && "$tap" == "$tap_reference" ]]; then
-        sudo ip link set "$tap" address "$reference_hw"
-    fi
     sudo ip link set "$tap" master "$bridge"
     sudo ip link set "$tap" up
 done

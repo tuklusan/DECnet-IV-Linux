@@ -142,7 +142,6 @@ def main() -> int:
         'host_pydecnet="$work/host-pydecnet"',
         'circuit ETH-0 Ethernet $tap_reference --mode tap',
         "reference_ready_marker='DECnet/Python is running'",
-        'sudo ip link set "$tap" address "$reference_hw"',
     ]
     for fragment in direct_tap_fragments:
         if fragment not in SCRIPT:
@@ -150,6 +149,12 @@ def main() -> int:
                 "interop-ready regression: PyDECnet independent reference must "
                 f"use the direct host TAP path; missing {fragment!r}"
             )
+    if 'ip link set "$tap" address "$reference_hw"' in SCRIPT:
+        raise SystemExit(
+            "interop-ready regression: PyDECnet TAP Linux MAC must remain "
+            "distinct from the DECnet logical MAC so bridge unicast reaches "
+            "the TAP queue"
+        )
     if 'args.reference == "route20" and counts["probes"] < 3' not in PCAP_VALIDATOR:
         raise SystemExit(
             "interop-ready regression: raw diagnostic probe minimum must remain "
