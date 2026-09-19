@@ -27,6 +27,8 @@ REFERENCE_IMAGE = (ROOT / "tests/lab/prepare-reference-image.sh").read_text(enco
 CANDIDATE_SMOKE = (ROOT / "tests/lab/dniv-interop-smoke.sh").read_text(encoding="utf-8")
 PCAP_VALIDATOR = (ROOT / "tests/lab/validate-interop-pcap.py").read_text(encoding="utf-8")
 REFERENCE_PEER = (ROOT / "tests/lab/dniv-reference-peer.sh").read_text(encoding="utf-8")
+DNACCEPT = (ROOT / "tests/lab/dnaccept.c").read_text(encoding="utf-8")
+PYDECNET_INBOUND = (ROOT / "tests/lab/pydecnet-inbound.py").read_text(encoding="utf-8")
 
 
 def main() -> int:
@@ -248,7 +250,47 @@ def main() -> int:
             "interop-ready regression: candidate image must include dnaccept"
         )
 
-    print("interop-ready regression passed: route20=180/600s pydecnet-host=60s direct-tap inbound")
+    oob_candidate_fragments = [
+        "POLLPRI",
+        "SIOCATMARK",
+        "MSG_OOB",
+        'OOB_ONE "py-oob-one"',
+        'OOB_TWO "py-oob-two"',
+        'OOB_REPLY "linux-oob"',
+        'AFTER_OOB "after-oob"',
+    ]
+    for fragment in oob_candidate_fragments:
+        if fragment not in DNACCEPT:
+            raise SystemExit(
+                "interop-ready regression: candidate inbound proof must retain "
+                f"interrupt/OOB coverage; missing {fragment!r}"
+            )
+
+    oob_reference_fragments = [
+        "connection.interrupt(OOB_ONE)",
+        "connection.interrupt(OOB_TWO)",
+        'reply.type != "interrupt"',
+        "time.sleep(1.0)",
+    ]
+    for fragment in oob_reference_fragments:
+        if fragment not in PYDECNET_INBOUND:
+            raise SystemExit(
+                "interop-ready regression: PyDECnet inbound driver must retain "
+                f"interrupt/OOB credit coverage; missing {fragment!r}"
+            )
+
+    oob_pcap_fragments = [
+        'counts["candidate_interrupt"] < 2',
+        'counts["reference_interrupt"] < 4',
+    ]
+    for fragment in oob_pcap_fragments:
+        if fragment not in PCAP_VALIDATOR:
+            raise SystemExit(
+                "interop-ready regression: pcap evidence must retain "
+                f"bidirectional interrupt proof; missing {fragment!r}"
+            )
+
+    print("interop-ready regression passed: route20=180/600s pydecnet-host=60s direct-tap inbound+oob")
     return 0
 
 

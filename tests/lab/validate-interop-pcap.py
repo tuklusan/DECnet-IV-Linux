@@ -202,6 +202,8 @@ def main() -> int:
         "candidate_l2_alll2": 0,
         "candidate_nsp": 0,
         "reference_nsp": 0,
+        "candidate_interrupt": 0,
+        "reference_interrupt": 0,
         "probes": 0,
     }
     bad_hello_hw = 0
@@ -215,8 +217,12 @@ def main() -> int:
         if nsp is not None:
             if src == args.candidate_mac:
                 counts["candidate_nsp"] += 1
+                if nsp[0] == 0x30:
+                    counts["candidate_interrupt"] += 1
             elif src == args.reference_mac:
                 counts["reference_nsp"] += 1
+                if nsp[0] == 0x30:
+                    counts["reference_interrupt"] += 1
         if dst == args.candidate_mac and payload.startswith(b"DNIV-INTEROP-PROBE-"):
             if args.reference == "route20" and src != args.reference_hw:
                 raise ValueError("raw unicast probe source MAC mismatch")
@@ -282,6 +288,11 @@ def main() -> int:
     if args.reference == "pydecnet":
         if counts["candidate_nsp"] < 5 or counts["reference_nsp"] < 5:
             raise SystemExit("interop pcap: insufficient bidirectional NSP socket traffic")
+        if args.scenario != "router-endnode":
+            if counts["candidate_interrupt"] < 2:
+                raise SystemExit("interop pcap: missing candidate NSP interrupt traffic")
+            if counts["reference_interrupt"] < 4:
+                raise SystemExit("interop pcap: missing repeated reference NSP interrupt traffic")
     if args.scenario == "router-endnode":
         if args.reference != "pydecnet":
             raise SystemExit("interop pcap: router-endnode requires PyDECnet")

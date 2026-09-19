@@ -110,6 +110,8 @@ int dniv_nsp_send_interrupt(__u16 local_link, const __u8 *payload,
                             __u16 payload_len);
 int dniv_nsp_recv(__u16 local_link, struct dniv_nsp_rx_meta *meta,
                   __u8 *payload, __u16 capacity);
+int dniv_nsp_recv_interrupt(__u16 local_link, __u8 *payload, __u16 capacity,
+                            __u16 *payload_len);
 int dniv_nsp_recv_message(__u16 local_link, __u8 *payload, __u32 capacity,
                           __u32 *payload_len);
 

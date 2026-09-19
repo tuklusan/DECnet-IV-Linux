@@ -21,7 +21,9 @@
 #include <linux/poll.h>
 #include <linux/slab.h>
 #include <linux/socket.h>
+#include <linux/sockios.h>
 #include <linux/spinlock.h>
+#include <linux/uaccess.h>
 #include <linux/uio.h>
 #include <linux/version.h>
 #include <linux/wait.h>
@@ -398,6 +400,21 @@ static int dniv_can_send(struct dniv_sock *dsk)
     return 1;
 }
 
+static int dniv_can_send_interrupt(struct dniv_sock *dsk)
+{
+    struct dniv_nsp_conn_snapshot snapshot;
+
+    if (!dsk->local_link ||
+        dniv_nsp_conn_snapshot(dsk->local_link, &snapshot))
+        return -ENOTCONN;
+    if (snapshot.state != DNIV_NSP_ST_RUN)
+        return -ENOTCONN;
+    if (!snapshot.interrupt_credit ||
+        snapshot.retransmit_count >= DNIV_NSP_MAX_RETRANSMIT)
+        return 0;
+    return 1;
+}
+
 static int dniv_wait_running(struct sock *sk, long *timeo)
 {
     struct dniv_sock *dsk = dniv_sk(sk);
@@ -639,12 +656,15 @@ static int dniv_sock_sendmsg(struct socket *sock, struct msghdr *msg,
     long timeo;
     int ret = 0;
 
-    if (msg->msg_name || size > DNBUFSIZE)
+    if (msg->msg_name ||
+        size > ((msg->msg_flags & MSG_OOB) ?
+                DNIV_NSP_MAX_INTERRUPT : DNBUFSIZE))
         return -EMSGSIZE;
-    if (msg->msg_flags & ~(MSG_DONTWAIT | MSG_NOSIGNAL | MSG_EOR))
+    if (msg->msg_flags &
+        ~(MSG_DONTWAIT | MSG_NOSIGNAL | MSG_EOR | MSG_OOB))
         return -EOPNOTSUPP;
     if (!size)
-        return 0;
+        return (msg->msg_flags & MSG_OOB) ? -EINVAL : 0;
 
     data = kmalloc(size, GFP_KERNEL);
     if (!data)
@@ -660,6 +680,31 @@ static int dniv_sock_sendmsg(struct socket *sock, struct msghdr *msg,
         goto out;
     }
     timeo = sock_sndtimeo(sk, msg->msg_flags & MSG_DONTWAIT);
+    if (msg->msg_flags & MSG_OOB) {
+        for (;;) {
+            ret = dniv_nsp_send_interrupt(dsk->local_link, data,
+                                          (__u16)size);
+            if (!ret) {
+                off = size;
+                break;
+            }
+            if ((ret != -EAGAIN && ret != -ENOSPC) || !timeo)
+                break;
+            ret = wait_event_interruptible_timeout(
+                dniv_sock_waitq, dniv_can_send_interrupt(dsk) != 0,
+                timeo);
+            if (ret < 0)
+                break;
+            if (!ret) {
+                ret = -EAGAIN;
+                break;
+            }
+            timeo = ret;
+            ret = 0;
+        }
+        goto out;
+    }
+
     while (off < size) {
         __u16 chunk = (__u16)min_t(size_t, DNIV_NSP_MSS, size - off);
         __u8 bom = off == 0U;
@@ -699,16 +744,19 @@ static int dniv_sock_recvmsg(struct socket *sock, struct msghdr *msg,
     struct dniv_sock *dsk = dniv_sk(sk);
     __u8 *data;
     __u32 length = 0U;
+    __u16 interrupt_len = 0U;
+    size_t allocation;
     size_t copied;
     long timeo;
     int ret;
 
-    if (flags & ~(MSG_DONTWAIT | MSG_TRUNC | MSG_NOSIGNAL))
+    if (flags & ~(MSG_DONTWAIT | MSG_TRUNC | MSG_NOSIGNAL | MSG_OOB))
         return -EOPNOTSUPP;
     if (!size && !(flags & MSG_TRUNC))
         return 0;
 
-    data = kmalloc(DNBUFSIZE, GFP_KERNEL);
+    allocation = (flags & MSG_OOB) ? DNIV_NSP_MAX_INTERRUPT : DNBUFSIZE;
+    data = kmalloc(allocation, GFP_KERNEL);
     if (!data)
         return -ENOMEM;
 
@@ -719,8 +767,16 @@ static int dniv_sock_recvmsg(struct socket *sock, struct msghdr *msg,
     }
     timeo = sock_rcvtimeo(sk, flags & MSG_DONTWAIT);
     for (;;) {
-        ret = dniv_nsp_recv_message(dsk->local_link, data, DNBUFSIZE,
-                                    &length);
+        if (flags & MSG_OOB) {
+            ret = dniv_nsp_recv_interrupt(
+                dsk->local_link, data, DNIV_NSP_MAX_INTERRUPT,
+                &interrupt_len);
+            if (!ret)
+                length = interrupt_len;
+        } else {
+            ret = dniv_nsp_recv_message(dsk->local_link, data, DNBUFSIZE,
+                                        &length);
+        }
         if (!ret)
             break;
         if (ret != -EAGAIN || !timeo)
@@ -729,7 +785,8 @@ static int dniv_sock_recvmsg(struct socket *sock, struct msghdr *msg,
             dniv_sock_waitq,
             ({ bool normal = false, intr = false;
                int ready = dniv_nsp_rx_ready(dsk->local_link, &normal, &intr);
-               ready || normal || dniv_link_status(dsk) != 1; }),
+               ready || ((flags & MSG_OOB) ? intr : normal) ||
+                   dniv_link_status(dsk) != 1; }),
             timeo);
         if (ret < 0)
             goto out;
@@ -751,6 +808,15 @@ static int dniv_sock_recvmsg(struct socket *sock, struct msghdr *msg,
     }
     if (copied < length)
         msg->msg_flags |= MSG_TRUNC;
+    if (flags & MSG_OOB) {
+        msg->msg_flags |= MSG_OOB;
+    } else {
+        bool normal = false;
+        bool intr = false;
+
+        if (!dniv_nsp_rx_ready(dsk->local_link, &normal, &intr) && intr)
+            msg->msg_flags |= MSG_OOB;
+    }
     if (msg->msg_name) {
         memcpy(msg->msg_name, &dsk->peer, sizeof(dsk->peer));
         msg->msg_namelen = sizeof(dsk->peer);
@@ -788,12 +854,37 @@ static __poll_t dniv_sock_poll(struct file *file, struct socket *sock,
         if (!dniv_nsp_rx_ready(dsk->local_link, &normal, &intr) && normal)
             mask |= EPOLLIN | EPOLLRDNORM;
         if (intr)
-            mask |= EPOLLPRI;
+            mask |= EPOLLPRI | EPOLLRDBAND;
     } else if (snapshot.state == DNIV_NSP_ST_DI ||
                snapshot.state == DNIV_NSP_ST_CLOSED) {
         mask |= EPOLLHUP;
     }
     return mask;
+}
+
+static int dniv_sock_ioctl(struct socket *sock,
+                           unsigned int cmd, unsigned long arg)
+{
+    struct dniv_sock *dsk = dniv_sk(sock->sk);
+    bool normal = false;
+    bool intr = false;
+    int ret;
+    int value;
+
+    if (cmd != SIOCATMARK)
+        return -ENOIOCTLCMD;
+
+    lock_sock(sock->sk);
+    if (dniv_link_status(dsk) <= 0) {
+        ret = -ENOTCONN;
+    } else {
+        ret = dniv_nsp_rx_ready(dsk->local_link, &normal, &intr);
+        value = intr ? 1 : 0;
+    }
+    release_sock(sock->sk);
+    if (ret)
+        return ret;
+    return put_user(value, (int __user *)arg);
 }
 
 static int dniv_sock_shutdown(struct socket *sock, int how)
@@ -1032,7 +1123,7 @@ static const struct proto_ops dniv_proto_ops = {
     .accept = dniv_sock_accept,
     .getname = dniv_sock_getname,
     .poll = dniv_sock_poll,
-    .ioctl = sock_no_ioctl,
+    .ioctl = dniv_sock_ioctl,
     .listen = dniv_sock_listen,
     .shutdown = dniv_sock_shutdown,
     .setsockopt = dniv_sock_setsockopt,

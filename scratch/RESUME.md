@@ -163,3 +163,8 @@ Planned distributed work remains ordered behind its dependencies. The VDE2 proof
 Documentation reconciliation corrected stale/cross-document status and continuity wording, including explicit local-only VDE2 proof status and the planned secret-backed Area-31/VAX test path. The zero-gap documentation audit restarts from this tree; protocol behavior is unchanged.
 
 Repository Policy run `35474499903` caught that the documentation reconciliation had renamed the required `## Next action` continuity heading. The canonical heading is restored in both continuity files; the append-only chronology rule remains unchanged. The zero-gap documentation audit restarts from this corrected tree.
+
+
+Exact-SHA acceptance of documentation-reconciled main `0f041277efbaa9633b56aeef500b04b89fa6d088` is green: Repository Policy `35474807386`, Build Bootstrap `35474819482`, Project State Gate `35474820666`, External Reference Baselines `35474821742`, E1-E4 VM Lab `35474823040`, `35474824226`, `35474825388`, `35474826191`, and Independent Ethernet Interoperability `35474827016`; all eight interop jobs passed.
+
+Phase 5 now advances to interrupt/OOB socket delivery. The candidate maps NSP interrupt data to `MSG_OOB`, enforces the 1-16 byte bound and remote interrupt credit, replenishes one remote interrupt credit when userspace consumes OOB, exposes `POLLPRI`/`EPOLLRDBAND` and `SIOCATMARK`, and extends the direct PyDECnet numeric/name listener proof to bidirectional interrupts plus repeated peer interrupt after credit replenishment. Next after exact-SHA acceptance: classic DECnet socket options/access/connect data.

@@ -1474,6 +1474,43 @@ int dniv_nsp_send_data(__u16 local_link, const __u8 *payload,
 }
 
 
+static int dniv_nsp_queue_interrupt_grant_locked(
+    struct dniv_nsp_connection *conn, __u8 *wire, __u16 *wire_len,
+    __u16 *remote_node)
+{
+    struct dniv_nsp_packet pkt;
+    __u16 sequence;
+    int len;
+    int ret;
+
+    if (!conn || !wire || !wire_len || !remote_node ||
+        conn->state != DNIV_NSP_ST_RUN || !conn->remote_link)
+        return -ENOTCONN;
+
+    sequence = conn->tx_next[DNIV_NSP_CH_OTHER];
+    memset(&pkt, 0, sizeof(pkt));
+    pkt.type = DNIV_NSP_LINK_SVC;
+    pkt.dst = conn->remote_link;
+    pkt.src = conn->local_link;
+    pkt.segnum = sequence;
+    pkt.fcmod = 0U;
+    pkt.fcval_int = 1U;
+    pkt.fcval = 1;
+    len = dniv_nsp_build(wire, DNIV_NSP_MAX_WIRE, &pkt);
+    if (len <= 0)
+        return -EINVAL;
+
+    ret = dniv_nsp_queue_locked(
+        conn, DNIV_NSP_CH_OTHER, sequence, wire, (__u16)len,
+        jiffies + DNIV_NSP_DEFAULT_RESPONSE_SECONDS * HZ);
+    if (ret)
+        return ret;
+
+    *wire_len = (__u16)len;
+    *remote_node = conn->remote_node;
+    return 0;
+}
+
 int dniv_nsp_send_interrupt(__u16 local_link, const __u8 *payload,
                             __u16 payload_len)
 {
@@ -1570,6 +1607,74 @@ int dniv_nsp_recv(__u16 local_link, struct dniv_nsp_rx_meta *meta,
     conn->rx_queued--;
 out:
     spin_unlock_irqrestore(&dniv_nsp_lock, flags);
+    return ret;
+}
+
+
+int dniv_nsp_recv_interrupt(__u16 local_link, __u8 *payload,
+                            __u16 capacity, __u16 *payload_len)
+{
+    struct dniv_nsp_connection *conn;
+    struct dniv_nsp_rx_entry *entry;
+    struct dniv_nsp_rx_entry *found = NULL;
+    __u8 wire[DNIV_NSP_MAX_WIRE];
+    unsigned long flags;
+    __u16 remote_node = 0U;
+    __u16 wire_len = 0U;
+    int ret = 0;
+
+    if (!payload || !payload_len || !capacity)
+        return -EINVAL;
+
+    spin_lock_irqsave(&dniv_nsp_lock, flags);
+    conn = dniv_nsp_find_locked(local_link);
+    if (!conn) {
+        ret = -ENOENT;
+        goto out;
+    }
+
+    list_for_each_entry(entry, &conn->rx_ready, link) {
+        if (entry->channel == DNIV_NSP_CH_OTHER &&
+            entry->type == DNIV_NSP_INT) {
+            found = entry;
+            break;
+        }
+    }
+    if (!found) {
+        ret = -EAGAIN;
+        goto out;
+    }
+    if (!found->payload_len ||
+        found->payload_len > DNIV_NSP_MAX_INTERRUPT) {
+        ret = -EPROTO;
+        goto out;
+    }
+    if (found->payload_len > capacity) {
+        ret = -EMSGSIZE;
+        goto out;
+    }
+
+    /*
+     * Queue the replacement interrupt credit before exposing the message to
+     * userspace.  If the other-data retransmit queue is temporarily full,
+     * leave the interrupt queued so a later recv can retry without losing
+     * flow-control state.
+     */
+    ret = dniv_nsp_queue_interrupt_grant_locked(
+        conn, wire, &wire_len, &remote_node);
+    if (ret)
+        goto out;
+
+    memcpy(payload, found->payload, found->payload_len);
+    *payload_len = found->payload_len;
+    list_del(&found->link);
+    kfree(found);
+    conn->rx_queued--;
+
+out:
+    spin_unlock_irqrestore(&dniv_nsp_lock, flags);
+    if (!ret && wire_len)
+        (void)dniv_nsp_transmit(remote_node, wire, wire_len);
     return ret;
 }
 

@@ -13,19 +13,27 @@
 // ============================================================================
 
 #include <errno.h>
+#include <poll.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <unistd.h>
+
+#include <linux/sockios.h>
 
 #include <linux/dn.h>
 
 #define TEST_OBJECT 240U
 #define TEST_NAME "DNIVTEST"
 #define SOURCE_NAME "PYDNIV"
+#define OOB_ONE "py-oob-one"
+#define OOB_TWO "py-oob-two"
+#define OOB_REPLY "linux-oob"
+#define AFTER_OOB "after-oob"
 
 static uint16_t dniv_le16_to_cpu(__le16 value)
 {
@@ -95,6 +103,27 @@ fail:
     return -1;
 }
 
+static int recv_oob(int fd, const char *expected)
+{
+    struct pollfd pfd = { .fd = fd, .events = POLLPRI };
+    unsigned char buf[DN_MAXOPTL];
+    size_t length = strlen(expected);
+    ssize_t got;
+    int atmark = 0;
+    int ready;
+
+    ready = poll(&pfd, 1, 30000);
+    if (ready != 1 || !(pfd.revents & POLLPRI))
+        return -1;
+    if (ioctl(fd, SIOCATMARK, &atmark) || atmark != 1)
+        return -1;
+
+    got = recv(fd, buf, sizeof(buf), MSG_OOB);
+    if (got != (ssize_t)length || memcmp(buf, expected, length))
+        return -1;
+    return 0;
+}
+
 static int serve_one(int listener, uint16_t expected_node,
                      const char *payload)
 {
@@ -130,6 +159,21 @@ static int serve_one(int listener, uint16_t expected_node,
     if (got != (ssize_t)expected || memcmp(buf, payload, expected))
         goto fail;
     if (send(fd, buf, expected, MSG_EOR | MSG_NOSIGNAL) != (ssize_t)expected)
+        goto fail;
+
+    if (recv_oob(fd, OOB_ONE))
+        goto fail;
+    if (send(fd, OOB_REPLY, sizeof(OOB_REPLY) - 1U,
+             MSG_OOB | MSG_NOSIGNAL) != (ssize_t)(sizeof(OOB_REPLY) - 1U))
+        goto fail;
+    if (recv_oob(fd, OOB_TWO))
+        goto fail;
+
+    got = recv(fd, buf, sizeof(buf), 0);
+    if (got != (ssize_t)(sizeof(AFTER_OOB) - 1U) ||
+        memcmp(buf, AFTER_OOB, sizeof(AFTER_OOB) - 1U))
+        goto fail;
+    if (send(fd, buf, (size_t)got, MSG_EOR | MSG_NOSIGNAL) != got)
         goto fail;
 
     got = recv(fd, buf, sizeof(buf), 0);

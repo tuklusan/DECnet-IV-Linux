@@ -129,6 +129,13 @@ static void test_interrupt_and_link_service(void)
 static void test_negative(void)
 {
     const unsigned char bad_ack[] = {0x04,0x03,0x00,0x05,0x01};
+    const unsigned char empty_intr[] = {
+        0x30,0x03,0x00,0x05,0x01,0x01,0x00
+    };
+    const unsigned char long_intr[] = {
+        0x30,0x03,0x00,0x05,0x01,0x01,0x00,
+        0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16
+    };
     const unsigned char bad_cross[] = {
         0x04,0x03,0x00,0x05,0x01,0x02,0x80,0x05,0x90
     };
@@ -148,6 +155,10 @@ static void test_negative(void)
     assert(dniv_nsp_parse(bad_ci_dst, sizeof(bad_ci_dst), &p) ==
            DNIV_NSP_MALFORMED);
     assert(dniv_nsp_parse(bad_ls, sizeof(bad_ls), &p) ==
+           DNIV_NSP_MALFORMED);
+    assert(dniv_nsp_parse(empty_intr, sizeof(empty_intr), &p) ==
+           DNIV_NSP_MALFORMED);
+    assert(dniv_nsp_parse(long_intr, sizeof(long_intr), &p) ==
            DNIV_NSP_MALFORMED);
 }
 

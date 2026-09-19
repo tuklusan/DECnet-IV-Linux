@@ -18,11 +18,16 @@
 from __future__ import annotations
 
 import sys
+import time
 
 from decnet.connectors import SimpleApiConnector
 
 SOURCE_NAME = "PYDNIV"
 TESTS = ((240, b"numeric-inbound"), ("DNIVTEST", b"named-inbound"))
+OOB_ONE = b"py-oob-one"
+OOB_TWO = b"py-oob-two"
+OOB_REPLY = b"linux-oob"
+AFTER_OOB = b"after-oob"
 def main() -> int:
     if len(sys.argv) != 4:
         raise SystemExit(
@@ -50,11 +55,36 @@ def main() -> int:
                     f"bad inbound echo for {remote_user!r}: "
                     f"type={reply.type!r} data={bytes(reply)!r}"
                 )
+
+            connection.interrupt(OOB_ONE)
+            reply = connection.recv()
+            if reply.type != "interrupt" or bytes(reply) != OOB_REPLY:
+                raise RuntimeError(
+                    f"bad inbound interrupt reply for {remote_user!r}: "
+                    f"type={reply.type!r} data={bytes(reply)!r}"
+                )
+
+            # The Linux peer replenishes one interrupt credit when userspace
+            # consumes OOB.  Give that Link Service update time to traverse
+            # the local test LAN, then prove a second PyDECnet interrupt is
+            # accepted on the same logical link.
+            time.sleep(1.0)
+            connection.interrupt(OOB_TWO)
+            connection.data(AFTER_OOB)
+            reply = connection.recv()
+            if reply.type != "data" or bytes(reply) != AFTER_OOB:
+                raise RuntimeError(
+                    f"bad post-interrupt data echo for {remote_user!r}: "
+                    f"type={reply.type!r} data={bytes(reply)!r}"
+                )
             connection.disconnect()
     finally:
         connector.close()
 
-    print(f"pydecnet-inbound: pass peer={destination} selectors=2")
+    print(
+        f"pydecnet-inbound: pass peer={destination} selectors=2 "
+        "oob=bidirectional+credit"
+    )
     return 0
 
 
