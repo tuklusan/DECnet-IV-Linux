@@ -226,7 +226,7 @@ if ! wait_marker "$ref1_log" "DNIV-REF-READY session=$session reference=$referen
     exit 1
 fi
 
-candidate_common="root=LABEL=dniv-root rootfstype=ext4 rw dniv.interop=1 dniv.area=$area dniv.node=$node dniv.name=$name dniv.peer_node=$ref_area.$ref_node dniv.scenario=$scenario dniv.session=$session"
+candidate_common="root=LABEL=dniv-root rootfstype=ext4 rw dniv.interop=1 dniv.reference=$reference dniv.area=$area dniv.node=$node dniv.name=$name dniv.peer_node=$ref_area.$ref_node dniv.scenario=$scenario dniv.session=$session"
 start_vm "candidate-$scenario" "$candidate_disk" "$tap_candidate" "$candidate_hw" "$candidate_log" "$candidate_common" & CANDIDATE_PID=$!
 if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-READY-STOP session=$session scenario=$scenario" "$timeout_seconds" "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
     tail -220 "$candidate_log" >&2 || true

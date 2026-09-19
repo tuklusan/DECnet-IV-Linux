@@ -26,6 +26,10 @@ ROUTER_HELLO = 0x0B
 ENDNODE_HELLO = 0x0D
 L1_ROUTING = 0x07
 L2_ROUTING = 0x09
+SHORT_DATA = 0x02
+LONG_DATA = 0x06
+DATA_CLASS_MASK = 0xC7
+NSP_CONTROL = {0x04, 0x10, 0x14, 0x18, 0x24, 0x28, 0x30, 0x38, 0x48, 0x68}
 MAX_BLOCK = 1498
 
 
@@ -76,6 +80,27 @@ def routing_payload(frame: bytes) -> tuple[bytes, bytes, bytes] | None:
             raise ValueError("invalid DECnet padding")
         payload = payload[pad:]
     return frame[:6], frame[6:12], payload
+
+
+def routed_nsp_payload(payload: bytes) -> bytes | None:
+    if not payload:
+        return None
+    data_class = payload[0] & DATA_CLASS_MASK
+    if data_class == SHORT_DATA:
+        header_len = 6
+    elif data_class == LONG_DATA:
+        header_len = 21
+    else:
+        return None
+    if len(payload) <= header_len:
+        return None
+    nsp = payload[header_len:]
+    flag = nsp[0]
+    if (flag & 0x83) == 0 and (flag & 0x9F) == 0:
+        return nsp
+    if flag in NSP_CONTROL:
+        return nsp
+    return None
 
 
 def router_entries(payload: bytes) -> list[tuple[bytes, int, bool]]:
@@ -175,6 +200,8 @@ def main() -> int:
         "candidate_l2_updates": 0,
         "candidate_l2_allrouters": 0,
         "candidate_l2_alll2": 0,
+        "candidate_nsp": 0,
+        "reference_nsp": 0,
         "probes": 0,
     }
     bad_hello_hw = 0
@@ -184,6 +211,12 @@ def main() -> int:
         if parsed is None:
             continue
         dst, src, payload = parsed
+        nsp = routed_nsp_payload(payload)
+        if nsp is not None:
+            if src == args.candidate_mac:
+                counts["candidate_nsp"] += 1
+            elif src == args.reference_mac:
+                counts["reference_nsp"] += 1
         if src == args.reference_hw and dst == args.candidate_mac and payload and payload[0] not in (ROUTER_HELLO, ENDNODE_HELLO):
             counts["probes"] += 1
         if payload and src == args.candidate_mac and payload[0] == L1_ROUTING:
@@ -241,6 +274,9 @@ def main() -> int:
         raise SystemExit(f"interop pcap: {bad_hello_hw} hello frame(s) used hardware source MAC")
     if counts["probes"] < 3:
         raise SystemExit("interop pcap: insufficient post-boot raw unicast probes")
+    if args.reference == "pydecnet":
+        if counts["candidate_nsp"] < 5 or counts["reference_nsp"] < 5:
+            raise SystemExit("interop pcap: insufficient bidirectional NSP socket traffic")
     if args.scenario == "router-endnode":
         if args.reference != "pydecnet":
             raise SystemExit("interop pcap: router-endnode requires PyDECnet")

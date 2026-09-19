@@ -155,9 +155,14 @@ area=$(get_arg dniv.area || printf '31')
 node=$(get_arg dniv.node || printf '70')
 name=$(get_arg dniv.name || printf 'DN70')
 peer_node=$(get_arg dniv.peer_node || true)
+reference=$(get_arg dniv.reference || true)
 scenario=$(get_arg dniv.scenario || true)
 session=$(get_arg dniv.session || printf 'local')
 
+case "$reference" in
+    route20|pydecnet) ;;
+    *) echo "DNIV-INTEROP-FAIL session=$session reason=bad-reference"; exit 1 ;;
+esac
 case "$scenario" in
     l1) local_type=2; peer_kind='L1 router' ;;
     l2) local_type=1; peer_kind='L2 router' ;;
@@ -181,6 +186,14 @@ if ! wait_peer_up "$peer_node" "$peer_kind" DNIV-INTEROP-INITIAL 600; then
     exit 1
 fi
 echo "DNIV-INTEROP-UP session=$session scenario=$scenario node=$name peer=$peer_node"
+
+if [ "$reference" = pydecnet ]; then
+    if ! /usr/local/sbin/dnmrr "$peer_node"; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=nsp-mirror"
+        exit 1
+    fi
+    echo "DNIV-INTEROP-NSP session=$session scenario=$scenario node=$name peer=$peer_node"
+fi
 
 snapshot=$(stats_snapshot 8) || {
     echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario reason=bad-hello-stats"

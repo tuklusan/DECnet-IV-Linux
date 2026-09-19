@@ -90,6 +90,8 @@ make -C /usr/src/decnet-iv-linux/userspace/dnctl clean all
 install -m 0755 /usr/src/decnet-iv-linux/userspace/dnctl/dnctl /usr/local/sbin/dnctl
 cc -O2 -std=c11 -Wall -Wextra -Werror \
     -o /usr/local/sbin/dnraw /usr/src/decnet-iv-linux/tests/lab/dnraw.c
+cc -I/usr/src/decnet-iv-linux/include/uapi -O2 -std=c11 -Wall -Wextra -Werror \
+    -o /usr/local/sbin/dnmrr /usr/src/decnet-iv-linux/tests/lab/dnmrr.c
 make -C /usr/src/decnet-iv-linux/kernel/decnet KDIR="/lib/modules/$krel/build" clean all
 install -D -m 0644 /usr/src/decnet-iv-linux/kernel/decnet/decnet_iv.ko \
     "/lib/modules/$krel/extra/decnet_iv.ko"
@@ -128,6 +130,7 @@ sudo test "$(sudo cat "$mnt/usr/src/decnet-iv-linux/.source-commit")" = "$source
 sudo test "$(sudo cat "$mnt/etc/dniv-candidate-sha")" = "$source_commit"
 sudo test -s "$mnt/usr/local/sbin/dnctl"
 sudo test -s "$mnt/usr/local/sbin/dnraw"
+sudo test -s "$mnt/usr/local/sbin/dnmrr"
 sudo test -s "$mnt/usr/local/sbin/dniv-smoke"
 sudo test -s "$mnt/usr/local/sbin/dniv-interop-smoke"
 
