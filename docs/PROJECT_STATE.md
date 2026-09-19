@@ -22,7 +22,7 @@ Build a complete native DECnet Phase IV stack for maintained Linux as an out-of-
 
 ## References and licensing
 
-Preferred exact reference pins are Route20 `564df0be75831aaf00590ce10152655460dd43dc`, PyDECnet live `60778de8242793228ffb5ba6c9db23ae92620cb1`, PyDECnet tests `9a844987bf3a1450632dee8d37e60a23a453bad3`, LinuxDECnet `ff39eef045d1e4b7b72a3d40111e89c07a473398`, and SIMH `5b73b1032b52d19bf80752ea4d9cbbdc92e7b5e0`.
+Preferred exact reference pins are Route20 `9ab398968b8fa9305af0fba502b3e6aa6e26a3e9`, PyDECnet live `310cf4032d21ffd1478be2536183c877386c5493`, PyDECnet tests `9a844987bf3a1450632dee8d37e60a23a453bad3`, LinuxDECnet `ff39eef045d1e4b7b72a3d40111e89c07a473398`, and SIMH `5b73b1032b52d19bf80752ea4d9cbbdc92e7b5e0`.
 
 Digital DNA Phase IV functional specifications are normative. PyDECnet and Route20 are independent implementation cross-checks; LinuxDECnet is the Linux ABI/userspace compatibility reference; SIMH plus genuine DEC operating systems are interoperability oracles. Third-party material retains its original license.
 
@@ -81,8 +81,8 @@ Implementation order:
 | Phase 4 accepted protocol candidate | `6c185b6d01f8a57ee9f0ea6a6c37d7112ddb77d2` |
 | Phase 4 closure commit | `571333bfd7aaa8b2fcc88715c1d61442af151f3c` |
 | Phase 4 tag | `PHASE-4-COMPLETE` |
-| Route20 pin | `564df0be75831aaf00590ce10152655460dd43dc` |
-| PyDECnet live pin | `60778de8242793228ffb5ba6c9db23ae92620cb1` |
+| Route20 pin | `9ab398968b8fa9305af0fba502b3e6aa6e26a3e9` |
+| PyDECnet live pin | `310cf4032d21ffd1478be2536183c877386c5493` |
 | VM lifecycle | direct QEMU/QMP |
 | Persistent VM state | source-independent amd64/arm64 foundations |
 | Candidate/reference images | disposable |
@@ -128,3 +128,5 @@ Repository Policy run `35436873179` rejected the initial distributed-transport i
 VDE2 proof run `35436873611` reached the transport harness after successfully installing dependencies, fetching both exact forks and building the VDE-enabled Route20 fork, but foreground `vde_switch` consumed EOF from the noninteractive runner console and exited before frame proof. The harness now starts `vde_switch` in daemon mode, discovers the unique per-run daemon by its private socket path and retains explicit cleanup. This is a VDE harness lifecycle fix, not protocol behavior.
 
 VDE2 proof rerun `35436975623` confirmed daemon startup but exposed a harness assumption about VDE2's `-sock` pathname: VDE2 2.3.2 creates a communication endpoint directory at that path rather than a UNIX socket at the path itself. The proof now waits for the endpoint path to exist and lets libvdeplug resolve its internal control socket. No VDE or DECnet behavior is changed.
+
+VDE2 proof run `35437051337` reached the real libvdeplug API and exposed an ABI mistake in both new reference adapters: Ubuntu 24.04's libvdeplug exports `vde_open_real` while `vde_open` is a source-level macro. The pinned PyDECnet and Route20 forks now support `vde_open_real` interface version 1 with legacy `vde_open` fallback. External Reference Baselines run `35437068303` also exposed an out-of-scope legacy transport test in the old complete-discovery baseline; the reference gate now executes an explicit repository-maintained in-scope PyDECnet module list instead. No candidate DECnet protocol behavior changes in this follow-up.

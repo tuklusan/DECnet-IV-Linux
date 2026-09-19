@@ -19,7 +19,7 @@ These are implementation references, not substitutes for the Digital functional 
 ## Route20
 
 - Repository: https://github.com/tuklusan/Route20
-- Exact project pin: `564df0be75831aaf00590ce10152655460dd43dc`
+- Exact project pin: `9ab398968b8fa9305af0fba502b3e6aa6e26a3e9`
 - Upstream documentation at that pin states that Route20 implements version 2.0 of the DECnet routing specification.
 - Best use here: Ethernet routing initialization, L1/L2 routing, adjacency, forwarding, native VDE Ethernet and an independent routing peer.
 - Important limit: Route20 is narrower than a complete DECnet stack and its own documentation records historical test limitations. A Route20 failure is evidence to investigate, not permission to change candidate protocol behavior blindly.
@@ -28,7 +28,7 @@ These are implementation references, not substitutes for the Digital functional 
 ## PyDECnet
 
 - Repository: https://github.com/tuklusan/pydecnet
-- Exact live/reference pin: `60778de8242793228ffb5ba6c9db23ae92620cb1`
+- Exact live/reference pin: `310cf4032d21ffd1478be2536183c877386c5493`
 - Exact tests pin: `9a844987bf3a1450632dee8d37e60a23a453bad3`
 - Its README states that it is written to conform to published DNA Phase II, III and IV specifications and covers Ethernet, routing endnode/L1/L2, NSP, Session Control, NICE/NML, MOP, DAP/FAL and the MULTINET transport used by this project's Internet lab gateway.
 - Best use here: independent whole-stack cross-check, edge cases and interoperability.

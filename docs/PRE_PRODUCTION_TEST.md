@@ -28,8 +28,8 @@ Repository state, `docs/HANDOVER.md`, `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`,
 
 | Reference | Revision | Acceptance use |
 | --- | --- | --- |
-| Route20 | `564df0be75831aaf00590ce10152655460dd43dc` | independent Ethernet/routing behavior, live peer and native VDE reference |
-| PyDECnet behavior/live | `60778de8242793228ffb5ba6c9db23ae92620cb1` | independent live peer, native VDE and MULTINET authority |
+| Route20 | `9ab398968b8fa9305af0fba502b3e6aa6e26a3e9` | independent Ethernet/routing behavior, live peer and native VDE reference |
+| PyDECnet behavior/live | `310cf4032d21ffd1478be2536183c877386c5493` | independent live peer, native VDE and MULTINET authority |
 | PyDECnet tests | `9a844987bf3a1450632dee8d37e60a23a453bad3` | protocol vectors/state machines and native reference baseline |
 | LinuxDECnet | `ff39eef045d1e4b7b72a3d40111e89c07a473398` | userspace/API and VAX-data conversion comparison |
 | SIMH | `5b73b1032b52d19bf80752ea4d9cbbdc92e7b5e0` | real DEC operating-system host and simulator reference health |
@@ -123,7 +123,7 @@ Boundary coverage is not satisfied by the words `minimum` and `maximum`. Test th
 
 Record exact DECnet-IV-Linux commit/tree, all reference SHAs, kernel/compiler/configuration and release artifact hashes. Build module/userspace/unit tests natively on x86_64 and aarch64, oldest/newest supported kernels and both supported compilers. Run appropriate kernel warning/static-analysis modes.
 
-Build the exact Route20 pin. Run complete unmodified PyDECnet native discovery. Build applicable LinuxDECnet tools/libraries and run `dnprogs/libvaxdata/src/test.c` as reference health; it also becomes mapped PP-07 evidence when VAX/RMS conversion is claimed. Build the exact selected SIMH DEC-host target with tests enabled and retain target-specific per-simulator test output for the VAX/PDP-11/DEC CPU, storage, Ethernet, serial and timer path used by PP-12. Unrelated simulator families remain reference-health only.
+Build the exact Route20 pin. Run the repository-maintained in-scope PyDECnet native module set unmodified. Build applicable LinuxDECnet tools/libraries and run `dnprogs/libvaxdata/src/test.c` as reference health; it also becomes mapped PP-07 evidence when VAX/RMS conversion is claimed. Build the exact selected SIMH DEC-host target with tests enabled and retain target-specific per-simulator test output for the VAX/PDP-11/DEC CPU, storage, Ethernet, serial and timer path used by PP-12. Unrelated simulator families remain reference-health only.
 
 Build the release/test image twice from identical inputs and compare documented reproducibility outputs. Verify base image, kernel, initrd, module, userspace, overlay and checkpoint hashes. Resume only a checkpoint matching architecture, exact source revision and mode.
 
@@ -264,7 +264,7 @@ At `564df0be75831aaf00590ce10152655460dd43dc`, no standalone path named as a tes
 
 ### PyDECnet
 
-The complete unmodified native discovery at `9a844987bf3a1450632dee8d37e60a23a453bad3` runs once in PP-00. Pinned test modules are disposed as follows:
+The repository-maintained in-scope native module set at `9a844987bf3a1450632dee8d37e60a23a453bad3` runs in PP-00. Pinned test modules are disposed as follows:
 
 | Upstream file | Disposition |
 | --- | --- |

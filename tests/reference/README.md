@@ -18,13 +18,13 @@ The project prefers the maintained `tuklusan` forks for automated gates and prot
 
 ## Route20
 
-`ROUTE20_REF` pins the Route20 fork revision used for build and live interoperability. The current pin adds a native libvdeplug Ethernet line while retaining the previously accepted routing behavior. VDE transport proof is run separately from protocol acceptance before the VDE path is used for scale.
+`ROUTE20_REF` pins the Route20 fork revision used for build and live interoperability. The current pin adds native libvdeplug Ethernet and supports both modern `vde_open_real` and legacy `vde_open` ABIs while retaining the previously accepted routing behavior. VDE transport proof is run separately from protocol acceptance before the VDE path is used for scale.
 
 ## PyDECnet
 
-`PYDECNET_REF` pins the current fork revision used for documentation, packet behavior and live interoperability. The current live pin adds native VDE Ethernet support; its existing MULTINET TCP implementation is the authoritative source for the project's user-space MULTINET gateway behavior.
+`PYDECNET_REF` pins the current fork revision used for documentation, packet behavior and live interoperability. The current live pin adds native VDE Ethernet support across modern and legacy libvdeplug ABIs; its existing MULTINET TCP implementation is the authoritative source for the project's user-space MULTINET gateway behavior.
 
-The current reference contains a pre-existing self-test contradiction in `Macaddr("1.24")`: the test requires DECnet `area.node` parsing while the code takes the hexadecimal path first. `PYDECNET_TEST_REF` therefore pins the immediately preceding internally consistent fork revision and its complete unit suite is run unmodified. No test is skipped or rewritten. Move the test pin forward when the contradiction is fixed.
+The current reference contains a pre-existing self-test contradiction in `Macaddr("1.24")`: the test requires DECnet `area.node` parsing while the code takes the hexadecimal path first. `PYDECNET_TEST_REF` therefore pins the immediately preceding internally consistent fork revision and the repository-maintained in-scope module list is run unmodified. Removed transport scope is not part of this baseline. Move the test pin forward when the contradiction is fixed.
 
 ## LinuxDECnet
 

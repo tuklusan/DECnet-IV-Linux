@@ -50,7 +50,7 @@ Ordinary test nodes use area 31, nodes 70 through 79, with names DN70 through DN
 
 ## Interoperability
 
-Route20 and PyDECnet remain pinned independent peers. Interoperability consumes the same source-independent architecture foundation, derives disposable exact-candidate/reference images, builds the exact pinned peer, and executes bounded L1/L2/endnode scenarios. Prior-run evidence restore is not part of execution. PyDECnet readiness is application-backed: the reference guest does not publish READY until the pinned process reports that DECnet/Python is running. The reference READY bound is 180 seconds on amd64 and 600 seconds on ARM64, where TCG startup/import time is materially slower; both remain bounded independently of candidate protocol timeouts.
+Route20 and PyDECnet remain pinned independent peers. Their VDE-enabled live pins support both modern and legacy libvdeplug open ABIs. Interoperability consumes the same source-independent architecture foundation, derives disposable exact-candidate/reference images, builds the exact pinned peer, and executes bounded L1/L2/endnode scenarios. Prior-run evidence restore is not part of execution. PyDECnet readiness is application-backed: the reference guest does not publish READY until the pinned process reports that DECnet/Python is running. The reference READY bound is 180 seconds on amd64 and 600 seconds on ARM64, where TCG startup/import time is materially slower; both remain bounded independently of candidate protocol timeouts.
 
 ## Scale and faults
 

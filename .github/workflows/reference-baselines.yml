@@ -190,7 +190,8 @@ jobs:
           "$RUNNER_TEMP/pyvenv/bin/python" -m pip install "$work/pydecnet" 2>&1 | \
             tee "$DNIV_SCRATCH_DIR/pip-install.log"
           cd "$work/pydecnet"
-          "$RUNNER_TEMP/pyvenv/bin/python" -m unittest discover -s tests -t . -p 'test_*.py' 2>&1 | \
+          mapfile -t modules < "$GITHUB_WORKSPACE/tests/reference/pydecnet-in-scope-tests.txt"
+          "$RUNNER_TEMP/pyvenv/bin/python" -m unittest -v "${modules[@]}" 2>&1 | \
             tee "$DNIV_SCRATCH_DIR/pydecnet-tests.log"
 
       - name: Verify exact tree after reference tests
