@@ -71,3 +71,5 @@ Next: finish exact-SHA acceptance, then VDE2 proof, then MULTINET proof, then re
 Repository Policy `35436873179` caught missing `queue: max` declarations in the new VDE2 and MULTINET workflow concurrency blocks. The follow-up changes workflow policy only; protocol and transport behavior are unchanged.
 
 VDE2 proof `35436873611` failed because foreground `vde_switch` exits on EOF in the noninteractive runner after dependencies/fork build succeeded. The proof now uses VDE daemon mode with per-run socket/PID discovery and cleanup.
+
+VDE2 proof `35436975623` reached daemon startup but the harness incorrectly required `-sock` to be a socket inode; VDE2 creates a communication directory there. The endpoint readiness check now accepts the real VDE2 path form.

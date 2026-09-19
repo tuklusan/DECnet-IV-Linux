@@ -64,11 +64,11 @@ for _ in $(seq 1 50); do
 done
 [ -n "$switch_pid" ] || { echo "vde2-proof: daemon pid absent" >&2; exit 1; }
 for _ in $(seq 1 100); do
-    [ -S "$sock" ] && break
+    [ -e "$sock" ] && break
     kill -0 "$switch_pid" 2>/dev/null || { cat "$work/vde-switch.log" >&2; exit 1; }
     sleep 0.1
 done
-[ -S "$sock" ] || { echo "vde2-proof: switch socket absent" >&2; exit 1; }
+[ -e "$sock" ] || { echo "vde2-proof: switch endpoint absent" >&2; exit 1; }
 url="vde://$sock"
 
 PYTHONPATH="$work/pydecnet/pydecnet" "$work/venv/bin/python" - "$url" <<'PY'
