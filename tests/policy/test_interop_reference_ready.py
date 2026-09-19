@@ -23,7 +23,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = (ROOT / "tests/lab/run-interop.sh").read_text(encoding="utf-8")
-REFERENCE_IMAGE = (ROOT / "tests/lab/prepare-reference-image.sh").read_text(encoding="utf-8")
+REFERENCE_IMAGE = (ROOT / "tests/lab/prepare-reference-image.sh").read_text(encoding="utf-8")\nCANDIDATE_SMOKE = (ROOT / "tests/lab/dniv-interop-smoke.sh").read_text(encoding="utf-8")
 
 
 def main() -> int:
@@ -108,6 +108,21 @@ def main() -> int:
         raise SystemExit(
             "interop-ready regression: reference failure marker must be checked "
             "before candidate success during convergence"
+        )
+
+
+    stable_call = 'if ! wait_peer_stable "$peer_node" "$peer_kind" 32 720; then'
+    if stable_call not in CANDIDATE_SMOKE:
+        raise SystemExit(
+            "interop-ready regression: PyDECnet NSP proof must require an "
+            "8-second stable adjacency within the bounded 180-second window"
+        )
+    stable_pos = CANDIDATE_SMOKE.find(stable_call)
+    mirror_pos = CANDIDATE_SMOKE.find('/usr/local/sbin/dnmrr "$peer_node"')
+    if mirror_pos < 0 or stable_pos > mirror_pos:
+        raise SystemExit(
+            "interop-ready regression: stable adjacency must be established "
+            "before the MIRROR socket connect"
         )
 
     print("interop-ready regression passed: ready-amd64=180s ready-arm64=600s")
