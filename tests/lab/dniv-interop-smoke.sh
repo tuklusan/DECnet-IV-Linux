@@ -204,6 +204,13 @@ if [ "$reference" = pydecnet ]; then
         exit 1
     fi
     echo "DNIV-INTEROP-NSP session=$session scenario=$scenario node=$name peer=$peer_node"
+    /usr/local/sbin/dnaccept "$peer_node" "$session" "$scenario" &
+    accept_pid=$!
+    if ! wait "$accept_pid"; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=inbound-listener"
+        exit 1
+    fi
+    echo "DNIV-INTEROP-LISTEN-PASS session=$session scenario=$scenario node=$name peer=$peer_node"
 fi
 
 snapshot=$(stats_snapshot 8) || {

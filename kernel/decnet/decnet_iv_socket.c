@@ -165,7 +165,7 @@ static int dniv_ci_decode(const __u8 *payload, __u16 payload_len,
     if (menu & DNIV_SC_MENU_ACCESS) {
         for (i = 0; i < 3U; i++) {
             ret = dniv_counted_field_validate(
-                payload + off, payload_len - off, DN_MAXACCL - 1U, &used);
+                payload + off, payload_len - off, DN_MAXACCL, &used);
             if (ret)
                 return ret;
             off += used;

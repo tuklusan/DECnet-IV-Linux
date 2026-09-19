@@ -142,6 +142,8 @@ def main() -> int:
         'host_pydecnet="$work/host-pydecnet"',
         'circuit ETH-0 Ethernet $tap_reference --mode tap',
         "reference_ready_marker='DECnet/Python is running'",
+        'api $host_pydecnet/api.sock --mode 600',
+        '"$script_dir/pydecnet-inbound.py" "$host_pydecnet/api.sock"',
     ]
     for fragment in direct_tap_fragments:
         if fragment not in SCRIPT:
@@ -214,7 +216,25 @@ def main() -> int:
             "proof must remain required for every independent reference path"
         )
 
-    print("interop-ready regression passed: route20=180/600s pydecnet-host=60s direct-tap")
+    inbound_fragments = [
+        '/usr/local/sbin/dnaccept "$peer_node" "$session" "$scenario"',
+        "DNIV-INTEROP-LISTEN-PASS",
+    ]
+    for fragment in inbound_fragments:
+        if fragment not in CANDIDATE_SMOKE:
+            raise SystemExit(
+                "interop-ready regression: PyDECnet must retain direct inbound "
+                f"AF_DECnet listen/accept proof; missing {fragment!r}"
+            )
+    candidate_image = (
+        ROOT / "tests/lab/prepare-candidate-image.sh"
+    ).read_text(encoding="utf-8")
+    if "/usr/local/sbin/dnaccept" not in candidate_image:
+        raise SystemExit(
+            "interop-ready regression: candidate image must include dnaccept"
+        )
+
+    print("interop-ready regression passed: route20=180/600s pydecnet-host=60s direct-tap inbound")
     return 0
 
 
