@@ -25,6 +25,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = (ROOT / "tests/lab/run-interop.sh").read_text(encoding="utf-8")
 REFERENCE_IMAGE = (ROOT / "tests/lab/prepare-reference-image.sh").read_text(encoding="utf-8")
 CANDIDATE_SMOKE = (ROOT / "tests/lab/dniv-interop-smoke.sh").read_text(encoding="utf-8")
+PCAP_VALIDATOR = (ROOT / "tests/lab/validate-interop-pcap.py").read_text(encoding="utf-8")
 
 
 def main() -> int:
@@ -120,6 +121,28 @@ def main() -> int:
     if "DNIV_INTEROP_TIMEOUT_SECONDS:-}" not in SCRIPT:
         raise SystemExit(
             "interop-ready regression: explicit candidate timeout override must remain supported"
+        )
+
+    logical_nic_guard = (
+        'if [[ "$reference" == pydecnet ]]; then\n'
+        '    reference_hw=$reference_mac\n'
+        'fi'
+    )
+    if logical_nic_guard not in SCRIPT:
+        raise SystemExit(
+            "interop-ready regression: PyDECnet reference NIC must use its "
+            "DECnet logical MAC so ARM64 TCG does not depend on delayed "
+            "promiscuous receive programming"
+        )
+    if 'payload.startswith(b"DNIV-INTEROP-PROBE-")' not in PCAP_VALIDATOR:
+        raise SystemExit(
+            "interop-ready regression: raw probe evidence must be identified "
+            "by its payload marker when reference hardware and DECnet MACs match"
+        )
+    if "args.reference_hw != args.reference_mac" not in PCAP_VALIDATOR:
+        raise SystemExit(
+            "interop-ready regression: pcap hello validation must allow a "
+            "reference NIC whose hardware and DECnet logical MAC are identical"
         )
 
     responsive_call = (

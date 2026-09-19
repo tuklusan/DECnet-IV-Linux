@@ -217,7 +217,9 @@ def main() -> int:
                 counts["candidate_nsp"] += 1
             elif src == args.reference_mac:
                 counts["reference_nsp"] += 1
-        if src == args.reference_hw and dst == args.candidate_mac and payload and payload[0] not in (ROUTER_HELLO, ENDNODE_HELLO):
+        if dst == args.candidate_mac and payload.startswith(b"DNIV-INTEROP-PROBE-"):
+            if src != args.reference_hw:
+                raise ValueError("raw unicast probe source MAC mismatch")
             counts["probes"] += 1
         if payload and src == args.candidate_mac and payload[0] == L1_ROUTING:
             if dst != ALL_ROUTERS:
@@ -239,7 +241,10 @@ def main() -> int:
             continue
         if not payload or payload[0] not in (ROUTER_HELLO, ENDNODE_HELLO):
             continue
-        if src in (args.candidate_hw, args.candidate_changed_hw, args.reference_hw):
+        hardware_only = src in (args.candidate_hw, args.candidate_changed_hw)
+        if args.reference_hw != args.reference_mac and src == args.reference_hw:
+            hardware_only = True
+        if hardware_only:
             bad_hello_hw += 1
         if payload[0] == ROUTER_HELLO:
             if len(payload) < 27:

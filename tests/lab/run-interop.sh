@@ -61,6 +61,14 @@ printf -v reference_mac 'aa:00:04:00:%02x:%02x' "$((ref_addr & 255))" "$(((ref_a
 printf -v candidate_hw '52:54:00:00:%02x:%02x' "$((addr & 255))" "$(((addr >> 8) & 255))"
 printf -v candidate_changed_hw '52:54:01:00:%02x:%02x' "$((addr & 255))" "$(((addr >> 8) & 255))"
 printf -v reference_hw '52:54:00:00:%02x:%02x' "$((ref_addr & 255))" "$(((ref_addr >> 8) & 255))"
+# PyDECnet injects and filters DECnet Phase IV frames using the logical
+# AA-00-04-00 node MAC. Match the virtual NIC receive address to that MAC so
+# the independent pcap peer does not depend on virtio promiscuous-mode timing
+# under ARM64 TCG. Route20 retains a distinct hardware MAC and continues to
+# exercise the promiscuous pcap path independently.
+if [[ "$reference" == pydecnet ]]; then
+    reference_hw=$reference_mac
+fi
 
 artifacts=${DNIV_INTEROP_ARTIFACTS:-"$(pwd)/tests/lab/artifacts"}
 timeout_seconds=${DNIV_INTEROP_TIMEOUT_SECONDS:-}
