@@ -72,15 +72,16 @@ def main() -> int:
             )
 
     uses = re.findall(
-        r'DNIV-REF-READY[^\n]*" "\$reference_ready_seconds" "\$REFERENCE_PID"',
+        r'wait_marker "\\$ref[12]_log" "\\$reference_ready_marker" '
+        r'"\\$reference_ready_seconds" "\\$REFERENCE_PID"',
         SCRIPT,
     )
     if len(uses) != 2:
         raise SystemExit(
-            "interop-ready regression: both initial and restart reference boots "
-            f"must use the bounded architecture value; saw {len(uses)}"
+            "interop-ready regression: both initial and restart reference "
+            f"processes must use the bounded readiness marker/value; saw {len(uses)}"
         )
-    if re.search(r'DNIV-REF-READY[^\n]*" [0-9]+ "\$REFERENCE_PID"', SCRIPT):
+    if re.search(r'wait_marker "\\$ref[12]_log"[^\\n]*" [0-9]+ "\\$REFERENCE_PID"', SCRIPT):
         raise SystemExit("interop-ready regression: hardcoded readiness wait remains")
 
 
@@ -135,11 +136,22 @@ def main() -> int:
             "DECnet logical MAC so ARM64 TCG does not depend on delayed "
             "promiscuous receive programming"
         )
-    if 'if [ "$reference" = pydecnet ]; then\n' not in REFERENCE_PEER or \
-       'ip link set "$iface" promisc on' not in REFERENCE_PEER:
+    direct_tap_fragments = [
+        'host_pydecnet="$work/host-pydecnet"',
+        'circuit ETH-0 Ethernet $tap_reference --mode tap',
+        "reference_ready_marker='DECnet/Python is running'",
+        'sudo ip link set "$tap" address "$reference_hw"',
+    ]
+    for fragment in direct_tap_fragments:
+        if fragment not in SCRIPT:
+            raise SystemExit(
+                "interop-ready regression: PyDECnet independent reference must "
+                f"use the direct host TAP path; missing {fragment!r}"
+            )
+    if 'args.reference == "route20" and counts["probes"] < 3' not in PCAP_VALIDATOR:
         raise SystemExit(
-            "interop-ready regression: PyDECnet reference guest must explicitly "
-            "enable NIC promiscuous mode before opening its pcap handle"
+            "interop-ready regression: raw diagnostic probe minimum must remain "
+            "scoped to the guest-backed Route20 reference path"
         )
     if 'payload.startswith(b"DNIV-INTEROP-PROBE-")' not in PCAP_VALIDATOR:
         raise SystemExit(
@@ -179,7 +191,7 @@ def main() -> int:
             "must not gate PyDECnet NSP under ARM64 TCG"
         )
 
-    print("interop-ready regression passed: ready-amd64=180s ready-arm64=600s")
+    print("interop-ready regression passed: route20=180/600s pydecnet-host=60s direct-tap")
     return 0
 
 
