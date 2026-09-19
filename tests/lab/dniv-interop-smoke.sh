@@ -224,13 +224,21 @@ if ! wait_post_change_hello "$peer_node" "$peer_kind" "$hello_before" 240; then
     exit 1
 fi
 
-nonhello_before=$(nonhello_value || true)
-case "$nonhello_before" in
-    ''|*[!0-9]*) echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario reason=bad-routing-stats"; exit 1 ;;
-esac
-if ! wait_unicast_delta "$nonhello_before" 160; then
-    echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=no-unicast-probes"
-    exit 1
+if [ "$reference" = pydecnet ]; then
+    if ! /usr/local/sbin/dnmrr "$peer_node"; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=changeaddr-nsp-mirror"
+        exit 1
+    fi
+    echo "DNIV-INTEROP-NSP-CHANGEADDR session=$session scenario=$scenario node=$name peer=$peer_node"
+else
+    nonhello_before=$(nonhello_value || true)
+    case "$nonhello_before" in
+        ''|*[!0-9]*) echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario reason=bad-routing-stats"; exit 1 ;;
+    esac
+    if ! wait_unicast_delta "$nonhello_before" 160; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=no-unicast-probes"
+        exit 1
+    fi
 fi
 
 echo "DNIV-INTEROP-READY-STOP session=$session scenario=$scenario node=$name peer=$peer_node"

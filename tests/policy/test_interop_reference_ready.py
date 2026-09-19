@@ -197,6 +197,16 @@ def main() -> int:
             "interop-ready regression: fixed-duration guest stability polling "
             "must not gate PyDECnet NSP under ARM64 TCG"
         )
+    changeaddr_mirror = (
+        'if ! /usr/local/sbin/dnmrr "$peer_node"; then\n'
+        '        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario '
+        'node=$name reason=changeaddr-nsp-mirror"'
+    )
+    if changeaddr_mirror not in CANDIDATE_SMOKE:
+        raise SystemExit(
+            "interop-ready regression: direct-TAP PyDECnet must prove "
+            "post-MAC-change bidirectional NSP instead of guest raw probes"
+        )
 
     print("interop-ready regression passed: route20=180/600s pydecnet-host=60s direct-tap")
     return 0
