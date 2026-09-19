@@ -63,7 +63,13 @@ printf -v candidate_changed_hw '52:54:01:00:%02x:%02x' "$((addr & 255))" "$(((ad
 printf -v reference_hw '52:54:00:00:%02x:%02x' "$((ref_addr & 255))" "$(((ref_addr >> 8) & 255))"
 
 artifacts=${DNIV_INTEROP_ARTIFACTS:-"$(pwd)/tests/lab/artifacts"}
-timeout_seconds=${DNIV_INTEROP_TIMEOUT_SECONDS:-420}
+timeout_seconds=${DNIV_INTEROP_TIMEOUT_SECONDS:-}
+if [[ -z "$timeout_seconds" ]]; then
+    timeout_seconds=420
+    if [[ "$(uname -m)" == aarch64 ]]; then
+        timeout_seconds=720
+    fi
+fi
 [[ "$timeout_seconds" =~ ^[1-9][0-9]*$ ]] || { echo "interop: bad timeout" >&2; exit 2; }
 session=${DNIV_INTEROP_SESSION_ID:-"local-$(date -u +%Y%m%dT%H%M%SZ)-$$-$reference-$scenario"}
 [[ "$session" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "interop: bad session id" >&2; exit 2; }

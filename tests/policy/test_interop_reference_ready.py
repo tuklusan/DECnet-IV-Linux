@@ -112,6 +112,16 @@ def main() -> int:
         )
 
 
+    if "timeout_seconds=720" not in INTEROP or 'if [[ "$(uname -m)" == aarch64 ]]; then' not in INTEROP:
+        raise SystemExit(
+            "interop-ready regression: ARM64 candidate-ready bound must be "
+            "720 seconds after the full-minute PyDECnet settle requirement"
+        )
+    if "DNIV_INTEROP_TIMEOUT_SECONDS:-}" not in INTEROP:
+        raise SystemExit(
+            "interop-ready regression: explicit candidate timeout override must remain supported"
+        )
+
     stable_call = 'if ! wait_peer_stable "$peer_node" "$peer_kind" 240 960; then'
     if stable_call not in CANDIDATE_SMOKE:
         raise SystemExit(
