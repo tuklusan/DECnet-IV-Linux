@@ -216,6 +216,20 @@ def main() -> int:
             "proof must remain required for every independent reference path"
         )
 
+    router_endnode_reference_guard = (
+        'if [[ "$reference" == pydecnet && "$scenario" != router-endnode ]]; then'
+    )
+    if router_endnode_reference_guard not in SCRIPT:
+        raise SystemExit(
+            "interop-ready regression: PyDECnet inbound socket proof must skip only "
+            "the pinned reference endnode outbound-NSP NoLink defect"
+        )
+    if 'if [ "$scenario" != router-endnode ]; then' not in CANDIDATE_SMOKE:
+        raise SystemExit(
+            "interop-ready regression: candidate listener must skip only the "
+            "pinned PyDECnet endnode outbound-NSP NoLink defect"
+        )
+
     inbound_fragments = [
         '/usr/local/sbin/dnaccept "$peer_node" "$session" "$scenario"',
         "DNIV-INTEROP-LISTEN-PASS",
