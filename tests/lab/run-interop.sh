@@ -117,6 +117,7 @@ cleanup() {
     set +e
     terminate_pid "${CANDIDATE_PID:-}"
     terminate_pid "${REFERENCE_PID:-}"
+    terminate_pid "${HOST_PROBE_PID:-}"
     [[ -n "${TCPDUMP_PID:-}" ]] && sudo kill "$TCPDUMP_PID" 2>/dev/null
     sudo ip link del "$tap_candidate" 2>/dev/null
     sudo ip link del "$tap_reference" 2>/dev/null
@@ -135,6 +136,20 @@ sudo tcpdump -U -i "$bridge" -w "$pcap" 'ether proto 0x6003' >/dev/null 2>&1 &
 TCPDUMP_PID=$!
 sleep 1
 kill -0 "$TCPDUMP_PID"
+
+if [[ "$reference" == pydecnet ]]; then
+    host_dnraw="$work/dnraw-host"
+    cc -O2 -Wall -Wextra "$script_dir/dnraw.c" -o "$host_dnraw"
+    (
+        probe_i=0
+        while :; do
+            probe_i=$((probe_i + 1))
+            sudo "$host_dnraw" "$bridge" "$candidate_mac"                 "DNIV-INTEROP-PROBE-$session-$scenario-host-$probe_i" || true
+            sleep 0.5
+        done
+    ) &
+    HOST_PROBE_PID=$!
+fi
 
 host_arch=$(uname -m)
 reference_ready_seconds=180

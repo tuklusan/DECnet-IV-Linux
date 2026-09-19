@@ -155,10 +155,21 @@ def main() -> int:
             "distinct from the DECnet logical MAC so bridge unicast reaches "
             "the TAP queue"
         )
-    if 'args.reference == "route20" and counts["probes"] < 3' not in PCAP_VALIDATOR:
+    host_probe_fragments = [
+        'cc -O2 -Wall -Wextra "$script_dir/dnraw.c" -o "$host_dnraw"',
+        '"DNIV-INTEROP-PROBE-$session-$scenario-host-$probe_i"',
+        'terminate_pid "${HOST_PROBE_PID:-}"',
+    ]
+    for fragment in host_probe_fragments:
+        if fragment not in SCRIPT:
+            raise SystemExit(
+                "interop-ready regression: direct-TAP PyDECnet must retain "
+                f"independent host raw-probe evidence; missing {fragment!r}"
+            )
+    if 'if counts["probes"] < 3' not in PCAP_VALIDATOR:
         raise SystemExit(
-            "interop-ready regression: raw diagnostic probe minimum must remain "
-            "scoped to the guest-backed Route20 reference path"
+            "interop-ready regression: raw diagnostic probe minimum must apply "
+            "to both independent reference paths"
         )
     if 'payload.startswith(b"DNIV-INTEROP-PROBE-")' not in PCAP_VALIDATOR:
         raise SystemExit(
@@ -197,15 +208,10 @@ def main() -> int:
             "interop-ready regression: fixed-duration guest stability polling "
             "must not gate PyDECnet NSP under ARM64 TCG"
         )
-    changeaddr_mirror = (
-        'if ! /usr/local/sbin/dnmrr "$peer_node"; then\n'
-        '        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario '
-        'node=$name reason=changeaddr-nsp-mirror"'
-    )
-    if changeaddr_mirror not in CANDIDATE_SMOKE:
+    if 'reason=no-unicast-probes' not in CANDIDATE_SMOKE:
         raise SystemExit(
-            "interop-ready regression: direct-TAP PyDECnet must prove "
-            "post-MAC-change bidirectional NSP instead of guest raw probes"
+            "interop-ready regression: post-MAC-change raw unicast receive "
+            "proof must remain required for every independent reference path"
         )
 
     print("interop-ready regression passed: route20=180/600s pydecnet-host=60s direct-tap")

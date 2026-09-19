@@ -218,7 +218,7 @@ def main() -> int:
             elif src == args.reference_mac:
                 counts["reference_nsp"] += 1
         if dst == args.candidate_mac and payload.startswith(b"DNIV-INTEROP-PROBE-"):
-            if src != args.reference_hw:
+            if args.reference == "route20" and src != args.reference_hw:
                 raise ValueError("raw unicast probe source MAC mismatch")
             counts["probes"] += 1
         if payload and src == args.candidate_mac and payload[0] == L1_ROUTING:
@@ -277,7 +277,7 @@ def main() -> int:
 
     if bad_hello_hw:
         raise SystemExit(f"interop pcap: {bad_hello_hw} hello frame(s) used hardware source MAC")
-    if args.reference == "route20" and counts["probes"] < 3:
+    if counts["probes"] < 3:
         raise SystemExit("interop pcap: insufficient post-boot raw unicast probes")
     if args.reference == "pydecnet":
         if counts["candidate_nsp"] < 5 or counts["reference_nsp"] < 5:
