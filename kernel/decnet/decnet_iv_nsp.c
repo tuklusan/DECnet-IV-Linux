@@ -335,6 +335,7 @@ static int dniv_nsp_rx_sequence_locked(
     enum dniv_nsp_channel channel, enum dniv_nsp_rx_order *rx_order)
 {
     struct dniv_nsp_rx_entry *entry;
+    enum dniv_nsp_rx_order order;
 
     if (!rx_order)
         return -EINVAL;
@@ -812,7 +813,6 @@ int dniv_nsp_receive(__u16 remote_node, const __u8 *wire, __u16 wire_len)
     struct dniv_nsp_packet pkt;
     struct dniv_nsp_connection *conn;
     unsigned long flags;
-    enum dniv_nsp_rx_order order;
     struct dniv_nsp_packet reply;
     __u8 reply_wire[DNIV_NSP_MAX_WIRE];
     __u16 reply_node = 0U;
