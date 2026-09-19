@@ -913,6 +913,15 @@ static void dniv_handle_valid_routing(int ifindex,
                  destination == DNIV_ADDR_AREA(local)))
                 continue;
 
+            /*
+             * Direct reachability to the advertising router comes from
+             * adjacency state. Its own vector slot may transiently be
+             * infinity while the peer routing database converges.
+             */
+            if (dniv_route_advertisement_is_self_destination(
+                    msg->level, destination, msg->source))
+                continue;
+
             if (cost >= DNIV_ROUTE_INFINITY_COST ||
                 hops >= DNIV_ROUTE_INFINITY_HOPS) {
                 dniv_route_withdraw(msg->level, destination, msg->source,

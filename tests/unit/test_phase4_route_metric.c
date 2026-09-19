@@ -45,6 +45,17 @@ int main(void)
     assert(!dniv_route_candidate_better(10, 100, 1, 10, 200, 2));
     assert(dniv_route_candidate_better(10, 100, 1, 10, 100, 2));
 
+    assert(dniv_route_advertisement_is_self_destination(
+        1U, 71U, (__u16)((31U << 10) | 71U)));
+    assert(!dniv_route_advertisement_is_self_destination(
+        1U, 70U, (__u16)((31U << 10) | 71U)));
+    assert(dniv_route_advertisement_is_self_destination(
+        2U, 31U, (__u16)((31U << 10) | 71U)));
+    assert(!dniv_route_advertisement_is_self_destination(
+        2U, 32U, (__u16)((31U << 10) | 71U)));
+    assert(!dniv_route_advertisement_is_self_destination(
+        3U, 71U, (__u16)((31U << 10) | 71U)));
+
     puts("phase4 route metric tests passed");
     return 0;
 }

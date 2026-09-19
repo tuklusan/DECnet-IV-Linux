@@ -56,6 +56,21 @@ static inline int dniv_route_metric_valid(__u16 cost, __u8 hops)
 }
 
 /*
+ * A broadcast-router adjacency supplies the direct route to that router.
+ * The peer's own vector slot is learned state and must not replace or
+ * withdraw that separately maintained direct adjacency route.
+ */
+static inline int dniv_route_advertisement_is_self_destination(
+    __u8 level, __u16 destination, __u16 source)
+{
+    if (level == 1U)
+        return destination == (source & 0x03ffU);
+    if (level == 2U)
+        return destination == ((source >> 10) & 0x003fU);
+    return 0;
+}
+
+/*
  * DNA routing minimizes path cost.  For equal costs, the DEC routing
  * decision algorithm selects the adjacency with the higher node address.
  * ifindex is only a final deterministic tie-break for duplicate next hops.
