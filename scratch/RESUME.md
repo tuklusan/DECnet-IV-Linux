@@ -61,3 +61,5 @@ Next: rerun exact-SHA acceptance for this harness correction. Only after the ful
 Repository Policy `35434792500` caught a Python syntax error in the new readiness regression: the generated source had a literal `\\n` between `REFERENCE_IMAGE` and `CANDIDATE_SMOKE`. The follow-up fixes only that formatting defect; protocol behavior and the stable-adjacency lab guard are unchanged.
 
 ARM64 PyDECnet routing in `35434888383` still timed out after the eight-second stable-adjacency guard. The guard is increased to forty continuous seconds (160 checks at 250 ms, bounded by 960 checks / 240 s), which exceeds the observed roughly 33-second PyDECnet processing blackout. Candidate protocol behavior is unchanged.
+
+PyDECnet settle guard raised from 40 to 60 continuously-UP seconds (240 quarter-second samples, still bounded by 960 samples / 240 s) to match the lab rule. Candidate protocol behavior is unchanged. VDE2 and MULTINET will be proven independently, not in the same acceptance run, before either is used for distributed scaling.

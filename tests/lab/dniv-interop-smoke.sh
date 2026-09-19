@@ -212,7 +212,7 @@ fi
 echo "DNIV-INTEROP-UP session=$session scenario=$scenario node=$name peer=$peer_node"
 
 if [ "$reference" = pydecnet ]; then
-    if ! wait_peer_stable "$peer_node" "$peer_kind" 160 960; then
+    if ! wait_peer_stable "$peer_node" "$peer_kind" 240 960; then
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=nsp-peer-not-stable"
         exit 1
     fi
