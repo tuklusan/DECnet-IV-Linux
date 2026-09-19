@@ -96,6 +96,7 @@ qemu-img create -q -f qcow2 -F qcow2 -b "$(readlink -f "$ref_base")" "$ref1_disk
 qemu-img create -q -f qcow2 -F qcow2 -b "$(readlink -f "$ref_base")" "$ref2_disk"
 
 suffix=$(printf '%s' "$session" | sha256sum | cut -c1-6)
+host_pydecnet_api="/tmp/dniv-api-${suffix}.sock"
 bridge="bi${suffix}"
 tap_candidate="ci${suffix}"
 tap_reference="ri${suffix}"
@@ -118,6 +119,7 @@ cleanup() {
     terminate_pid "${CANDIDATE_PID:-}"
     terminate_pid "${REFERENCE_PID:-}"
     terminate_pid "${HOST_PROBE_PID:-}"
+    rm -f "${host_pydecnet_api:-}"
     [[ -n "${TCPDUMP_PID:-}" ]] && sudo kill "$TCPDUMP_PID" 2>/dev/null
     sudo ip link del "$tap_candidate" 2>/dev/null
     sudo ip link del "$tap_reference" 2>/dev/null
@@ -206,9 +208,9 @@ node $area.$node $name
 circuit ETH-0 Ethernet $tap_reference --mode tap --cost 3 --t3 2 --priority 64
 EOF_PYDECNET
         cat > "$host_pydecnet/api.conf" <<EOF_API
-api $host_pydecnet/api.sock --mode 600
+api $host_pydecnet_api --mode 600
 EOF_API
-        rm -f "$host_pydecnet/api.sock"
+        rm -f "$host_pydecnet_api"
         : > "$log"
         cd "$host_pydecnet/pydecnet"
         exec env PYTHONPATH=. python3 -u -m decnet.main \
@@ -295,7 +297,7 @@ if [[ "$reference" == pydecnet ]]; then
         exit 1
     fi
     if ! env PYTHONPATH="$host_pydecnet/pydecnet" python3 \
-        "$script_dir/pydecnet-inbound.py" "$host_pydecnet/api.sock" \
+        "$script_dir/pydecnet-inbound.py" "$host_pydecnet_api" \
         "$area.$node" "$ref_name"; then
         tail -220 "$candidate_log" >&2 || true
         tail -160 "$ref1_log" >&2 || true

@@ -142,8 +142,8 @@ def main() -> int:
         'host_pydecnet="$work/host-pydecnet"',
         'circuit ETH-0 Ethernet $tap_reference --mode tap',
         "reference_ready_marker='DECnet/Python is running'",
-        'api $host_pydecnet/api.sock --mode 600',
-        '"$script_dir/pydecnet-inbound.py" "$host_pydecnet/api.sock"',
+        'host_pydecnet_api="/tmp/dniv-api-${suffix}.sock"',
+        '"$script_dir/pydecnet-inbound.py" "$host_pydecnet_api"',
     ]
     for fragment in direct_tap_fragments:
         if fragment not in SCRIPT:
