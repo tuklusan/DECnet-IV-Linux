@@ -22,6 +22,13 @@
 #define DNIV_NSP_DEFAULT_RESPONSE_SECONDS 5U
 #define DNIV_NSP_CONNECT_TIMEOUT_SECONDS 30U
 #define DNIV_NSP_INACTIVITY_SECONDS 300U
+#define DNIV_NSP_INITIAL_SEQUENCE 1U
+
+enum dniv_nsp_channel {
+    DNIV_NSP_CH_DATA = 0,
+    DNIV_NSP_CH_OTHER = 1,
+    DNIV_NSP_CH_COUNT = 2,
+};
 
 enum dniv_nsp_rx_order {
     DNIV_NSP_RX_EXPECTED = 0,
@@ -64,6 +71,14 @@ dniv_nsp_seq_order(__u16 expected, __u16 received)
 static inline int dniv_nsp_seq_acked(__u16 sequence, __u16 ack)
 {
     return dniv_nsp_seq_norm((__u32)ack - sequence) < DNIV_NSP_SEQ_HALF;
+}
+
+static inline int dniv_nsp_seq_in_window(__u16 first, __u16 last, __u16 value)
+{
+    __u16 span = dniv_nsp_seq_norm((__u32)last - first);
+    __u16 offset = dniv_nsp_seq_norm((__u32)value - first);
+
+    return span < DNIV_NSP_SEQ_HALF && offset <= span;
 }
 
 static inline int

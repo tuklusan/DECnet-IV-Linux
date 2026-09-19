@@ -158,6 +158,13 @@ static void test_sequence(void)
     assert(dniv_nsp_seq_order(10U, 10U) == DNIV_NSP_RX_EXPECTED);
     assert(dniv_nsp_seq_order(10U, 11U) == DNIV_NSP_RX_FUTURE);
     assert(dniv_nsp_seq_order(0U, 4095U) == DNIV_NSP_RX_DUPLICATE);
+    assert(dniv_nsp_seq_in_window(10U, 20U, 10U));
+    assert(dniv_nsp_seq_in_window(10U, 20U, 15U));
+    assert(dniv_nsp_seq_in_window(10U, 20U, 20U));
+    assert(!dniv_nsp_seq_in_window(10U, 20U, 21U));
+    assert(dniv_nsp_seq_in_window(4094U, 2U, 0U));
+    assert(!dniv_nsp_seq_in_window(4094U, 2U, 3U));
+    assert(DNIV_NSP_INITIAL_SEQUENCE == 1U);
     assert(DNIV_NSP_DEFAULT_RESPONSE_SECONDS == 5U);
     assert(DNIV_NSP_CONNECT_TIMEOUT_SECONDS == 30U);
     assert(DNIV_NSP_INACTIVITY_SECONDS == 300U);

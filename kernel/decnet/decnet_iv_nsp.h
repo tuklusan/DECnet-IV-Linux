@@ -20,14 +20,20 @@
 
 #define DNIV_NSP_MAX_CONNECTIONS 256U
 #define DNIV_NSP_MAX_RETRANSMIT 64U
+#define DNIV_NSP_MAX_RETRANSMITS 5U
+#define DNIV_NSP_MAX_WIRE 1477U
 
 struct dniv_nsp_conn_snapshot {
     __u16 local_link;
     __u16 remote_link;
     __u16 remote_node;
-    __u16 tx_next;
-    __u16 rx_next;
+    __u16 data_tx_next;
+    __u16 data_rx_next;
+    __u16 other_tx_next;
+    __u16 other_rx_next;
     __u16 retransmit_count;
+    unsigned long connect_deadline;
+    unsigned long inactivity_deadline;
     enum dniv_nsp_conn_state state;
 };
 
@@ -44,13 +50,17 @@ int dniv_nsp_conn_set_remote(__u16 local_link, __u16 remote_node,
                              __u16 remote_link);
 int dniv_nsp_conn_snapshot(__u16 local_link,
                            struct dniv_nsp_conn_snapshot *snapshot);
-int dniv_nsp_retransmit_queue(__u16 local_link, __u16 sequence,
-                              const __u8 *wire, __u16 wire_len,
-                              unsigned long deadline);
-unsigned int dniv_nsp_retransmit_ack(__u16 local_link, __u16 ack);
-int dniv_nsp_retransmit_due(__u16 local_link, unsigned long now,
-                            __u16 *sequence, __u8 *wire, __u16 capacity,
-                            __u16 *wire_len);
+int dniv_nsp_retransmit_queue(__u16 local_link,
+                              enum dniv_nsp_channel channel,
+                              __u16 sequence, const __u8 *wire,
+                              __u16 wire_len, unsigned long deadline);
+unsigned int dniv_nsp_retransmit_ack(__u16 local_link,
+                                     enum dniv_nsp_channel channel,
+                                     __u16 ack);
+int dniv_nsp_retransmit_due(__u16 local_link,
+                            enum dniv_nsp_channel channel,
+                            unsigned long now, __u16 *sequence,
+                            __u8 *wire, __u16 capacity, __u16 *wire_len);
 int dniv_nsp_receive(__u16 remote_node, const __u8 *wire, __u16 wire_len);
 int dniv_nsp_transmit(__u16 remote_node, const __u8 *wire, __u16 wire_len);
 
