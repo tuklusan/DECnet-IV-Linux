@@ -69,3 +69,5 @@ Transport reconciliation: serial/synchronous datalink scope is removed. VDE2 is 
 Next: finish exact-SHA acceptance, then VDE2 proof, then MULTINET proof, then resume Phase 5 inbound socket/listener work.
 
 Repository Policy `35436873179` caught missing `queue: max` declarations in the new VDE2 and MULTINET workflow concurrency blocks. The follow-up changes workflow policy only; protocol and transport behavior are unchanged.
+
+VDE2 proof `35436873611` failed because foreground `vde_switch` exits on EOF in the noninteractive runner after dependencies/fork build succeeded. The proof now uses VDE daemon mode with per-run socket/PID discovery and cleanup.

@@ -56,8 +56,13 @@ python3 -m venv "$work/venv"
 "$work/venv/bin/python" -m pip install -q --upgrade pip setuptools
 "$work/venv/bin/python" -m pip install -q "$work/pydecnet/pydecnet"
 
-vde_switch -F -sock "$sock" >"$work/vde-switch.log" 2>&1 &
-switch_pid=$!
+vde_switch -daemon -sock "$sock" >"$work/vde-switch.log" 2>&1
+for _ in $(seq 1 50); do
+    switch_pid=$(pgrep -f "vde_switch.*-sock $sock" | head -n1 || true)
+    [ -n "$switch_pid" ] && break
+    sleep 0.1
+done
+[ -n "$switch_pid" ] || { echo "vde2-proof: daemon pid absent" >&2; exit 1; }
 for _ in $(seq 1 100); do
     [ -S "$sock" ] && break
     kill -0 "$switch_pid" 2>/dev/null || { cat "$work/vde-switch.log" >&2; exit 1; }
