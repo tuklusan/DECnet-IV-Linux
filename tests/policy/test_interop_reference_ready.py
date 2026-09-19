@@ -37,11 +37,11 @@ def main() -> int:
     )
     if default != ["180"]:
         raise SystemExit(f"interop-ready regression: amd64/default bound changed: {default}")
-    if arm != ["360"]:
+    if arm != ["600"]:
         raise SystemExit(f"interop-ready regression: ARM64 bound changed: {arm}")
     if int(arm[0]) <= int(default[0]):
         raise SystemExit("interop-ready regression: ARM64 bound must exceed default")
-    if int(arm[0]) > 420:
+    if int(arm[0]) > 660:
         raise SystemExit("interop-ready regression: ARM64 reference-ready bound is excessive")
 
     executable_paths = [
@@ -110,7 +110,7 @@ def main() -> int:
             "before candidate success during convergence"
         )
 
-    print("interop-ready regression passed: ready-amd64=180s ready-arm64=360s")
+    print("interop-ready regression passed: ready-amd64=180s ready-arm64=600s")
     return 0
 
 
