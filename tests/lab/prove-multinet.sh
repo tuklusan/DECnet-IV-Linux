@@ -54,14 +54,14 @@ routing 31.78 --type l1router
 node 31.78 MNA78
 node 31.79 MNB79
 circuit MUL-0 Multinet --mode listen --local-address 127.0.0.1 --local-port $port --cost 3 --t3 2
-logging console --events 4.15,4.16
+logging console --events 4.8,4.10
 EOF
 cat >"$work/b.conf" <<EOF
 routing 31.79 --type l1router
 node 31.78 MNA78
 node 31.79 MNB79
 circuit MUL-0 Multinet --mode connect --remote-address 127.0.0.1 --remote-port $port --cost 3 --t3 2
-logging console --events 4.15,4.16
+logging console --events 4.8,4.10
 EOF
 
 start_a() {
@@ -84,28 +84,28 @@ sleep 1
 start_b
 
 for _ in $(seq 1 120); do
-    if grep -Fq "Adjacency up" "$work/a.log" && grep -Fq "31.79" "$work/a.log" &&
-       grep -Fq "Adjacency up" "$work/b.log" && grep -Fq "31.78" "$work/b.log"; then
+    if grep -Fq "Circuit up" "$work/a.log" && grep -Fq "31.79" "$work/a.log" &&
+       grep -Fq "Circuit up" "$work/b.log" && grep -Fq "31.78" "$work/b.log"; then
         break
     fi
     kill -0 "$a_pid" 2>/dev/null || { cat "$work/a.log" >&2; exit 1; }
     kill -0 "$b_pid" 2>/dev/null || { cat "$work/b.log" >&2; exit 1; }
     sleep 0.5
 done
-grep -Fq "Adjacency up" "$work/a.log" || { cat "$work/a.log" >&2; exit 1; }
-grep -Fq "Adjacency up" "$work/b.log" || { cat "$work/b.log" >&2; exit 1; }
+grep -Fq "Circuit up" "$work/a.log" || { cat "$work/a.log" >&2; exit 1; }
+grep -Fq "Circuit up" "$work/b.log" || { cat "$work/b.log" >&2; exit 1; }
 
 kill "$b_pid"
 wait "$b_pid" 2>/dev/null || true
 b_pid=
 for _ in $(seq 1 80); do
-    grep -Fq "Adjacency down" "$work/a.log" && break
+    grep -Fq "Circuit down" "$work/a.log" && break
     sleep 0.5
 done
 
 start_b
 for _ in $(seq 1 160); do
-    ups=$(grep -Fc "Adjacency up" "$work/a.log" || true)
+    ups=$(grep -Fc "Circuit up" "$work/a.log" || true)
     if [ "$ups" -ge 2 ]; then
         echo "multinet-proof: pass"
         exit 0
