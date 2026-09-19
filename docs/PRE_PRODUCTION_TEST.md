@@ -28,8 +28,8 @@ Repository state, `docs/HANDOVER.md`, `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`,
 
 | Reference | Revision | Acceptance use |
 | --- | --- | --- |
-| Route20 | `9ab398968b8fa9305af0fba502b3e6aa6e26a3e9` | independent Ethernet/routing behavior, live peer and native VDE reference |
-| PyDECnet behavior/live | `310cf4032d21ffd1478be2536183c877386c5493` | independent live peer, native VDE and MULTINET authority |
+| Route20 | `a9ef7c0b7f875f0dd2e8abaf11213798a8e4474c` | independent Ethernet/routing behavior, live peer and native VDE reference |
+| PyDECnet behavior/live | `295938c76c956a70957f4cf96b05685f555b2a18` | independent live peer, native VDE and MULTINET authority |
 | PyDECnet tests | `9a844987bf3a1450632dee8d37e60a23a453bad3` | protocol vectors/state machines and native reference baseline |
 | LinuxDECnet | `ff39eef045d1e4b7b72a3d40111e89c07a473398` | userspace/API and VAX-data conversion comparison |
 | SIMH | `5b73b1032b52d19bf80752ea4d9cbbdc92e7b5e0` | real DEC operating-system host and simulator reference health |

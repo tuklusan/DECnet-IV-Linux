@@ -26,8 +26,8 @@ Temporary Phase 3 Route20 crash instrumentation and the temporary tagging workfl
 
 ## Stable infrastructure
 
-- Route20: `9ab398968b8fa9305af0fba502b3e6aa6e26a3e9` (native VDE Ethernet, modern/legacy libvdeplug ABI).
-- PyDECnet live: `310cf4032d21ffd1478be2536183c877386c5493` (native VDE Ethernet, modern/legacy libvdeplug ABI; mature MULTINET retained).
+- Route20: `a9ef7c0b7f875f0dd2e8abaf11213798a8e4474c` (native VDE Ethernet, default open args, modern/legacy libvdeplug ABI).
+- PyDECnet live: `295938c76c956a70957f4cf96b05685f555b2a18` (native VDE Ethernet, default open args, modern/legacy libvdeplug ABI; mature MULTINET retained).
 - PyDECnet tests: `9a844987bf3a1450632dee8d37e60a23a453bad3`.
 - LinuxDECnet: `ff39eef045d1e4b7b72a3d40111e89c07a473398`.
 - SIMH: `5b73b1032b52d19bf80752ea4d9cbbdc92e7b5e0`.
@@ -75,3 +75,5 @@ VDE2 proof `35436873611` failed because foreground `vde_switch` exits on EOF in 
 VDE2 proof `35436975623` reached daemon startup but the harness incorrectly required `-sock` to be a socket inode; VDE2 creates a communication directory there. The endpoint readiness check now accepts the real VDE2 path form.
 
 VDE2 proof `35437051337` found that modern libvdeplug exports `vde_open_real`, not a callable `vde_open` symbol. Both VDE-enabled forks are corrected with modern ABI plus legacy fallback and repinned. The reference baseline is now explicitly scoped to the maintained PyDECnet module list so removed transport scope does not re-enter acceptance. Next rerun VDE2 independently, then MULTINET independently, then return to Phase 5 socket/listener work.
+
+VDE2 proof `35440198290` got through modern ABI symbol resolution but libvdeplug returned `EINVAL` when given a zeroed open-args structure. Both fork adapters now pass NULL open args, and the proof first validates the switch `ctl` socket plus a native C/libvdeplug frame round trip before exercising PyDECnet. Rerun VDE2 alone; do not start MULTINET until it is green.

@@ -69,7 +69,71 @@ for _ in $(seq 1 100); do
     sleep 0.1
 done
 [ -e "$sock" ] || { echo "vde2-proof: switch endpoint absent" >&2; exit 1; }
+[ -S "$sock/ctl" ] || { echo "vde2-proof: switch control socket absent" >&2; find "$sock" -maxdepth 2 -ls >&2 || true; exit 1; }
 url="vde://$sock"
+
+cat >"$work/vde-native.c" <<'EOF_C'
+#include <errno.h>
+#include <libvdeplug.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/select.h>
+#include <unistd.h>
+
+int main(int argc, char **argv)
+{
+    VDECONN *a, *b;
+    unsigned char frame[60] = {0xab,0x00,0x00,0x04,0x00,0x00,
+                               0x02,0x00,0x00,0x00,0x00,0x01,
+                               0x60,0x03,0x2e,0x00};
+    unsigned char got[2048];
+    fd_set rfds;
+    struct timeval tv = {3, 0};
+    int fd;
+    ssize_t n;
+
+    if (argc != 2)
+        return 2;
+    a = vde_open(argv[1], (char *)"dniv-vde-a", NULL);
+    if (!a) {
+        perror("vde_open a");
+        return 1;
+    }
+    b = vde_open(argv[1], (char *)"dniv-vde-b", NULL);
+    if (!b) {
+        perror("vde_open b");
+        vde_close(a);
+        return 1;
+    }
+    fd = vde_datafd(b);
+    if (fd < 0 || vde_send(a, frame, sizeof(frame), 0) != (ssize_t)sizeof(frame)) {
+        perror("vde send/datafd");
+        vde_close(b);
+        vde_close(a);
+        return 1;
+    }
+    FD_ZERO(&rfds);
+    FD_SET(fd, &rfds);
+    if (select(fd + 1, &rfds, NULL, NULL, &tv) != 1) {
+        fprintf(stderr, "vde native proof: receive timeout\n");
+        vde_close(b);
+        vde_close(a);
+        return 1;
+    }
+    n = vde_recv(b, got, sizeof(got), 0);
+    if (n != (ssize_t)sizeof(frame) || memcmp(frame, got, sizeof(frame)) != 0) {
+        fprintf(stderr, "vde native proof: frame mismatch (%zd)\n", n);
+        vde_close(b);
+        vde_close(a);
+        return 1;
+    }
+    vde_close(b);
+    vde_close(a);
+    return 0;
+}
+EOF_C
+cc -std=c11 -Wall -Wextra -Werror "$work/vde-native.c" -lvdeplug -o "$work/vde-native"
+"$work/vde-native" "$url"
 
 PYTHONPATH="$work/pydecnet/pydecnet" "$work/venv/bin/python" - "$url" <<'PY'
 import select
