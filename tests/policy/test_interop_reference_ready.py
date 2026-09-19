@@ -112,11 +112,11 @@ def main() -> int:
         )
 
 
-    stable_call = 'if ! wait_peer_stable "$peer_node" "$peer_kind" 32 720; then'
+    stable_call = 'if ! wait_peer_stable "$peer_node" "$peer_kind" 160 960; then'
     if stable_call not in CANDIDATE_SMOKE:
         raise SystemExit(
             "interop-ready regression: PyDECnet NSP proof must require an "
-            "8-second stable adjacency within the bounded 180-second window"
+            "40-second stable adjacency within the bounded 240-second window"
         )
     stable_pos = CANDIDATE_SMOKE.find(stable_call)
     mirror_pos = CANDIDATE_SMOKE.find('/usr/local/sbin/dnmrr "$peer_node"')

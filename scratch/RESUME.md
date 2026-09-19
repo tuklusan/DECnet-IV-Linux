@@ -59,3 +59,5 @@ Exact-SHA acceptance of `5a79c95bbddcdce27507acc55d211c5f70fa7ce4` passed policy
 Next: rerun exact-SHA acceptance for this harness correction. Only after the full matrix is green, continue Phase 5 with inbound listen/accept, interrupt/OOB delivery, classic DECnet socket options/access/connect data, stream mode, socket lifecycle negatives and dedicated independent NSP socket interoperability.
 
 Repository Policy `35434792500` caught a Python syntax error in the new readiness regression: the generated source had a literal `\\n` between `REFERENCE_IMAGE` and `CANDIDATE_SMOKE`. The follow-up fixes only that formatting defect; protocol behavior and the stable-adjacency lab guard are unchanged.
+
+ARM64 PyDECnet routing in `35434888383` still timed out after the eight-second stable-adjacency guard. The guard is increased to forty continuous seconds (160 checks at 250 ms, bounded by 960 checks / 240 s), which exceeds the observed roughly 33-second PyDECnet processing blackout. Candidate protocol behavior is unchanged.
