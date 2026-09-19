@@ -77,3 +77,5 @@ VDE2 proof `35436975623` reached daemon startup but the harness incorrectly requ
 VDE2 proof `35437051337` found that modern libvdeplug exports `vde_open_real`, not a callable `vde_open` symbol. Both VDE-enabled forks are corrected with modern ABI plus legacy fallback and repinned. The reference baseline is now explicitly scoped to the maintained PyDECnet module list so removed transport scope does not re-enter acceptance. Next rerun VDE2 independently, then MULTINET independently, then return to Phase 5 socket/listener work.
 
 VDE2 proof `35440198290` got through modern ABI symbol resolution but libvdeplug returned `EINVAL` when given a zeroed open-args structure. Both fork adapters now pass NULL open args, and the proof first validates the switch `ctl` socket plus a native C/libvdeplug frame round trip before exercising PyDECnet. Rerun VDE2 alone; do not start MULTINET until it is green.
+
+Repository Policy `35440503013` caught the missing canonical project header on `tests/reference/pydecnet-in-scope-tests.txt`. The follow-up fixes only that policy defect; the in-scope module list is unchanged.
