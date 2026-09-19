@@ -277,7 +277,7 @@ def main() -> int:
 
     if bad_hello_hw:
         raise SystemExit(f"interop pcap: {bad_hello_hw} hello frame(s) used hardware source MAC")
-    if counts["probes"] < 3:
+    if args.reference == "route20" and counts["probes"] < 3:
         raise SystemExit("interop pcap: insufficient post-boot raw unicast probes")
     if args.reference == "pydecnet":
         if counts["candidate_nsp"] < 5 or counts["reference_nsp"] < 5:

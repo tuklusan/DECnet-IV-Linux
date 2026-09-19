@@ -61,11 +61,10 @@ printf -v reference_mac 'aa:00:04:00:%02x:%02x' "$((ref_addr & 255))" "$(((ref_a
 printf -v candidate_hw '52:54:00:00:%02x:%02x' "$((addr & 255))" "$(((addr >> 8) & 255))"
 printf -v candidate_changed_hw '52:54:01:00:%02x:%02x' "$((addr & 255))" "$(((addr >> 8) & 255))"
 printf -v reference_hw '52:54:00:00:%02x:%02x' "$((ref_addr & 255))" "$(((ref_addr >> 8) & 255))"
-# PyDECnet injects and filters DECnet Phase IV frames using the logical
-# AA-00-04-00 node MAC. Match the virtual NIC receive address to that MAC so
-# the independent pcap peer does not depend on virtio promiscuous-mode timing
-# under ARM64 TCG. Route20 retains a distinct hardware MAC and continues to
-# exercise the promiscuous pcap path independently.
+# PyDECnet's independent peer uses its native Linux TAP backend directly on
+# the host bridge, avoiding the architecture-sensitive guest virtio+pcap path.
+# Give that TAP the DECnet logical MAC. Route20 retains a distinct emulated
+# hardware MAC and its independent guest/pcap path.
 if [[ "$reference" == pydecnet ]]; then
     reference_hw=$reference_mac
 fi
@@ -127,6 +126,9 @@ sudo ip link add "$bridge" type bridge
 sudo ip link set "$bridge" up
 for tap in "$tap_candidate" "$tap_reference"; do
     sudo ip tuntap add dev "$tap" mode tap user "$(id -un)"
+    if [[ "$reference" == pydecnet && "$tap" == "$tap_reference" ]]; then
+        sudo ip link set "$tap" address "$reference_hw"
+    fi
     sudo ip link set "$tap" master "$bridge"
     sudo ip link set "$tap" up
 done
@@ -139,6 +141,12 @@ host_arch=$(uname -m)
 reference_ready_seconds=180
 if [[ "$host_arch" == aarch64 ]]; then
     reference_ready_seconds=600
+fi
+if [[ "$reference" == pydecnet ]]; then
+    reference_ready_seconds=60
+    host_pydecnet="$work/host-pydecnet"
+    mkdir -p "$host_pydecnet"
+    tar -xf "$bundle/pydecnet.tar" -C "$host_pydecnet"
 fi
 accel=tcg
 if [[ -e /dev/kvm && -r /dev/kvm && -w /dev/kvm ]]; then accel=kvm; fi
@@ -173,6 +181,20 @@ start_vm() {
 
 start_reference() {
     local disk=$1 log=$2
+    if [[ "$reference" == pydecnet ]]; then
+        local py_type=l1router
+        [[ "$scenario" == l2 ]] && py_type=l2router
+        [[ "$scenario" == router-endnode ]] && py_type=endnode
+        cat > "$host_pydecnet/pydecnet.conf" <<EOF_PYDECNET
+routing $ref_area.$ref_node --type $py_type
+node $ref_area.$ref_node $ref_name
+node $area.$node $name
+circuit ETH-0 Ethernet $tap_reference --mode tap --cost 3 --t3 2 --priority 64
+EOF_PYDECNET
+        : > "$log"
+        cd "$host_pydecnet/pydecnet"
+        exec env PYTHONPATH=. python3 -u -m decnet.main "$host_pydecnet/pydecnet.conf" >>"$log" 2>&1
+    fi
     local common="root=LABEL=dniv-root rootfstype=ext4 rw dniv.reference=$reference dniv.ref_sha=$expected_sha dniv.area=$ref_area dniv.node=$ref_node dniv.name=$ref_name dniv.peer=$candidate_mac dniv.peer_node=$area.$node dniv.scenario=$scenario dniv.session=$session"
     case "$host_arch" in
         x86_64)
@@ -235,7 +257,11 @@ wait_candidate_marker() {
 }
 
 start_reference "$ref1_disk" "$ref1_log" & REFERENCE_PID=$!
-if ! wait_marker "$ref1_log" "DNIV-REF-READY session=$session reference=$reference sha=$expected_sha scenario=$scenario" "$reference_ready_seconds" "$REFERENCE_PID"; then
+reference_ready_marker="DNIV-REF-READY session=$session reference=$reference sha=$expected_sha scenario=$scenario"
+if [[ "$reference" == pydecnet ]]; then
+    reference_ready_marker='DECnet/Python is running'
+fi
+if ! wait_marker "$ref1_log" "$reference_ready_marker" "$reference_ready_seconds" "$REFERENCE_PID"; then
     tail -160 "$ref1_log" >&2 || true
     exit 1
 fi
@@ -257,7 +283,7 @@ if ! wait_marker "$candidate_log" "DNIV-INTEROP-EXPIRED session=$session scenari
 fi
 
 start_reference "$ref2_disk" "$ref2_log" & REFERENCE_PID=$!
-if ! wait_marker "$ref2_log" "DNIV-REF-READY session=$session reference=$reference sha=$expected_sha scenario=$scenario" "$reference_ready_seconds" "$REFERENCE_PID"; then
+if ! wait_marker "$ref2_log" "$reference_ready_marker" "$reference_ready_seconds" "$REFERENCE_PID"; then
     tail -160 "$ref2_log" >&2 || true
     exit 1
 fi
