@@ -58,11 +58,15 @@ The Python controller is intentionally small enough to extend from two to 16 ind
 
 E4 router readiness is adjacency-backed rather than a boot marker: L1 routers must see their local L2 peer UP, and L2 routers must see both the local L1 and cross-area L2 peer UP before endpoints start. Endpoint probes remain active for a bounded 90-second convergence window so independent ARM64 TCG boot skew cannot turn a valid routed path into a one-direction sampling false failure. Host PCAP checks still require the correct router source MAC and visit count at transit and destination segments in both directions.
 
-## Distributed VDE2 and MULTINET
+## Distributed VDE2, MULTINET and Area-31
 
-VDE2 and MULTINET are independent transport test tracks. `tests/lab/prove-vde2.sh` proves real libvdeplug frame delivery plus Route20/PyDECnet adjacency. `tests/lab/prove-multinet.sh` runs PyDECnet's complete MULTINET unit module and a live TCP point-to-point adjacency/reconnect proof. These tracks are never combined to manufacture a pass.
+VDE2 and MULTINET are independent transport test tracks. `tests/lab/prove-vde2.sh` has a green local/rootless proof for real libvdeplug frame delivery plus Route20/PyDECnet adjacency. `tests/lab/prove-multinet.sh` has a separate green proof for the pinned PyDECnet MULTINET module and a live TCP point-to-point adjacency/reconnect cycle. These tracks are never combined to manufacture a pass.
 
-After both transport tracks are independently green, `userspace/dnmultinet/dnmultinet.py` may be used as a VDE-to-MULTINET routing gateway for controlled HECnet Area-31 tests. External peer endpoints and any credentials remain runtime-only. See `docs/HECNET_LAB.md`.
+The current VDE2 proof is single-host. Cross-runner VDE2 remains unproven until two hosted machines each run their own `vde_switch` and the switches are actually joined, with frame delivery, adjacency, disconnect/reconnect and fault evidence retained across the host boundary.
+
+The Area-31 stage uses `userspace/dnmultinet/dnmultinet.py` as a VDE-to-MULTINET gateway in TCP client mode. Its repository-tracked workflow must obtain `MULTINET_REMOTE_HOST`, `MULTINET_REMOTE_PORT`, `VAX_ADDR`, `VAX_USERNAME` and `VAX_PASSWORD` from Actions secrets only. The first executable step must detect missing prerequisites and identify the missing secret names without printing values. The MULTINET endpoint is one Area-31 area router; the VAX at `VAX_ADDR` is another area router reachable through that path.
+
+As userspace matures, keep reusable Linux/VAX test pairs under `tests/lab` (with VAX-side helpers in a dedicated subdirectory). Start with remote node/route/NICE information and counters, then NSP/Session/object access, login, DAP/FAL, PHONE, mail, task access and application experiments. Evidence must redact credentials and must distinguish local transport proof, remote routing proof and application proof. See `docs/HECNET_LAB.md`.
 
 ## Release-image separation
 

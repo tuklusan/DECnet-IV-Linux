@@ -18,7 +18,7 @@ This is the execution order for DECnet-IV-Linux. Later phases do not replace ear
 
 ## Phase 0 - repository continuity and reference discipline
 
-Exit criteria: repository policy/continuity gates are active; every substantive commit refreshes `docs/PROJECT_STATE.md`; preferred reference roles and license boundaries are documented; the removed legacy Linux DECnet stack is not the implementation base; substantive work is committed directly to `main`, and acceptance applies only to the exact unchanged green `main` commit.
+Exit criteria: repository policy/continuity gates are active; every substantive commit refreshes both `docs/PROJECT_STATE.md` and `scratch/RESUME.md` in the same commit; preferred reference roles and license boundaries are documented; the removed legacy Linux DECnet stack is not the implementation base; substantive work is committed directly to `main`, and acceptance applies only to the exact unchanged green `main` commit.
 
 ## Phase 1 - buildable kernel and userspace bootstrap
 
@@ -72,15 +72,21 @@ Exit criteria: scripted and interactive management queries work locally and agai
 
 ## Phase 7 - useful DECnet/Linux userspace
 
-Implement as protocol dependencies become ready: `ncp`; `sethost`/`dnlogin`; DAP/FAL/RMS copy/type/directory tools; PHONE; mail; task/object access; daemons; libraries; diagnostics and administration tools.
+Implement as protocol dependencies become ready: `ncp`; `sethost`/`dnlogin`; DAP/FAL/RMS copy/type/directory tools; PHONE; mail; task/object access; daemons; libraries; diagnostics and administration tools. Application-level experiments such as a DECnet-native `dnlynx` client may be added after the standard Session/object and management interfaces they depend on are stable; they are not substitutes for the standard tool set.
 
 Exit criteria: the useful DECnet/Linux command environment works on the new kernel stack and against independent peers.
 
 ## Phase 8 - distributed VDE2, MULTINET and HECnet interoperability
 
-Deliver rootless VDE2 Ethernet fabrics for local and cross-runner labs, a configurable user-space MULTINET TCP gateway based on the proven PyDECnet implementation, and controlled Area-31 HECnet connectivity.
+Deliver:
 
-Exit criteria: VDE2 and MULTINET pass separate positive, negative, restart and stress proofs; then an exact candidate routes successfully between local VDE lab nodes and explicitly selected HECnet peers without one-off protocol patches.
+- rootless VDE2 Ethernet fabrics for local and cross-runner labs, including an actual two-host switch-to-switch join rather than assuming the documented SSH design works;
+- a configurable user-space MULTINET TCP gateway based on the proven PyDECnet implementation;
+- a repository-tracked Area-31 client workflow that consumes `MULTINET_REMOTE_HOST`, `MULTINET_REMOTE_PORT`, `VAX_ADDR`, `VAX_USERNAME` and `VAX_PASSWORD` only at runtime, checks that all required secrets are present before network activity, reports missing prerequisites clearly, and never logs secret values;
+- controlled routing through the MULTINET-connected Area-31 area router to the second Area-31 router at `VAX_ADDR`;
+- persistent paired Linux/VAX tests under `tests/lab` for routing/NICE information and counters, NSP/Session/object access and, as Phase 7 tools mature, login, DAP/FAL, PHONE, mail, task access and application-level experiments.
+
+Exit criteria: VDE2 and MULTINET pass separate positive, negative, restart and stress proofs; cross-runner VDE2 is demonstrated; then an exact candidate routes successfully between local VDE lab nodes, the MULTINET-facing Area-31 router and the VAX area router without one-off protocol patches or credential leakage.
 
 ## Phase 9 - scale, portability, real peers and release images
 

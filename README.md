@@ -27,11 +27,11 @@ Based on original work by Supratim Sanyal of SANYALnet Labs. See `LICENSE` for t
 
 ## Current baseline
 
-Phase 1 provides the retained bootstrap: configurable node identity (default 31.70 / DN70), DECnet Routing Layer EtherType registration/counters, `dnctl`, and native x86_64/aarch64 build gates.
+Phases 1-4 are complete. The kernel stack has native DECnet Ethernet initialization, endnode/L1/L2 routing, convergence and multi-area forwarding on amd64 and ARM64.
 
-Phase 2 uses Ubuntu Base 26.04.1 LTS. The official amd64 and arm64 rootfs tarballs are 33 MiB and are pinned by SHA-256. The VM lab builds the root disk before boot and direct-boots its exact kernel/initrd, so there is no installer, cloud provisioning layer, firmware dependency or management NIC in the acceptance path.
+Phase 5 is active. NSP transport and native `AF_DECnet` / `SOCK_SEQPACKET` support include outbound connections, record segmentation/reassembly, inbound listener/backlog/accept handling and independent PyDECnet MIRROR/listener interoperability. Exact-SHA acceptance is green through `6aa5eec808e45c0477bb7ea87b9ff76e0bc0859b`.
 
-Phase 3 is in progress. UAPI version 2 adds DECnet Ethernet address handling, router/endnode hello parsing and generation, adjacency state/expiry, extended counters, and `dnctl adjacencies`. Independent wire vectors are checked against the pinned Route20 and PyDECnet forks before live interoperability gates.
+Local/rootless VDE2 and MULTINET TCP transports have separate green proofs. Cross-runner VDE2 joining and secret-backed Area-31 integration remain planned distributed-lab work; they do not replace exact-SHA local acceptance.
 
 ## Layout
 

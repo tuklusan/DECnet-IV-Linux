@@ -24,7 +24,7 @@ A documented test that was not actually executed is not green. Manual and physic
 
 ## Authority and pinned references
 
-Repository state, `docs/HANDOVER.md`, `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, `docs/TEST_LAB.md` and `tests/reference/refs.env` are authoritative.
+Repository state, `docs/HANDOVER.md`, `docs/PROJECT_STATE.md`, `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, `docs/TEST_LAB.md`, `docs/HECNET_LAB.md` and `tests/reference/refs.env` are authoritative.
 
 | Reference | Revision | Acceptance use |
 | --- | --- | --- |
@@ -49,7 +49,7 @@ Every upstream test is classified as one of:
 - **feature-gated** — blocking positive, negative, stress and recovery coverage when the feature is claimed;
 - **harness** — support code rather than an independent semantic test.
 
-No upstream test disappears because it is inconvenient. Complete native discovery still runs once where a reference has a suite.
+No in-scope upstream test disappears because it is inconvenient. The repository-maintained in-scope discovery set runs at the pinned revision; explicitly out-of-scope modules remain classified in this document rather than silently re-entering acceptance.
 
 ## Feature gating
 
@@ -123,7 +123,7 @@ Boundary coverage is not satisfied by the words `minimum` and `maximum`. Test th
 
 Record exact DECnet-IV-Linux commit/tree, all reference SHAs, kernel/compiler/configuration and release artifact hashes. Build module/userspace/unit tests natively on x86_64 and aarch64, oldest/newest supported kernels and both supported compilers. Run appropriate kernel warning/static-analysis modes.
 
-Build the exact Route20 pin. Run the repository-maintained in-scope PyDECnet native module set unmodified. Build applicable LinuxDECnet tools/libraries and run `dnprogs/libvaxdata/src/test.c` as reference health; it also becomes mapped PP-07 evidence when VAX/RMS conversion is claimed. Build the exact selected SIMH DEC-host target with tests enabled and retain target-specific per-simulator test output for the VAX/PDP-11/DEC CPU, storage, Ethernet, serial and timer path used by PP-12. Unrelated simulator families remain reference-health only.
+Build the exact Route20 pin. Run the repository-maintained in-scope PyDECnet native module set unmodified. Build applicable LinuxDECnet tools/libraries and run `dnprogs/libvaxdata/src/test.c` as reference health; it also becomes mapped PP-07 evidence when VAX/RMS conversion is claimed. Build the exact selected SIMH DEC-host target with tests enabled and retain target-specific per-simulator test output for the VAX/PDP-11/DEC CPU, storage, Ethernet and timer path used by PP-12. Serial/synchronous DECnet media are outside this project's transport claim. Unrelated simulator families remain reference-health only.
 
 Build the release/test image twice from identical inputs and compare documented reproducibility outputs. Verify base image, kernel, initrd, module, userspace, overlay and checkpoint hashes. Resume only a checkpoint matching architecture, exact source revision and mode.
 
@@ -196,7 +196,7 @@ Negatives include bad credentials/denial/unknown object; malformed Session/NICE 
 
 VDE2 and MULTINET are proven independently before they are combined.
 
-VDE2 proof requires real libvdeplug frame delivery, multiple independent VDE endpoints, Route20/PyDECnet adjacency on the VDE fabric, switch/client restart, disconnect/reconnect, malformed/oversized frame rejection where applicable, and cross-host VDE joining over SSH before any multi-runner topology depends on it.
+VDE2 proof requires real libvdeplug frame delivery, multiple independent VDE endpoints, Route20/PyDECnet adjacency on the VDE fabric, switch/client restart, disconnect/reconnect, malformed/oversized frame rejection where applicable, and an actual cross-host VDE join before any multi-runner topology depends on it. The already-green single-host proof does not satisfy the cross-runner requirement.
 
 MULTINET proof uses the pinned PyDECnet implementation as the behavioral authority. Run its complete MULTINET test module, including TCP connect/listen, fragmented/coalesced framing, IPv4/IPv6 cases where supported, late listener, restart and reconnect. Add a live two-router TCP point-to-point adjacency/reconnect proof. UDP is not part of the supported project transport claim.
 
@@ -204,7 +204,7 @@ Transport proofs are separate jobs and separate evidence sets. Neither may mask 
 
 ### PP-09 — distributed and HECnet routing
 
-After PP-08 is independently green, connect local DECnet-IV-Linux VMs through VDE2 to a PyDECnet-derived MULTINET gateway. Prove one controlled Area-31 HECnet adjacency first, then bidirectional routing to explicitly selected remote nodes. Exercise route establishment/withdrawal, peer and gateway restart, link interruption, reconnect, asymmetric failure, boundary NSP traffic and repeated churn. No loop, duplicate application delivery, leaked disposable node identity or stale path after convergence is allowed.
+After PP-08 is independently green, connect local DECnet-IV-Linux VMs through VDE2 to a PyDECnet-derived MULTINET gateway. The repository-tracked remote workflow must consume `MULTINET_REMOTE_HOST`, `MULTINET_REMOTE_PORT`, `VAX_ADDR`, `VAX_USERNAME` and `VAX_PASSWORD` only as runtime secrets; before network activity it must detect missing prerequisites by name without exposing values. Prove one controlled adjacency to the MULTINET-facing Area-31 area router first, then bidirectional routing to the second Area-31 router at `VAX_ADDR`. Query routing/NICE state and counters where implemented, exercise NSP/MIRROR and Session/object traffic, and add paired Linux/VAX user-level tests as Phase 7 tools become available. Exercise route establishment/withdrawal, peer and gateway restart, link interruption, reconnect, asymmetric failure, boundary NSP traffic and repeated churn. No loop, duplicate application delivery, credential leakage, leaked disposable node identity or stale path after convergence is allowed.
 
 ### PP-10 — harness/evidence false-green tests
 
@@ -260,7 +260,7 @@ This is not a cryptographic-security claim. It requires bounded parsing and corr
 
 ### Route20
 
-At `564df0be75831aaf00590ce10152655460dd43dc`, no standalone path named as a test suite was found in the pinned tree. Build is PP-00; live Ethernet/routing behavior maps to PP-04/PP-05 and native VDE Ethernet behavior maps to PP-08. Any subsequently discovered native test at this pin is classified before release.
+At `a9ef7c0b7f875f0dd2e8abaf11213798a8e4474c`, no standalone path named as a test suite was found in the pinned tree. Build is PP-00; live Ethernet/routing behavior maps to PP-04/PP-05 and native VDE Ethernet behavior maps to PP-08. Any subsequently discovered native test at this pin is classified before release.
 
 ### PyDECnet
 
@@ -302,9 +302,9 @@ At `ff39eef045d1e4b7b72a3d40111e89c07a473398`, LinuxDECnet is compatibility/refe
 
 ### SIMH
 
-SIMH is a simulator dependency, not a DECnet protocol oracle. At `5b73b1032b52d19bf80752ea4d9cbbdc92e7b5e0`, normal builds run available per-simulator tests unless disabled. PP-00 therefore builds the exact selected DEC-host target with tests enabled and retains its transcript. CPU/device/network/serial/timer tests used by the selected DEC host are blocking reference health for PP-12; unrelated machine families remain reference-health only. DECnet/Linux semantic acceptance comes from the DEC operating system running on SIMH in PP-12.
+SIMH is a simulator dependency, not a DECnet protocol oracle. At `5b73b1032b52d19bf80752ea4d9cbbdc92e7b5e0`, normal builds run available per-simulator tests unless disabled. PP-00 therefore builds the exact selected DEC-host target with tests enabled and retains its transcript. CPU/device/network/timer tests used by the selected DEC host are blocking reference health for PP-12; serial/synchronous DECnet media are not part of this project's transport claim, and unrelated machine families remain reference-health only. DECnet/Linux semantic acceptance comes from the DEC operating system running on SIMH in PP-12.
 
-## Existing gate mapping
+## Gate and planned-case mapping
 
 | Existing gate | Canonical home |
 | --- | --- |

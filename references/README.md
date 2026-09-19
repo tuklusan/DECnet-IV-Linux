@@ -42,6 +42,6 @@ For NSP and Session Control, normally triangulate **Digital NSP/Session Control 
 
 For Linux sockets and classic utilities, normally triangulate **Digital wire specification -> LinuxDECnet ABI/userspace behavior -> PyDECnet/DEC peer on the wire**.
 
-For distributed transport, prove **VDE2 independently**, prove **PyDECnet MULTINET TCP independently**, then combine them only for controlled Area-31/Hecnet routing tests.
+For distributed transport, prove **VDE2 independently**, prove **PyDECnet MULTINET TCP independently**, then combine them only for controlled Area-31/HECnet routing tests.
 
 See `PROTOCOL_SPECS.md`, `IMPLEMENTATIONS.md` and `LICENSING.md` for the retained subset and exact pins.

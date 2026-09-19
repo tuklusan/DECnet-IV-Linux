@@ -43,6 +43,6 @@ A graphical desktop is not part of the protocol acceptance path. Any later GUI l
 
 Acceptance nodes are independent VMs with independent kernels. Network namespaces or containers that share one kernel do not satisfy the VM gate.
 
-The test ladder grows from 2 to 4, 8 and 16 nodes and covers x86_64, aarch64, both mixed directions, routed multi-LAN topologies, deterministic faults, stress, independent Route20/PyDECnet peers, later SIMH-hosted real DEC systems, plus rootless/distributed VDE2 Ethernet fabrics, MULTINET-backed Internet lab gateways, HECnet Area-31 interoperability and physical hardware.
+The test ladder grows from 2 to 4, 8 and 16 nodes and covers x86_64, aarch64, both mixed directions, routed multi-LAN topologies, deterministic faults, stress, independent Route20/PyDECnet peers, later SIMH-hosted real DEC systems, plus rootless/distributed VDE2 Ethernet fabrics, MULTINET-backed Internet lab gateways, HECnet Area-31 interoperability, a real VAX area router, and physical hardware. The MULTINET-facing Area-31 router and the reachable VAX router are interoperability peers, not implementation dependencies.
 
 Self-to-self success is useful for development but never sufficient for final interoperability claims.
