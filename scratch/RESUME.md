@@ -93,3 +93,5 @@ Acceptance `47c95e0` exposed only an ARM64 harness budget issue: PyDECnet READY 
 Repository Policy `35443472854` caught an undefined `INTEROP` name in the new readiness regression. Replace it with the existing `SCRIPT` text variable and rerun exact-SHA acceptance; no lab/protocol behavior changes.
 
 Repository Policy `35443572981` caught that the prior typo fix over-rewrote literal `DNIV-INTEROP` / `DNIV_INTEROP_TIMEOUT_SECONDS` strings in the regression. Restore those literals; keep only the Python text variable as `SCRIPT`. Rerun exact-SHA acceptance.
+
+Acceptance `35443697753` showed the 720-second ARM64 budget still expires inside the fixed 60-guest-second PyDECnet stability loop after both reference READY and candidate UP. Replace elapsed guest-time settling with a protocol-visible readiness condition: snapshot hello count after UP, require a subsequent peer hello while still UP, then run MIRROR. No candidate protocol behavior changes.

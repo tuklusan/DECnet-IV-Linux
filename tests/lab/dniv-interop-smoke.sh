@@ -91,30 +91,6 @@ wait_peer_up() {
     return 1
 }
 
-wait_peer_stable() {
-    peer_address=$1
-    peer_kind=$2
-    stable_checks=$3
-    tries=$4
-    stable=0
-    i=0
-    while [ "$i" -lt "$tries" ]; do
-        output=$(/usr/local/sbin/dnctl adjacencies 2>/dev/null || true)
-        if printf '%s\n' "$output" | grep -F "$peer_address via " | \
-           grep -Fq " $peer_kind UP "; then
-            stable=$((stable + 1))
-            if [ "$stable" -ge "$stable_checks" ]; then
-                return 0
-            fi
-        else
-            stable=0
-        fi
-        i=$((i + 1))
-        sleep 0.25
-    done
-    return 1
-}
-
 wait_post_change_hello() {
     peer_address=$1
     peer_kind=$2
@@ -212,8 +188,14 @@ fi
 echo "DNIV-INTEROP-UP session=$session scenario=$scenario node=$name peer=$peer_node"
 
 if [ "$reference" = pydecnet ]; then
-    if ! wait_peer_stable "$peer_node" "$peer_kind" 240 960; then
-        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=nsp-peer-not-stable"
+    snapshot=$(stats_snapshot 8) || {
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=nsp-ready-stats"
+        exit 1
+    }
+    set -- $snapshot
+    hello_ready_before=$2
+    if ! wait_post_change_hello "$peer_node" "$peer_kind" "$hello_ready_before" 240; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=nsp-peer-not-responsive"
         exit 1
     fi
     echo "DNIV-INTEROP-NSP-READY session=$session scenario=$scenario node=$name peer=$peer_node"

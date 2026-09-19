@@ -115,25 +115,38 @@ def main() -> int:
     if "timeout_seconds=720" not in SCRIPT or 'if [[ "$(uname -m)" == aarch64 ]]; then' not in SCRIPT:
         raise SystemExit(
             "interop-ready regression: ARM64 candidate-ready bound must be "
-            "720 seconds after the full-minute PyDECnet settle requirement"
+            "720 seconds for slow ARM64 candidate convergence"
         )
     if "DNIV_INTEROP_TIMEOUT_SECONDS:-}" not in SCRIPT:
         raise SystemExit(
             "interop-ready regression: explicit candidate timeout override must remain supported"
         )
 
-    stable_call = 'if ! wait_peer_stable "$peer_node" "$peer_kind" 240 960; then'
-    if stable_call not in CANDIDATE_SMOKE:
+    responsive_call = (
+        'if ! wait_post_change_hello "$peer_node" "$peer_kind" '
+        '"$hello_ready_before" 240; then'
+    )
+    if responsive_call not in CANDIDATE_SMOKE:
         raise SystemExit(
-            "interop-ready regression: PyDECnet NSP proof must require an "
-            "60-second stable adjacency within the bounded 240-second window"
+            "interop-ready regression: PyDECnet NSP proof must require a "
+            "fresh peer hello while the adjacency remains UP"
         )
-    stable_pos = CANDIDATE_SMOKE.find(stable_call)
+    baseline_pos = CANDIDATE_SMOKE.find("hello_ready_before=$2")
+    responsive_pos = CANDIDATE_SMOKE.find(responsive_call)
     mirror_pos = CANDIDATE_SMOKE.find('/usr/local/sbin/dnmrr "$peer_node"')
-    if mirror_pos < 0 or stable_pos > mirror_pos:
+    if (
+        baseline_pos < 0
+        or responsive_pos < baseline_pos
+        or mirror_pos < responsive_pos
+    ):
         raise SystemExit(
-            "interop-ready regression: stable adjacency must be established "
-            "before the MIRROR socket connect"
+            "interop-ready regression: fresh-hello readiness must be sampled "
+            "after adjacency UP and before the MIRROR socket connect"
+        )
+    if "wait_peer_stable" in CANDIDATE_SMOKE:
+        raise SystemExit(
+            "interop-ready regression: fixed-duration guest stability polling "
+            "must not gate PyDECnet NSP under ARM64 TCG"
         )
 
     print("interop-ready regression passed: ready-amd64=180s ready-arm64=600s")
