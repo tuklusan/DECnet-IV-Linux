@@ -91,3 +91,5 @@ External Reference Baselines `35440924133` exposed a harness parser defect: the 
 Acceptance `47c95e0` exposed only an ARM64 harness budget issue: PyDECnet READY and candidate adjacency UP are present, but the fixed 420-second candidate-ready controller timeout expires during the required 60-second stability polling under TCG, before MIRROR or any protocol failure marker. Default ARM64 candidate-ready bound raised to 720 seconds; amd64 remains 420 and explicit override remains supported. Rerun exact-SHA acceptance before Phase 5 listener work.
 
 Repository Policy `35443472854` caught an undefined `INTEROP` name in the new readiness regression. Replace it with the existing `SCRIPT` text variable and rerun exact-SHA acceptance; no lab/protocol behavior changes.
+
+Repository Policy `35443572981` caught that the prior typo fix over-rewrote literal `DNIV-INTEROP` / `DNIV_INTEROP_TIMEOUT_SECONDS` strings in the regression. Restore those literals; keep only the Python text variable as `SCRIPT`. Rerun exact-SHA acceptance.
