@@ -85,3 +85,5 @@ VDE2 proof `35440502997` is green: real libvdeplug frame delivery, PyDECnet adap
 MULTINET `35440600180`: all 40 upstream MULTINET tests passed. Live proof false-failed because it watched Ethernet adjacency events instead of point-to-point circuit events. Harness now watches 4.10 Circuit up / 4.8 Circuit down and will be rerun independently.
 
 MULTINET proof `35440787624` is green: upstream MULTINET suite plus live TCP point-to-point circuit establishment, down detection and reconnect recovery. VDE2 and MULTINET are independently proven. Next run exact-SHA project acceptance, then resume Phase 5 socket/listener work; Area-31 combination follows only as an additional interoperability surface.
+
+External Reference Baselines `35440924133` exposed a harness parser defect: the canonical header in the PyDECnet module list was treated as test names, yielding `ValueError: Empty module name`. The workflow now filters comments/blank lines and requires a non-empty module array before running unittest. Rerun exact-SHA acceptance.

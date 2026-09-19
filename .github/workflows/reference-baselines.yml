@@ -190,7 +190,10 @@ jobs:
           "$RUNNER_TEMP/pyvenv/bin/python" -m pip install "$work/pydecnet" 2>&1 | \
             tee "$DNIV_SCRATCH_DIR/pip-install.log"
           cd "$work/pydecnet"
-          mapfile -t modules < "$GITHUB_WORKSPACE/tests/reference/pydecnet-in-scope-tests.txt"
+          mapfile -t modules < <(
+            grep -Ev '^[[:space:]]*(#|$)' "$GITHUB_WORKSPACE/tests/reference/pydecnet-in-scope-tests.txt"
+          )
+          test "${#modules[@]}" -gt 0
           "$RUNNER_TEMP/pyvenv/bin/python" -m unittest -v "${modules[@]}" 2>&1 | \
             tee "$DNIV_SCRATCH_DIR/pydecnet-tests.log"
 
