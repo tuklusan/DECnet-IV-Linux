@@ -61,6 +61,9 @@ struct dniv_sock {
     __u16 pending_tail;
     __u16 pending_count;
     __u8 accept_mode;
+    __u8 *stream_rx;
+    __u32 stream_rx_len;
+    __u32 stream_rx_off;
     bool bound;
     bool listening;
 };
@@ -584,6 +587,10 @@ static int dniv_sock_release(struct socket *sock)
             }
             dsk->local_link = 0U;
         }
+        kfree(dsk->stream_rx);
+        dsk->stream_rx = NULL;
+        dsk->stream_rx_len = 0U;
+        dsk->stream_rx_off = 0U;
         sock->state = SS_DISCONNECTING;
         release_sock(sk);
         sock_orphan(sk);
@@ -763,6 +770,8 @@ static int dniv_sock_sendmsg(struct socket *sock, struct msghdr *msg,
     if (msg->msg_flags &
         ~(MSG_DONTWAIT | MSG_NOSIGNAL | MSG_EOR | MSG_OOB))
         return -EOPNOTSUPP;
+    if (sock->type == SOCK_STREAM && (msg->msg_flags & MSG_EOR))
+        return -EINVAL;
     if (!size)
         return (msg->msg_flags & MSG_OOB) ? -EINVAL : 0;
 
@@ -837,6 +846,80 @@ out:
     return ret;
 }
 
+static int dniv_stream_recv_locked(struct socket *sock,
+                                   struct msghdr *msg, size_t size,
+                                   int flags, long *timeo)
+{
+    struct dniv_sock *dsk = dniv_sk(sock->sk);
+    size_t copied = 0U;
+    int ret;
+
+    if (!dsk->stream_rx) {
+        dsk->stream_rx = kmalloc(DNBUFSIZE, GFP_KERNEL);
+        if (!dsk->stream_rx)
+            return -ENOMEM;
+    }
+
+    while (copied < size) {
+        size_t available;
+        size_t chunk;
+
+        if (dsk->stream_rx_off == dsk->stream_rx_len) {
+            __u32 length = 0U;
+
+            dsk->stream_rx_off = 0U;
+            dsk->stream_rx_len = 0U;
+            for (;;) {
+                ret = dniv_nsp_recv_message(dsk->local_link,
+                                            dsk->stream_rx, DNBUFSIZE,
+                                            &length);
+                if (!ret) {
+                    dsk->stream_rx_len = length;
+                    break;
+                }
+                if (ret != -EAGAIN)
+                    return copied ? (int)copied : ret;
+                if (dniv_link_status(dsk) < 0)
+                    return (int)copied;
+                if (!*timeo)
+                    return copied ? (int)copied : -EAGAIN;
+                ret = wait_event_interruptible_timeout(
+                    dniv_sock_waitq,
+                    ({ bool normal = false, intr = false;
+                       int ready = dniv_nsp_rx_ready(
+                           dsk->local_link, &normal, &intr);
+                       ready || normal || dniv_link_status(dsk) != 1; }),
+                    *timeo);
+                if (ret < 0)
+                    return copied ? (int)copied : ret;
+                if (!ret) {
+                    *timeo = 0;
+                    return copied ? (int)copied : -EAGAIN;
+                }
+                *timeo = ret;
+            }
+        }
+
+        available = dsk->stream_rx_len - dsk->stream_rx_off;
+        chunk = min_t(size_t, size - copied, available);
+        if (chunk &&
+            copy_to_iter(dsk->stream_rx + dsk->stream_rx_off, chunk,
+                         &msg->msg_iter) != chunk)
+            return copied ? (int)copied : -EFAULT;
+        dsk->stream_rx_off += chunk;
+        copied += chunk;
+
+        if (!(flags & MSG_WAITALL))
+            break;
+    }
+
+    if (msg->msg_name) {
+        memcpy(msg->msg_name, &dsk->peer, sizeof(dsk->peer));
+        msg->msg_namelen = sizeof(dsk->peer);
+    }
+    return (int)copied;
+}
+
 static int dniv_sock_recvmsg(struct socket *sock, struct msghdr *msg,
                              size_t size, int flags)
 {
@@ -850,10 +933,27 @@ static int dniv_sock_recvmsg(struct socket *sock, struct msghdr *msg,
     long timeo;
     int ret;
 
-    if (flags & ~(MSG_DONTWAIT | MSG_TRUNC | MSG_NOSIGNAL | MSG_OOB))
+    if (flags & ~(MSG_DONTWAIT | MSG_TRUNC | MSG_NOSIGNAL | MSG_OOB |
+                  MSG_WAITALL))
+        return -EOPNOTSUPP;
+    if (sock->type == SOCK_SEQPACKET && (flags & MSG_WAITALL))
+        return -EOPNOTSUPP;
+    if (sock->type == SOCK_STREAM && (flags & MSG_TRUNC))
         return -EOPNOTSUPP;
     if (!size && !(flags & MSG_TRUNC))
         return 0;
+
+    lock_sock(sk);
+    if (sock->state != SS_CONNECTED) {
+        ret = -ENOTCONN;
+        goto out_unlock;
+    }
+    timeo = sock_rcvtimeo(sk, flags & MSG_DONTWAIT);
+    if (sock->type == SOCK_STREAM && !(flags & MSG_OOB)) {
+        ret = dniv_stream_recv_locked(sock, msg, size, flags, &timeo);
+        goto out_unlock;
+    }
+    release_sock(sk);
 
     allocation = (flags & MSG_OOB) ? DNIV_NSP_MAX_INTERRUPT : DNBUFSIZE;
     data = kmalloc(allocation, GFP_KERNEL);
@@ -914,6 +1014,7 @@ static int dniv_sock_recvmsg(struct socket *sock, struct msghdr *msg,
         bool normal = false;
         bool intr = false;
 
+        msg->msg_flags |= MSG_EOR;
         if (!dniv_nsp_rx_ready(dsk->local_link, &normal, &intr) && intr)
             msg->msg_flags |= MSG_OOB;
     }
@@ -925,6 +1026,10 @@ static int dniv_sock_recvmsg(struct socket *sock, struct msghdr *msg,
 out:
     release_sock(sk);
     kfree(data);
+    return ret;
+
+out_unlock:
+    release_sock(sk);
     return ret;
 }
 
@@ -1165,6 +1270,9 @@ static int dniv_sock_accept_impl(struct socket *sock, struct socket *newsock,
     newdsk->discdata_out = dsk->discdata_out;
     newdsk->accessdata = access;
     newdsk->accept_mode = dsk->accept_mode;
+    newdsk->stream_rx = NULL;
+    newdsk->stream_rx_len = 0U;
+    newdsk->stream_rx_off = 0U;
     dniv_sockaddr_set_node(&newdsk->peer, ci.remote_node);
     newdsk->local_link = link;
     newdsk->pending_head = 0U;
@@ -1473,7 +1581,7 @@ static int dniv_sock_create(struct net *net, struct socket *sock,
 
     if (!net_eq(net, &init_net))
         return -EAFNOSUPPORT;
-    if (sock->type != SOCK_SEQPACKET)
+    if (sock->type != SOCK_SEQPACKET && sock->type != SOCK_STREAM)
         return -ESOCKTNOSUPPORT;
     if (protocol != 0 && protocol != DNPROTO_NSP)
         return -EPROTONOSUPPORT;
@@ -1502,6 +1610,9 @@ static int dniv_sock_create(struct net *net, struct socket *sock,
     dsk->pending_tail = 0U;
     dsk->pending_count = 0U;
     dsk->accept_mode = ACC_IMMED;
+    dsk->stream_rx = NULL;
+    dsk->stream_rx_len = 0U;
+    dsk->stream_rx_off = 0U;
     dsk->bound = false;
     dsk->listening = false;
     return 0;

@@ -248,3 +248,8 @@ The next Phase 5 candidate preserves peer Disconnect Initiate reason/data throug
 
 
 Candidate `e3c516f572ec4238263165f76e69719f1c82627e` failed Build Bootstrap `35507899224` on x86_64 with the concrete compiler error `dniv_sock_getsockopt: ret undeclared` in the new `DSO_DISDATA` snapshot path. The corrective successor only declares the existing local return variable; protocol behavior is unchanged. Next: exact-SHA acceptance of the corrective successor.
+
+
+Exact-SHA acceptance of disconnect-data corrective candidate `0c71473a90c8c601f8a6c2dc4ec55e9ac80e23df` is green: Repository Policy `35507949425`, Build Bootstrap `35507964672`, Project State Gate `35507965960`, External Reference Baselines `35507967011`, E1-E4 Python QEMU VM Lab `35507968181`, `35507969353`, `35507970535`, and `35507971766`, and Independent Ethernet Interoperability `35507973008` all completed successfully. Peer Disconnect Initiate reason/data preservation and `DSO_DISDATA` retrieval are accepted.
+
+Phase 5 now adds native `SOCK_STREAM` compatibility over NSP. Stream sockets preserve unread bytes across short reads, support `MSG_WAITALL` across NSP record boundaries, reject application `MSG_EOR`, and retain the existing interrupt/OOB path. The direct PyDECnet MIRROR proof exercises a 4096-byte response through 257-byte reads and a 200-byte `MSG_WAITALL` read spanning two peer records. Next after exact-SHA acceptance: lifecycle negatives and broader socket stress/interoperability.
