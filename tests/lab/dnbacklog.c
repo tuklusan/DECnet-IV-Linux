@@ -26,6 +26,7 @@
 #define BACKLOG_OBJECT 241U
 #define OVERFLOW_OBJECT 242U
 #define CLOSE_RACE_OBJECT 243U
+#define LISTENER_CLOSE_OBJECT 245U
 #define BACKLOG_COUNT 4U
 #define OVERFLOW_BACKLOG 2U
 
@@ -80,11 +81,12 @@ int main(int argc, char **argv)
     int fds[BACKLOG_COUNT] = { -1, -1, -1, -1 };
     int overflow = 0;
     int close_race = 0;
+    int listener_close = 0;
     int listener;
 
     setvbuf(stdout, NULL, _IONBF, 0);
     if ((argc != 4 && argc != 5) || parse_node(argv[1], &expected_node)) {
-        fprintf(stderr, "usage: %s PEER-AREA.NODE SESSION SCENARIO [overflow|close-race]\n", argv[0]);
+        fprintf(stderr, "usage: %s PEER-AREA.NODE SESSION SCENARIO [overflow|close-race|listener-close]\n", argv[0]);
         return 2;
     }
     if (argc == 5) {
@@ -97,6 +99,11 @@ int main(int argc, char **argv)
             close_race = 1;
             object = CLOSE_RACE_OBJECT;
             accept_count = BACKLOG_COUNT * 4U;
+        } else if (!strcmp(argv[4], "listener-close")) {
+            listener_close = 1;
+            object = LISTENER_CLOSE_OBJECT;
+            backlog = BACKLOG_COUNT;
+            accept_count = 1U;
         } else {
             fprintf(stderr, "unsupported backlog mode: %s\n", argv[4]);
             return 2;
@@ -109,12 +116,54 @@ int main(int argc, char **argv)
         return 1;
     }
     printf("DNIV-INTEROP-%s-READY session=%s scenario=%s count=%u\n",
-           overflow ? "OVERFLOW" : (close_race ? "CLOSE-RACE" : "BACKLOG"),
+           overflow ? "OVERFLOW" : (close_race ? "CLOSE-RACE" :
+               (listener_close ? "LISTENER-CLOSE" : "BACKLOG")),
            argv[2], argv[3], backlog);
 
     sleep(3);
     if (close_race) {
-        for (i = 0U; i < accept_count; i++) {
+        if (listener_close) {
+        struct sockaddr_dn peer;
+        socklen_t peerlen = sizeof(peer);
+        ssize_t got;
+        uint16_t node;
+        int fd = accept(listener, (struct sockaddr *)&peer, &peerlen);
+
+        if (fd < 0 || peerlen != sizeof(peer) ||
+            peer.sdn_family != AF_DECnet ||
+            (uint16_t)peer.sdn_nodeaddrl != 2U) {
+            if (fd >= 0)
+                close(fd);
+            goto fail_children;
+        }
+        node = (uint16_t)(peer.sdn_nodeaddr[0] |
+                          ((uint16_t)peer.sdn_nodeaddr[1] << 8));
+        if (node != expected_node) {
+            close(fd);
+            goto fail_children;
+        }
+
+        /*
+         * Closing the listener must reject only still-pending requests.
+         * The already accepted child must remain a valid independent link.
+         */
+        close(listener);
+        listener = -1;
+
+        got = recv(fd, buf, sizeof(buf), 0);
+        if (got <= 0 ||
+            send(fd, buf, (size_t)got, MSG_EOR | MSG_NOSIGNAL) != got) {
+            fprintf(stderr,
+                    "listener-close child io failed got=%zd errno=%d (%s)\n",
+                    got, errno, strerror(errno));
+            close(fd);
+            goto fail_children;
+        }
+        close(fd);
+        goto done;
+    }
+
+    for (i = 0U; i < accept_count; i++) {
             struct sockaddr_dn peer;
             socklen_t peerlen = sizeof(peer);
             ssize_t got;
@@ -196,9 +245,11 @@ int main(int argc, char **argv)
     }
 
 done:
-    close(listener);
+    if (listener >= 0)
+        close(listener);
     printf("DNIV-INTEROP-%s-SERVER-PASS session=%s scenario=%s count=%u\n",
-           overflow ? "OVERFLOW" : (close_race ? "CLOSE-RACE" : "BACKLOG"),
+           overflow ? "OVERFLOW" : (close_race ? "CLOSE-RACE" :
+               (listener_close ? "LISTENER-CLOSE" : "BACKLOG")),
            argv[2], argv[3], accept_count);
     return 0;
 
@@ -207,6 +258,7 @@ fail_children:
         if (fds[i] >= 0)
             close(fds[i]);
     }
-    close(listener);
+    if (listener >= 0)
+        close(listener);
     return 1;
 }

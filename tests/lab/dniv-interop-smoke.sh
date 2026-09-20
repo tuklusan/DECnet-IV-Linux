@@ -255,6 +255,13 @@ if [ "$reference" = pydecnet ]; then
             exit 1
         fi
         echo "DNIV-INTEROP-RESET-PASS session=$session scenario=$scenario node=$name peer=$peer_node"
+        /usr/local/sbin/dnbacklog "$peer_node" "$session" "$scenario" listener-close &
+        listener_close_pid=$!
+        if ! wait "$listener_close_pid"; then
+            echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=listener-close-pending"
+            exit 1
+        fi
+        echo "DNIV-INTEROP-LISTENER-CLOSE-PASS session=$session scenario=$scenario node=$name peer=$peer_node"
     fi
 fi
 
