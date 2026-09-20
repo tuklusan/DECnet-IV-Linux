@@ -65,6 +65,7 @@ struct dniv_nsp_connection {
     __u16 rx_next[DNIV_NSP_CH_COUNT];
     __u16 retransmit_count;
     __u16 rx_queued;
+    __u16 rx_queued_channel[DNIV_NSP_CH_COUNT];
     __u16 interrupt_credit;
     bool data_xon;
     bool ack_pending[DNIV_NSP_CH_COUNT];
@@ -317,6 +318,7 @@ static void dniv_nsp_rx_apply_locked(struct dniv_nsp_connection *conn,
             conn->interrupt_credit = (__u16)(credit > 127U ? 127U : credit);
         }
         conn->rx_queued--;
+        conn->rx_queued_channel[entry->channel]--;
         kfree(entry);
         return;
     }
@@ -337,6 +339,33 @@ dniv_nsp_rx_pending_find_locked(struct dniv_nsp_connection *conn,
     return NULL;
 }
 
+static bool
+dniv_nsp_rx_reclaim_future_locked(struct dniv_nsp_connection *conn,
+                                  enum dniv_nsp_channel channel)
+{
+    struct dniv_nsp_rx_entry *entry;
+    struct dniv_nsp_rx_entry *victim = NULL;
+    __u16 victim_delta = 0U;
+
+    list_for_each_entry(entry, &conn->rx_pending[channel], link) {
+        __u16 delta = dniv_nsp_seq_norm(
+            (__u32)entry->sequence - conn->rx_next[channel]);
+
+        if (!victim || delta > victim_delta) {
+            victim = entry;
+            victim_delta = delta;
+        }
+    }
+    if (!victim)
+        return false;
+
+    list_del(&victim->link);
+    conn->rx_queued--;
+    conn->rx_queued_channel[channel]--;
+    kfree(victim);
+    return true;
+}
+
 static int dniv_nsp_rx_sequence_locked(
     struct dniv_nsp_connection *conn, const struct dniv_nsp_packet *pkt,
     enum dniv_nsp_channel channel, enum dniv_nsp_rx_order *rx_order)
@@ -354,22 +383,35 @@ static int dniv_nsp_rx_sequence_locked(
     if (order == DNIV_NSP_RX_FUTURE) {
         if (dniv_nsp_rx_pending_find_locked(conn, channel, pkt->segnum))
             return 0;
-        if (conn->rx_queued >= DNIV_NSP_MAX_RX_QUEUED)
-            return -ENOSPC;
+        /*
+         * Phase IV cache buffers are optional.  If this subchannel's
+         * bounded cache is full, leave the future segment unacknowledged
+         * so the sender can retransmit it after the sequence gap closes.
+         */
+        if (conn->rx_queued_channel[channel] >= DNIV_NSP_MAX_RX_QUEUED)
+            return 0;
         entry = dniv_nsp_rx_alloc(pkt, channel);
         if (!entry)
             return -ENOMEM;
         list_add_tail(&entry->link, &conn->rx_pending[channel]);
         conn->rx_queued++;
+        conn->rx_queued_channel[channel]++;
         return 0;
     }
 
-    if (conn->rx_queued >= DNIV_NSP_MAX_RX_QUEUED)
+    /*
+     * Never discard the missing lower-numbered segment while a higher
+     * segment is cached.  Reclaim the farthest cached future segment first;
+     * it was never acknowledged and remains eligible for peer retransmit.
+     */
+    if (conn->rx_queued_channel[channel] >= DNIV_NSP_MAX_RX_QUEUED &&
+        !dniv_nsp_rx_reclaim_future_locked(conn, channel))
         return -ENOSPC;
     entry = dniv_nsp_rx_alloc(pkt, channel);
     if (!entry)
         return -ENOMEM;
     conn->rx_queued++;
+    conn->rx_queued_channel[channel]++;
     dniv_nsp_rx_apply_locked(conn, entry);
     conn->rx_next[channel] = dniv_nsp_seq_next(conn->rx_next[channel]);
 
@@ -485,6 +527,7 @@ static void dniv_nsp_purge_locked(struct dniv_nsp_connection *conn)
     }
     conn->retransmit_count = 0U;
     conn->rx_queued = 0U;
+    memset(conn->rx_queued_channel, 0, sizeof(conn->rx_queued_channel));
 }
 
 int dniv_nsp_init(void)
@@ -1664,8 +1707,9 @@ int dniv_nsp_recv(__u16 local_link, struct dniv_nsp_rx_meta *meta,
     if (entry->payload_len)
         memcpy(payload, entry->payload, entry->payload_len);
     list_del(&entry->link);
-    kfree(entry);
     conn->rx_queued--;
+    conn->rx_queued_channel[entry->channel]--;
+    kfree(entry);
 out:
     spin_unlock_irqrestore(&dniv_nsp_lock, flags);
     return ret;
@@ -1729,8 +1773,9 @@ int dniv_nsp_recv_interrupt(__u16 local_link, __u8 *payload,
     memcpy(payload, found->payload, found->payload_len);
     *payload_len = found->payload_len;
     list_del(&found->link);
-    kfree(found);
     conn->rx_queued--;
+    conn->rx_queued_channel[found->channel]--;
+    kfree(found);
 
 out:
     spin_unlock_irqrestore(&dniv_nsp_lock, flags);
@@ -1810,8 +1855,9 @@ int dniv_nsp_recv_message(__u16 local_link, __u8 *payload, __u32 capacity,
         }
         complete = entry->eom;
         list_del(&entry->link);
-        kfree(entry);
         conn->rx_queued--;
+        conn->rx_queued_channel[entry->channel]--;
+        kfree(entry);
         if (complete)
             break;
     }

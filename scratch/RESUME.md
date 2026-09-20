@@ -18,7 +18,7 @@
 
 Annotated tag `PHASE-4-COMPLETE` is verified on closure commit `571333bfd7aaa8b2fcc88715c1d61442af151f3c`; the temporary tag workflow has been removed.
 
-Phase 4 is complete on exact protocol candidate `6c185b6d01f8a57ee9f0ea6a6c37d7112ddb77d2`; Phase 5 is active on `main`. The latest accepted Phase 5 candidate is `dc62cdb2ab1494069fe8d2d1c546a18d0ae8a279`. Phase 3 remains frozen at tag `PHASE-3-COMPLETE` on commit `ae1bcb82a1539ccadda0661664205e360bd760b7`.
+Phase 4 is complete on exact protocol candidate `6c185b6d01f8a57ee9f0ea6a6c37d7112ddb77d2`; Phase 5 is active on `main`. The latest accepted Phase 5 candidate is `d62bf7cb5c86ca5cee2f0c199872978ead6828c6`. Phase 3 remains frozen at tag `PHASE-3-COMPLETE` on commit `ae1bcb82a1539ccadda0661664205e360bd760b7`.
 
 The final Phase 3 acceptance set was green: Repository Policy `35343324826`, Build Bootstrap `35343357536`, Project State Gate `35343359444`, External Reference Baselines `35343361139`, Python QEMU VM Lab `35343362922`, and Independent Ethernet Interoperability run `35343364812`. The interoperability matrix passed all eight amd64/ARM64 Route20/PyDECnet routing/endnode role jobs.
 
@@ -348,3 +348,8 @@ The next test-only successor exercises connection-control retry exhaustion: refe
 Exact-SHA fast acceptance for connection-control retry candidate `2c646d82a0f6a7c49df17ebafae67785185a383f` is green: Repository Policy `35544499145`, Build Bootstrap `35544514739`, Project State Gate `35544515810`, E1 `35544516934` on both architectures, and x64 PyDECnet L1 interop `35544517875`. PCAP proved the initial CI, four RCIs, and fresh-link recovery data.
 
 The next Phase 5 correction removes an exact-only ACK_OTHER special case. Other-Data ACKNUM is cumulative just like Data ACKNUM, and both pinned PyDECnet and LinuxDECnet retire acknowledged Other-Data through the cumulative number. The common wrap-safe ACK/NAK path now applies to both channels, preventing lost early ACKs from leaving stale interrupt/link-service retransmit entries. Next: exact-SHA fast socket acceptance, then sequencing/resource and malformed-ACK negatives.
+
+
+Exact-SHA fast acceptance for cumulative ACK_OTHER candidate `d62bf7cb5c86ca5cee2f0c199872978ead6828c6` is green: Repository Policy `35544925880`, Build Bootstrap `35544944645`, Project State Gate `35544945676`, E1 `35544946708` on both architectures, and x64 PyDECnet L1 interop `35544947674`.
+
+Phase 5 receive buffering now fixes a concrete bounded-cache deadlock. The old global 32-entry limit could be filled entirely by unacknowledged future segments, after which the missing expected segment was rejected and the cache could never advance; it could also let normal-data backlog block Other-Data. DNA permits future segments to be discarded instead of cached and requires retention/admission of the missing lower segment ahead of cached higher segments. Bounds are now per subchannel. Full-cache future arrivals are left unacknowledged, while an expected arrival reclaims the farthest cached future on that subchannel before admission. Next: exact-SHA fast socket acceptance, then malformed ACK-field and sequence-boundary negatives.

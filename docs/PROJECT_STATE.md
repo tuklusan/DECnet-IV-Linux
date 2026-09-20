@@ -81,7 +81,7 @@ Implementation order:
 | Phase 4 accepted protocol candidate | `6c185b6d01f8a57ee9f0ea6a6c37d7112ddb77d2` |
 | Phase 4 closure commit | `571333bfd7aaa8b2fcc88715c1d61442af151f3c` |
 | Phase 4 tag | `PHASE-4-COMPLETE` |
-| Latest accepted Phase 5 candidate | `dc62cdb2ab1494069fe8d2d1c546a18d0ae8a279` |
+| Latest accepted Phase 5 candidate | `d62bf7cb5c86ca5cee2f0c199872978ead6828c6` |
 | Route20 pin | `a9ef7c0b7f875f0dd2e8abaf11213798a8e4474c` |
 | PyDECnet live pin | `295938c76c956a70957f4cf96b05685f555b2a18` |
 | VM lifecycle | direct QEMU/QMP |
@@ -406,3 +406,8 @@ Phase 5 now extends loss coverage to connection-control retransmission. The host
 Exact-SHA fast acceptance for connection-control retry exhaustion candidate `2c646d82a0f6a7c49df17ebafae67785185a383f` is green: Repository Policy `35544499145`, Build Bootstrap `35544514739`, Project State Gate `35544515810`, E1 Python QEMU VM Lab `35544516934` on x86_64 and ARM64, and x64 PyDECnet L1 Independent Ethernet Interoperability `35544517875`. Packet capture proved one marked CI plus four marked RCIs under deterministic lost CC responses, followed by a fresh connection and bidirectional marked data after fault removal.
 
 NSP ACK review then found a concrete Other-Data error-control defect. The candidate treated a normal ACK_OTHER as valid only when its ACKNUM exactly equaled the first outstanding Other-Data sequence. Phase IV ACK numbers are cumulative for both Data and Other-Data subchannels; the pinned PyDECnet and LinuxDECnet implementations likewise retire all acknowledged entries through ACKNUM. If an earlier interrupt/link-service ACK was lost and a later cumulative ACK_OTHER arrived, the candidate could therefore retain already acknowledged Other-Data and eventually retransmit or time it out incorrectly. The special exact-only Other-Data path is removed so both channels use the same wrap-safe cumulative ACK/NAK logic. Next: exact-SHA fast socket acceptance, then continue sequencing/resource and malformed-ACK negative coverage.
+
+
+Exact-SHA fast acceptance for cumulative Other-Data ACK candidate `d62bf7cb5c86ca5cee2f0c199872978ead6828c6` is green: Repository Policy `35544925880`, Build Bootstrap `35544944645`, Project State Gate `35544945676`, E1 Python QEMU VM Lab `35544946708` on x86_64 and ARM64, and x64 PyDECnet L1 Independent Ethernet Interoperability `35544947674`.
+
+NSP receive-resource review found a bounded-cache deadlock and subchannel-isolation defect. A single global 32-entry receive limit allowed out-of-order future segments to consume every slot; the missing lower-numbered segment was then rejected with `ENOSPC`, so the cached higher segments could never become contiguous and drain. The same global limit also allowed normal-data backlog to block the independently flow-controlled Other-Data subchannel. DNA NSP V4.0.1 sections 2.6.4, 2.7.1 and 6.5 explicitly allow out-of-order segments to be discarded instead of cached, and section 6.5 forbids discarding lower-numbered data while higher-numbered data remains cached. Receive bounds are now per subchannel. A future packet arriving to a full subchannel cache is left unacknowledged for peer retransmission; when the missing expected packet arrives to a full cache, the farthest cached future packet on that subchannel is reclaimed first so forward progress is guaranteed. Total receive accounting remains available for diagnostics. Next: exact-SHA fast socket acceptance, then malformed ACK-field and sequence-boundary negatives.
