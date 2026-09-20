@@ -19,7 +19,6 @@
 #include <linux/module.h>
 #include <linux/net.h>
 #include <linux/poll.h>
-#include <linux/security.h>
 #include <linux/slab.h>
 #include <linux/socket.h>
 #include <linux/sockios.h>
@@ -934,11 +933,6 @@ static int dniv_sock_recvmsg(struct socket *sock, struct msghdr *msg,
     long timeo;
     int ret;
 
-    if (dsk->local.sdn_objnum == 243U)
-        pr_err("dniv close-race recvmsg enter link=%u family=%u type=%u protocol=%u state=%d flags=0x%x size=%zu\n",
-                dsk->local_link, sk->sk_family, sk->sk_type,
-                sk->sk_protocol, sock->state, flags, size);
-
     if (flags & ~(MSG_DONTWAIT | MSG_TRUNC | MSG_NOSIGNAL | MSG_OOB |
                   MSG_WAITALL))
         return -EOPNOTSUPP;
@@ -1030,17 +1024,11 @@ static int dniv_sock_recvmsg(struct socket *sock, struct msghdr *msg,
     }
     ret = (flags & MSG_TRUNC) ? (int)length : (int)copied;
 out:
-    if (dsk->local.sdn_objnum == 243U)
-        pr_err("dniv close-race recvmsg exit link=%u ret=%d state=%d\n",
-                dsk->local_link, ret, sock->state);
     release_sock(sk);
     kfree(data);
     return ret;
 
 out_unlock:
-    if (dsk->local.sdn_objnum == 243U)
-        pr_err("dniv close-race recvmsg early-exit link=%u ret=%d state=%d\n",
-                dsk->local_link, ret, sock->state);
     release_sock(sk);
     return ret;
 }
@@ -1262,8 +1250,8 @@ static int dniv_sock_accept_impl(struct socket *sock, struct socket *newsock,
     }
     newsk->sk_family = PF_DECnet;
     newsk->sk_protocol = DNPROTO_NSP;
-    sock_init_data(newsock, newsk);
-    security_sock_graft(newsk, newsock);
+    sock_init_data_uid(NULL, newsk, SOCK_INODE(newsock)->i_uid);
+    sock_graft(newsk, newsock);
     newsock->ops = &dniv_proto_ops;
 
     newdsk = dniv_sk(newsk);
@@ -1294,10 +1282,6 @@ static int dniv_sock_accept_impl(struct socket *sock, struct socket *newsock,
     newdsk->bound = true;
     newdsk->listening = false;
     newsock->state = SS_CONNECTING;
-    if (newdsk->local.sdn_objnum == 243U)
-        pr_err("dniv close-race accept child link=%u family=%u type=%u protocol=%u state=%d\n",
-                newdsk->local_link, newsk->sk_family, newsk->sk_type,
-                newsk->sk_protocol, newsock->state);
 
     if (newdsk->accept_mode == ACC_IMMED) {
         ret = dniv_nsp_accept(

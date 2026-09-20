@@ -23,58 +23,11 @@
 
 #include <linux/dn.h>
 
-#ifndef SO_PROTOCOL
-#define SO_PROTOCOL 38
-#endif
-#ifndef SO_DOMAIN
-#define SO_DOMAIN 39
-#endif
-
 #define BACKLOG_OBJECT 241U
 #define OVERFLOW_OBJECT 242U
 #define CLOSE_RACE_OBJECT 243U
 #define BACKLOG_COUNT 4U
 #define OVERFLOW_BACKLOG 2U
-
-static void log_socket_identity(int fd, unsigned int index, const char *mode)
-{
-    int domain = -1, type = -1, protocol = -1;
-    socklen_t len;
-
-    len = sizeof(domain);
-    if (getsockopt(fd, SOL_SOCKET, SO_DOMAIN, &domain, &len))
-        domain = -errno;
-    len = sizeof(type);
-    if (getsockopt(fd, SOL_SOCKET, SO_TYPE, &type, &len))
-        type = -errno;
-    len = sizeof(protocol);
-    if (getsockopt(fd, SOL_SOCKET, SO_PROTOCOL, &protocol, &len))
-        protocol = -errno;
-    fprintf(stderr,
-            "%s child=%u fd=%d domain=%d type=%d protocol=%d\n",
-            mode, index, fd, domain, type, protocol);
-}
-
-static void log_security_context(void)
-{
-    char line[256];
-    FILE *fp = fopen("/proc/self/attr/current", "r");
-
-    if (fp) {
-        if (fgets(line, sizeof(line), fp))
-            fprintf(stderr, "close-race security attr=%s", line);
-        fclose(fp);
-    }
-    fp = fopen("/proc/self/status", "r");
-    if (fp) {
-        while (fgets(line, sizeof(line), fp)) {
-            if (!strncmp(line, "Seccomp:", 8) ||
-                !strncmp(line, "NoNewPrivs:", 11))
-                fprintf(stderr, "close-race security %s", line);
-        }
-        fclose(fp);
-    }
-}
 
 static int parse_node(const char *text, uint16_t *address)
 {
@@ -161,7 +114,6 @@ int main(int argc, char **argv)
 
     sleep(3);
     if (close_race) {
-        log_security_context();
         for (i = 0U; i < accept_count; i++) {
             struct sockaddr_dn peer;
             socklen_t peerlen = sizeof(peer);
@@ -182,7 +134,6 @@ int main(int argc, char **argv)
                 close(fd);
                 goto fail_children;
             }
-            log_socket_identity(fd, i, "close-race identity");
             got = recv(fd, buf, sizeof(buf), 0);
             if (got <= 0 ||
                 send(fd, buf, (size_t)got, MSG_EOR | MSG_NOSIGNAL) != got) {
