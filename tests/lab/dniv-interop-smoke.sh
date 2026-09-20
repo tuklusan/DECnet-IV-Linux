@@ -241,6 +241,13 @@ if [ "$reference" = pydecnet ]; then
             exit 1
         fi
         echo "DNIV-INTEROP-OVERFLOW-PASS session=$session scenario=$scenario node=$name peer=$peer_node"
+        /usr/local/sbin/dnbacklog "$peer_node" "$session" "$scenario" close-race &
+        close_race_pid=$!
+        if ! wait "$close_race_pid"; then
+            echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=inbound-close-race"
+            exit 1
+        fi
+        echo "DNIV-INTEROP-CLOSE-RACE-PASS session=$session scenario=$scenario node=$name peer=$peer_node"
     fi
 fi
 

@@ -24,6 +24,7 @@ QUEUE_COUNT = 4
 QUEUE_OBJECT = 241
 OVERFLOW_COUNT = 3
 OVERFLOW_OBJECT = 242
+CLOSE_RACE_OBJECT = 243
 OBJECT_BUSY = 6
 
 
@@ -63,14 +64,17 @@ def worker(api_socket: str, destination: str, system: str, index: int,
 def main() -> int:
     if len(sys.argv) not in (4, 5):
         raise SystemExit(
-            f"usage: {sys.argv[0]} API-SOCKET AREA.NODE PYDECNET-SYSTEM [overflow]"
+            f"usage: {sys.argv[0]} API-SOCKET AREA.NODE PYDECNET-SYSTEM [overflow|close-race]"
         )
     api_socket, destination, system = sys.argv[1:4]
-    overflow = len(sys.argv) == 5
-    if overflow and sys.argv[4] != "overflow":
-        raise SystemExit(f"unsupported backlog mode: {sys.argv[4]}")
+    mode = sys.argv[4] if len(sys.argv) == 5 else "queue"
+    if mode not in ("queue", "overflow", "close-race"):
+        raise SystemExit(f"unsupported backlog mode: {mode}")
+    overflow = mode == "overflow"
+    close_race = mode == "close-race"
     count = OVERFLOW_COUNT if overflow else QUEUE_COUNT
-    object_number = OVERFLOW_OBJECT if overflow else QUEUE_OBJECT
+    object_number = (OVERFLOW_OBJECT if overflow else
+                     CLOSE_RACE_OBJECT if close_race else QUEUE_OBJECT)
     barrier = threading.Barrier(count)
     errors: list[str] = []
     results: list[str | None] = [None] * count
@@ -107,8 +111,11 @@ def main() -> int:
         )
     else:
         if results != ["accept"] * count:
-            raise RuntimeError(f"queue outcomes unexpected: {results!r}")
-        print(f"pydecnet-backlog: pass peer={destination} queued={count}")
+            raise RuntimeError(f"{mode} outcomes unexpected: {results!r}")
+        if close_race:
+            print(f"pydecnet-backlog: close-race pass peer={destination} cycles={count}")
+        else:
+            print(f"pydecnet-backlog: pass peer={destination} queued={count}")
     return 0
 
 
