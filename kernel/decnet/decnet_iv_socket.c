@@ -1249,12 +1249,12 @@ static int dniv_sock_accept_impl(struct socket *sock, struct socket *newsock,
         ret = -ENOMEM;
         goto out;
     }
+    newsk->sk_family = PF_DECnet;
+    newsk->sk_protocol = DNPROTO_NSP;
     sock_init_data(newsock, newsk);
     security_sock_graft(newsk, newsock);
     security_sk_clone(sk, newsk);
     newsock->ops = &dniv_proto_ops;
-    newsk->sk_family = PF_DECnet;
-    newsk->sk_protocol = DNPROTO_NSP;
 
     newdsk = dniv_sk(newsk);
     memset(&newdsk->local, 0, sizeof(newdsk->local));
