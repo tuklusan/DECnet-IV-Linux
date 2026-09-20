@@ -318,9 +318,20 @@ e1)
         output=$(/usr/local/sbin/dnctl adjacencies 2>/dev/null || true)
         printf '%s\n' "$output"
         if printf '%s\n' "$output" | grep -Fq "$peer_node via "; then
-            if [ "$seen_expired" -eq 1 ] && [ "$restart_init_reported" -eq 0 ] && \
+            if [ "$seen_expired" -eq 0 ] && \
                printf '%s\n' "$output" | grep -F "$peer_node via " | \
                    grep -Fq ' L1 router INIT '; then
+                # A restarted peer can refresh an expired adjacency directly
+                # into INIT before userspace samples the transient deletion.
+                # INIT after the established-UP phase is therefore sufficient
+                # evidence that the old adjacency expired and restarted.
+                seen_expired=1
+                restart_init_reported=1
+                echo "DNIV-E1-EXPIRED session=$session node=$name peer=$peer_node"
+                echo "DNIV-E1-RESTART-INIT session=$session node=$name peer=$peer_node"
+            elif [ "$seen_expired" -eq 1 ] && [ "$restart_init_reported" -eq 0 ] && \
+                 printf '%s\n' "$output" | grep -F "$peer_node via " | \
+                     grep -Fq ' L1 router INIT '; then
                 restart_init_reported=1
                 echo "DNIV-E1-RESTART-INIT session=$session node=$name peer=$peer_node"
             fi
