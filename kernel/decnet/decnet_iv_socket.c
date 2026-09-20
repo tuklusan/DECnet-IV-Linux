@@ -1196,7 +1196,6 @@ static void dniv_accept_child_discard(struct socket *newsock,
 static int dniv_sock_accept_impl(struct socket *sock, struct socket *newsock,
                                  int flags, bool kern)
 {
-    (void)kern;
     struct sock *sk = sock->sk;
     struct dniv_sock *dsk = dniv_sk(sk);
     struct dniv_nsp_ci_snapshot ci;
@@ -1244,18 +1243,17 @@ static int dniv_sock_accept_impl(struct socket *sock, struct socket *newsock,
         timeo = ret;
     }
 
-    newsk = sk_clone_lock(sk, GFP_KERNEL);
+    newsk = sk_alloc(sock_net(sk), PF_DECnet, GFP_KERNEL, &dniv_proto, kern);
     if (!newsk) {
         dniv_nsp_reject(link, DNIV_REASON_OBJECT_BUSY, NULL, 0U);
         ret = -ENOMEM;
         goto out;
     }
-    /* sk_clone_lock() returns a socket plus a protocol-side reference.
-     * DECnet does not hash accepted children, so retain only the socket-side
-     * reference and attach the fully cloned child to the accepted socket. */
-    __sock_put(newsk);
-    newsk->sk_ack_backlog = 0;
-    newsk->sk_max_ack_backlog = 0;
+    newsk->sk_family = PF_DECnet;
+    newsk->sk_protocol = DNPROTO_NSP;
+    sock_init_data(newsock, newsk);
+    security_sock_graft(newsk, newsock);
+    newsock->ops = &dniv_proto_ops;
 
     newdsk = dniv_sk(newsk);
     memset(&newdsk->local, 0, sizeof(newdsk->local));
@@ -1284,10 +1282,7 @@ static int dniv_sock_accept_impl(struct socket *sock, struct socket *newsock,
     newdsk->pending_count = 0U;
     newdsk->bound = true;
     newdsk->listening = false;
-    sock_graft(newsk, newsock);
-    newsock->ops = &dniv_proto_ops;
     newsock->state = SS_CONNECTING;
-    bh_unlock_sock(newsk);
 
     if (newdsk->accept_mode == ACC_IMMED) {
         ret = dniv_nsp_accept(
