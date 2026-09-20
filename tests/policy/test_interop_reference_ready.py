@@ -308,7 +308,7 @@ def main() -> int:
             )
 
     option_reference_fragments = [
-        "conndata=CONNECT_DATA",
+        "data=CONNECT_DATA",
         "username=ACCESS_USER",
         "password=ACCESS_PASS",
         "account=ACCESS_ACCOUNT",

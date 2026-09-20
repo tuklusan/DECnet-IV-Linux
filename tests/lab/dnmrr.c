@@ -158,8 +158,14 @@ int main(int argc, char **argv)
     if (getsockopt(fd, DNPROTO_NSP, DSO_CONDATA,
                    &acceptdata, &optlen) ||
         optlen != sizeof(acceptdata) ||
-        dniv_le16_to_cpu(acceptdata.opt_optl) != 0U) {
-        fprintf(stderr, "DSO_CONDATA accept-data read failed\n");
+        dniv_le16_to_cpu(acceptdata.opt_optl) != 2U ||
+        acceptdata.opt_data[0] != 0xffU ||
+        acceptdata.opt_data[1] != 0xffU) {
+        fprintf(stderr,
+                "DSO_CONDATA accept-data read failed len=%u data=%02x%02x optlen=%u\n",
+                (unsigned int)dniv_le16_to_cpu(acceptdata.opt_optl),
+                acceptdata.opt_data[0], acceptdata.opt_data[1],
+                (unsigned int)optlen);
         close(fd);
         return 1;
     }

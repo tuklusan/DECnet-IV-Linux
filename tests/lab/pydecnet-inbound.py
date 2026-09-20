@@ -47,7 +47,7 @@ def main() -> int:
                 dest=destination,
                 remuser=remote_user,
                 localuser=SOURCE_NAME,
-                conndata=CONNECT_DATA,
+                data=CONNECT_DATA,
                 username=ACCESS_USER,
                 password=ACCESS_PASS,
                 account=ACCESS_ACCOUNT,
