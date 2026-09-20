@@ -112,7 +112,7 @@ int main(int argc, char **argv)
         }
         got = recv(fd, buf, sizeof(buf), 0);
         if (got <= 0) {
-            fprintf(stderr, "backlog recv index=%u got=%zd errno=%d (%s)\\n",
+            fprintf(stderr, "backlog recv index=%u got=%zd errno=%d (%s)\n",
                     i, got, errno, strerror(errno));
             close(fd);
             close(listener);
@@ -124,7 +124,7 @@ int main(int argc, char **argv)
 
             if (sent != got) {
                 fprintf(stderr,
-                        "backlog send index=%u got=%zd sent=%zd errno=%d (%s)\\n",
+                        "backlog send index=%u got=%zd sent=%zd errno=%d (%s)\n",
                         i, got, sent, errno, strerror(errno));
                 close(fd);
                 close(listener);
