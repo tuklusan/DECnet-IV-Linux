@@ -23,6 +23,13 @@
 
 #include <linux/dn.h>
 
+#ifndef SO_PROTOCOL
+#define SO_PROTOCOL 38
+#endif
+#ifndef SO_DOMAIN
+#define SO_DOMAIN 39
+#endif
+
 #define BACKLOG_OBJECT 241U
 #define OVERFLOW_OBJECT 242U
 #define CLOSE_RACE_OBJECT 243U
