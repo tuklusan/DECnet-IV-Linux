@@ -343,3 +343,8 @@ The next test-only successor holds deterministic reference-to-candidate unicast 
 Exact-SHA fast acceptance for established-link retry exhaustion candidate `e803482a0cac568e44708fcdd1fa6d54e38bb5ef` is green: Repository Policy `35543151094`, Build Bootstrap `35543165444`, Project State Gate `35543166349`, E1 `35543167217` on both architectures, and x64 PyDECnet L1 interop `35543168107`. The five-attempt loss sequence, node-unreachable socket semantics and fresh-link recovery are all proven.
 
 The next test-only successor exercises connection-control retry exhaustion: reference-to-candidate unicast is blackholed before a marked MIRROR `connect()`, which must return `EHOSTUNREACH`; pcap must contain one CI plus four RCIs, followed after fault removal by a successful fresh marked connection and echo. Next: exact-SHA fast socket acceptance, then delayed-ACK/NAK/flow-control timer edges.
+
+
+Exact-SHA fast acceptance for connection-control retry candidate `2c646d82a0f6a7c49df17ebafae67785185a383f` is green: Repository Policy `35544499145`, Build Bootstrap `35544514739`, Project State Gate `35544515810`, E1 `35544516934` on both architectures, and x64 PyDECnet L1 interop `35544517875`. PCAP proved the initial CI, four RCIs, and fresh-link recovery data.
+
+The next Phase 5 correction removes an exact-only ACK_OTHER special case. Other-Data ACKNUM is cumulative just like Data ACKNUM, and both pinned PyDECnet and LinuxDECnet retire acknowledged Other-Data through the cumulative number. The common wrap-safe ACK/NAK path now applies to both channels, preventing lost early ACKs from leaving stale interrupt/link-service retransmit entries. Next: exact-SHA fast socket acceptance, then sequencing/resource and malformed-ACK negatives.

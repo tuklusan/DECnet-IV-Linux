@@ -447,17 +447,6 @@ static void dniv_nsp_process_ack_locked(
         return;
 
     nak = ack->qual == DNIV_NSP_NAK || ack->qual == DNIV_NSP_XNAK;
-    if (channel == DNIV_NSP_CH_OTHER) {
-        if (nak &&
-            ack->num == dniv_nsp_seq_norm((__u32)first->sequence - 1U)) {
-            first->deadline = jiffies;
-            return;
-        }
-        if (!nak && ack->num == first->sequence)
-            dniv_nsp_ack_locked(conn, channel, ack->num);
-        return;
-    }
-
     if (nak &&
         ack->num == dniv_nsp_seq_norm((__u32)first->sequence - 1U)) {
         first->deadline = jiffies;
