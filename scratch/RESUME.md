@@ -18,7 +18,7 @@
 
 Annotated tag `PHASE-4-COMPLETE` is verified on closure commit `571333bfd7aaa8b2fcc88715c1d61442af151f3c`; the temporary tag workflow has been removed.
 
-Phase 4 is complete on exact protocol candidate `6c185b6d01f8a57ee9f0ea6a6c37d7112ddb77d2`; Phase 5 is active on `main`. The latest accepted Phase 5 candidate is `749c1eca73d808759bc03969f597f14a4bf479a1`. Phase 3 remains frozen at tag `PHASE-3-COMPLETE` on commit `ae1bcb82a1539ccadda0661664205e360bd760b7`.
+Phase 4 is complete on exact protocol candidate `6c185b6d01f8a57ee9f0ea6a6c37d7112ddb77d2`; Phase 5 is active on `main`. The latest accepted Phase 5 candidate is `30fda8f27f172f7904d6d0bef42c8aeaa605d7ad`. Phase 3 remains frozen at tag `PHASE-3-COMPLETE` on commit `ae1bcb82a1539ccadda0661664205e360bd760b7`.
 
 The final Phase 3 acceptance set was green: Repository Policy `35343324826`, Build Bootstrap `35343357536`, Project State Gate `35343359444`, External Reference Baselines `35343361139`, Python QEMU VM Lab `35343362922`, and Independent Ethernet Interoperability run `35343364812`. The interoperability matrix passed all eight amd64/ARM64 Route20/PyDECnet routing/endnode role jobs.
 
@@ -213,3 +213,8 @@ Next Phase 5 candidate adds poll/epoll readiness, dup and fork descriptor lifeti
 Exact-SHA acceptance of descriptor/process/concurrency candidate `749c1eca73d808759bc03969f597f14a4bf479a1` is green: Repository Policy `35515817724`, Build Bootstrap `35515835527`, Project State Gate `35515836391`, External Reference Baselines `35515837603`, E1-E4 VM Lab `35515838672`, `35515839711`, `35515840906`, and `35515842015`, and Independent Ethernet Interoperability `35515843122`; all eight interop jobs passed. Descriptor/process/concurrency socket stress is accepted.
 
 Next Phase 5 candidate adds sustained multi-link data/window pressure: eight simultaneous PyDECnet MIRROR sessions, each carrying repeated 4096-byte records with exact echo validation before close. If exact-SHA acceptance is green, proceed to inbound listener backlog/accept stress and close/reset races.
+
+
+Exact-SHA acceptance of sustained data/window-pressure candidate `30fda8f27f172f7904d6d0bef42c8aeaa605d7ad` is green: Repository Policy `35519500865`, Build Bootstrap `35519522589`, Project State Gate `35519523777`, External Reference Baselines `35519524801`, E1-E4 VM Lab `35519525762`, `35519526703`, `35519527663`, and `35519528509`, and Independent Ethernet Interoperability `35519529402`; all eight interop jobs passed. Sustained multi-link data/window pressure is accepted.
+
+Next Phase 5 candidate adds inbound listener backlog/accept stress: four simultaneous PyDECnet Session connects are queued before native userspace accepts them, then all four are accepted and echoed exactly. If exact-SHA acceptance is green, proceed to backlog overflow/object-busy rejection and close/reset races.
