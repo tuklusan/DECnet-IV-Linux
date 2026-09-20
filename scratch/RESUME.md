@@ -18,7 +18,7 @@
 
 Annotated tag `PHASE-4-COMPLETE` is verified on closure commit `571333bfd7aaa8b2fcc88715c1d61442af151f3c`; the temporary tag workflow has been removed.
 
-Phase 4 is complete on exact protocol candidate `6c185b6d01f8a57ee9f0ea6a6c37d7112ddb77d2`; Phase 5 is active on `main`. The latest accepted Phase 5 candidate is `dd8107fe0967cad04c048175d9843e9057efd2bc`. Phase 3 remains frozen at tag `PHASE-3-COMPLETE` on commit `ae1bcb82a1539ccadda0661664205e360bd760b7`.
+Phase 4 is complete on exact protocol candidate `6c185b6d01f8a57ee9f0ea6a6c37d7112ddb77d2`; Phase 5 is active on `main`. The latest accepted Phase 5 candidate is `749c1eca73d808759bc03969f597f14a4bf479a1`. Phase 3 remains frozen at tag `PHASE-3-COMPLETE` on commit `ae1bcb82a1539ccadda0661664205e360bd760b7`.
 
 The final Phase 3 acceptance set was green: Repository Policy `35343324826`, Build Bootstrap `35343357536`, Project State Gate `35343359444`, External Reference Baselines `35343361139`, Python QEMU VM Lab `35343362922`, and Independent Ethernet Interoperability run `35343364812`. The interoperability matrix passed all eight amd64/ARM64 Route20/PyDECnet routing/endnode role jobs.
 
@@ -208,3 +208,8 @@ Next Phase 5 candidate: socket lifecycle negatives and independent connection ch
 Exact-SHA acceptance of socket lifecycle/stress candidate `dd8107fe0967cad04c048175d9843e9057efd2bc` is green: Repository Policy `35513958617`, Build Bootstrap `35514007595`, Project State Gate `35514009043`, External Reference Baselines `35514010307`, E1-E4 VM Lab `35514011498`, `35514012520`, `35514013577`, and `35514014546`, and Independent Ethernet Interoperability `35514015412`; all eight interop jobs passed. Lifecycle negatives and 16-cycle independent MIRROR churn are accepted.
 
 Next Phase 5 candidate adds poll/epoll readiness, dup and fork descriptor lifetime, process-exit cleanup, and eight concurrent PyDECnet MIRROR sessions. If exact-SHA acceptance is green, continue with higher-volume concurrent data/window pressure and listener backlog/accept stress.
+
+
+Exact-SHA acceptance of descriptor/process/concurrency candidate `749c1eca73d808759bc03969f597f14a4bf479a1` is green: Repository Policy `35515817724`, Build Bootstrap `35515835527`, Project State Gate `35515836391`, External Reference Baselines `35515837603`, E1-E4 VM Lab `35515838672`, `35515839711`, `35515840906`, and `35515842015`, and Independent Ethernet Interoperability `35515843122`; all eight interop jobs passed. Descriptor/process/concurrency socket stress is accepted.
+
+Next Phase 5 candidate adds sustained multi-link data/window pressure: eight simultaneous PyDECnet MIRROR sessions, each carrying repeated 4096-byte records with exact echo validation before close. If exact-SHA acceptance is green, proceed to inbound listener backlog/accept stress and close/reset races.

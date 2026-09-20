@@ -81,7 +81,7 @@ Implementation order:
 | Phase 4 accepted protocol candidate | `6c185b6d01f8a57ee9f0ea6a6c37d7112ddb77d2` |
 | Phase 4 closure commit | `571333bfd7aaa8b2fcc88715c1d61442af151f3c` |
 | Phase 4 tag | `PHASE-4-COMPLETE` |
-| Latest accepted Phase 5 candidate | `dd8107fe0967cad04c048175d9843e9057efd2bc` |
+| Latest accepted Phase 5 candidate | `749c1eca73d808759bc03969f597f14a4bf479a1` |
 | Route20 pin | `a9ef7c0b7f875f0dd2e8abaf11213798a8e4474c` |
 | PyDECnet live pin | `295938c76c956a70957f4cf96b05685f555b2a18` |
 | VM lifecycle | direct QEMU/QMP |
@@ -266,3 +266,8 @@ Phase 5 now advances to socket lifecycle negatives and broader independent socke
 Exact-SHA acceptance of socket lifecycle/stress candidate `dd8107fe0967cad04c048175d9843e9057efd2bc` is green: Repository Policy `35513958617`, Build Bootstrap `35514007595`, Project State Gate `35514009043`, External Reference Baselines `35514010307`, E1-E4 Python QEMU VM Lab `35514011498`, `35514012520`, `35514013577`, and `35514014546`, and Independent Ethernet Interoperability `35514015412` all completed successfully. All eight Route20/PyDECnet interoperability jobs passed. Deterministic pre-connect error handling, nonblocking connect completion, unsupported half-shutdown rejection, full shutdown/send-after-shutdown behavior, stream negative flags, and 16-cycle PyDECnet MIRROR connection churn are accepted.
 
 Phase 5 now adds descriptor/process/concurrency socket stress: poll and epoll readiness, dup survival after closing the original descriptor, inherited socket use after fork, process-exit cleanup, and eight concurrent independent PyDECnet MIRROR sessions. Next: exact-SHA acceptance; if green, continue with higher-volume concurrent data/window pressure and listener backlog/accept stress.
+
+
+Exact-SHA acceptance of descriptor/process/concurrency candidate `749c1eca73d808759bc03969f597f14a4bf479a1` is green: Repository Policy `35515817724`, Build Bootstrap `35515835527`, Project State Gate `35515836391`, External Reference Baselines `35515837603`, E1-E4 Python QEMU VM Lab `35515838672`, `35515839711`, `35515840906`, and `35515842015`, and Independent Ethernet Interoperability `35515843122` all completed successfully. All eight Route20/PyDECnet interoperability jobs passed. Poll/epoll readiness, dup survival, fork inheritance, process-exit cleanup, and eight concurrent independent MIRROR sessions are accepted.
+
+Phase 5 now advances to sustained data/window pressure over multiple simultaneous native sockets. The next candidate keeps eight concurrent PyDECnet MIRROR links open and drives repeated 4096-byte records through every link before teardown, verifying record integrity throughout. Next after exact-SHA acceptance: inbound listener backlog/accept stress and close/reset races.

@@ -28,6 +28,8 @@
 
 #define CONCURRENT 8U
 #define PAYLOAD 128U
+#define PRESSURE_PAYLOAD 4096U
+#define PRESSURE_ROUNDS 12U
 
 static int parse_node(const char *text, uint16_t *address)
 {
@@ -214,6 +216,49 @@ static int exit_cleanup_test(const struct sockaddr_dn *peer)
     }
 }
 
+static int pressure_test(const struct sockaddr_dn *peer)
+{
+    int fds[CONCURRENT];
+    unsigned char tx[PRESSURE_PAYLOAD];
+    unsigned char rx[PRESSURE_PAYLOAD];
+    unsigned int round, i;
+
+    for (i = 0U; i < CONCURRENT; i++)
+        fds[i] = -1;
+    for (i = 0U; i < CONCURRENT; i++) {
+        fds[i] = open_mirror(peer);
+        if (fds[i] < 0)
+            goto fail;
+    }
+
+    for (round = 0U; round < PRESSURE_ROUNDS; round++) {
+        for (i = 0U; i < CONCURRENT; i++) {
+            make_payload(tx, sizeof(tx), 1000U + round * CONCURRENT + i);
+            if (send(fds[i], tx, sizeof(tx), MSG_EOR | MSG_NOSIGNAL) !=
+                (ssize_t)sizeof(tx))
+                goto fail;
+        }
+        for (i = 0U; i < CONCURRENT; i++) {
+            ssize_t got;
+            make_payload(tx, sizeof(tx), 1000U + round * CONCURRENT + i);
+            got = recv(fds[i], rx, sizeof(rx), 0);
+            if (got != (ssize_t)sizeof(rx) || rx[0] != 1U ||
+                memcmp(rx + 1U, tx + 1U, sizeof(tx) - 1U))
+                goto fail;
+        }
+    }
+
+    for (i = 0U; i < CONCURRENT; i++)
+        close(fds[i]);
+    return 0;
+
+fail:
+    for (i = 0U; i < CONCURRENT; i++)
+        if (fds[i] >= 0)
+            close(fds[i]);
+    return -1;
+}
+
 static int concurrent_test(const struct sockaddr_dn *peer)
 {
     int fds[CONCURRENT];
@@ -265,11 +310,12 @@ int main(int argc, char **argv)
     fill_peer(&peer, address);
 
     if (readiness_test(&peer) || dup_test(&peer) || fork_test(&peer) ||
-        exit_cleanup_test(&peer) || concurrent_test(&peer)) {
+        exit_cleanup_test(&peer) || concurrent_test(&peer) ||
+        pressure_test(&peer)) {
         fprintf(stderr, "dnsockstress: failed errno=%d\n", errno);
         return 1;
     }
-    printf("dnsockstress: pass peer=%s concurrent=%u poll=1 epoll=1 dup=1 fork=1 exit=1\n",
-           argv[1], CONCURRENT);
+    printf("dnsockstress: pass peer=%s concurrent=%u poll=1 epoll=1 dup=1 fork=1 exit=1 pressure_rounds=%u pressure_bytes=%u\n",
+           argv[1], CONCURRENT, PRESSURE_ROUNDS, PRESSURE_PAYLOAD);
     return 0;
 }
