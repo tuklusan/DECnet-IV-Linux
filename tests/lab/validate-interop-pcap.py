@@ -278,6 +278,11 @@ def main() -> int:
         "candidate_loss_probe": 0,
         "reference_loss_probe": 0,
         "candidate_exhaust_probe": 0,
+        "candidate_ci_exhaust": 0,
+        "candidate_ci_exhaust_rci": 0,
+        "candidate_ci_recover": 0,
+        "candidate_ci_recover_data": 0,
+        "reference_ci_recover_data": 0,
         "probes": 0,
     }
     bad_hello_hw = 0
@@ -295,6 +300,14 @@ def main() -> int:
                     counts["candidate_loss_probe"] += 1
                 if b"DNIV-EXHAUST-PROBE" in nsp:
                     counts["candidate_exhaust_probe"] += 1
+                if b"CI-EXHAUST" in nsp:
+                    counts["candidate_ci_exhaust"] += 1
+                    if nsp[0] == 0x68:
+                        counts["candidate_ci_exhaust_rci"] += 1
+                if b"CI-RECOVER" in nsp:
+                    counts["candidate_ci_recover"] += 1
+                if b"DNIV-CI-RECOVER-DATA" in nsp:
+                    counts["candidate_ci_recover_data"] += 1
                 if nsp[0] == 0x30:
                     counts["candidate_interrupt"] += 1
                 opts = session_ci_options(nsp)
@@ -309,6 +322,8 @@ def main() -> int:
                 counts["reference_nsp"] += 1
                 if b"DNIV-LOSS-PROBE" in nsp:
                     counts["reference_loss_probe"] += 1
+                if b"DNIV-CI-RECOVER-DATA" in nsp:
+                    counts["reference_ci_recover_data"] += 1
                 if nsp[0] == 0x30:
                     counts["reference_interrupt"] += 1
                 opts = session_ci_options(nsp)
@@ -390,6 +405,12 @@ def main() -> int:
             raise SystemExit("interop pcap: missing post-fault reference loss-probe response")
         if counts["candidate_exhaust_probe"] < 5:
             raise SystemExit("interop pcap: retransmit-limit probe did not reach all five attempts")
+        if counts["candidate_ci_exhaust"] < 5 or counts["candidate_ci_exhaust_rci"] < 4:
+            raise SystemExit("interop pcap: missing CI/RCI retransmit-limit sequence")
+        if counts["candidate_ci_recover"] < 1:
+            raise SystemExit("interop pcap: missing fresh CI after connect retry exhaustion")
+        if counts["candidate_ci_recover_data"] < 1 or counts["reference_ci_recover_data"] < 1:
+            raise SystemExit("interop pcap: missing data recovery after connect retry exhaustion")
         if args.scenario != "router-endnode":
             if counts["candidate_interrupt"] < 2:
                 raise SystemExit("interop pcap: missing candidate NSP interrupt traffic")

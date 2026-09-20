@@ -364,6 +364,42 @@ if [[ "$reference" == pydecnet ]]; then
         cat "$exhaust_fault_log" >&2 || true
         exit 1
     fi
+
+    if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-CI-EXHAUST-READY session=$session scenario=$scenario" 30 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+        tail -320 "$candidate_log" >&2 || true
+        tail -260 "$ref1_log" >&2 || true
+        exit 1
+    fi
+    ci_fault_log="$work/nsp-ci-exhaust-fault.log"
+    : > "$ci_fault_log"
+    sudo tc qdisc add dev "$tap_reference" clsact
+    LOSS_QDISC=1
+    sudo tc filter add dev "$tap_reference" ingress protocol all pref 10 flower \
+        src_mac "$reference_mac" dst_mac "$candidate_mac" action drop
+    printf 'fault=reference-unicast-drop-until-ci-retry-exhaustion source=%s destination=%s\n' \
+        "$reference_mac" "$candidate_mac" >> "$ci_fault_log"
+    if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-CI-EXHAUSTED session=$session scenario=$scenario errno=113" 40 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+        tail -340 "$candidate_log" >&2 || true
+        tail -280 "$ref1_log" >&2 || true
+        sudo tc -s filter show dev "$tap_reference" ingress >> "$ci_fault_log" 2>&1 || true
+        cat "$ci_fault_log" >&2 || true
+        exit 1
+    fi
+    ci_stats=$(sudo tc -s filter show dev "$tap_reference" ingress)
+    printf '%s\n' "$ci_stats" >> "$ci_fault_log"
+    if ! printf '%s\n' "$ci_stats" | grep -Eq 'Sent [0-9]+ bytes [1-9][0-9]* pkt'; then
+        echo "interop: NSP CI exhaustion injector matched no frames" >&2
+        cat "$ci_fault_log" >&2
+        exit 1
+    fi
+    sudo tc qdisc del dev "$tap_reference" clsact
+    unset LOSS_QDISC
+    if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-CI-EXHAUST-PASS session=$session scenario=$scenario" 30 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+        tail -340 "$candidate_log" >&2 || true
+        tail -280 "$ref1_log" >&2 || true
+        cat "$ci_fault_log" >&2 || true
+        exit 1
+    fi
 fi
 if [[ "$reference" == pydecnet && "$scenario" != router-endnode ]]; then
     listen_marker="DNIV-INTEROP-LISTEN-READY session=$session scenario=$scenario"

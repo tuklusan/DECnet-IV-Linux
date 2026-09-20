@@ -338,3 +338,8 @@ Retransmit-limit semantics are corrected next. The old timer path erased the con
 Exact-SHA fast acceptance for retransmit-exhaustion semantics candidate `9f486435c5c35576c6ae2ce17b41b1a06a8a419c` is green: Repository Policy `35542589965`, Build Bootstrap `35542611007`, Project State Gate `35542612321`, E1 `35542613688` on both architectures, and x64 PyDECnet L1 interop `35542615041`.
 
 The next test-only successor holds deterministic reference-to-candidate unicast loss through the complete five-attempt NSP response budget. Native userspace requires `EHOSTUNREACH`, `DSO_DISDATA` reason 39, `POLLERR|POLLHUP`, five marked candidate transmissions on pcap, a nonzero injector counter, and a successful fresh MIRROR connection after fault removal. Next: exact-SHA fast socket acceptance, then connection-establishment/control retransmission and timer-boundary coverage.
+
+
+Exact-SHA fast acceptance for established-link retry exhaustion candidate `e803482a0cac568e44708fcdd1fa6d54e38bb5ef` is green: Repository Policy `35543151094`, Build Bootstrap `35543165444`, Project State Gate `35543166349`, E1 `35543167217` on both architectures, and x64 PyDECnet L1 interop `35543168107`. The five-attempt loss sequence, node-unreachable socket semantics and fresh-link recovery are all proven.
+
+The next test-only successor exercises connection-control retry exhaustion: reference-to-candidate unicast is blackholed before a marked MIRROR `connect()`, which must return `EHOSTUNREACH`; pcap must contain one CI plus four RCIs, followed after fault removal by a successful fresh marked connection and echo. Next: exact-SHA fast socket acceptance, then delayed-ACK/NAK/flow-control timer edges.

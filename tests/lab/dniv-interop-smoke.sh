@@ -235,6 +235,11 @@ if [ "$reference" = pydecnet ]; then
         exit 1
     fi
     echo "DNIV-INTEROP-EXHAUST-RECOVERED session=$session scenario=$scenario node=$name peer=$peer_node"
+    if ! /usr/local/sbin/dnconnectloss "$peer_node" "$session" "$scenario"; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=nsp-connect-retransmit-exhaustion"
+        exit 1
+    fi
+    echo "DNIV-INTEROP-CI-EXHAUST-PASS session=$session scenario=$scenario node=$name peer=$peer_node"
     if [ "$scenario" != router-endnode ]; then
         /usr/local/sbin/dnaccept "$peer_node" "$session" "$scenario" &
         accept_pid=$!
