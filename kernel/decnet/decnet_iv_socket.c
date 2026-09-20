@@ -524,7 +524,6 @@ static int dniv_wait_running(struct sock *sk, long *timeo)
             return status;
         if (!*timeo)
             return -EINPROGRESS;
-        diag_stage = 20;
         ret = wait_event_interruptible_timeout(
             dniv_sock_waitq, dniv_link_status(dsk) != 0, *timeo);
         if (ret < 0)
@@ -986,6 +985,7 @@ static int dniv_sock_recvmsg(struct socket *sock, struct msghdr *msg,
             break;
         if (ret != -EAGAIN || !timeo)
             goto out;
+        diag_stage = 20;
         ret = wait_event_interruptible_timeout(
             dniv_sock_waitq,
             ({ bool normal = false, intr = false;
