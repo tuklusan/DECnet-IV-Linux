@@ -81,7 +81,7 @@ Implementation order:
 | Phase 4 accepted protocol candidate | `6c185b6d01f8a57ee9f0ea6a6c37d7112ddb77d2` |
 | Phase 4 closure commit | `571333bfd7aaa8b2fcc88715c1d61442af151f3c` |
 | Phase 4 tag | `PHASE-4-COMPLETE` |
-| Latest accepted Phase 5 candidate | `89799302cb0c164cbd8291fd744ef6463567d78b` |
+| Latest accepted Phase 5 candidate | `65b6857eae25d38f260e7185580d6a88c2efb49b` |
 | Route20 pin | `a9ef7c0b7f875f0dd2e8abaf11213798a8e4474c` |
 | PyDECnet live pin | `295938c76c956a70957f4cf96b05685f555b2a18` |
 | VM lifecycle | direct QEMU/QMP |
@@ -256,3 +256,8 @@ Phase 5 now adds native `SOCK_STREAM` compatibility over NSP. Stream sockets pre
 
 
 The initial SOCK_STREAM commit `f8aed0844f5d1bf19e61143d5f156d7bc76100d9` accidentally cleared executable mode on the candidate-image and interoperability entry scripts while constructing the multi-file tree. This corrective successor restores only those executable bits; stream/socket behavior is unchanged. Next: exact-SHA acceptance.
+
+
+Exact-SHA acceptance of SOCK_STREAM corrective candidate `65b6857eae25d38f260e7185580d6a88c2efb49b` is green: Repository Policy `35511887065`, Build Bootstrap `35511906913`, Project State Gate `35511908045`, External Reference Baselines `35511909266`, E1-E4 Python QEMU VM Lab `35511910105`, `35511911060`, `35511912053`, and `35511913169`, and Independent Ethernet Interoperability `35511914361` all completed successfully. All eight Route20/PyDECnet interoperability jobs passed. Native SOCK_STREAM compatibility, short-read preservation, cross-record MSG_WAITALL, MSG_EOR rejection, and the direct PyDECnet MIRROR stream proof are accepted.
+
+Phase 5 now advances to socket lifecycle negatives and broader independent socket stress. The next candidate adds deterministic local error-path checks, nonblocking connect completion, half-shutdown rejection, full shutdown/send-after-shutdown behavior, and repeated independent PyDECnet MIRROR connection churn. Next: exact-SHA acceptance of the lifecycle/stress candidate; if green, continue with poll/epoll, fork/dup/process-exit and concurrent-session stress.
