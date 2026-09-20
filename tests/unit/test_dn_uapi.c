@@ -24,6 +24,9 @@ int main(void)
     assert(DN_MAXOBJL == 16);
     assert(DN_MAXACCL == 40);
     assert(DSO_CONDATA == 1);
+    assert(DSO_CONACCESS == 2);
+    assert(DSO_ACCEPTMODE == 4);
+    assert(DSO_CONACCEPT == 5);
     assert(DSO_CONREJECT == 6);
     assert(DSO_LINKINFO == 7);
     assert(DSO_MAXWINDOW == 11);
@@ -33,5 +36,8 @@ int main(void)
     assert(offsetof(struct sockaddr_dn, sdn_add) == 22U);
     assert(sizeof(struct optdata_dn) == 20U);
     assert(sizeof(struct accessdata_dn) == 123U);
+    assert(sizeof(struct linkinfo_dn) == 4U);
+    assert(ACC_IMMED == 0);
+    assert(ACC_DEFER == 1);
     return 0;
 }

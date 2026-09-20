@@ -28,6 +28,7 @@ CANDIDATE_SMOKE = (ROOT / "tests/lab/dniv-interop-smoke.sh").read_text(encoding=
 PCAP_VALIDATOR = (ROOT / "tests/lab/validate-interop-pcap.py").read_text(encoding="utf-8")
 REFERENCE_PEER = (ROOT / "tests/lab/dniv-reference-peer.sh").read_text(encoding="utf-8")
 DNACCEPT = (ROOT / "tests/lab/dnaccept.c").read_text(encoding="utf-8")
+DNMRR = (ROOT / "tests/lab/dnmrr.c").read_text(encoding="utf-8")
 PYDECNET_INBOUND = (ROOT / "tests/lab/pydecnet-inbound.py").read_text(encoding="utf-8")
 
 
@@ -279,6 +280,59 @@ def main() -> int:
                 f"interrupt/OOB credit coverage; missing {fragment!r}"
             )
 
+    option_candidate_fragments = [
+        "DSO_CONACCESS",
+        "DSO_CONDATA",
+        "DSO_LINKINFO",
+        'ACCESS_USER "DNIVUSER"',
+        'CONNECT_DATA "dniv-connect"',
+    ]
+    for fragment in option_candidate_fragments:
+        if fragment not in DNMRR:
+            raise SystemExit(
+                "interop-ready regression: MIRROR proof must retain outbound "
+                f"classic socket-option coverage; missing {fragment!r}"
+            )
+
+    option_listener_fragments = [
+        "getsockopt(fd, DNPROTO_NSP, DSO_CONDATA",
+        "getsockopt(fd, DNPROTO_NSP, DSO_CONACCESS",
+        'ACCEPT_DATA "linux-accept"',
+        'CONNECT_DATA "py-connect"',
+    ]
+    for fragment in option_listener_fragments:
+        if fragment not in DNACCEPT:
+            raise SystemExit(
+                "interop-ready regression: inbound listener proof must retain "
+                f"access/connect-data coverage; missing {fragment!r}"
+            )
+
+    option_reference_fragments = [
+        "conndata=CONNECT_DATA",
+        "username=ACCESS_USER",
+        "password=ACCESS_PASS",
+        "account=ACCESS_ACCOUNT",
+        "bytes(response) != ACCEPT_DATA",
+    ]
+    for fragment in option_reference_fragments:
+        if fragment not in PYDECNET_INBOUND:
+            raise SystemExit(
+                "interop-ready regression: PyDECnet driver must retain "
+                f"access/connect-data coverage; missing {fragment!r}"
+            )
+
+    option_pcap_fragments = [
+        'counts["candidate_option_ci"] < 1',
+        'counts["reference_option_ci"] < 2',
+        'counts["candidate_accept_data"] < 2',
+    ]
+    for fragment in option_pcap_fragments:
+        if fragment not in PCAP_VALIDATOR:
+            raise SystemExit(
+                "interop-ready regression: pcap evidence must retain "
+                f"classic socket-option proof; missing {fragment!r}"
+            )
+
     oob_pcap_fragments = [
         'counts["candidate_interrupt"] < 2',
         'counts["reference_interrupt"] < 4',
@@ -290,7 +344,7 @@ def main() -> int:
                 f"bidirectional interrupt proof; missing {fragment!r}"
             )
 
-    print("interop-ready regression passed: route20=180/600s pydecnet-host=60s direct-tap inbound+oob")
+    print("interop-ready regression passed: route20=180/600s pydecnet-host=60s direct-tap inbound+oob+options")
     return 0
 
 

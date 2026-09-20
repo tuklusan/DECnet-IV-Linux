@@ -23,6 +23,29 @@
 
 #include <linux/dn.h>
 
+#define ACCESS_USER "DNIVUSER"
+#define ACCESS_PASS "DNIVPASS"
+#define ACCESS_ACCOUNT "DNIVACCT"
+#define CONNECT_DATA "dniv-connect"
+
+static __le16 dniv_cpu_to_le16(uint16_t value)
+{
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+    return (__le16)value;
+#else
+    return (__le16)__builtin_bswap16(value);
+#endif
+}
+
+static uint16_t dniv_le16_to_cpu(__le16 value)
+{
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+    return (uint16_t)value;
+#else
+    return __builtin_bswap16((uint16_t)value);
+#endif
+}
+
 static int parse_node(const char *text, uint16_t *address)
 {
     char *end;
@@ -53,7 +76,13 @@ int main(int argc, char **argv)
     unsigned char tx[4096];
     unsigned char rx[4096];
     struct sockaddr_dn peer;
+    struct accessdata_dn access;
+    struct accessdata_dn access_check;
+    struct optdata_dn conndata;
+    struct optdata_dn acceptdata;
+    struct linkinfo_dn linkinfo;
     struct timeval timeout = { .tv_sec = 20, .tv_usec = 0 };
+    socklen_t optlen;
     uint16_t address;
     size_t test;
     int fd;
@@ -76,6 +105,30 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    memset(&access, 0, sizeof(access));
+    access.acc_userl = sizeof(ACCESS_USER) - 1U;
+    memcpy(access.acc_user, ACCESS_USER, access.acc_userl);
+    access.acc_passl = sizeof(ACCESS_PASS) - 1U;
+    memcpy(access.acc_pass, ACCESS_PASS, access.acc_passl);
+    access.acc_accl = sizeof(ACCESS_ACCOUNT) - 1U;
+    memcpy(access.acc_acc, ACCESS_ACCOUNT, access.acc_accl);
+    if (setsockopt(fd, DNPROTO_NSP, DSO_CONACCESS,
+                   &access, sizeof(access))) {
+        perror("setsockopt(DSO_CONACCESS)");
+        close(fd);
+        return 1;
+    }
+
+    memset(&conndata, 0, sizeof(conndata));
+    conndata.opt_optl = dniv_cpu_to_le16(sizeof(CONNECT_DATA) - 1U);
+    memcpy(conndata.opt_data, CONNECT_DATA, sizeof(CONNECT_DATA) - 1U);
+    if (setsockopt(fd, DNPROTO_NSP, DSO_CONDATA,
+                   &conndata, sizeof(conndata))) {
+        perror("setsockopt(DSO_CONDATA)");
+        close(fd);
+        return 1;
+    }
+
     memset(&peer, 0, sizeof(peer));
     peer.sdn_family = AF_DECnet;
     peer.sdn_objnum = 25U;
@@ -85,6 +138,40 @@ int main(int argc, char **argv)
 
     if (connect(fd, (struct sockaddr *)&peer, sizeof(peer))) {
         perror("connect(MIRROR)");
+        close(fd);
+        return 1;
+    }
+
+    memset(&access_check, 0, sizeof(access_check));
+    optlen = sizeof(access_check);
+    if (getsockopt(fd, DNPROTO_NSP, DSO_CONACCESS,
+                   &access_check, &optlen) ||
+        optlen != sizeof(access_check) ||
+        memcmp(&access_check, &access, sizeof(access))) {
+        fprintf(stderr, "DSO_CONACCESS roundtrip failed\n");
+        close(fd);
+        return 1;
+    }
+
+    memset(&acceptdata, 0, sizeof(acceptdata));
+    optlen = sizeof(acceptdata);
+    if (getsockopt(fd, DNPROTO_NSP, DSO_CONDATA,
+                   &acceptdata, &optlen) ||
+        optlen != sizeof(acceptdata) ||
+        dniv_le16_to_cpu(acceptdata.opt_optl) != 0U) {
+        fprintf(stderr, "DSO_CONDATA accept-data read failed\n");
+        close(fd);
+        return 1;
+    }
+
+    memset(&linkinfo, 0, sizeof(linkinfo));
+    optlen = sizeof(linkinfo);
+    if (getsockopt(fd, DNPROTO_NSP, DSO_LINKINFO,
+                   &linkinfo, &optlen) ||
+        optlen != sizeof(linkinfo) ||
+        linkinfo.idn_linkstate != LL_RUNNING ||
+        linkinfo.idn_segsize == 0U) {
+        fprintf(stderr, "DSO_LINKINFO running-state read failed\n");
         close(fd);
         return 1;
     }
@@ -123,7 +210,7 @@ int main(int argc, char **argv)
     }
 
     close(fd);
-    printf("dnmrr: pass peer=%s records=%zu\n", argv[1],
-           sizeof(sizes) / sizeof(sizes[0]));
+    printf("dnmrr: pass peer=%s records=%zu options=access+condata+linkinfo\n",
+           argv[1], sizeof(sizes) / sizeof(sizes[0]));
     return 0;
 }

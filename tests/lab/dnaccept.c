@@ -34,6 +34,11 @@
 #define OOB_TWO "py-oob-two"
 #define OOB_REPLY "linux-oob"
 #define AFTER_OOB "after-oob"
+#define CONNECT_DATA "py-connect"
+#define ACCEPT_DATA "linux-accept"
+#define ACCESS_USER "PYUSER"
+#define ACCESS_PASS "PYPASS"
+#define ACCESS_ACCOUNT "PYACCT"
 
 static uint16_t dniv_le16_to_cpu(__le16 value)
 {
@@ -77,6 +82,7 @@ static int parse_node(const char *text, uint16_t *address)
 static int make_listener(int named)
 {
     struct sockaddr_dn local;
+    struct optdata_dn acceptdata;
     struct timeval timeout = { .tv_sec = 30, .tv_usec = 0 };
     int fd;
 
@@ -84,6 +90,13 @@ static int make_listener(int named)
     if (fd < 0)
         return -1;
     if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)))
+        goto fail;
+
+    memset(&acceptdata, 0, sizeof(acceptdata));
+    acceptdata.opt_optl = dniv_cpu_to_le16(sizeof(ACCEPT_DATA) - 1U);
+    memcpy(acceptdata.opt_data, ACCEPT_DATA, sizeof(ACCEPT_DATA) - 1U);
+    if (setsockopt(fd, DNPROTO_NSP, DSO_CONDATA,
+                   &acceptdata, sizeof(acceptdata)))
         goto fail;
 
     memset(&local, 0, sizeof(local));
@@ -131,6 +144,9 @@ static int serve_one(int listener, uint16_t expected_node,
     socklen_t peer_len = sizeof(peer);
     struct timeval timeout = { .tv_sec = 30, .tv_usec = 0 };
     unsigned char buf[128];
+    struct optdata_dn conndata;
+    struct accessdata_dn access;
+    socklen_t optlen;
     uint16_t node;
     size_t expected = strlen(payload);
     ssize_t got;
@@ -153,6 +169,26 @@ static int serve_one(int listener, uint16_t expected_node,
     if (node != expected_node || peer.sdn_objnum ||
         dniv_le16_to_cpu(peer.sdn_objnamel) != sizeof(SOURCE_NAME) - 1U ||
         memcmp(peer.sdn_objname, SOURCE_NAME, sizeof(SOURCE_NAME) - 1U))
+        goto fail;
+
+    memset(&conndata, 0, sizeof(conndata));
+    optlen = sizeof(conndata);
+    if (getsockopt(fd, DNPROTO_NSP, DSO_CONDATA, &conndata, &optlen) ||
+        optlen != sizeof(conndata) ||
+        dniv_le16_to_cpu(conndata.opt_optl) != sizeof(CONNECT_DATA) - 1U ||
+        memcmp(conndata.opt_data, CONNECT_DATA, sizeof(CONNECT_DATA) - 1U))
+        goto fail;
+
+    memset(&access, 0, sizeof(access));
+    optlen = sizeof(access);
+    if (getsockopt(fd, DNPROTO_NSP, DSO_CONACCESS, &access, &optlen) ||
+        optlen != sizeof(access) ||
+        access.acc_userl != sizeof(ACCESS_USER) - 1U ||
+        access.acc_passl != sizeof(ACCESS_PASS) - 1U ||
+        access.acc_accl != sizeof(ACCESS_ACCOUNT) - 1U ||
+        memcmp(access.acc_user, ACCESS_USER, sizeof(ACCESS_USER) - 1U) ||
+        memcmp(access.acc_pass, ACCESS_PASS, sizeof(ACCESS_PASS) - 1U) ||
+        memcmp(access.acc_acc, ACCESS_ACCOUNT, sizeof(ACCESS_ACCOUNT) - 1U))
         goto fail;
 
     got = recv(fd, buf, sizeof(buf), 0);
@@ -223,7 +259,7 @@ int main(int argc, char **argv)
 
     close(named);
     close(numeric);
-    printf("DNIV-INTEROP-LISTEN-SERVER-PASS session=%s scenario=%s\n",
+    printf("DNIV-INTEROP-LISTEN-SERVER-PASS session=%s scenario=%s options=access+condata\n",
            argv[2], argv[3]);
     return 0;
 }

@@ -74,6 +74,8 @@ struct dniv_nsp_connection {
     enum dniv_nsp_conn_state state;
     __u16 ci_payload_len;
     __u8 ci_payload[DNIV_NSP_MAX_CI_PAYLOAD];
+    __u16 accept_payload_len;
+    __u8 accept_payload[DNIV_NSP_MAX_CTL_DATA];
     struct dniv_nsp_control_retransmit *control;
     struct list_head retransmit;
     struct list_head rx_pending[DNIV_NSP_CH_COUNT];
@@ -712,6 +714,34 @@ out:
     return ret;
 }
 
+int dniv_nsp_accept_data_snapshot(__u16 local_link, __u8 *payload,
+                                  __u16 capacity, __u16 *payload_len)
+{
+    struct dniv_nsp_connection *conn;
+    unsigned long flags;
+    int ret = 0;
+
+    if (!payload || !payload_len)
+        return -EINVAL;
+
+    spin_lock_irqsave(&dniv_nsp_lock, flags);
+    conn = dniv_nsp_find_locked(local_link);
+    if (!conn) {
+        ret = -ENOENT;
+        goto out;
+    }
+    if (conn->accept_payload_len > capacity) {
+        ret = -EMSGSIZE;
+        goto out;
+    }
+    *payload_len = conn->accept_payload_len;
+    if (conn->accept_payload_len)
+        memcpy(payload, conn->accept_payload, conn->accept_payload_len);
+out:
+    spin_unlock_irqrestore(&dniv_nsp_lock, flags);
+    return ret;
+}
+
 int dniv_nsp_rx_ready(__u16 local_link, bool *normal, bool *interrupt)
 {
     struct dniv_nsp_connection *conn;
@@ -976,6 +1006,9 @@ int dniv_nsp_receive(__u16 remote_node, const __u8 *wire, __u16 wire_len)
             return -EINVAL;
         }
         dniv_nsp_clear_control_locked(conn);
+        conn->accept_payload_len = (__u16)pkt.payload_len;
+        if (pkt.payload_len)
+            memcpy(conn->accept_payload, pkt.payload, pkt.payload_len);
         dniv_nsp_set_state_locked(conn, DNIV_NSP_ST_RUN, jiffies);
         memset(&reply, 0, sizeof(reply));
         reply.type = DNIV_NSP_ACK_DATA;

@@ -28,6 +28,11 @@ OOB_ONE = b"py-oob-one"
 OOB_TWO = b"py-oob-two"
 OOB_REPLY = b"linux-oob"
 AFTER_OOB = b"after-oob"
+CONNECT_DATA = b"py-connect"
+ACCEPT_DATA = b"linux-accept"
+ACCESS_USER = "PYUSER"
+ACCESS_PASS = "PYPASS"
+ACCESS_ACCOUNT = "PYACCT"
 def main() -> int:
     if len(sys.argv) != 4:
         raise SystemExit(
@@ -42,11 +47,19 @@ def main() -> int:
                 dest=destination,
                 remuser=remote_user,
                 localuser=SOURCE_NAME,
+                conndata=CONNECT_DATA,
+                username=ACCESS_USER,
+                password=ACCESS_PASS,
+                account=ACCESS_ACCOUNT,
             )
             if connection is None or response.type != "accept":
                 raise RuntimeError(
                     f"inbound connect rejected for {remote_user!r}: "
                     f"{getattr(response, 'reason', 'unknown')}"
+                )
+            if bytes(response) != ACCEPT_DATA:
+                raise RuntimeError(
+                    f"bad accept data for {remote_user!r}: {bytes(response)!r}"
                 )
             connection.data(payload)
             reply = connection.recv()
@@ -83,7 +96,7 @@ def main() -> int:
 
     print(
         f"pydecnet-inbound: pass peer={destination} selectors=2 "
-        "oob=bidirectional+credit"
+        "oob=bidirectional+credit options=access+condata"
     )
     return 0
 

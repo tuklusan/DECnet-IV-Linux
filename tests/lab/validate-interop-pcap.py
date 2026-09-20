@@ -103,6 +103,74 @@ def routed_nsp_payload(payload: bytes) -> bytes | None:
     return None
 
 
+def enduser_end(buf: bytes, off: int) -> int:
+    if off + 2 > len(buf):
+        raise ValueError("truncated Session end-user")
+    fmt = buf[off]
+    if fmt == 0:
+        return off + 2
+    if fmt == 1:
+        prefix = 2
+    elif fmt == 2:
+        prefix = 6
+    elif fmt == 4:
+        prefix = 10
+    else:
+        raise ValueError("invalid Session end-user format")
+    pos = off + prefix
+    if pos >= len(buf):
+        raise ValueError("truncated Session end-user name")
+    length = buf[pos]
+    end = pos + 1 + length
+    if end > len(buf):
+        raise ValueError("truncated Session end-user value")
+    return end
+
+
+def counted_field(buf: bytes, off: int) -> tuple[bytes, int]:
+    if off >= len(buf):
+        raise ValueError("truncated Session counted field")
+    length = buf[off]
+    end = off + 1 + length
+    if end > len(buf):
+        raise ValueError("truncated Session counted value")
+    return buf[off + 1 : end], end
+
+
+def session_ci_options(nsp: bytes) -> tuple[tuple[bytes, bytes, bytes], bytes] | None:
+    if not nsp or nsp[0] not in (0x18, 0x68):
+        return None
+    off = 9
+    off = enduser_end(nsp, off)
+    off = enduser_end(nsp, off)
+    if off >= len(nsp):
+        raise ValueError("truncated Session CI menu")
+    menu = nsp[off]
+    off += 1
+    access = (b"", b"", b"")
+    conndata = b""
+    if menu & 0x01:
+        fields = []
+        for _ in range(3):
+            field, off = counted_field(nsp, off)
+            fields.append(field)
+        access = tuple(fields)
+    if menu & 0x02:
+        conndata, off = counted_field(nsp, off)
+    return access, conndata
+
+
+def cc_data(nsp: bytes) -> bytes | None:
+    if not nsp or nsp[0] != 0x28:
+        return None
+    if len(nsp) < 10:
+        raise ValueError("truncated NSP Connect Confirm data")
+    length = nsp[9]
+    if 10 + length > len(nsp):
+        raise ValueError("truncated NSP Connect Confirm payload")
+    return nsp[10 : 10 + length]
+
+
 def router_entries(payload: bytes) -> list[tuple[bytes, int, bool]]:
     if len(payload) < 27 or payload[0] != ROUTER_HELLO:
         return []
@@ -204,6 +272,9 @@ def main() -> int:
         "reference_nsp": 0,
         "candidate_interrupt": 0,
         "reference_interrupt": 0,
+        "candidate_option_ci": 0,
+        "reference_option_ci": 0,
+        "candidate_accept_data": 0,
         "probes": 0,
     }
     bad_hello_hw = 0
@@ -219,10 +290,24 @@ def main() -> int:
                 counts["candidate_nsp"] += 1
                 if nsp[0] == 0x30:
                     counts["candidate_interrupt"] += 1
+                opts = session_ci_options(nsp)
+                if opts == (
+                    (b"DNIVUSER", b"DNIVPASS", b"DNIVACCT"),
+                    b"dniv-connect",
+                ):
+                    counts["candidate_option_ci"] += 1
+                if cc_data(nsp) == b"linux-accept":
+                    counts["candidate_accept_data"] += 1
             elif src == args.reference_mac:
                 counts["reference_nsp"] += 1
                 if nsp[0] == 0x30:
                     counts["reference_interrupt"] += 1
+                opts = session_ci_options(nsp)
+                if opts == (
+                    (b"PYUSER", b"PYPASS", b"PYACCT"),
+                    b"py-connect",
+                ):
+                    counts["reference_option_ci"] += 1
         if dst == args.candidate_mac and payload.startswith(b"DNIV-INTEROP-PROBE-"):
             if args.reference == "route20" and src != args.reference_hw:
                 raise ValueError("raw unicast probe source MAC mismatch")
@@ -288,11 +373,17 @@ def main() -> int:
     if args.reference == "pydecnet":
         if counts["candidate_nsp"] < 5 or counts["reference_nsp"] < 5:
             raise SystemExit("interop pcap: insufficient bidirectional NSP socket traffic")
+        if counts["candidate_option_ci"] < 1:
+            raise SystemExit("interop pcap: missing candidate access/connect-data CI")
         if args.scenario != "router-endnode":
             if counts["candidate_interrupt"] < 2:
                 raise SystemExit("interop pcap: missing candidate NSP interrupt traffic")
             if counts["reference_interrupt"] < 4:
                 raise SystemExit("interop pcap: missing repeated reference NSP interrupt traffic")
+            if counts["reference_option_ci"] < 2:
+                raise SystemExit("interop pcap: missing reference access/connect-data CI")
+            if counts["candidate_accept_data"] < 2:
+                raise SystemExit("interop pcap: missing candidate Connect Confirm data")
     if args.scenario == "router-endnode":
         if args.reference != "pydecnet":
             raise SystemExit("interop pcap: router-endnode requires PyDECnet")

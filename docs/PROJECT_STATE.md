@@ -81,7 +81,7 @@ Implementation order:
 | Phase 4 accepted protocol candidate | `6c185b6d01f8a57ee9f0ea6a6c37d7112ddb77d2` |
 | Phase 4 closure commit | `571333bfd7aaa8b2fcc88715c1d61442af151f3c` |
 | Phase 4 tag | `PHASE-4-COMPLETE` |
-| Latest accepted Phase 5 candidate | `6aa5eec808e45c0477bb7ea87b9ff76e0bc0859b` |
+| Latest accepted Phase 5 candidate | `c24ecd22042c110ae72d39ac9965b0d0b5e7093a` |
 | Route20 pin | `a9ef7c0b7f875f0dd2e8abaf11213798a8e4474c` |
 | PyDECnet live pin | `295938c76c956a70957f4cf96b05685f555b2a18` |
 | VM lifecycle | direct QEMU/QMP |
@@ -226,3 +226,8 @@ Repository Policy run `35474499903` caught that the documentation reconciliation
 Exact-SHA acceptance of documentation-reconciled main `0f041277efbaa9633b56aeef500b04b89fa6d088` is green. Repository Policy `35474807386`, Build Bootstrap `35474819482`, Project State Gate `35474820666`, External Reference Baselines `35474821742`, the four amd64/ARM64 E1-E4 Python QEMU VM Lab runs `35474823040`, `35474824226`, `35474825388`, and `35474826191`, plus Independent Ethernet Interoperability `35474827016` all completed successfully; all eight interoperability jobs passed.
 
 The next Phase 5 candidate exposes the already-implemented NSP interrupt subchannel through classic Linux DECnet OOB semantics. `MSG_OOB` sends and receives 1-16 byte interrupt messages; outbound sends honor NSP interrupt credit; consuming inbound interrupt data queues a one-credit Interrupt Request Link Service message before releasing the message; poll reports priority/band readiness; and `SIOCATMARK` reports pending interrupt data. Wire validation now rejects empty and over-16-byte interrupts. The direct PyDECnet listener proof drives two peer interrupts on each numeric/named connection with a Linux interrupt reply between them, proving bidirectional OOB and remote-credit replenishment while retaining normal record traffic. Packet capture requires interrupt traffic in both directions. Next after exact-SHA acceptance: classic DECnet socket options/access/connect data.
+
+
+Exact-SHA acceptance of interrupt/OOB candidate `c24ecd22042c110ae72d39ac9965b0d0b5e7093a` is green. Repository Policy `35476621265`, Build Bootstrap `35476639827`, Project State Gate `35476640927`, External Reference Baselines `35476642259`, the four amd64/ARM64 E1-E4 Python QEMU VM Lab runs `35476643544`, `35476644595`, `35476645585`, and `35476646632`, plus Independent Ethernet Interoperability `35476647856` all completed successfully; all eight interoperability jobs passed. Interrupt/OOB delivery is therefore accepted on main.
+
+The next Phase 5 candidate implements classic Linux DECnet socket options needed by legacy DECnet userspace. `DSO_CONACCESS` stores validated username/password/account fields and emits them in outbound Session CI. `DSO_CONDATA` stores outbound connect/accept data, includes it in CI or CC as appropriate, decodes inbound CI connect data into accepted child sockets, and captures peer CC data for outbound sockets. `DSO_LINKINFO` reports inactive/connecting/running/disconnecting state and the current NSP segment size. The direct PyDECnet proof now validates outbound candidate access/connect-data CI on MIRROR, inbound PyDECnet access/connect data through native `getsockopt()`, candidate CC accept data returned to PyDECnet, and packet-capture evidence for all three wire images. Next after exact-SHA acceptance: disconnect data/deferred accept controls as required by classic userspace, then stream mode and lifecycle negatives.
