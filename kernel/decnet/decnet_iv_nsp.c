@@ -76,6 +76,9 @@ struct dniv_nsp_connection {
     __u8 ci_payload[DNIV_NSP_MAX_CI_PAYLOAD];
     __u16 accept_payload_len;
     __u8 accept_payload[DNIV_NSP_MAX_CTL_DATA];
+    __u16 disconnect_reason;
+    __u16 disconnect_payload_len;
+    __u8 disconnect_payload[DNIV_NSP_MAX_CTL_DATA];
     struct dniv_nsp_control_retransmit *control;
     struct list_head retransmit;
     struct list_head rx_pending[DNIV_NSP_CH_COUNT];
@@ -742,6 +745,37 @@ out:
     return ret;
 }
 
+int dniv_nsp_disconnect_data_snapshot(__u16 local_link, __u16 *reason,
+                                      __u8 *payload, __u16 capacity,
+                                      __u16 *payload_len)
+{
+    struct dniv_nsp_connection *conn;
+    unsigned long flags;
+    int ret = 0;
+
+    if (!reason || !payload || !payload_len)
+        return -EINVAL;
+
+    spin_lock_irqsave(&dniv_nsp_lock, flags);
+    conn = dniv_nsp_find_locked(local_link);
+    if (!conn) {
+        ret = -ENOENT;
+        goto out;
+    }
+    if (conn->disconnect_payload_len > capacity) {
+        ret = -EMSGSIZE;
+        goto out;
+    }
+    *reason = conn->disconnect_reason;
+    *payload_len = conn->disconnect_payload_len;
+    if (conn->disconnect_payload_len)
+        memcpy(payload, conn->disconnect_payload,
+               conn->disconnect_payload_len);
+out:
+    spin_unlock_irqrestore(&dniv_nsp_lock, flags);
+    return ret;
+}
+
 int dniv_nsp_rx_ready(__u16 local_link, bool *normal, bool *interrupt)
 {
     struct dniv_nsp_connection *conn;
@@ -1032,9 +1066,12 @@ int dniv_nsp_receive(__u16 remote_node, const __u8 *wire, __u16 wire_len)
         reply.reason = 42U;
         reply_len = dniv_nsp_build(reply_wire, sizeof(reply_wire), &reply);
         reply_node = conn->remote_node;
+        conn->disconnect_reason = pkt.reason;
+        conn->disconnect_payload_len = (__u16)pkt.payload_len;
+        if (pkt.payload_len)
+            memcpy(conn->disconnect_payload, pkt.payload, pkt.payload_len);
         dniv_nsp_purge_locked(conn);
-        memset(conn, 0, sizeof(*conn));
-        dniv_nsp_init_conn_lists(conn);
+        dniv_nsp_set_state_locked(conn, DNIV_NSP_ST_CLOSED, jiffies);
         break;
     case DNIV_NSP_DC:
         dniv_nsp_purge_locked(conn);

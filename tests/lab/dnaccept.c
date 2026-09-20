@@ -148,6 +148,7 @@ static int serve_one(int listener, uint16_t expected_node,
     struct timeval timeout = { .tv_sec = 30, .tv_usec = 0 };
     unsigned char buf[128];
     struct optdata_dn conndata;
+    struct optdata_dn discdata;
     struct accessdata_dn access;
     socklen_t optlen;
     uint16_t node;
@@ -227,6 +228,16 @@ static int serve_one(int listener, uint16_t expected_node,
     got = recv(fd, buf, sizeof(buf), 0);
     if (got != 0)
         goto fail;
+
+    memset(&discdata, 0, sizeof(discdata));
+    optlen = sizeof(discdata);
+    if (getsockopt(fd, DNPROTO_NSP, DSO_DISDATA, &discdata, &optlen) ||
+        optlen != sizeof(discdata) ||
+        dniv_le16_to_cpu(discdata.opt_status) != 0U ||
+        dniv_le16_to_cpu(discdata.opt_optl) != sizeof("py-disconnect") - 1U ||
+        memcmp(discdata.opt_data, "py-disconnect",
+               sizeof("py-disconnect") - 1U))
+        goto fail;
     close(fd);
     return 0;
 
@@ -271,7 +282,7 @@ int main(int argc, char **argv)
 
     close(named);
     close(numeric);
-    printf("DNIV-INTEROP-LISTEN-SERVER-PASS session=%s scenario=%s options=access+condata+defer\n",
+    printf("DNIV-INTEROP-LISTEN-SERVER-PASS session=%s scenario=%s options=access+condata+defer+disdata\n",
            argv[2], argv[3]);
     return 0;
 }

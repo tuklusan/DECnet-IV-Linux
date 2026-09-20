@@ -182,3 +182,8 @@ Exact-SHA acceptance of classic-option corrective candidate `89799302cb0c164cbd8
 
 
 Phase 5 deferred-accept and outbound disconnect-data support is now implemented against the pinned LinuxDECnet socket contract. `DSO_ACCEPTMODE` accepts `ACC_IMMED` or `ACC_DEFER`; deferred `accept()` returns the CR child without sending CC, `DSO_CONACCEPT` sends the configured CC data and waits for RUN, and `DSO_CONREJECT` sends DI using configured `DSO_DISDATA`. Normal shutdown/release also transmits configured disconnect reason/data. The direct PyDECnet inbound proof uses immediate numeric accept and deferred named accept, so both paths are exercised against an independent peer. Inbound peer disconnect-data capture remains next before stream mode and lifecycle negatives.
+
+
+Exact-SHA acceptance of deferred-accept candidate `0499c273de9e4eb068b5a899327bfe3f25621082` is green: Build Bootstrap `35493677400`, Project State Gate `35493678586`, External Reference Baselines `35493679708`, E1-E4 Python QEMU VM Lab `35493680575`, `35493681592`, `35493682418`, `35493683113`, and Independent Ethernet Interoperability `35493684110` all completed successfully. Deferred accept/reject and outbound disconnect-data controls are accepted.
+
+The next Phase 5 candidate preserves peer Disconnect Initiate reason/data through the NSP closed state and exposes it through `DSO_DISDATA`; the PyDECnet inbound proof now disconnects both listener sessions with `py-disconnect`, and native userspace requires the exact payload after EOF. Next after exact-SHA acceptance: stream-mode semantics and lifecycle negatives.

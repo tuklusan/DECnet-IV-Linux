@@ -84,6 +84,9 @@ int dniv_nsp_ci_snapshot(__u16 local_link,
                          __u8 *payload, __u16 capacity);
 int dniv_nsp_accept_data_snapshot(__u16 local_link, __u8 *payload,
                                   __u16 capacity, __u16 *payload_len);
+int dniv_nsp_disconnect_data_snapshot(__u16 local_link, __u16 *reason,
+                                      __u8 *payload, __u16 capacity,
+                                      __u16 *payload_len);
 int dniv_nsp_rx_ready(__u16 local_link, bool *normal, bool *interrupt);
 void dniv_nsp_set_notify(dniv_nsp_notify_fn notify);
 int dniv_nsp_retransmit_queue(__u16 local_link,

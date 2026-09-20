@@ -90,13 +90,13 @@ def main() -> int:
                     f"bad post-interrupt data echo for {remote_user!r}: "
                     f"type={reply.type!r} data={bytes(reply)!r}"
                 )
-            connection.disconnect()
+            connection.disconnect(b"py-disconnect")
     finally:
         connector.close()
 
     print(
         f"pydecnet-inbound: pass peer={destination} selectors=2 "
-        "oob=bidirectional+credit options=access+condata"
+        "oob=bidirectional+credit options=access+condata+disdata"
     )
     return 0
 

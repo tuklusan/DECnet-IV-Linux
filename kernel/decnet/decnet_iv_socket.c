@@ -1369,6 +1369,25 @@ static int dniv_sock_getsockopt(struct socket *sock, int level, int optname,
         break;
 
     case DSO_DISDATA:
+        if (dsk->local_link) {
+            __u8 payload[DN_MAXOPTL];
+            __u16 payload_len = 0U;
+            __u16 reason = 0U;
+
+            ret = dniv_nsp_disconnect_data_snapshot(
+                dsk->local_link, &reason, payload, sizeof(payload),
+                &payload_len);
+            if (!ret) {
+                memset(&dsk->discdata_in, 0, sizeof(dsk->discdata_in));
+                dsk->discdata_in.opt_status = cpu_to_le16(reason);
+                dsk->discdata_in.opt_optl = cpu_to_le16(payload_len);
+                if (payload_len)
+                    memcpy(dsk->discdata_in.opt_data, payload, payload_len);
+            } else if (ret != -ENOENT) {
+                release_sock(sock->sk);
+                return ret;
+            }
+        }
         value.opt = dsk->discdata_in;
         available = sizeof(value.opt);
         break;
