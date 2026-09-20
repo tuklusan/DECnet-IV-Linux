@@ -277,6 +277,7 @@ def main() -> int:
         "candidate_accept_data": 0,
         "candidate_loss_probe": 0,
         "reference_loss_probe": 0,
+        "candidate_exhaust_probe": 0,
         "probes": 0,
     }
     bad_hello_hw = 0
@@ -292,6 +293,8 @@ def main() -> int:
                 counts["candidate_nsp"] += 1
                 if b"DNIV-LOSS-PROBE" in nsp:
                     counts["candidate_loss_probe"] += 1
+                if b"DNIV-EXHAUST-PROBE" in nsp:
+                    counts["candidate_exhaust_probe"] += 1
                 if nsp[0] == 0x30:
                     counts["candidate_interrupt"] += 1
                 opts = session_ci_options(nsp)
@@ -385,6 +388,8 @@ def main() -> int:
             raise SystemExit("interop pcap: missing candidate NSP timeout retransmission")
         if counts["reference_loss_probe"] < 1:
             raise SystemExit("interop pcap: missing post-fault reference loss-probe response")
+        if counts["candidate_exhaust_probe"] < 5:
+            raise SystemExit("interop pcap: retransmit-limit probe did not reach all five attempts")
         if args.scenario != "router-endnode":
             if counts["candidate_interrupt"] < 2:
                 raise SystemExit("interop pcap: missing candidate NSP interrupt traffic")
