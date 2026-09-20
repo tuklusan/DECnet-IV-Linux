@@ -25,6 +25,24 @@ on:
         description: Exact parent candidate SHA; blank for direct dispatch
         required: false
         type: string
+      profile:
+        description: Acceptance depth
+        required: true
+        default: full
+        type: choice
+        options:
+          - fast
+          - consolidated
+          - full
+      scope:
+        description: Change scope used by the fast profile
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - socket
+          - routing
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}-${{ github.sha }}
@@ -37,25 +55,61 @@ permissions:
 
 jobs:
   live-interop:
+    if: >-
+      ${{ inputs.profile == 'full' ||
+      (inputs.profile == 'consolidated' && matrix.consolidated) ||
+      (inputs.profile == 'fast' && inputs.scope == 'socket' && matrix.fast_socket) ||
+      (inputs.profile == 'fast' && inputs.scope == 'routing' && matrix.fast_routing) ||
+      (inputs.profile == 'fast' && inputs.scope == 'all' && matrix.fast_all) }}
     strategy:
       fail-fast: false
-      max-parallel: 8
+      max-parallel: 14
       matrix:
         include:
           - runner: ubuntu-24.04
             slot: x64
             arch: amd64
             qemu: qemu-system-x86
-            suite: r20-routing
+            suite: r20-l1
             reference: route20
-            scenarios: "l1 l2"
+            scenarios: "l1"
+            fast_socket: false
+            fast_routing: true
+            fast_all: true
+            consolidated: true
           - runner: ubuntu-24.04-arm
             slot: arm64
             arch: arm64
             qemu: qemu-system-arm
-            suite: r20-routing
+            suite: r20-l1
             reference: route20
-            scenarios: "l1 l2"
+            scenarios: "l1"
+            fast_socket: false
+            fast_routing: false
+            fast_all: false
+            consolidated: true
+          - runner: ubuntu-24.04
+            slot: x64
+            arch: amd64
+            qemu: qemu-system-x86
+            suite: r20-l2
+            reference: route20
+            scenarios: "l2"
+            fast_socket: false
+            fast_routing: false
+            fast_all: false
+            consolidated: false
+          - runner: ubuntu-24.04-arm
+            slot: arm64
+            arch: arm64
+            qemu: qemu-system-arm
+            suite: r20-l2
+            reference: route20
+            scenarios: "l2"
+            fast_socket: false
+            fast_routing: false
+            fast_all: false
+            consolidated: false
           - runner: ubuntu-24.04
             slot: x64
             arch: amd64
@@ -63,6 +117,10 @@ jobs:
             suite: r20-endnode
             reference: route20
             scenarios: "endnode"
+            fast_socket: false
+            fast_routing: false
+            fast_all: false
+            consolidated: false
           - runner: ubuntu-24.04-arm
             slot: arm64
             arch: arm64
@@ -70,34 +128,98 @@ jobs:
             suite: r20-endnode
             reference: route20
             scenarios: "endnode"
+            fast_socket: false
+            fast_routing: false
+            fast_all: false
+            consolidated: false
           - runner: ubuntu-24.04
             slot: x64
             arch: amd64
             qemu: qemu-system-x86
-            suite: py-routing
+            suite: py-l1
             reference: pydecnet
-            scenarios: "l1 l2"
+            scenarios: "l1"
+            fast_socket: true
+            fast_routing: true
+            fast_all: true
+            consolidated: true
           - runner: ubuntu-24.04-arm
             slot: arm64
             arch: arm64
             qemu: qemu-system-arm
-            suite: py-routing
+            suite: py-l1
             reference: pydecnet
-            scenarios: "l1 l2"
+            scenarios: "l1"
+            fast_socket: false
+            fast_routing: false
+            fast_all: false
+            consolidated: true
           - runner: ubuntu-24.04
             slot: x64
             arch: amd64
             qemu: qemu-system-x86
-            suite: py-roles
+            suite: py-l2
             reference: pydecnet
-            scenarios: "endnode router-endnode"
+            scenarios: "l2"
+            fast_socket: false
+            fast_routing: false
+            fast_all: false
+            consolidated: false
           - runner: ubuntu-24.04-arm
             slot: arm64
             arch: arm64
             qemu: qemu-system-arm
-            suite: py-roles
+            suite: py-l2
             reference: pydecnet
-            scenarios: "endnode router-endnode"
+            scenarios: "l2"
+            fast_socket: false
+            fast_routing: false
+            fast_all: false
+            consolidated: false
+          - runner: ubuntu-24.04
+            slot: x64
+            arch: amd64
+            qemu: qemu-system-x86
+            suite: py-endnode
+            reference: pydecnet
+            scenarios: "endnode"
+            fast_socket: false
+            fast_routing: false
+            fast_all: false
+            consolidated: true
+          - runner: ubuntu-24.04-arm
+            slot: arm64
+            arch: arm64
+            qemu: qemu-system-arm
+            suite: py-endnode
+            reference: pydecnet
+            scenarios: "endnode"
+            fast_socket: false
+            fast_routing: false
+            fast_all: false
+            consolidated: true
+          - runner: ubuntu-24.04
+            slot: x64
+            arch: amd64
+            qemu: qemu-system-x86
+            suite: py-router-endnode
+            reference: pydecnet
+            scenarios: "router-endnode"
+            fast_socket: false
+            fast_routing: false
+            fast_all: false
+            consolidated: false
+          - runner: ubuntu-24.04-arm
+            slot: arm64
+            arch: arm64
+            qemu: qemu-system-arm
+            suite: py-router-endnode
+            reference: pydecnet
+            scenarios: "router-endnode"
+            fast_socket: false
+            fast_routing: false
+            fast_all: false
+            consolidated: false
     runs-on: ${{ matrix.runner }}
     concurrency:
       group: dniv-interop-${{ github.run_id }}-${{ matrix.slot }}-${{ matrix.suite }}

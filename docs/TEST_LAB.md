@@ -48,6 +48,18 @@ The hosted matrix remains amd64 on `ubuntu-24.04` with `qemu-system-x86_64`, and
 
 Ordinary test nodes use area 31, nodes 70 through 79, with names DN70 through DN79 as defined in `tests/lab/test-addresses.env`. DECnet Phase IV protocol MACs are derived from area/node. E1 deliberately gives the emulated NIC a different primary MAC so the test proves protocol-originated frames use the DECnet-derived source MAC and unicast filtering survives later primary-MAC changes.
 
+## Acceptance depth and runtime policy
+
+Development acceptance is tiered so reliability coverage is preserved without re-running the entire production matrix after every small increment.
+
+- **Fast** is the default exact-SHA development gate. It runs repository policy, native amd64/arm64 build and unit coverage, project-state continuity, E1 on both architectures, and a small independent interop slice selected by change scope. `SCOPE=socket` runs the x64 PyDECnet L1 socket path; `SCOPE=routing` runs x64 Route20 L1 plus x64 PyDECnet L1; `SCOPE=all` runs the same two independent x64 paths. Fast evidence proves the increment is suitable for continued development; it is not phase/release promotion evidence.
+- **Consolidated** is used after several related increments or at a subsystem checkpoint. It adds pinned reference baselines, E4 on both architectures, and a broader six-job interop slice spanning Route20/PyDECnet, amd64/arm64 and router/endnode roles.
+- **Full** is mandatory for phase closure, release candidates, and any promotion claim. It runs pinned reference baselines, E1-E4 on both architectures and every independent interoperability scenario. Full interoperability is split into one scenario per matrix job so L1/L2 and role scenarios execute independently instead of serially inside a single runner.
+- A scheduled nightly run uses the full profile against the exact current `main` SHA. Thus slower coverage remains continuously exercised even while ordinary development uses the fast gate.
+- The acceptance issue body may contain exact lines `PROFILE=fast|consolidated|full` and `SCOPE=all|socket|routing`. Omitted profile defaults to `fast`; scheduled runs force `full`.
+
+Long stress, soak and release-endurance work remains at the documented checkpoint/release stages. Runtime reduction comes from eliminating redundant repetition and serial scenario packing, not from deleting required production coverage.
+
 ## Interoperability
 
 Route20 and PyDECnet remain pinned independent peers. Their VDE-enabled live pins support both modern and legacy libvdeplug open ABIs. Interoperability consumes the same source-independent architecture foundation, derives the disposable exact-candidate image, builds the exact pinned peer, and executes bounded L1/L2/endnode scenarios. Prior-run evidence restore is not part of execution. Route20 continues to run in an independent reference VM. PyDECnet runs its pinned source directly on the architecture-matched hosted runner through its native Linux TAP backend attached to the same host bridge as the candidate VM. This removes QEMU virtio/libpcap receive-filter timing from PyDECnet interoperability without changing candidate protocol behavior. The host TAP's Linux device MAC deliberately remains distinct from PyDECnet's DECnet logical MAC; assigning the logical MAC to the TAP creates a bridge-local FDB entry and prevents candidate unicast from reaching the TAP queue. PyDECnet readiness is application-backed and requires its own `DECnet/Python is running` marker. Route20 reference READY remains bounded at 180 seconds on amd64 and 600 seconds on ARM64; host PyDECnet readiness is bounded at 60 seconds.

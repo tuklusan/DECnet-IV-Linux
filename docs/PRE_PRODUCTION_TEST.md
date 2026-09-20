@@ -117,6 +117,12 @@ Boundary coverage is not satisfied by the words `minimum` and `maximum`. Test th
 - every sequence space: zero, last, wrap, duplicate, previous/future and exact half-space ambiguity where ordering is undefined;
 - every later buffer/window/segment/object/file-size limit: zero, one, one below, exact limit and one above.
 
+## Development versus promotion execution
+
+The complete procedure below defines production acceptance coverage; it does not require every production case to run after every development increment. Exact-SHA development uses three execution depths documented in `docs/TEST_LAB.md`: fast, consolidated and full. Fast and consolidated runs reduce redundant repetition while preserving the full catalogue for scheduled nightly revalidation and mandatory phase/release promotion. Only a full run can satisfy a phase-closure or release acceptance claim.
+
+Scenario parallelism is an execution optimization only. Splitting independent interoperability scenarios into separate jobs does not change their assertions, peer pins, evidence rules or pass criteria.
+
 ## Ordered acceptance stages
 
 ### PP-00 — provenance, source health, build and reproducibility
