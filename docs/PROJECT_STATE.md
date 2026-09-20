@@ -81,7 +81,7 @@ Implementation order:
 | Phase 4 accepted protocol candidate | `6c185b6d01f8a57ee9f0ea6a6c37d7112ddb77d2` |
 | Phase 4 closure commit | `571333bfd7aaa8b2fcc88715c1d61442af151f3c` |
 | Phase 4 tag | `PHASE-4-COMPLETE` |
-| Latest accepted Phase 5 candidate | `c24ecd22042c110ae72d39ac9965b0d0b5e7093a` |
+| Latest accepted Phase 5 candidate | `89799302cb0c164cbd8291fd744ef6463567d78b` |
 | Route20 pin | `a9ef7c0b7f875f0dd2e8abaf11213798a8e4474c` |
 | PyDECnet live pin | `295938c76c956a70957f4cf96b05685f555b2a18` |
 | VM lifecycle | direct QEMU/QMP |
@@ -234,3 +234,6 @@ The next Phase 5 candidate implements classic Linux DECnet socket options needed
 
 
 Exact-SHA acceptance of classic-option candidate `43c6b96bf014702a6d572429509cb68e6760ea0b` passed Repository Policy `35486993255`, Build Bootstrap `35487008935`, Project State Gate `35487009957`, External Reference Baselines `35487010777`, and all four amd64/ARM64 E1-E4 Python QEMU VM Lab runs `35487011810`, `35487013033`, `35487014162`, and `35487015291`. Independent Ethernet Interoperability `35487016251` failed all four PyDECnet jobs at the first outbound MIRROR option check while all four Route20 jobs passed. Each PyDECnet failure was `DSO_CONDATA accept-data read failed`; retained ARM64 L1 packet capture proves PyDECnet's MIRROR CC carries the expected two-byte `ff ff` accept payload. The test had incorrectly required zero-length accept data even though the candidate correctly captured the peer CC payload. The pinned PyDECnet Session API also names outbound connect data `data`, not `conndata`; correct that deterministic harness mismatch before the inbound listener subtest can run. Candidate protocol behavior is unchanged. Next: exact-SHA acceptance of this narrowly corrective successor.
+
+
+Exact-SHA acceptance of classic-option corrective candidate `89799302cb0c164cbd8291fd744ef6463567d78b` is green: Repository Policy `35488506272`, Build Bootstrap `35488525088`, Project State Gate `35488526182`, External Reference Baselines `35488527090`, E1-E4 Python QEMU VM Lab `35488528135`, `35488529268`, `35488530262`, `35488531164`, and Independent Ethernet Interoperability `35488532137` all completed successfully; all eight Route20/PyDECnet interoperability jobs passed. The classic `DSO_CONACCESS`, `DSO_CONDATA`, and read-only `DSO_LINKINFO` subset is accepted on main. Next Phase 5 work: disconnect data/deferred accept controls where required by classic userspace, then stream mode, lifecycle negatives, and broader independent socket interoperability.
