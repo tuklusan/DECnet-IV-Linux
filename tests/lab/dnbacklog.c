@@ -55,6 +55,27 @@ static void log_socket_identity(int fd, unsigned int index, const char *mode)
             mode, index, fd, domain, type, protocol);
 }
 
+static void log_security_context(void)
+{
+    char line[256];
+    FILE *fp = fopen("/proc/self/attr/current", "r");
+
+    if (fp) {
+        if (fgets(line, sizeof(line), fp))
+            fprintf(stderr, "close-race security attr=%s", line);
+        fclose(fp);
+    }
+    fp = fopen("/proc/self/status", "r");
+    if (fp) {
+        while (fgets(line, sizeof(line), fp)) {
+            if (!strncmp(line, "Seccomp:", 8) ||
+                !strncmp(line, "NoNewPrivs:", 11))
+                fprintf(stderr, "close-race security %s", line);
+        }
+        fclose(fp);
+    }
+}
+
 static int parse_node(const char *text, uint16_t *address)
 {
     char *end;
@@ -122,6 +143,7 @@ int main(int argc, char **argv)
         } else if (!strcmp(argv[4], "close-race")) {
             close_race = 1;
             object = CLOSE_RACE_OBJECT;
+            accept_count = BACKLOG_COUNT * 4U;
         } else {
             fprintf(stderr, "unsupported backlog mode: %s\n", argv[4]);
             return 2;
@@ -139,6 +161,7 @@ int main(int argc, char **argv)
 
     sleep(3);
     if (close_race) {
+        log_security_context();
         for (i = 0U; i < accept_count; i++) {
             struct sockaddr_dn peer;
             socklen_t peerlen = sizeof(peer);

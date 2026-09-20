@@ -347,13 +347,16 @@ if [[ "$reference" == pydecnet && "$scenario" != router-endnode ]]; then
         tail -160 "$ref1_log" >&2 || true
         exit 1
     fi
-    if ! env PYTHONPATH="$host_pydecnet/pydecnet" python3 \
-        "$script_dir/pydecnet-backlog.py" "$host_pydecnet_api" \
-        "$area.$node" "$ref_name" close-race; then
-        tail -220 "$candidate_log" >&2 || true
-        tail -160 "$ref1_log" >&2 || true
-        exit 1
-    fi
+    for close_race_round in 1 2 3 4; do
+        if ! env PYTHONPATH="$host_pydecnet/pydecnet" python3 \
+            "$script_dir/pydecnet-backlog.py" "$host_pydecnet_api" \
+            "$area.$node" "$ref_name" close-race; then
+            echo "close-race round $close_race_round failed" >&2
+            tail -260 "$candidate_log" >&2 || true
+            tail -180 "$ref1_log" >&2 || true
+            exit 1
+        fi
+    done
     if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-CLOSE-RACE-PASS session=$session scenario=$scenario" 90 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
         tail -220 "$candidate_log" >&2 || true
         tail -160 "$ref1_log" >&2 || true
