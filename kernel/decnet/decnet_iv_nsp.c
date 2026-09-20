@@ -950,8 +950,6 @@ int dniv_nsp_receive(__u16 remote_node, const __u8 *wire, __u16 wire_len)
                 return -EINVAL;
             ret = dniv_nsp_transmit(remote_node, reply_wire,
                                     (__u16)reply_len);
-            if (!ret)
-                dniv_nsp_notify_link(link);
             return ret;
         }
         conn = NULL;
