@@ -19,6 +19,7 @@
 #include <linux/module.h>
 #include <linux/net.h>
 #include <linux/poll.h>
+#include <linux/security.h>
 #include <linux/slab.h>
 #include <linux/socket.h>
 #include <linux/sockios.h>
@@ -1258,7 +1259,9 @@ static int dniv_sock_accept_impl(struct socket *sock, struct socket *newsock,
         ret = -ENOMEM;
         goto out;
     }
+    security_sk_clone(sk, newsk);
     sock_init_data(newsock, newsk);
+    security_sock_graft(newsk, newsock);
     newsock->ops = &dniv_proto_ops;
     newsk->sk_family = PF_DECnet;
     newsk->sk_protocol = DNPROTO_NSP;
