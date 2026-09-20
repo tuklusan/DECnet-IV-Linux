@@ -1024,11 +1024,19 @@ static int dniv_sock_recvmsg(struct socket *sock, struct msghdr *msg,
     }
     ret = (flags & MSG_TRUNC) ? (int)length : (int)copied;
 out:
+    if (dsk->local.sdn_objnum == 243U && ret < 0)
+        pr_err("dniv close-race recvmsg negative link=%u ret=%d state=%d type=%u protocol=%u\n",
+               dsk->local_link, ret, sock->state, sk->sk_type,
+               sk->sk_protocol);
     release_sock(sk);
     kfree(data);
     return ret;
 
 out_unlock:
+    if (dsk->local.sdn_objnum == 243U && ret < 0)
+        pr_err("dniv close-race recvmsg negative-early link=%u ret=%d state=%d type=%u protocol=%u\n",
+               dsk->local_link, ret, sock->state, sk->sk_type,
+               sk->sk_protocol);
     release_sock(sk);
     return ret;
 }
