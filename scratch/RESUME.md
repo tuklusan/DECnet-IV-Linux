@@ -230,3 +230,8 @@ Infrastructure policy follow-up: Repository Policy `35523266827` correctly stopp
 
 
 Infrastructure test correction: Repository Policy `35523382490` caught the stale two-scenario policy-test fixture. The fixture now models one legal scenario and verifies that two scenarios are rejected; production workflow behavior is unchanged.
+
+
+Infrastructure detour closure: acceptance tiering is implemented and policy-validated on main `45b17abc86837cb2777fad628480af8342a1552f`. Repository Policy `35523481269` and its dispatcher passed. The emitted fast profile was exactly build + state + E1 on amd64/arm64 + x64 Route20/PyDECnet L1 interop; those E1/interop children were externally cancelled before completion and are not acceptance evidence. Full interop is now one scenario per job (14 jobs), nightly scheduled acceptance is full, and only full can promote a phase/release.
+
+End the infrastructure detour and resume the frozen Phase 5 backlog investigation at candidate `5924e18523cf8c2fc569b8ab68eaea5e812fc981`. First inspect failed x64 PyDECnet jobs `106106370256` and `106106370339`; no failure logs were analyzed and no corrective protocol/harness work was performed during the detour. Fix only proven defects, then iterate with the fast acceptance profile unless a consolidated/full checkpoint is warranted.

@@ -32,7 +32,7 @@ Digital DNA Phase IV functional specifications are normative. PyDECnet and Route
 - The remote branch invariant is exactly `refs/heads/main`.
 - Every substantive commit updates this file and `scratch/RESUME.md` together.
 - Acceptance applies only to one exact unchanged `main` commit.
-- Hosted jobs are bounded and isolated per GitHub-hosted runner. Acceptance no longer serializes independent architectures/scenarios globally: E1-E4 modes may execute concurrently, all eight interop matrix jobs may execute concurrently, and independent reference jobs may execute concurrently. Exact-SHA/parent binding remains unchanged.
+- Hosted jobs are bounded and isolated per GitHub-hosted runner. Acceptance no longer serializes independent architectures/scenarios globally: E1-E4 modes may execute concurrently, full interoperability currently expands to 14 one-scenario jobs, and independent reference jobs may execute concurrently. Exact-SHA/parent binding remains unchanged.
 - Persistent VM input is limited to verified source-independent architecture foundations.
 - Exact candidate/reference images, VM overlays and QMP sockets are disposable.
 - Compact evidence retention is at most 30 days.
@@ -288,3 +288,8 @@ Infrastructure policy follow-up: Repository Policy run `35523266827` rejected th
 
 
 Infrastructure test correction: Repository Policy `35523382490` found that the workflow-budget regression fixture itself still encoded a two-scenario interop row after the gate maximum was tightened to one. The fixture and oversize negative are corrected to one legal scenario and a two-scenario rejection case; production workflow semantics are unchanged.
+
+
+Infrastructure detour closure: runtime tiering is implemented on main at `45b17abc86837cb2777fad628480af8342a1552f`. Repository Policy run `35523481269` passed and its dispatcher correctly emitted the fast profile only: dual-architecture Build Bootstrap, Project State Gate, dual-architecture E1, and x64 Route20/PyDECnet L1 interoperability. The fast E1/interop children were externally cancelled before completion, so they are infrastructure smoke evidence only and do not constitute product acceptance. No Phase 5 failure analysis or corrective product change occurred during the detour.
+
+Resume normal Phase 5 work at the locked backlog-candidate failure point: candidate `5924e18523cf8c2fc569b8ab68eaea5e812fc981`; x64 PyDECnet interoperability jobs `106106370256` and `106106370339` failed before the detour. Inspect those exact job logs/evidence first, classify the failures, and fix only concrete defects. Use the new fast acceptance profile for ordinary corrective iterations; use consolidated checkpoints as appropriate and full acceptance for promotion/closure.
