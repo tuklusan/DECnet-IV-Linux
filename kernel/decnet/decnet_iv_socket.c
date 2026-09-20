@@ -761,6 +761,7 @@ static int dniv_sock_sendmsg(struct socket *sock, struct msghdr *msg,
     __u8 *data;
     size_t off = 0U;
     long timeo;
+    long wait_ret;
     int ret = 0;
 
     if (msg->msg_name ||
@@ -799,16 +800,18 @@ static int dniv_sock_sendmsg(struct socket *sock, struct msghdr *msg,
             }
             if ((ret != -EAGAIN && ret != -ENOSPC) || !timeo)
                 break;
-            ret = wait_event_interruptible_timeout(
+            wait_ret = wait_event_interruptible_timeout(
                 dniv_sock_waitq, dniv_can_send_interrupt(dsk) != 0,
                 timeo);
-            if (ret < 0)
+            if (wait_ret < 0) {
+                ret = (int)wait_ret;
                 break;
-            if (!ret) {
+            }
+            if (!wait_ret) {
                 ret = -EAGAIN;
                 break;
             }
-            timeo = ret;
+            timeo = wait_ret;
             ret = 0;
         }
         goto out;
@@ -827,15 +830,17 @@ static int dniv_sock_sendmsg(struct socket *sock, struct msghdr *msg,
         }
         if (ret != -EAGAIN || !timeo)
             break;
-        ret = wait_event_interruptible_timeout(
+        wait_ret = wait_event_interruptible_timeout(
             dniv_sock_waitq, dniv_can_send(dsk) != 0, timeo);
-        if (ret < 0)
+        if (wait_ret < 0) {
+            ret = (int)wait_ret;
             break;
-        if (!ret) {
+        }
+        if (!wait_ret) {
             ret = -EAGAIN;
             break;
         }
-        timeo = ret;
+        timeo = wait_ret;
         ret = 0;
     }
 out:
@@ -852,6 +857,7 @@ static int dniv_stream_recv_locked(struct socket *sock,
 {
     struct dniv_sock *dsk = dniv_sk(sock->sk);
     size_t copied = 0U;
+    long wait_ret;
     int ret;
 
     if (!dsk->stream_rx) {
@@ -883,20 +889,20 @@ static int dniv_stream_recv_locked(struct socket *sock,
                     return (int)copied;
                 if (!*timeo)
                     return copied ? (int)copied : -EAGAIN;
-                ret = wait_event_interruptible_timeout(
+                wait_ret = wait_event_interruptible_timeout(
                     dniv_sock_waitq,
                     ({ bool normal = false, intr = false;
                        int ready = dniv_nsp_rx_ready(
                            dsk->local_link, &normal, &intr);
                        ready || normal || dniv_link_status(dsk) != 1; }),
                     *timeo);
-                if (ret < 0)
-                    return copied ? (int)copied : ret;
-                if (!ret) {
+                if (wait_ret < 0)
+                    return copied ? (int)copied : (int)wait_ret;
+                if (!wait_ret) {
                     *timeo = 0;
                     return copied ? (int)copied : -EAGAIN;
                 }
-                *timeo = ret;
+                *timeo = wait_ret;
             }
         }
 
@@ -931,9 +937,8 @@ static int dniv_sock_recvmsg(struct socket *sock, struct msghdr *msg,
     size_t allocation;
     size_t copied;
     long timeo;
+    long wait_ret;
     int ret;
-    int diag_stage = 0;
-    long diag_wait_timeo = 0;
 
     if (flags & ~(MSG_DONTWAIT | MSG_TRUNC | MSG_NOSIGNAL | MSG_OOB |
                   MSG_WAITALL))
@@ -947,7 +952,6 @@ static int dniv_sock_recvmsg(struct socket *sock, struct msghdr *msg,
 
     lock_sock(sk);
     if (sock->state != SS_CONNECTED) {
-        diag_stage = 1;
         ret = -ENOTCONN;
         goto out_unlock;
     }
@@ -965,7 +969,6 @@ static int dniv_sock_recvmsg(struct socket *sock, struct msghdr *msg,
 
     lock_sock(sk);
     if (sock->state != SS_CONNECTED) {
-        diag_stage = 2;
         ret = -ENOTCONN;
         goto out;
     }
@@ -978,31 +981,29 @@ static int dniv_sock_recvmsg(struct socket *sock, struct msghdr *msg,
             if (!ret)
                 length = interrupt_len;
         } else {
-            diag_stage = 10;
-            ret = dniv_nsp_recv_message(dsk->local_link, data, DNBUFSIZE,
+                ret = dniv_nsp_recv_message(dsk->local_link, data, DNBUFSIZE,
                                         &length);
         }
         if (!ret)
             break;
         if (ret != -EAGAIN || !timeo)
             goto out;
-        diag_stage = 20;
-        diag_wait_timeo = timeo;
-        ret = wait_event_interruptible_timeout(
+        wait_ret = wait_event_interruptible_timeout(
             dniv_sock_waitq,
             ({ bool normal = false, intr = false;
                int ready = dniv_nsp_rx_ready(dsk->local_link, &normal, &intr);
                ready || ((flags & MSG_OOB) ? intr : normal) ||
                    dniv_link_status(dsk) != 1; }),
             timeo);
-        if (ret < 0)
+        if (wait_ret < 0) {
+            ret = (int)wait_ret;
             goto out;
-        if (!ret) {
+        }
+        if (!wait_ret) {
             ret = -EAGAIN;
             goto out;
         }
-        timeo = ret;
-        diag_stage = 21;
+        timeo = wait_ret;
         if (dniv_link_status(dsk) < 0) {
             ret = 0;
             goto out;
@@ -1011,7 +1012,6 @@ static int dniv_sock_recvmsg(struct socket *sock, struct msghdr *msg,
 
     copied = min_t(size_t, size, length);
     if (copied && copy_to_iter(data, copied, &msg->msg_iter) != copied) {
-        diag_stage = 30;
         ret = -EFAULT;
         goto out;
     }
@@ -1033,21 +1033,11 @@ static int dniv_sock_recvmsg(struct socket *sock, struct msghdr *msg,
     }
     ret = (flags & MSG_TRUNC) ? (int)length : (int)copied;
 out:
-    if (dsk->local.sdn_objnum == 243U && ret < 0)
-        pr_err("dniv close-race recvmsg negative link=%u ret=%d stage=%d wait=%ld rcvtimeo=%ld state=%d type=%u protocol=%u\n",
-               dsk->local_link, ret, diag_stage, diag_wait_timeo,
-               READ_ONCE(sk->sk_rcvtimeo), sock->state, sk->sk_type,
-               sk->sk_protocol);
     release_sock(sk);
     kfree(data);
     return ret;
 
 out_unlock:
-    if (dsk->local.sdn_objnum == 243U && ret < 0)
-        pr_err("dniv close-race recvmsg negative-early link=%u ret=%d stage=%d wait=%ld rcvtimeo=%ld state=%d type=%u protocol=%u\n",
-               dsk->local_link, ret, diag_stage, diag_wait_timeo,
-               READ_ONCE(sk->sk_rcvtimeo), sock->state, sk->sk_type,
-               sk->sk_protocol);
     release_sock(sk);
     return ret;
 }
@@ -1226,6 +1216,7 @@ static int dniv_sock_accept_impl(struct socket *sock, struct socket *newsock,
     __u8 payload[DNIV_NSP_MAX_CI_PAYLOAD];
     __u16 link;
     long timeo;
+    long wait_ret;
     int ret;
 
     lock_sock(sk);
@@ -1248,17 +1239,19 @@ static int dniv_sock_accept_impl(struct socket *sock, struct socket *newsock,
         }
         if (ret != -EAGAIN || !timeo)
             goto out;
-        ret = wait_event_interruptible_timeout(
+        wait_ret = wait_event_interruptible_timeout(
             dniv_sock_waitq,
             READ_ONCE(dsk->pending_count) || !READ_ONCE(dsk->listening),
             timeo);
-        if (ret < 0)
+        if (wait_ret < 0) {
+            ret = (int)wait_ret;
             goto out;
-        if (!ret) {
+        }
+        if (!wait_ret) {
             ret = -EAGAIN;
             goto out;
         }
-        timeo = ret;
+        timeo = wait_ret;
     }
 
     newsk = sk_alloc(sock_net(sk), PF_DECnet, GFP_KERNEL, &dniv_proto, kern);
