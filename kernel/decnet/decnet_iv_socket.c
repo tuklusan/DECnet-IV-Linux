@@ -1306,6 +1306,18 @@ static int dniv_sock_accept_impl(struct socket *sock, struct socket *newsock,
         }
 
         ret = dniv_wait_running(newsk, &timeo);
+        if (ret == -ECONNREFUSED) {
+            struct dniv_nsp_conn_snapshot snapshot;
+
+            /*
+             * CC has already been sent successfully.  If the peer tears the
+             * accepted link down before this waiter samples RUN, preserve the
+             * accepted child so userspace can observe EOF and DSO_DISDATA.
+             */
+            if (!dniv_nsp_conn_snapshot(link, &snapshot) &&
+                snapshot.state == DNIV_NSP_ST_CLOSED)
+                ret = 0;
+        }
         if (ret) {
             dniv_accept_child_discard(newsock, newsk, link);
             goto out;
