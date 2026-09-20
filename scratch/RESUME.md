@@ -221,3 +221,6 @@ Next Phase 5 candidate adds inbound listener backlog/accept stress: four simulta
 
 
 Infrastructure detour is active. Acceptance is now tiered as `fast`, `consolidated`, and `full`; ordinary owner acceptance issues default to fast, nightly scheduled acceptance is full, and only full acceptance can promote a phase/release. Fast keeps dual-architecture build/E1 plus focused independent interop; consolidated adds references/E4 and broader peers; full retains the complete E1-E4/reference/interop matrix. Interop scenario pairs are split into independent parallel jobs to reduce wall time without deleting assertions. The Phase 5 backlog candidate `5924e18523cf8c2fc569b8ab68eaea5e812fc981` investigation remains locked exactly where it was: x64 PyDECnet jobs `106106370256` and `106106370339` failed, no failure logs have been analyzed, and no protocol/harness corrective work has been attempted. End the infra detour before resuming that investigation.
+
+
+Infrastructure correction: GitHub rejected the first tiered `interop.yml` because a job-level `if` referenced `matrix.*` before matrix expansion. The corrected version uses a dynamic `fromJSON` include matrix selected from `PROFILE` and `SCOPE`; coverage policy is unchanged.
