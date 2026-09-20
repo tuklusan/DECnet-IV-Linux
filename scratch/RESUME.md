@@ -18,7 +18,7 @@
 
 Annotated tag `PHASE-4-COMPLETE` is verified on closure commit `571333bfd7aaa8b2fcc88715c1d61442af151f3c`; the temporary tag workflow has been removed.
 
-Phase 4 is complete on exact protocol candidate `6c185b6d01f8a57ee9f0ea6a6c37d7112ddb77d2`; Phase 5 is active on `main`. The latest accepted Phase 5 candidate is `65b6857eae25d38f260e7185580d6a88c2efb49b`. Phase 3 remains frozen at tag `PHASE-3-COMPLETE` on commit `ae1bcb82a1539ccadda0661664205e360bd760b7`.
+Phase 4 is complete on exact protocol candidate `6c185b6d01f8a57ee9f0ea6a6c37d7112ddb77d2`; Phase 5 is active on `main`. The latest accepted Phase 5 candidate is `dd8107fe0967cad04c048175d9843e9057efd2bc`. Phase 3 remains frozen at tag `PHASE-3-COMPLETE` on commit `ae1bcb82a1539ccadda0661664205e360bd760b7`.
 
 The final Phase 3 acceptance set was green: Repository Policy `35343324826`, Build Bootstrap `35343357536`, Project State Gate `35343359444`, External Reference Baselines `35343361139`, Python QEMU VM Lab `35343362922`, and Independent Ethernet Interoperability run `35343364812`. The interoperability matrix passed all eight amd64/ARM64 Route20/PyDECnet routing/endnode role jobs.
 
@@ -203,3 +203,8 @@ The initial SOCK_STREAM commit `f8aed0844f5d1bf19e61143d5f156d7bc76100d9` accide
 Exact-SHA acceptance of SOCK_STREAM corrective candidate `65b6857eae25d38f260e7185580d6a88c2efb49b` is green: Repository Policy `35511887065`, Build Bootstrap `35511906913`, Project State Gate `35511908045`, External Reference Baselines `35511909266`, E1-E4 VM Lab `35511910105`, `35511911060`, `35511912053`, and `35511913169`, and Independent Ethernet Interoperability `35511914361`; all eight interop jobs passed. SOCK_STREAM is accepted.
 
 Next Phase 5 candidate: socket lifecycle negatives and independent connection churn, including deterministic pre-connect errors, nonblocking connect completion, unsupported half-shutdown, full shutdown/send-after-shutdown, and repeated PyDECnet MIRROR sessions. If exact-SHA acceptance is green, proceed to poll/epoll, fork/dup/process-exit and concurrent-session stress.
+
+
+Exact-SHA acceptance of socket lifecycle/stress candidate `dd8107fe0967cad04c048175d9843e9057efd2bc` is green: Repository Policy `35513958617`, Build Bootstrap `35514007595`, Project State Gate `35514009043`, External Reference Baselines `35514010307`, E1-E4 VM Lab `35514011498`, `35514012520`, `35514013577`, and `35514014546`, and Independent Ethernet Interoperability `35514015412`; all eight interop jobs passed. Lifecycle negatives and 16-cycle independent MIRROR churn are accepted.
+
+Next Phase 5 candidate adds poll/epoll readiness, dup and fork descriptor lifetime, process-exit cleanup, and eight concurrent PyDECnet MIRROR sessions. If exact-SHA acceptance is green, continue with higher-volume concurrent data/window pressure and listener backlog/accept stress.

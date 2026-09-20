@@ -214,6 +214,11 @@ if [ "$reference" = pydecnet ]; then
         exit 1
     fi
     echo "DNIV-INTEROP-SOCKET-LIFECYCLE session=$session scenario=$scenario node=$name peer=$peer_node"
+    if ! /usr/local/sbin/dnsockstress "$peer_node"; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=nsp-socket-stress"
+        exit 1
+    fi
+    echo "DNIV-INTEROP-SOCKET-STRESS session=$session scenario=$scenario node=$name peer=$peer_node"
     if [ "$scenario" != router-endnode ]; then
         /usr/local/sbin/dnaccept "$peer_node" "$session" "$scenario" &
         accept_pid=$!
