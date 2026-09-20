@@ -224,3 +224,6 @@ Infrastructure detour is active. Acceptance is now tiered as `fast`, `consolidat
 
 
 Infrastructure correction: GitHub rejected the first tiered `interop.yml` because a job-level `if` referenced `matrix.*` before matrix expansion. The corrected version uses a dynamic `fromJSON` include matrix selected from `PROFILE` and `SCOPE`; coverage policy is unchanged.
+
+
+Infrastructure policy follow-up: Repository Policy `35523266827` correctly stopped dispatch because `workflow_budget_gate.py` could not see scenarios inside the dynamic JSON matrix. The gate now parses both literal YAML and JSON matrix scenario fields, with a one-scenario-per-job maximum; regression coverage is updated accordingly.

@@ -282,3 +282,6 @@ Infrastructure detour: acceptance runtime has been restructured without reducing
 
 
 Infrastructure correction: the first tiered-interop workflow revision referenced `matrix.*` in a job-level `if`, which GitHub evaluates before matrix expansion and rejected at workflow-parse time. The corrected workflow builds the scenario matrix dynamically from `PROFILE`/`SCOPE` using `fromJSON`, preserving the same fast/consolidated/full coverage selections without invalid pre-matrix expressions.
+
+
+Infrastructure policy follow-up: Repository Policy run `35523266827` rejected the dynamic interop matrix because the workflow-budget parser only recognized literal YAML `scenarios:` rows. The policy gate and its regression test now also parse scenario fields embedded in the dynamic JSON matrix, and the allowed scenarios-per-job ceiling is tightened from two to one to lock the new parallelization invariant.

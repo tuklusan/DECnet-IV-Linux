@@ -27,7 +27,7 @@ from typing import Callable
 WORKFLOW_ROOT = ".github/workflows/"
 MAX_JOB_MINUTES = 75
 MAX_EVIDENCE_DAYS = 30
-MAX_INTEROP_SCENARIOS_PER_JOB = 2
+MAX_INTEROP_SCENARIOS_PER_JOB = 1
 ACTION_PINS = {
     "actions/checkout": "11d5960a326750d5838078e36cf38b85af677262",
     "actions/upload-artifact": "ea165f8d65b6e75b540449e92b4886f43607fa02",
@@ -43,6 +43,7 @@ TIMEOUT_RE = re.compile(r"^    timeout-minutes:\s*([0-9]+)\s*$")
 RETENTION_RE = re.compile(r"^\s+retention-days:\s*([0-9]+)\s*$")
 STEP_RE = re.compile(r"^      - name:\s+")
 SCENARIOS_RE = re.compile(r"^\s+scenarios:\s*[\"']?([^\"'#]+?)[\"']?\s*$")
+SCENARIOS_JSON_RE = re.compile(r'"scenarios":"([^"]+)"')
 CONCURRENCY_RE = re.compile(r"^(\s*)concurrency:\s*$")
 USES_RE = re.compile(
     r"^\s+uses:\s+(actions/(?:checkout|upload-artifact|download-artifact|cache/(?:restore|save)))@([^\s#]+)"
@@ -224,10 +225,12 @@ def check_workflow(path: str, text: str) -> list[str]:
         rows = []
         for line in lines:
             if match := SCENARIOS_RE.match(line):
-                scenarios = match.group(1).split()
-                rows.append(scenarios)
-                if not scenarios or len(scenarios) > MAX_INTEROP_SCENARIOS_PER_JOB:
-                    errors.append(f"{path}: interop matrix row has {len(scenarios)} scenarios; maximum is {MAX_INTEROP_SCENARIOS_PER_JOB}")
+                rows.append(match.group(1).split())
+        if not rows:
+            rows.extend(match.group(1).split() for match in SCENARIOS_JSON_RE.finditer(text))
+        for scenarios in rows:
+            if not scenarios or len(scenarios) > MAX_INTEROP_SCENARIOS_PER_JOB:
+                errors.append(f"{path}: interop matrix row has {len(scenarios)} scenarios; maximum is {MAX_INTEROP_SCENARIOS_PER_JOB}")
         if not rows:
             errors.append(f"{path}: no bounded interoperability scenario rows found")
     return errors
