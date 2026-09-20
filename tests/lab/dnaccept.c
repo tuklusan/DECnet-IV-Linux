@@ -83,6 +83,7 @@ static int make_listener(int named)
 {
     struct sockaddr_dn local;
     struct optdata_dn acceptdata;
+    int acceptmode = named ? ACC_DEFER : ACC_IMMED;
     struct timeval timeout = { .tv_sec = 30, .tv_usec = 0 };
     int fd;
 
@@ -96,7 +97,9 @@ static int make_listener(int named)
     acceptdata.opt_optl = dniv_cpu_to_le16(sizeof(ACCEPT_DATA) - 1U);
     memcpy(acceptdata.opt_data, ACCEPT_DATA, sizeof(ACCEPT_DATA) - 1U);
     if (setsockopt(fd, DNPROTO_NSP, DSO_CONDATA,
-                   &acceptdata, sizeof(acceptdata)))
+                   &acceptdata, sizeof(acceptdata)) ||
+        setsockopt(fd, DNPROTO_NSP, DSO_ACCEPTMODE,
+                   &acceptmode, sizeof(acceptmode)))
         goto fail;
 
     memset(&local, 0, sizeof(local));
@@ -138,7 +141,7 @@ static int recv_oob(int fd, const char *expected)
 }
 
 static int serve_one(int listener, uint16_t expected_node,
-                     const char *payload)
+                     const char *payload, int deferred)
 {
     struct sockaddr_dn peer;
     socklen_t peer_len = sizeof(peer);
@@ -155,6 +158,15 @@ static int serve_one(int listener, uint16_t expected_node,
     fd = accept(listener, NULL, NULL);
     if (fd < 0)
         return -1;
+    if (deferred) {
+        unsigned char mode = 0xffU;
+        socklen_t modelen = sizeof(mode);
+
+        if (getsockopt(fd, DNPROTO_NSP, DSO_ACCEPTMODE, &mode, &modelen) ||
+            modelen != sizeof(mode) || mode != ACC_DEFER ||
+            setsockopt(fd, DNPROTO_NSP, DSO_CONACCEPT, NULL, 0))
+            goto fail;
+    }
     if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) ||
         setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)))
         goto fail;
@@ -249,8 +261,8 @@ int main(int argc, char **argv)
 
     printf("DNIV-INTEROP-LISTEN-READY session=%s scenario=%s\n",
            argv[2], argv[3]);
-    if (serve_one(numeric, expected_node, "numeric-inbound") ||
-        serve_one(named, expected_node, "named-inbound")) {
+    if (serve_one(numeric, expected_node, "numeric-inbound", 0) ||
+        serve_one(named, expected_node, "named-inbound", 1)) {
         fprintf(stderr, "dnaccept: inbound listener exchange failed\n");
         close(named);
         close(numeric);
@@ -259,7 +271,7 @@ int main(int argc, char **argv)
 
     close(named);
     close(numeric);
-    printf("DNIV-INTEROP-LISTEN-SERVER-PASS session=%s scenario=%s options=access+condata\n",
+    printf("DNIV-INTEROP-LISTEN-SERVER-PASS session=%s scenario=%s options=access+condata+defer\n",
            argv[2], argv[3]);
     return 0;
 }

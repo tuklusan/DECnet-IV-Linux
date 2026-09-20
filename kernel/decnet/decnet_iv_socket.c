@@ -51,6 +51,8 @@ struct dniv_sock {
     struct sockaddr_dn peer;
     struct optdata_dn conndata_out;
     struct optdata_dn conndata_in;
+    struct optdata_dn discdata_out;
+    struct optdata_dn discdata_in;
     struct accessdata_dn accessdata;
     struct list_head listener_link;
     __u16 pending[DNIV_SOCK_MAX_BACKLOG];
@@ -58,6 +60,7 @@ struct dniv_sock {
     __u16 pending_head;
     __u16 pending_tail;
     __u16 pending_count;
+    __u8 accept_mode;
     bool bound;
     bool listening;
 };
@@ -570,7 +573,11 @@ static int dniv_sock_release(struct socket *sock)
         if (dsk->local_link) {
             if (!dniv_nsp_conn_snapshot(dsk->local_link, &snapshot) &&
                 snapshot.state == DNIV_NSP_ST_RUN) {
-                if (dniv_nsp_disconnect(dsk->local_link, 0U, NULL, 0U))
+                if (dniv_nsp_disconnect(
+                        dsk->local_link,
+                        le16_to_cpu(dsk->discdata_out.opt_status),
+                        dsk->discdata_out.opt_data,
+                        le16_to_cpu(dsk->discdata_out.opt_optl)))
                     dniv_nsp_conn_release(dsk->local_link);
             } else {
                 dniv_nsp_conn_release(dsk->local_link);
@@ -991,7 +998,11 @@ static int dniv_sock_shutdown(struct socket *sock, int how)
     if (!dsk->local_link)
         ret = -ENOTCONN;
     else {
-        ret = dniv_nsp_disconnect(dsk->local_link, 0U, NULL, 0U);
+        ret = dniv_nsp_disconnect(
+            dsk->local_link,
+            le16_to_cpu(dsk->discdata_out.opt_status),
+            dsk->discdata_out.opt_data,
+            le16_to_cpu(dsk->discdata_out.opt_optl));
         if (!ret) {
             sock->state = SS_DISCONNECTING;
             sock->sk->sk_shutdown = SHUTDOWN_MASK;
@@ -1142,6 +1153,8 @@ static int dniv_sock_accept_impl(struct socket *sock, struct socket *newsock,
     memset(&newdsk->peer, 0, sizeof(newdsk->peer));
     memset(&newdsk->conndata_out, 0, sizeof(newdsk->conndata_out));
     memset(&newdsk->conndata_in, 0, sizeof(newdsk->conndata_in));
+    memset(&newdsk->discdata_out, 0, sizeof(newdsk->discdata_out));
+    memset(&newdsk->discdata_in, 0, sizeof(newdsk->discdata_in));
     memset(&newdsk->accessdata, 0, sizeof(newdsk->accessdata));
     INIT_LIST_HEAD(&newdsk->listener_link);
     memset(newdsk->pending, 0, sizeof(newdsk->pending));
@@ -1149,7 +1162,9 @@ static int dniv_sock_accept_impl(struct socket *sock, struct socket *newsock,
     newdsk->peer = source;
     newdsk->conndata_out = dsk->conndata_out;
     newdsk->conndata_in = conndata;
+    newdsk->discdata_out = dsk->discdata_out;
     newdsk->accessdata = access;
+    newdsk->accept_mode = dsk->accept_mode;
     dniv_sockaddr_set_node(&newdsk->peer, ci.remote_node);
     newdsk->local_link = link;
     newdsk->pending_head = 0U;
@@ -1159,20 +1174,24 @@ static int dniv_sock_accept_impl(struct socket *sock, struct socket *newsock,
     newdsk->listening = false;
     newsock->state = SS_CONNECTING;
 
-    ret = dniv_nsp_accept(
-        link, newdsk->conndata_out.opt_data,
-        le16_to_cpu(newdsk->conndata_out.opt_optl));
-    if (ret) {
-        dniv_accept_child_discard(newsock, newsk, link);
-        goto out;
-    }
+    if (newdsk->accept_mode == ACC_IMMED) {
+        ret = dniv_nsp_accept(
+            link, newdsk->conndata_out.opt_data,
+            le16_to_cpu(newdsk->conndata_out.opt_optl));
+        if (ret) {
+            dniv_accept_child_discard(newsock, newsk, link);
+            goto out;
+        }
 
-    ret = dniv_wait_running(newsk, &timeo);
-    if (ret) {
-        dniv_accept_child_discard(newsock, newsk, link);
-        goto out;
+        ret = dniv_wait_running(newsk, &timeo);
+        if (ret) {
+            dniv_accept_child_discard(newsock, newsk, link);
+            goto out;
+        }
+        newsock->state = SS_CONNECTED;
+    } else {
+        ret = 0;
     }
-    newsock->state = SS_CONNECTED;
 out:
     release_sock(sk);
     return ret;
@@ -1202,6 +1221,7 @@ static int dniv_sock_setsockopt(struct socket *sock, int level, int optname,
     union {
         struct optdata_dn opt;
         struct accessdata_dn access;
+        int mode;
     } value;
     int ret = 0;
 
@@ -1223,6 +1243,80 @@ static int dniv_sock_setsockopt(struct socket *sock, int level, int optname,
             dsk->conndata_out = value.opt;
         release_sock(sock->sk);
         return ret;
+
+    case DSO_DISDATA:
+        if (optlen != sizeof(value.opt) ||
+            copy_from_sockptr(&value.opt, optval, optlen))
+            return -EINVAL;
+        if (le16_to_cpu(value.opt.opt_optl) > DN_MAXOPTL)
+            return -EINVAL;
+        lock_sock(sock->sk);
+        if (sock->state != SS_CONNECTED &&
+            !(dsk->accept_mode == ACC_DEFER && dsk->local_link))
+            ret = -ENOTCONN;
+        else
+            dsk->discdata_out = value.opt;
+        release_sock(sock->sk);
+        return ret;
+
+    case DSO_ACCEPTMODE:
+        if (optlen != sizeof(value.mode) ||
+            copy_from_sockptr(&value.mode, optval, optlen))
+            return -EINVAL;
+        if (value.mode != ACC_IMMED && value.mode != ACC_DEFER)
+            return -EINVAL;
+        lock_sock(sock->sk);
+        if (dsk->local_link || sock->state == SS_CONNECTED)
+            ret = -EISCONN;
+        else
+            dsk->accept_mode = (__u8)value.mode;
+        release_sock(sock->sk);
+        return ret;
+
+    case DSO_CONACCEPT: {
+        struct dniv_nsp_conn_snapshot snapshot;
+        long timeo;
+
+        lock_sock(sock->sk);
+        if (!dsk->local_link || dsk->accept_mode != ACC_DEFER ||
+            dniv_nsp_conn_snapshot(dsk->local_link, &snapshot) ||
+            snapshot.state != DNIV_NSP_ST_CR) {
+            ret = -EINVAL;
+        } else {
+            ret = dniv_nsp_accept(
+                dsk->local_link, dsk->conndata_out.opt_data,
+                le16_to_cpu(dsk->conndata_out.opt_optl));
+            if (!ret) {
+                timeo = sock_rcvtimeo(sock->sk, 0);
+                ret = dniv_wait_running(sock->sk, &timeo);
+                if (!ret)
+                    sock->state = SS_CONNECTED;
+            }
+        }
+        release_sock(sock->sk);
+        return ret;
+    }
+
+    case DSO_CONREJECT: {
+        struct dniv_nsp_conn_snapshot snapshot;
+
+        lock_sock(sock->sk);
+        if (!dsk->local_link || dsk->accept_mode != ACC_DEFER ||
+            dniv_nsp_conn_snapshot(dsk->local_link, &snapshot) ||
+            snapshot.state != DNIV_NSP_ST_CR) {
+            ret = -EINVAL;
+        } else {
+            ret = dniv_nsp_reject(
+                dsk->local_link,
+                le16_to_cpu(dsk->discdata_out.opt_status),
+                dsk->discdata_out.opt_data,
+                le16_to_cpu(dsk->discdata_out.opt_optl));
+            if (!ret)
+                sock->state = SS_DISCONNECTING;
+        }
+        release_sock(sock->sk);
+        return ret;
+    }
 
     case DSO_CONACCESS:
         if (optlen != sizeof(value.access) ||
@@ -1253,6 +1347,7 @@ static int dniv_sock_getsockopt(struct socket *sock, int level, int optname,
         struct optdata_dn opt;
         struct accessdata_dn access;
         struct linkinfo_dn link;
+        __u8 mode;
     } value;
     unsigned int available;
     unsigned int copied;
@@ -1273,9 +1368,19 @@ static int dniv_sock_getsockopt(struct socket *sock, int level, int optname,
         available = sizeof(value.opt);
         break;
 
+    case DSO_DISDATA:
+        value.opt = dsk->discdata_in;
+        available = sizeof(value.opt);
+        break;
+
     case DSO_CONACCESS:
         value.access = dsk->accessdata;
         available = sizeof(value.access);
+        break;
+
+    case DSO_ACCEPTMODE:
+        value.mode = dsk->accept_mode;
+        available = sizeof(value.mode);
         break;
 
     case DSO_LINKINFO:
@@ -1365,6 +1470,8 @@ static int dniv_sock_create(struct net *net, struct socket *sock,
     memset(&dsk->peer, 0, sizeof(dsk->peer));
     memset(&dsk->conndata_out, 0, sizeof(dsk->conndata_out));
     memset(&dsk->conndata_in, 0, sizeof(dsk->conndata_in));
+    memset(&dsk->discdata_out, 0, sizeof(dsk->discdata_out));
+    memset(&dsk->discdata_in, 0, sizeof(dsk->discdata_in));
     memset(&dsk->accessdata, 0, sizeof(dsk->accessdata));
     dsk->local.sdn_family = AF_DECnet;
     dsk->peer.sdn_family = AF_DECnet;
@@ -1374,6 +1481,7 @@ static int dniv_sock_create(struct net *net, struct socket *sock,
     dsk->pending_head = 0U;
     dsk->pending_tail = 0U;
     dsk->pending_count = 0U;
+    dsk->accept_mode = ACC_IMMED;
     dsk->bound = false;
     dsk->listening = false;
     return 0;
