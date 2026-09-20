@@ -81,7 +81,7 @@ Implementation order:
 | Phase 4 accepted protocol candidate | `6c185b6d01f8a57ee9f0ea6a6c37d7112ddb77d2` |
 | Phase 4 closure commit | `571333bfd7aaa8b2fcc88715c1d61442af151f3c` |
 | Phase 4 tag | `PHASE-4-COMPLETE` |
-| Latest accepted Phase 5 candidate | `d62bf7cb5c86ca5cee2f0c199872978ead6828c6` |
+| Latest accepted Phase 5 candidate | `551029224a621c5f11b3ae3a280c51e14b965ca0` |
 | Route20 pin | `a9ef7c0b7f875f0dd2e8abaf11213798a8e4474c` |
 | PyDECnet live pin | `295938c76c956a70957f4cf96b05685f555b2a18` |
 | VM lifecycle | direct QEMU/QMP |
@@ -411,3 +411,8 @@ NSP ACK review then found a concrete Other-Data error-control defect. The candid
 Exact-SHA fast acceptance for cumulative Other-Data ACK candidate `d62bf7cb5c86ca5cee2f0c199872978ead6828c6` is green: Repository Policy `35544925880`, Build Bootstrap `35544944645`, Project State Gate `35544945676`, E1 Python QEMU VM Lab `35544946708` on x86_64 and ARM64, and x64 PyDECnet L1 Independent Ethernet Interoperability `35544947674`.
 
 NSP receive-resource review found a bounded-cache deadlock and subchannel-isolation defect. A single global 32-entry receive limit allowed out-of-order future segments to consume every slot; the missing lower-numbered segment was then rejected with `ENOSPC`, so the cached higher segments could never become contiguous and drain. The same global limit also allowed normal-data backlog to block the independently flow-controlled Other-Data subchannel. DNA NSP V4.0.1 sections 2.6.4, 2.7.1 and 6.5 explicitly allow out-of-order segments to be discarded instead of cached, and section 6.5 forbids discarding lower-numbered data while higher-numbered data remains cached. Receive bounds are now per subchannel. A future packet arriving to a full subchannel cache is left unacknowledged for peer retransmission; when the missing expected packet arrives to a full cache, the farthest cached future packet on that subchannel is reclaimed first so forward progress is guaranteed. Total receive accounting remains available for diagnostics. Next: exact-SHA fast socket acceptance, then malformed ACK-field and sequence-boundary negatives.
+
+
+Exact-SHA fast acceptance for receive-cache deadlock candidate `551029224a621c5f11b3ae3a280c51e14b965ca0` is green: Repository Policy `35545504071`, Build Bootstrap `35545526646`, Project State Gate `35545527462`, E1 Python QEMU VM Lab `35545528555` on x86_64 and ARM64, and x64 PyDECnet L1 Independent Ethernet Interoperability `35545529422`.
+
+Audit of the socket-lifecycle harness found a false-green discriminator defect in `dnbacklog.c`: the listener-close implementation was nested inside `if (close_race)`, but the command-line modes are mutually exclusive. The intended path that accepts one child, closes the listener with two requests still pending, then proves the accepted child remains usable was therefore unreachable. Listener-close mode instead fell through the generic one-accept path and did not prove the intended lifetime ordering. The listener-close block is now a separate mode before the close-race loop. No kernel/protocol behavior changes in this candidate. Prior listener-close acceptance evidence is superseded; exact-SHA fast acceptance must re-prove one accepted child, two reason-6 pending rejections, and surviving child I/O.

@@ -121,8 +121,7 @@ int main(int argc, char **argv)
            argv[2], argv[3], backlog);
 
     sleep(3);
-    if (close_race) {
-        if (listener_close) {
+    if (listener_close) {
         struct sockaddr_dn peer;
         socklen_t peerlen = sizeof(peer);
         ssize_t got;
@@ -163,7 +162,8 @@ int main(int argc, char **argv)
         goto done;
     }
 
-    for (i = 0U; i < accept_count; i++) {
+    if (close_race) {
+        for (i = 0U; i < accept_count; i++) {
             struct sockaddr_dn peer;
             socklen_t peerlen = sizeof(peer);
             ssize_t got;
