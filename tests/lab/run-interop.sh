@@ -362,6 +362,23 @@ if [[ "$reference" == pydecnet && "$scenario" != router-endnode ]]; then
         tail -160 "$ref1_log" >&2 || true
         exit 1
     fi
+    if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-RESET-READY session=$session scenario=$scenario" 30 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+        tail -240 "$candidate_log" >&2 || true
+        tail -180 "$ref1_log" >&2 || true
+        exit 1
+    fi
+    if ! env PYTHONPATH="$host_pydecnet/pydecnet" python3 \
+        "$script_dir/pydecnet-reset.py" "$host_pydecnet_api" \
+        "$area.$node" "$ref_name"; then
+        tail -260 "$candidate_log" >&2 || true
+        tail -200 "$ref1_log" >&2 || true
+        exit 1
+    fi
+    if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-RESET-PASS session=$session scenario=$scenario" 90 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+        tail -260 "$candidate_log" >&2 || true
+        tail -200 "$ref1_log" >&2 || true
+        exit 1
+    fi
 fi
 if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-READY-STOP session=$session scenario=$scenario" "$timeout_seconds" "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
     tail -220 "$candidate_log" >&2 || true
