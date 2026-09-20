@@ -111,11 +111,25 @@ int main(int argc, char **argv)
             return 1;
         }
         got = recv(fd, buf, sizeof(buf), 0);
-        if (got <= 0 || send(fd, buf, (size_t)got,
-                             MSG_EOR | MSG_NOSIGNAL) != got) {
+        if (got <= 0) {
+            fprintf(stderr, "backlog recv index=%u got=%zd errno=%d (%s)\\n",
+                    i, got, errno, strerror(errno));
             close(fd);
             close(listener);
             return 1;
+        }
+        {
+            ssize_t sent = send(fd, buf, (size_t)got,
+                                MSG_EOR | MSG_NOSIGNAL);
+
+            if (sent != got) {
+                fprintf(stderr,
+                        "backlog send index=%u got=%zd sent=%zd errno=%d (%s)\\n",
+                        i, got, sent, errno, strerror(errno));
+                close(fd);
+                close(listener);
+                return 1;
+            }
         }
         close(fd);
     }
