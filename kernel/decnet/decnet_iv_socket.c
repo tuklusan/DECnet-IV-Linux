@@ -524,6 +524,7 @@ static int dniv_wait_running(struct sock *sk, long *timeo)
             return status;
         if (!*timeo)
             return -EINPROGRESS;
+        diag_stage = 20;
         ret = wait_event_interruptible_timeout(
             dniv_sock_waitq, dniv_link_status(dsk) != 0, *timeo);
         if (ret < 0)
@@ -932,6 +933,7 @@ static int dniv_sock_recvmsg(struct socket *sock, struct msghdr *msg,
     size_t copied;
     long timeo;
     int ret;
+    int diag_stage = 0;
 
     if (flags & ~(MSG_DONTWAIT | MSG_TRUNC | MSG_NOSIGNAL | MSG_OOB |
                   MSG_WAITALL))
@@ -945,6 +947,7 @@ static int dniv_sock_recvmsg(struct socket *sock, struct msghdr *msg,
 
     lock_sock(sk);
     if (sock->state != SS_CONNECTED) {
+        diag_stage = 1;
         ret = -ENOTCONN;
         goto out_unlock;
     }
@@ -962,6 +965,7 @@ static int dniv_sock_recvmsg(struct socket *sock, struct msghdr *msg,
 
     lock_sock(sk);
     if (sock->state != SS_CONNECTED) {
+        diag_stage = 2;
         ret = -ENOTCONN;
         goto out;
     }
@@ -974,6 +978,7 @@ static int dniv_sock_recvmsg(struct socket *sock, struct msghdr *msg,
             if (!ret)
                 length = interrupt_len;
         } else {
+            diag_stage = 10;
             ret = dniv_nsp_recv_message(dsk->local_link, data, DNBUFSIZE,
                                         &length);
         }
@@ -995,6 +1000,7 @@ static int dniv_sock_recvmsg(struct socket *sock, struct msghdr *msg,
             goto out;
         }
         timeo = ret;
+        diag_stage = 21;
         if (dniv_link_status(dsk) < 0) {
             ret = 0;
             goto out;
@@ -1003,6 +1009,7 @@ static int dniv_sock_recvmsg(struct socket *sock, struct msghdr *msg,
 
     copied = min_t(size_t, size, length);
     if (copied && copy_to_iter(data, copied, &msg->msg_iter) != copied) {
+        diag_stage = 30;
         ret = -EFAULT;
         goto out;
     }
@@ -1025,8 +1032,8 @@ static int dniv_sock_recvmsg(struct socket *sock, struct msghdr *msg,
     ret = (flags & MSG_TRUNC) ? (int)length : (int)copied;
 out:
     if (dsk->local.sdn_objnum == 243U && ret < 0)
-        pr_err("dniv close-race recvmsg negative link=%u ret=%d state=%d type=%u protocol=%u\n",
-               dsk->local_link, ret, sock->state, sk->sk_type,
+        pr_err("dniv close-race recvmsg negative link=%u ret=%d stage=%d state=%d type=%u protocol=%u\n",
+               dsk->local_link, ret, diag_stage, sock->state, sk->sk_type,
                sk->sk_protocol);
     release_sock(sk);
     kfree(data);
@@ -1034,8 +1041,8 @@ out:
 
 out_unlock:
     if (dsk->local.sdn_objnum == 243U && ret < 0)
-        pr_err("dniv close-race recvmsg negative-early link=%u ret=%d state=%d type=%u protocol=%u\n",
-               dsk->local_link, ret, sock->state, sk->sk_type,
+        pr_err("dniv close-race recvmsg negative-early link=%u ret=%d stage=%d state=%d type=%u protocol=%u\n",
+               dsk->local_link, ret, diag_stage, sock->state, sk->sk_type,
                sk->sk_protocol);
     release_sock(sk);
     return ret;
