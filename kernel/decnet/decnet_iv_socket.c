@@ -1251,9 +1251,9 @@ static int dniv_sock_accept_impl(struct socket *sock, struct socket *newsock,
     }
     newsk->sk_family = PF_DECnet;
     newsk->sk_protocol = DNPROTO_NSP;
+    security_sk_clone(sk, newsk);
     sock_init_data(newsock, newsk);
     security_sock_graft(newsk, newsock);
-    security_sk_clone(sk, newsk);
     newsock->ops = &dniv_proto_ops;
 
     newdsk = dniv_sk(newsk);
