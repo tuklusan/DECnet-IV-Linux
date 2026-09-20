@@ -262,6 +262,13 @@ if [ "$reference" = pydecnet ]; then
             exit 1
         fi
         echo "DNIV-INTEROP-LISTENER-CLOSE-PASS session=$session scenario=$scenario node=$name peer=$peer_node"
+        /usr/local/sbin/dntermrace "$peer_node" "$session" "$scenario" &
+        term_race_pid=$!
+        if ! wait "$term_race_pid"; then
+            echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=simultaneous-termination"
+            exit 1
+        fi
+        echo "DNIV-INTEROP-TERM-RACE-PASS session=$session scenario=$scenario node=$name peer=$peer_node"
     fi
 fi
 

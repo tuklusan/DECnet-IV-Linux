@@ -104,6 +104,8 @@ cc -I/usr/src/decnet-iv-linux/include/uapi -O2 -std=c11 -Wall -Wextra -Werror \
     -o /usr/local/sbin/dnbacklog /usr/src/decnet-iv-linux/tests/lab/dnbacklog.c
 cc -I/usr/src/decnet-iv-linux/include/uapi -O2 -std=c11 -Wall -Wextra -Werror \
     -o /usr/local/sbin/dnreset /usr/src/decnet-iv-linux/tests/lab/dnreset.c
+cc -I/usr/src/decnet-iv-linux/include/uapi -O2 -std=c11 -Wall -Wextra -Werror \
+    -o /usr/local/sbin/dntermrace /usr/src/decnet-iv-linux/tests/lab/dntermrace.c
 make -C /usr/src/decnet-iv-linux/kernel/decnet KDIR="/lib/modules/$krel/build" clean all
 install -D -m 0644 /usr/src/decnet-iv-linux/kernel/decnet/decnet_iv.ko \
     "/lib/modules/$krel/extra/decnet_iv.ko"
@@ -149,6 +151,7 @@ sudo test -s "$mnt/usr/local/sbin/dnsocklife"
 sudo test -s "$mnt/usr/local/sbin/dnsockstress"
 sudo test -s "$mnt/usr/local/sbin/dnbacklog"
 sudo test -s "$mnt/usr/local/sbin/dnreset"
+sudo test -s "$mnt/usr/local/sbin/dntermrace"
 sudo test -s "$mnt/usr/local/sbin/dniv-smoke"
 sudo test -s "$mnt/usr/local/sbin/dniv-interop-smoke"
 
