@@ -187,6 +187,7 @@ static void test_sequence(void)
     assert(DNIV_NSP_DEFAULT_RESPONSE_SECONDS == 5U);
     assert(DNIV_NSP_CONNECT_TIMEOUT_SECONDS == 30U);
     assert(DNIV_NSP_INACTIVITY_SECONDS == 300U);
+    assert(DNIV_NSP_REASON_NODE_UNREACHABLE == 39U);
 }
 
 int main(void)

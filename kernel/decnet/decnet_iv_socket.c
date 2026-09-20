@@ -477,6 +477,9 @@ static int dniv_link_status(struct dniv_sock *dsk)
         snapshot.state == DNIV_NSP_ST_CD ||
         snapshot.state == DNIV_NSP_ST_CC)
         return 0;
+    if (snapshot.state == DNIV_NSP_ST_CLOSED &&
+        snapshot.disconnect_reason == DNIV_NSP_REASON_NODE_UNREACHABLE)
+        return -EHOSTUNREACH;
     return -ECONNREFUSED;
 }
 
@@ -785,10 +788,13 @@ static int dniv_sock_sendmsg(struct socket *sock, struct msghdr *msg,
     }
 
     lock_sock(sk);
-    if (sock->state != SS_CONNECTED || dniv_link_status(dsk) <= 0) {
-        ret = -ENOTCONN;
+    ret = dniv_link_status(dsk);
+    if (sock->state != SS_CONNECTED || ret <= 0) {
+        if (ret != -EHOSTUNREACH)
+            ret = -ENOTCONN;
         goto out;
     }
+    ret = 0;
     timeo = sock_sndtimeo(sk, msg->msg_flags & MSG_DONTWAIT);
     if (msg->msg_flags & MSG_OOB) {
         for (;;) {
@@ -885,8 +891,13 @@ static int dniv_stream_recv_locked(struct socket *sock,
                 }
                 if (ret != -EAGAIN)
                     return copied ? (int)copied : ret;
-                if (dniv_link_status(dsk) < 0)
-                    return (int)copied;
+                {
+                    int status = dniv_link_status(dsk);
+
+                    if (status < 0)
+                        return copied ? (int)copied :
+                               (status == -EHOSTUNREACH ? status : 0);
+                }
                 if (!*timeo)
                     return copied ? (int)copied : -EAGAIN;
                 wait_ret = wait_event_interruptible_timeout(
@@ -1004,9 +1015,13 @@ static int dniv_sock_recvmsg(struct socket *sock, struct msghdr *msg,
             goto out;
         }
         timeo = wait_ret;
-        if (dniv_link_status(dsk) < 0) {
-            ret = 0;
-            goto out;
+        {
+            int status = dniv_link_status(dsk);
+
+            if (status < 0) {
+                ret = status == -EHOSTUNREACH ? status : 0;
+                goto out;
+            }
         }
     }
 
@@ -1072,6 +1087,9 @@ static __poll_t dniv_sock_poll(struct file *file, struct socket *sock,
     } else if (snapshot.state == DNIV_NSP_ST_DI ||
                snapshot.state == DNIV_NSP_ST_CLOSED) {
         mask |= EPOLLHUP;
+        if (snapshot.state == DNIV_NSP_ST_CLOSED &&
+            snapshot.disconnect_reason == DNIV_NSP_REASON_NODE_UNREACHABLE)
+            mask |= EPOLLERR;
     }
     return mask;
 }

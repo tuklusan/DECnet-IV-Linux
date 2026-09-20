@@ -60,6 +60,7 @@ struct dniv_nsp_conn_snapshot {
     __u16 retransmit_count;
     __u16 rx_queued;
     __u16 interrupt_credit;
+    __u16 disconnect_reason;
     __u8 data_xon;
     unsigned long connect_deadline;
     unsigned long inactivity_deadline;

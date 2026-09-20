@@ -672,6 +672,7 @@ int dniv_nsp_conn_snapshot(__u16 local_link,
     snapshot->retransmit_count = conn->retransmit_count;
     snapshot->rx_queued = conn->rx_queued;
     snapshot->interrupt_credit = conn->interrupt_credit;
+    snapshot->disconnect_reason = conn->disconnect_reason;
     snapshot->data_xon = conn->data_xon ? 1U : 0U;
     snapshot->connect_deadline = conn->connect_deadline;
     snapshot->inactivity_deadline = conn->inactivity_deadline;
@@ -1323,8 +1324,9 @@ static void dniv_nsp_timer_workfn(struct work_struct *work)
         if (ret == -ETIMEDOUT) {
             notify_link = conn->local_link;
             dniv_nsp_purge_locked(conn);
-            memset(conn, 0, sizeof(*conn));
-            dniv_nsp_init_conn_lists(conn);
+            conn->disconnect_reason = DNIV_NSP_REASON_NODE_UNREACHABLE;
+            conn->disconnect_payload_len = 0U;
+            dniv_nsp_set_state_locked(conn, DNIV_NSP_ST_CLOSED, now);
             spin_unlock_irqrestore(&dniv_nsp_lock, flags);
             dniv_nsp_notify_link(notify_link);
             continue;
