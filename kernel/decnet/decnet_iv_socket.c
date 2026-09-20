@@ -933,6 +933,7 @@ static int dniv_sock_recvmsg(struct socket *sock, struct msghdr *msg,
     long timeo;
     int ret;
     int diag_stage = 0;
+    long diag_wait_timeo = 0;
 
     if (flags & ~(MSG_DONTWAIT | MSG_TRUNC | MSG_NOSIGNAL | MSG_OOB |
                   MSG_WAITALL))
@@ -986,6 +987,7 @@ static int dniv_sock_recvmsg(struct socket *sock, struct msghdr *msg,
         if (ret != -EAGAIN || !timeo)
             goto out;
         diag_stage = 20;
+        diag_wait_timeo = timeo;
         ret = wait_event_interruptible_timeout(
             dniv_sock_waitq,
             ({ bool normal = false, intr = false;
@@ -1032,8 +1034,9 @@ static int dniv_sock_recvmsg(struct socket *sock, struct msghdr *msg,
     ret = (flags & MSG_TRUNC) ? (int)length : (int)copied;
 out:
     if (dsk->local.sdn_objnum == 243U && ret < 0)
-        pr_err("dniv close-race recvmsg negative link=%u ret=%d stage=%d state=%d type=%u protocol=%u\n",
-               dsk->local_link, ret, diag_stage, sock->state, sk->sk_type,
+        pr_err("dniv close-race recvmsg negative link=%u ret=%d stage=%d wait=%ld rcvtimeo=%ld state=%d type=%u protocol=%u\n",
+               dsk->local_link, ret, diag_stage, diag_wait_timeo,
+               READ_ONCE(sk->sk_rcvtimeo), sock->state, sk->sk_type,
                sk->sk_protocol);
     release_sock(sk);
     kfree(data);
@@ -1041,8 +1044,9 @@ out:
 
 out_unlock:
     if (dsk->local.sdn_objnum == 243U && ret < 0)
-        pr_err("dniv close-race recvmsg negative-early link=%u ret=%d stage=%d state=%d type=%u protocol=%u\n",
-               dsk->local_link, ret, diag_stage, sock->state, sk->sk_type,
+        pr_err("dniv close-race recvmsg negative-early link=%u ret=%d stage=%d wait=%ld rcvtimeo=%ld state=%d type=%u protocol=%u\n",
+               dsk->local_link, ret, diag_stage, diag_wait_timeo,
+               READ_ONCE(sk->sk_rcvtimeo), sock->state, sk->sk_type,
                sk->sk_protocol);
     release_sock(sk);
     return ret;
