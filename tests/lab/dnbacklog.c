@@ -24,7 +24,9 @@
 #include <linux/dn.h>
 
 #define BACKLOG_OBJECT 241U
+#define OVERFLOW_OBJECT 242U
 #define BACKLOG_COUNT 4U
+#define OVERFLOW_BACKLOG 2U
 
 static int parse_node(const char *text, uint16_t *address)
 {
@@ -44,7 +46,7 @@ static int parse_node(const char *text, uint16_t *address)
     return 0;
 }
 
-static int make_listener(void)
+static int make_listener(unsigned int object, unsigned int backlog)
 {
     struct sockaddr_dn local;
     struct timeval timeout = { .tv_sec = 30, .tv_usec = 0 };
@@ -56,9 +58,9 @@ static int make_listener(void)
         goto fail;
     memset(&local, 0, sizeof(local));
     local.sdn_family = AF_DECnet;
-    local.sdn_objnum = BACKLOG_OBJECT;
+    local.sdn_objnum = (unsigned char)object;
     if (bind(fd, (struct sockaddr *)&local, sizeof(local)) ||
-        listen(fd, (int)BACKLOG_COUNT))
+        listen(fd, (int)backlog))
         goto fail;
     return fd;
 fail:
@@ -71,24 +73,38 @@ int main(int argc, char **argv)
     unsigned char buf[128];
     uint16_t expected_node;
     unsigned int i;
+    unsigned int object = BACKLOG_OBJECT;
+    unsigned int backlog = BACKLOG_COUNT;
+    unsigned int accept_count = BACKLOG_COUNT;
+    int overflow = 0;
     int listener;
 
     setvbuf(stdout, NULL, _IONBF, 0);
-    if (argc != 4 || parse_node(argv[1], &expected_node)) {
-        fprintf(stderr, "usage: %s PEER-AREA.NODE SESSION SCENARIO\n", argv[0]);
+    if ((argc != 4 && argc != 5) || parse_node(argv[1], &expected_node)) {
+        fprintf(stderr, "usage: %s PEER-AREA.NODE SESSION SCENARIO [overflow]\n", argv[0]);
         return 2;
     }
+    if (argc == 5) {
+        if (strcmp(argv[4], "overflow")) {
+            fprintf(stderr, "unsupported backlog mode: %s\n", argv[4]);
+            return 2;
+        }
+        overflow = 1;
+        object = OVERFLOW_OBJECT;
+        backlog = OVERFLOW_BACKLOG;
+        accept_count = OVERFLOW_BACKLOG;
+    }
 
-    listener = make_listener();
+    listener = make_listener(object, backlog);
     if (listener < 0) {
         perror("backlog listener");
         return 1;
     }
-    printf("DNIV-INTEROP-BACKLOG-READY session=%s scenario=%s count=%u\n",
-           argv[2], argv[3], BACKLOG_COUNT);
+    printf("DNIV-INTEROP-%s-READY session=%s scenario=%s count=%u\n",
+           overflow ? "OVERFLOW" : "BACKLOG", argv[2], argv[3], backlog);
 
     sleep(3);
-    for (i = 0U; i < BACKLOG_COUNT; i++) {
+    for (i = 0U; i < accept_count; i++) {
         struct sockaddr_dn peer;
         socklen_t peerlen = sizeof(peer);
         ssize_t got;
@@ -135,7 +151,7 @@ int main(int argc, char **argv)
     }
 
     close(listener);
-    printf("DNIV-INTEROP-BACKLOG-SERVER-PASS session=%s scenario=%s count=%u\n",
-           argv[2], argv[3], BACKLOG_COUNT);
+    printf("DNIV-INTEROP-%s-SERVER-PASS session=%s scenario=%s count=%u\n",
+           overflow ? "OVERFLOW" : "BACKLOG", argv[2], argv[3], accept_count);
     return 0;
 }

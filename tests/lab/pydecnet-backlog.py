@@ -20,29 +20,40 @@ import threading
 
 from decnet.connectors import SimpleApiConnector
 
-COUNT = 4
-OBJECT = 241
+QUEUE_COUNT = 4
+QUEUE_OBJECT = 241
+OVERFLOW_COUNT = 3
+OVERFLOW_OBJECT = 242
+OBJECT_BUSY = 6
 
 
 def worker(api_socket: str, destination: str, system: str, index: int,
-           barrier: threading.Barrier, errors: list[str]) -> None:
+           object_number: int, barrier: threading.Barrier,
+           results: list[str | None], errors: list[str]) -> None:
     connector = SimpleApiConnector(api_socket)
     try:
         barrier.wait()
         connection, response = connector.connect(
             system=system,
             dest=destination,
-            remuser=OBJECT,
+            remuser=object_number,
             localuser=f"BKL{index}",
         )
         if connection is None or response.type != "accept":
-            raise RuntimeError(f"connect {index} rejected: {getattr(response, 'reason', None)!r}")
+            reason = getattr(response, "reason", None)
+            if object_number == OVERFLOW_OBJECT and reason == OBJECT_BUSY:
+                results[index] = "busy"
+                return
+            raise RuntimeError(f"connect {index} rejected: {reason!r}")
         payload = f"backlog-{index}".encode("ascii")
         connection.data(payload)
         reply = connection.recv()
         if reply.type != "data" or bytes(reply) != payload:
-            raise RuntimeError(f"bad echo {index}: type={reply.type!r} data={bytes(reply)!r}")
+            raise RuntimeError(
+                f"bad echo {index}: type={reply.type!r} data={bytes(reply)!r}"
+            )
         connection.disconnect()
+        results[index] = "accept"
     except Exception as exc:
         errors.append(f"{index}:{exc!r}")
     finally:
@@ -50,18 +61,29 @@ def worker(api_socket: str, destination: str, system: str, index: int,
 
 
 def main() -> int:
-    if len(sys.argv) != 4:
-        raise SystemExit(f"usage: {sys.argv[0]} API-SOCKET AREA.NODE PYDECNET-SYSTEM")
-    api_socket, destination, system = sys.argv[1:]
-    barrier = threading.Barrier(COUNT)
+    if len(sys.argv) not in (4, 5):
+        raise SystemExit(
+            f"usage: {sys.argv[0]} API-SOCKET AREA.NODE PYDECNET-SYSTEM [overflow]"
+        )
+    api_socket, destination, system = sys.argv[1:4]
+    overflow = len(sys.argv) == 5
+    if overflow and sys.argv[4] != "overflow":
+        raise SystemExit(f"unsupported backlog mode: {sys.argv[4]}")
+    count = OVERFLOW_COUNT if overflow else QUEUE_COUNT
+    object_number = OVERFLOW_OBJECT if overflow else QUEUE_OBJECT
+    barrier = threading.Barrier(count)
     errors: list[str] = []
+    results: list[str | None] = [None] * count
     threads = [
         threading.Thread(
             target=worker,
-            args=(api_socket, destination, system, i, barrier, errors),
+            args=(
+                api_socket, destination, system, i, object_number,
+                barrier, results, errors,
+            ),
             daemon=True,
         )
-        for i in range(COUNT)
+        for i in range(count)
     ]
     for thread in threads:
         thread.start()
@@ -71,7 +93,22 @@ def main() -> int:
         raise RuntimeError("backlog workers timed out")
     if errors:
         raise RuntimeError("; ".join(errors))
-    print(f"pydecnet-backlog: pass peer={destination} queued={COUNT}")
+    if overflow:
+        accepted = results.count("accept")
+        busy = results.count("busy")
+        if accepted != 2 or busy != 1:
+            raise RuntimeError(
+                f"overflow outcomes unexpected: accepted={accepted} busy={busy} "
+                f"results={results!r}"
+            )
+        print(
+            f"pydecnet-backlog: overflow pass peer={destination} "
+            f"accepted={accepted} busy={busy}"
+        )
+    else:
+        if results != ["accept"] * count:
+            raise RuntimeError(f"queue outcomes unexpected: {results!r}")
+        print(f"pydecnet-backlog: pass peer={destination} queued={count}")
     return 0
 
 

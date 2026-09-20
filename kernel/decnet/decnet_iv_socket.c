@@ -934,10 +934,6 @@ static int dniv_sock_recvmsg(struct socket *sock, struct msghdr *msg,
     long timeo;
     int ret;
 
-    if (dsk->local.sdn_objnum == 241U)
-        pr_info("dniv backlog recvmsg enter link=%u sock_state=%d\n",
-                dsk->local_link, sock->state);
-
     if (flags & ~(MSG_DONTWAIT | MSG_TRUNC | MSG_NOSIGNAL | MSG_OOB |
                   MSG_WAITALL))
         return -EOPNOTSUPP;
@@ -1029,17 +1025,11 @@ static int dniv_sock_recvmsg(struct socket *sock, struct msghdr *msg,
     }
     ret = (flags & MSG_TRUNC) ? (int)length : (int)copied;
 out:
-    if (dsk->local.sdn_objnum == 241U)
-        pr_info("dniv backlog recvmsg exit link=%u ret=%d\n",
-                dsk->local_link, ret);
     release_sock(sk);
     kfree(data);
     return ret;
 
 out_unlock:
-    if (dsk->local.sdn_objnum == 241U)
-        pr_info("dniv backlog recvmsg early-exit link=%u ret=%d\n",
-                dsk->local_link, ret);
     release_sock(sk);
     return ret;
 }
