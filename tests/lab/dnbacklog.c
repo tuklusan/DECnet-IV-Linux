@@ -76,6 +76,7 @@ int main(int argc, char **argv)
     unsigned int object = BACKLOG_OBJECT;
     unsigned int backlog = BACKLOG_COUNT;
     unsigned int accept_count = BACKLOG_COUNT;
+    int fds[BACKLOG_COUNT] = { -1, -1, -1, -1 };
     int overflow = 0;
     int listener;
 
@@ -107,7 +108,6 @@ int main(int argc, char **argv)
     for (i = 0U; i < accept_count; i++) {
         struct sockaddr_dn peer;
         socklen_t peerlen = sizeof(peer);
-        ssize_t got;
         uint16_t node;
         int fd = accept(listener, (struct sockaddr *)&peer, &peerlen);
 
@@ -116,42 +116,52 @@ int main(int argc, char **argv)
             (uint16_t)peer.sdn_nodeaddrl != 2U) {
             if (fd >= 0)
                 close(fd);
-            close(listener);
-            return 1;
+            goto fail_children;
         }
         node = (uint16_t)(peer.sdn_nodeaddr[0] |
                           ((uint16_t)peer.sdn_nodeaddr[1] << 8));
         if (node != expected_node) {
             close(fd);
-            close(listener);
-            return 1;
+            goto fail_children;
         }
-        got = recv(fd, buf, sizeof(buf), 0);
+        fds[i] = fd;
+    }
+
+    for (i = 0U; i < accept_count; i++) {
+        ssize_t got = recv(fds[i], buf, sizeof(buf), 0);
+
         if (got <= 0) {
             fprintf(stderr, "backlog recv index=%u got=%zd errno=%d (%s)\n",
                     i, got, errno, strerror(errno));
-            close(fd);
-            close(listener);
-            return 1;
+            goto fail_children;
         }
         {
-            ssize_t sent = send(fd, buf, (size_t)got,
+            ssize_t sent = send(fds[i], buf, (size_t)got,
                                 MSG_EOR | MSG_NOSIGNAL);
 
             if (sent != got) {
                 fprintf(stderr,
                         "backlog send index=%u got=%zd sent=%zd errno=%d (%s)\n",
                         i, got, sent, errno, strerror(errno));
-                close(fd);
-                close(listener);
-                return 1;
+                goto fail_children;
             }
         }
-        close(fd);
+    }
+    for (i = 0U; i < accept_count; i++) {
+        close(fds[i]);
+        fds[i] = -1;
     }
 
     close(listener);
     printf("DNIV-INTEROP-%s-SERVER-PASS session=%s scenario=%s count=%u\n",
            overflow ? "OVERFLOW" : "BACKLOG", argv[2], argv[3], accept_count);
     return 0;
+
+fail_children:
+    for (i = 0U; i < BACKLOG_COUNT; i++) {
+        if (fds[i] >= 0)
+            close(fds[i]);
+    }
+    close(listener);
+    return 1;
 }
