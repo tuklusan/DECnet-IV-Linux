@@ -187,3 +187,6 @@ Phase 5 deferred-accept and outbound disconnect-data support is now implemented 
 Exact-SHA acceptance of deferred-accept candidate `0499c273de9e4eb068b5a899327bfe3f25621082` is green: Build Bootstrap `35493677400`, Project State Gate `35493678586`, External Reference Baselines `35493679708`, E1-E4 Python QEMU VM Lab `35493680575`, `35493681592`, `35493682418`, `35493683113`, and Independent Ethernet Interoperability `35493684110` all completed successfully. Deferred accept/reject and outbound disconnect-data controls are accepted.
 
 The next Phase 5 candidate preserves peer Disconnect Initiate reason/data through the NSP closed state and exposes it through `DSO_DISDATA`; the PyDECnet inbound proof now disconnects both listener sessions with `py-disconnect`, and native userspace requires the exact payload after EOF. Next after exact-SHA acceptance: stream-mode semantics and lifecycle negatives.
+
+
+Candidate `e3c516f572ec4238263165f76e69719f1c82627e` failed Build Bootstrap `35507899224` on x86_64 with the concrete compiler error `dniv_sock_getsockopt: ret undeclared` in the new `DSO_DISDATA` snapshot path. The corrective successor only declares the existing local return variable; protocol behavior is unchanged. Next: exact-SHA acceptance of the corrective successor.

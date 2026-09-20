@@ -1343,6 +1343,7 @@ static int dniv_sock_getsockopt(struct socket *sock, int level, int optname,
                                 char __user *optval, int __user *optlen)
 {
     struct dniv_sock *dsk = dniv_sk(sock->sk);
+    int ret;
     union {
         struct optdata_dn opt;
         struct accessdata_dn access;
