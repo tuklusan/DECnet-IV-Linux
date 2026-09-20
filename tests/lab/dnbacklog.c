@@ -29,6 +29,25 @@
 #define BACKLOG_COUNT 4U
 #define OVERFLOW_BACKLOG 2U
 
+static void log_socket_identity(int fd, unsigned int index, const char *mode)
+{
+    int domain = -1, type = -1, protocol = -1;
+    socklen_t len;
+
+    len = sizeof(domain);
+    if (getsockopt(fd, SOL_SOCKET, SO_DOMAIN, &domain, &len))
+        domain = -errno;
+    len = sizeof(type);
+    if (getsockopt(fd, SOL_SOCKET, SO_TYPE, &type, &len))
+        type = -errno;
+    len = sizeof(protocol);
+    if (getsockopt(fd, SOL_SOCKET, SO_PROTOCOL, &protocol, &len))
+        protocol = -errno;
+    fprintf(stderr,
+            "%s child=%u fd=%d domain=%d type=%d protocol=%d\n",
+            mode, index, fd, domain, type, protocol);
+}
+
 static int parse_node(const char *text, uint16_t *address)
 {
     char *end;
@@ -133,6 +152,7 @@ int main(int argc, char **argv)
                 close(fd);
                 goto fail_children;
             }
+            log_socket_identity(fd, i, "close-race identity");
             got = recv(fd, buf, sizeof(buf), 0);
             if (got <= 0 ||
                 send(fd, buf, (size_t)got, MSG_EOR | MSG_NOSIGNAL) != got) {

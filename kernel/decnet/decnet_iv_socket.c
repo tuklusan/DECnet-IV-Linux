@@ -934,6 +934,11 @@ static int dniv_sock_recvmsg(struct socket *sock, struct msghdr *msg,
     long timeo;
     int ret;
 
+    if (dsk->local.sdn_objnum == 243U)
+        pr_warn("dniv close-race recvmsg enter link=%u family=%u type=%u protocol=%u state=%d flags=0x%x size=%zu\n",
+                dsk->local_link, sk->sk_family, sk->sk_type,
+                sk->sk_protocol, sock->state, flags, size);
+
     if (flags & ~(MSG_DONTWAIT | MSG_TRUNC | MSG_NOSIGNAL | MSG_OOB |
                   MSG_WAITALL))
         return -EOPNOTSUPP;
@@ -1025,11 +1030,17 @@ static int dniv_sock_recvmsg(struct socket *sock, struct msghdr *msg,
     }
     ret = (flags & MSG_TRUNC) ? (int)length : (int)copied;
 out:
+    if (dsk->local.sdn_objnum == 243U)
+        pr_warn("dniv close-race recvmsg exit link=%u ret=%d state=%d\n",
+                dsk->local_link, ret, sock->state);
     release_sock(sk);
     kfree(data);
     return ret;
 
 out_unlock:
+    if (dsk->local.sdn_objnum == 243U)
+        pr_warn("dniv close-race recvmsg early-exit link=%u ret=%d state=%d\n",
+                dsk->local_link, ret, sock->state);
     release_sock(sk);
     return ret;
 }
@@ -1283,6 +1294,10 @@ static int dniv_sock_accept_impl(struct socket *sock, struct socket *newsock,
     newdsk->bound = true;
     newdsk->listening = false;
     newsock->state = SS_CONNECTING;
+    if (newdsk->local.sdn_objnum == 243U)
+        pr_warn("dniv close-race accept child link=%u family=%u type=%u protocol=%u state=%d\n",
+                newdsk->local_link, newsk->sk_family, newsk->sk_type,
+                newsk->sk_protocol, newsock->state);
 
     if (newdsk->accept_mode == ACC_IMMED) {
         ret = dniv_nsp_accept(
