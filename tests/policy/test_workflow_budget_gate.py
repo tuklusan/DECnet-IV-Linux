@@ -86,7 +86,7 @@ jobs:
         include:
           - arch: amd64
             suite: routing
-            scenarios: \"l1 l2\"
+            scenarios: \"l1\"
     env:
       DNIV_SCRATCH_DIR: ${{{{ github.workspace }}}}/scratch/runtime/${{{{ github.run_id }}}}/${{{{ github.job }}}}-${{{{ matrix.arch }}}}-${{{{ matrix.suite }}}}
     steps:
@@ -189,12 +189,12 @@ def main() -> int:
             raise SystemExit("workflow budget failed to reject a movable cache action tag")
 
         run(root, "git", "reset", "-q", "HEAD", "--", str(sample.relative_to(root)))
-        interop_bad = INTEROP_GOOD.replace('scenarios: "l1 l2"', 'scenarios: "l1 l2 endnode"')
+        interop_bad = INTEROP_GOOD.replace('scenarios: "l1"', 'scenarios: "l1 l2"')
         interop.write_text(interop_bad, encoding="utf-8")
         run(root, "git", "add", str(interop.relative_to(root)))
         interop.write_text(INTEROP_GOOD, encoding="utf-8")
         result = invoke(root, "--staged")
-        if result.returncode == 0 or "3 scenarios" not in result.stderr:
+        if result.returncode == 0 or "2 scenarios" not in result.stderr:
             raise SystemExit("workflow budget failed to reject an oversized staged interop scenario group")
 
         run(root, "git", "reset", "-q", "HEAD", "--", str(interop.relative_to(root)))

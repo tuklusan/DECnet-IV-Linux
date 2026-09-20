@@ -285,3 +285,6 @@ Infrastructure correction: the first tiered-interop workflow revision referenced
 
 
 Infrastructure policy follow-up: Repository Policy run `35523266827` rejected the dynamic interop matrix because the workflow-budget parser only recognized literal YAML `scenarios:` rows. The policy gate and its regression test now also parse scenario fields embedded in the dynamic JSON matrix, and the allowed scenarios-per-job ceiling is tightened from two to one to lock the new parallelization invariant.
+
+
+Infrastructure test correction: Repository Policy `35523382490` found that the workflow-budget regression fixture itself still encoded a two-scenario interop row after the gate maximum was tightened to one. The fixture and oversize negative are corrected to one legal scenario and a two-scenario rejection case; production workflow semantics are unchanged.

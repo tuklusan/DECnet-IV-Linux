@@ -227,3 +227,6 @@ Infrastructure correction: GitHub rejected the first tiered `interop.yml` becaus
 
 
 Infrastructure policy follow-up: Repository Policy `35523266827` correctly stopped dispatch because `workflow_budget_gate.py` could not see scenarios inside the dynamic JSON matrix. The gate now parses both literal YAML and JSON matrix scenario fields, with a one-scenario-per-job maximum; regression coverage is updated accordingly.
+
+
+Infrastructure test correction: Repository Policy `35523382490` caught the stale two-scenario policy-test fixture. The fixture now models one legal scenario and verifies that two scenarios are rejected; production workflow behavior is unchanged.
