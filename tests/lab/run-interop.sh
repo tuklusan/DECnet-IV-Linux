@@ -119,6 +119,9 @@ cleanup() {
     terminate_pid "${CANDIDATE_PID:-}"
     terminate_pid "${REFERENCE_PID:-}"
     terminate_pid "${HOST_PROBE_PID:-}"
+    if [[ -n "${LOSS_QDISC:-}" ]]; then
+        sudo tc qdisc del dev "$tap_reference" clsact 2>/dev/null || true
+    fi
     rm -f "${host_pydecnet_api:-}"
     [[ -n "${TCPDUMP_PID:-}" ]] && sudo kill "$TCPDUMP_PID" 2>/dev/null
     sudo ip link del "$tap_candidate" 2>/dev/null
@@ -289,6 +292,40 @@ fi
 
 candidate_common="root=LABEL=dniv-root rootfstype=ext4 rw dniv.interop=1 dniv.reference=$reference dniv.area=$area dniv.node=$node dniv.name=$name dniv.peer_node=$ref_area.$ref_node dniv.scenario=$scenario dniv.session=$session"
 start_vm "candidate-$scenario" "$candidate_disk" "$tap_candidate" "$candidate_hw" "$candidate_log" "$candidate_common" & CANDIDATE_PID=$!
+if [[ "$reference" == pydecnet ]]; then
+    loss_marker="DNIV-INTEROP-LOSS-READY session=$session scenario=$scenario"
+    if ! wait_candidate_marker "$candidate_log" "$loss_marker" "$timeout_seconds" "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+        tail -240 "$candidate_log" >&2 || true
+        tail -180 "$ref1_log" >&2 || true
+        exit 1
+    fi
+
+    loss_fault_log="$work/nsp-loss-fault.log"
+    : > "$loss_fault_log"
+    sudo tc qdisc add dev "$tap_reference" clsact
+    LOSS_QDISC=1
+    sudo tc filter add dev "$tap_reference" ingress protocol all pref 10 flower \
+        src_mac "$reference_mac" dst_mac "$candidate_mac" action drop
+    printf 'fault=reference-unicast-drop duration=8s source=%s destination=%s\n' \
+        "$reference_mac" "$candidate_mac" >> "$loss_fault_log"
+    sleep 8
+    loss_stats=$(sudo tc -s filter show dev "$tap_reference" ingress)
+    printf '%s\n' "$loss_stats" >> "$loss_fault_log"
+    if ! printf '%s\n' "$loss_stats" | grep -Eq 'Sent [0-9]+ bytes [1-9][0-9]* pkt'; then
+        echo "interop: NSP loss injector matched no frames" >&2
+        cat "$loss_fault_log" >&2
+        exit 1
+    fi
+    sudo tc qdisc del dev "$tap_reference" clsact
+    unset LOSS_QDISC
+
+    if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-LOSS-PASS session=$session scenario=$scenario" 30 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+        tail -260 "$candidate_log" >&2 || true
+        tail -200 "$ref1_log" >&2 || true
+        cat "$loss_fault_log" >&2 || true
+        exit 1
+    fi
+fi
 if [[ "$reference" == pydecnet && "$scenario" != router-endnode ]]; then
     listen_marker="DNIV-INTEROP-LISTEN-READY session=$session scenario=$scenario"
     if ! wait_candidate_marker "$candidate_log" "$listen_marker" "$timeout_seconds" "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then

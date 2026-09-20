@@ -93,6 +93,8 @@ cc -O2 -std=c11 -Wall -Wextra -Werror \
 cc -I/usr/src/decnet-iv-linux/include/uapi -O2 -std=c11 -Wall -Wextra -Werror \
     -o /usr/local/sbin/dnmrr /usr/src/decnet-iv-linux/tests/lab/dnmrr.c
 cc -I/usr/src/decnet-iv-linux/include/uapi -O2 -std=c11 -Wall -Wextra -Werror \
+    -o /usr/local/sbin/dnloss /usr/src/decnet-iv-linux/tests/lab/dnloss.c
+cc -I/usr/src/decnet-iv-linux/include/uapi -O2 -std=c11 -Wall -Wextra -Werror \
     -o /usr/local/sbin/dnaccept /usr/src/decnet-iv-linux/tests/lab/dnaccept.c
 cc -I/usr/src/decnet-iv-linux/include/uapi -O2 -std=c11 -Wall -Wextra -Werror \
     -o /usr/local/sbin/dnstream /usr/src/decnet-iv-linux/tests/lab/dnstream.c
@@ -145,6 +147,7 @@ sudo test "$(sudo cat "$mnt/etc/dniv-candidate-sha")" = "$source_commit"
 sudo test -s "$mnt/usr/local/sbin/dnctl"
 sudo test -s "$mnt/usr/local/sbin/dnraw"
 sudo test -s "$mnt/usr/local/sbin/dnmrr"
+sudo test -s "$mnt/usr/local/sbin/dnloss"
 sudo test -s "$mnt/usr/local/sbin/dnaccept"
 sudo test -s "$mnt/usr/local/sbin/dnstream"
 sudo test -s "$mnt/usr/local/sbin/dnsocklife"

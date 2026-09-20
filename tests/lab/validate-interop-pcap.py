@@ -275,6 +275,8 @@ def main() -> int:
         "candidate_option_ci": 0,
         "reference_option_ci": 0,
         "candidate_accept_data": 0,
+        "candidate_loss_probe": 0,
+        "reference_loss_probe": 0,
         "probes": 0,
     }
     bad_hello_hw = 0
@@ -288,6 +290,8 @@ def main() -> int:
         if nsp is not None:
             if src == args.candidate_mac:
                 counts["candidate_nsp"] += 1
+                if b"DNIV-LOSS-PROBE" in nsp:
+                    counts["candidate_loss_probe"] += 1
                 if nsp[0] == 0x30:
                     counts["candidate_interrupt"] += 1
                 opts = session_ci_options(nsp)
@@ -300,6 +304,8 @@ def main() -> int:
                     counts["candidate_accept_data"] += 1
             elif src == args.reference_mac:
                 counts["reference_nsp"] += 1
+                if b"DNIV-LOSS-PROBE" in nsp:
+                    counts["reference_loss_probe"] += 1
                 if nsp[0] == 0x30:
                     counts["reference_interrupt"] += 1
                 opts = session_ci_options(nsp)
@@ -375,6 +381,10 @@ def main() -> int:
             raise SystemExit("interop pcap: insufficient bidirectional NSP socket traffic")
         if counts["candidate_option_ci"] < 1:
             raise SystemExit("interop pcap: missing candidate access/connect-data CI")
+        if counts["candidate_loss_probe"] < 2:
+            raise SystemExit("interop pcap: missing candidate NSP timeout retransmission")
+        if counts["reference_loss_probe"] < 1:
+            raise SystemExit("interop pcap: missing post-fault reference loss-probe response")
         if args.scenario != "router-endnode":
             if counts["candidate_interrupt"] < 2:
                 raise SystemExit("interop pcap: missing candidate NSP interrupt traffic")
