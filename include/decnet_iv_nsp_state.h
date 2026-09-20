@@ -30,6 +30,12 @@ enum dniv_nsp_channel {
     DNIV_NSP_CH_COUNT = 2,
 };
 
+static inline int
+dniv_nsp_retransmit_allowed(enum dniv_nsp_channel channel, int data_xon)
+{
+    return channel != DNIV_NSP_CH_DATA || data_xon;
+}
+
 enum dniv_nsp_rx_order {
     DNIV_NSP_RX_EXPECTED = 0,
     DNIV_NSP_RX_FUTURE = 1,

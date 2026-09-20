@@ -162,6 +162,14 @@ static void test_negative(void)
            DNIV_NSP_MALFORMED);
 }
 
+static void test_retransmit_flow(void)
+{
+    assert(!dniv_nsp_retransmit_allowed(DNIV_NSP_CH_DATA, 0));
+    assert(dniv_nsp_retransmit_allowed(DNIV_NSP_CH_DATA, 1));
+    assert(dniv_nsp_retransmit_allowed(DNIV_NSP_CH_OTHER, 0));
+    assert(dniv_nsp_retransmit_allowed(DNIV_NSP_CH_OTHER, 1));
+}
+
 static void test_sequence(void)
 {
     assert(dniv_nsp_seq_norm(4096U) == 0U);
@@ -188,6 +196,7 @@ int main(void)
     test_control();
     test_interrupt_and_link_service();
     test_negative();
+    test_retransmit_flow();
     test_sequence();
     return 0;
 }

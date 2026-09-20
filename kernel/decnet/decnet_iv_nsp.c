@@ -1263,6 +1263,8 @@ static int dniv_nsp_prepare_retransmit_locked(
     list_for_each_entry(entry, &conn->retransmit, link) {
         if (time_before(now, entry->deadline))
             continue;
+        if (!dniv_nsp_retransmit_allowed(entry->channel, conn->data_xon))
+            continue;
         if (entry->tries >= DNIV_NSP_MAX_RETRANSMITS)
             return -ETIMEDOUT;
         memcpy(wire, entry->wire, entry->wire_len);

@@ -27,4 +27,4 @@ This is the stable resume entry point for DECnet-IV-Linux.
 
 Repository files are authoritative. Do not reconstruct current state from chat history or stale workflow runs.
 
-Infrastructure detour is complete. Resume normal Phase 5 work from the locked backlog-candidate failure point recorded in `docs/PROJECT_STATE.md` and `scratch/RESUME.md`; investigate the two previously failed x64 PyDECnet jobs before making any protocol or harness correction.
+Infrastructure detour is complete. Resume Phase 5 from the final `Next action` entries in `docs/PROJECT_STATE.md` and `scratch/RESUME.md`. The socket-lifecycle checkpoint is consolidated-green; current work is NSP loss/retransmission/timer behavior.
