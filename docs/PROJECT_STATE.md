@@ -649,3 +649,6 @@ PP-06 full Data-window backpressure now has a live independent-peer proof. On a 
 
 
 The first full-window live proof failed because the test encoded an eight-segment window while the implementation's declared bounded Data window is 20 segments. The candidate correctly accepted the ninth segment. The test is corrected to fill all 20 outstanding Data slots, require the 21st nonblocking send to return EAGAIN, then require recovery after peer replies resume. Product behavior is unchanged.
+
+
+- Exact-SHA fast socket acceptance for full-window backpressure candidate `2f4d54c26d3330badada1f4e9703b5384162403b` is green: Repository Policy `35661733498`, Build Bootstrap `35661771870`, Project State Gate `35661773813`, Python QEMU VM Lab `35661776097` on x86_64 and ARM64, and x64 PyDECnet L1 interoperability `35661778430`. The corrected live proof filled all 20 outstanding Data slots, observed nonblocking backpressure on the 21st send while peer replies were suppressed, then resumed and completed after replies were restored.
