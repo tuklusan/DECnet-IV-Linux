@@ -224,6 +224,9 @@ static void test_negative(void)
 
 static void test_retransmit_flow(void)
 {
+    assert(dniv_nsp_negotiated_segsize(128U, 563U) == 128U);
+    assert(dniv_nsp_negotiated_segsize(576U, 563U) == 563U);
+    assert(dniv_nsp_negotiated_segsize(0U, 563U) == 0U);
     assert(!dniv_nsp_retransmit_allowed(DNIV_NSP_CH_DATA, 0));
     assert(dniv_nsp_retransmit_allowed(DNIV_NSP_CH_DATA, 1));
     assert(dniv_nsp_retransmit_allowed(DNIV_NSP_CH_OTHER, 0));

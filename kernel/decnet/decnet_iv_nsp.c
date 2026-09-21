@@ -67,6 +67,7 @@ struct dniv_nsp_connection {
     __u16 rx_queued;
     __u16 rx_queued_channel[DNIV_NSP_CH_COUNT];
     __u16 interrupt_credit;
+    __u16 segment_size;
     bool data_xon;
     bool shutdown_pending;
     bool ack_pending[DNIV_NSP_CH_COUNT];
@@ -121,6 +122,7 @@ static void dniv_nsp_init_conn_lists(struct dniv_nsp_connection *conn)
     INIT_LIST_HEAD(&conn->rx_ready);
     conn->data_xon = true;
     conn->interrupt_credit = 1U;
+    conn->segment_size = DNIV_NSP_MSS;
 }
 
 static struct dniv_nsp_connection *dniv_nsp_find_locked(__u16 local_link)
@@ -724,6 +726,7 @@ int dniv_nsp_conn_snapshot(__u16 local_link,
     }
     snapshot->rx_queued = conn->rx_queued;
     snapshot->interrupt_credit = conn->interrupt_credit;
+    snapshot->segment_size = conn->segment_size;
     snapshot->disconnect_reason = conn->disconnect_reason;
     snapshot->data_xon = conn->data_xon ? 1U : 0U;
     snapshot->shutdown_pending = conn->shutdown_pending ? 1U : 0U;
@@ -1055,6 +1058,8 @@ int dniv_nsp_receive(__u16 remote_node, const __u8 *wire, __u16 wire_len)
         conn->local_link = link;
         conn->remote_link = pkt.src;
         conn->remote_node = remote_node;
+        conn->segment_size =
+            dniv_nsp_negotiated_segsize(pkt.segsize, DNIV_NSP_MSS);
         conn->ci_payload_len = (__u16)pkt.payload_len;
         if (pkt.payload_len)
             memcpy(conn->ci_payload, pkt.payload, pkt.payload_len);
@@ -1144,6 +1149,8 @@ int dniv_nsp_receive(__u16 remote_node, const __u8 *wire, __u16 wire_len)
         }
         if (action == DNIV_NSP_CC_RX_ACCEPT) {
             dniv_nsp_clear_control_locked(conn);
+            conn->segment_size =
+                dniv_nsp_negotiated_segsize(pkt.segsize, DNIV_NSP_MSS);
             conn->accept_payload_len = (__u16)pkt.payload_len;
             if (pkt.payload_len)
                 memcpy(conn->accept_payload, pkt.payload, pkt.payload_len);
@@ -1700,7 +1707,7 @@ int dniv_nsp_send_data(__u16 local_link, const __u8 *payload,
     int len;
     int ret;
 
-    if (!payload || !payload_len || payload_len > DNIV_NSP_MSS)
+    if (!payload || !payload_len)
         return -EINVAL;
 
     spin_lock_irqsave(&dniv_nsp_lock, flags);
@@ -1712,6 +1719,10 @@ int dniv_nsp_send_data(__u16 local_link, const __u8 *payload,
     if (conn->shutdown_pending) {
         spin_unlock_irqrestore(&dniv_nsp_lock, flags);
         return -ESHUTDOWN;
+    }
+    if (!conn->segment_size || payload_len > conn->segment_size) {
+        spin_unlock_irqrestore(&dniv_nsp_lock, flags);
+        return -EMSGSIZE;
     }
     {
         struct dniv_nsp_retransmit *queued;

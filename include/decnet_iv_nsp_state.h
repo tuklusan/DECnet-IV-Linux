@@ -51,6 +51,12 @@ dniv_nsp_data_send_allowed(int data_xon, unsigned int data_outstanding,
            total_outstanding < total_limit;
 }
 
+static inline __u16
+dniv_nsp_negotiated_segsize(__u16 peer_segsize, __u16 local_mss)
+{
+    return peer_segsize < local_mss ? peer_segsize : local_mss;
+}
+
 static inline int
 dniv_nsp_data_delay_ack_allowed(unsigned int data_outstanding,
                                 unsigned int data_window)

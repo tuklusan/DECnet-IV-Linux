@@ -880,8 +880,21 @@ static int dniv_sock_sendmsg(struct socket *sock, struct msghdr *msg,
         goto out;
     }
 
-    while (off < size) {
-        __u16 chunk = (__u16)min_t(size_t, DNIV_NSP_MSS, size - off);
+    {
+        struct dniv_nsp_conn_snapshot snapshot;
+        __u16 segment_size;
+
+        ret = dniv_nsp_conn_snapshot(dsk->local_link, &snapshot);
+        if (ret)
+            goto out;
+        segment_size = snapshot.segment_size;
+        if (!segment_size) {
+            ret = -EPROTO;
+            goto out;
+        }
+
+        while (off < size) {
+        __u16 chunk = (__u16)min_t(size_t, segment_size, size - off);
         __u8 bom = off == 0U;
         __u8 eom = off + chunk == size;
 
@@ -905,6 +918,7 @@ static int dniv_sock_sendmsg(struct socket *sock, struct msghdr *msg,
         }
         timeo = wait_ret;
         ret = 0;
+        }
     }
 out:
     release_sock(sk);
@@ -1616,6 +1630,13 @@ static int dniv_sock_getsockopt(struct socket *sock, int level, int optname,
 
     case DSO_LINKINFO:
         value.link.idn_segsize = DNIV_NSP_MSS;
+        if (dsk->local_link) {
+            struct dniv_nsp_conn_snapshot snapshot;
+
+            if (!dniv_nsp_conn_snapshot(dsk->local_link, &snapshot) &&
+                snapshot.segment_size)
+                value.link.idn_segsize = snapshot.segment_size;
+        }
         switch (sock->state) {
         case SS_CONNECTING:
             value.link.idn_linkstate = LL_CONNECTING;
