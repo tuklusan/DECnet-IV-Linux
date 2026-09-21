@@ -23,7 +23,7 @@
 
 #include <linux/dn.h>
 
-#define WINDOW_COUNT 8U
+#define WINDOW_COUNT 20U
 
 static int parse_node(const char *text, uint16_t *address)
 {

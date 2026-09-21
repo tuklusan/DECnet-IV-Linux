@@ -646,3 +646,6 @@ Exact-SHA fast socket acceptance for inactivity-keepalive candidate `b2ab90a1a6d
 
 
 PP-06 full Data-window backpressure now has a live independent-peer proof. On a fresh MIRROR link the host suppresses every PyDECnet-to-candidate unicast reply while userspace submits eight one-segment records, filling the bounded NSP Data window. An immediate ninth nonblocking record must return EAGAIN rather than overrun the retransmit window. After the reverse path is restored, the blocked ninth record must resume on the same logical link. This complements the existing XOFF zero-window proof and distinguishes protocol flow control from socket-buffer behavior. Product behavior is unchanged. Next: exact-SHA fast socket acceptance, then continue remaining NSP/PP-06 negatives.
+
+
+The first full-window live proof failed because the test encoded an eight-segment window while the implementation's declared bounded Data window is 20 segments. The candidate correctly accepted the ninth segment. The test is corrected to fill all 20 outstanding Data slots, require the 21st nonblocking send to return EAGAIN, then require recovery after peer replies resume. Product behavior is unchanged.
