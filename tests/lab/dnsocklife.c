@@ -166,6 +166,109 @@ fail:
     return -1;
 }
 
+static int syscall_negative_corpus(const struct sockaddr_dn *peer)
+{
+    struct sockaddr_dn addr;
+    struct optdata_dn opt;
+    struct accessdata_dn access;
+    unsigned char byte = 0U;
+    socklen_t optlen;
+    int mode;
+    int fd;
+
+    fd = socket(AF_DECnet, SOCK_SEQPACKET, DNPROTO_NSP);
+    if (fd < 0)
+        return -1;
+
+    addr = *peer;
+    errno = 0;
+    if (expect_errno_int(connect(fd, (const struct sockaddr *)&addr,
+                                 sizeof(addr) - 1U), EINVAL))
+        goto fail;
+
+    memset(&addr, 0, sizeof(addr));
+    addr.sdn_family = AF_UNSPEC;
+    errno = 0;
+    if (expect_errno_int(bind(fd, (const struct sockaddr *)&addr,
+                              sizeof(addr)), EINVAL))
+        goto fail;
+
+    memset(&addr, 0, sizeof(addr));
+    addr.sdn_family = AF_DECnet;
+    addr.sdn_objnum = 7U;
+    addr.sdn_objnamel = (__le16)1U;
+    addr.sdn_objname[0] = 'X';
+    errno = 0;
+    if (expect_errno_int(bind(fd, (const struct sockaddr *)&addr,
+                              sizeof(addr)), EINVAL))
+        goto fail;
+
+    memset(&addr, 0, sizeof(addr));
+    addr.sdn_family = AF_DECnet;
+    addr.sdn_flags = 1U;
+    errno = 0;
+    if (expect_errno_int(bind(fd, (const struct sockaddr *)&addr,
+                              sizeof(addr)), EOPNOTSUPP))
+        goto fail;
+
+    memset(&addr, 0, sizeof(addr));
+    addr.sdn_family = AF_DECnet;
+    addr.sdn_nodeaddrl = (__le16)1U;
+    errno = 0;
+    if (expect_errno_int(bind(fd, (const struct sockaddr *)&addr,
+                              sizeof(addr)), EINVAL))
+        goto fail;
+
+    memset(&addr, 0, sizeof(addr));
+    addr.sdn_family = AF_DECnet;
+    addr.sdn_objnum = 25U;
+    errno = 0;
+    if (expect_errno_int(connect(fd, (const struct sockaddr *)&addr,
+                                 sizeof(addr)), EINVAL))
+        goto fail;
+
+    memset(&opt, 0, sizeof(opt));
+    errno = 0;
+    if (expect_errno_int(setsockopt(fd, DNPROTO_NSP, DSO_CONDATA,
+                                    &opt, sizeof(opt) - 1U), EINVAL))
+        goto fail;
+
+    mode = 99;
+    errno = 0;
+    if (expect_errno_int(setsockopt(fd, DNPROTO_NSP, DSO_ACCEPTMODE,
+                                    &mode, sizeof(mode)), EINVAL))
+        goto fail;
+
+    memset(&access, 0, sizeof(access));
+    access.acc_userl = DN_MAXACCL + 1U;
+    errno = 0;
+    if (expect_errno_int(setsockopt(fd, DNPROTO_NSP, DSO_CONACCESS,
+                                    &access, sizeof(access)), EINVAL))
+        goto fail;
+
+    errno = 0;
+    if (expect_errno_int(setsockopt(fd, DNPROTO_NSP, 0x7fff,
+                                    &mode, sizeof(mode)), ENOPROTOOPT))
+        goto fail;
+
+    optlen = sizeof(opt);
+    errno = 0;
+    if (expect_errno_int(getsockopt(fd, DNPROTO_NSP, 0x7fff,
+                                    &opt, &optlen), ENOPROTOOPT))
+        goto fail;
+
+    errno = 0;
+    if (expect_errno_ssize(send(fd, &byte, 1U, MSG_PEEK), ENOTCONN))
+        goto fail;
+
+    close(fd);
+    return 0;
+
+fail:
+    close(fd);
+    return -1;
+}
+
 static int nonblocking_lifecycle(const struct sockaddr_dn *peer)
 {
     struct pollfd pfd;
@@ -280,6 +383,11 @@ int main(int argc, char **argv)
         fprintf(stderr, "dnsocklife: local negative failed errno=%d\n", errno);
         return 1;
     }
+    if (syscall_negative_corpus(&peer)) {
+        fprintf(stderr, "dnsocklife: syscall negative corpus failed errno=%d\n",
+                errno);
+        return 1;
+    }
     if (nonblocking_lifecycle(&peer)) {
         fprintf(stderr, "dnsocklife: nonblocking lifecycle failed errno=%d\n",
                 errno);
@@ -296,7 +404,7 @@ int main(int argc, char **argv)
             return 1;
         }
     }
-    printf("dnsocklife: pass peer=%s cycles=%u nonblock=1 shutdown=1\n",
+    printf("dnsocklife: pass peer=%s cycles=%u nonblock=1 shutdown=1 syscall_negatives=1\n",
            argv[1], CHURN_CYCLES);
     return 0;
 }
