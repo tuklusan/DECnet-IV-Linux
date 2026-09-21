@@ -140,6 +140,10 @@ def main() -> int:
         # consume the full retransmit budget before path recovery.
         cross_forged = (seq + 7) & 0x0fff
         cross_half = (seq + 2048) & 0x0fff
+        wrong_remote_value = (int.from_bytes(remote_link, "little") + 1) & 0xffff
+        if wrong_remote_value == 0:
+            wrong_remote_value = 1
+        wrong_remote_link = struct.pack("<H", wrong_remote_value)
         sent_at = time.monotonic()
         send_ack(send, candidate, src_mac, src_node, dst_node,
                  local_link, remote_link, cross_forged, 2, 0x14)
@@ -152,6 +156,15 @@ def main() -> int:
         print(
             "ack-range-inject: cross half-space XACK sent "
             f"seq={seq} ack={cross_half}",
+            flush=True,
+        )
+        # A numerically valid ACK from the right node but wrong remote
+        # connection ID must not drain this logical link's retransmit queue.
+        send_ack(send, candidate, src_mac, src_node, dst_node,
+                 local_link, wrong_remote_link, seq, 0, 0x04)
+        print(
+            "ack-range-inject: wrong-source-link ACK sent "
+            f"ack={seq} src_link={wrong_remote_value}",
             flush=True,
         )
 
@@ -169,7 +182,7 @@ def main() -> int:
                         "candidate retransmitted too early after forged cross XACKs"
                     )
                 print(
-                    "ack-range-inject: cross XACK future/half-space ACKs ignored "
+                    "ack-range-inject: cross XACK future/half-space and wrong-link ACKs ignored "
                     f"elapsed={elapsed:.3f}s",
                     flush=True,
                 )
@@ -195,7 +208,8 @@ def main() -> int:
                 elapsed = time.monotonic() - sent_at
                 print(
                     "ack-range-inject: pass cross_future_ack_ignored=1 "
-                    "cross_halfspace_ack_ignored=1 cross_nak_retransmit=1 "
+                    "cross_halfspace_ack_ignored=1 wrong_link_ack_ignored=1 "
+                    "cross_nak_retransmit=1 "
                     f"elapsed={elapsed:.3f}s"
                 )
                 return 0
