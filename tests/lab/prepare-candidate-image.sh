@@ -133,6 +133,8 @@ cc -I/usr/src/decnet-iv-linux/include/uapi -O2 -std=c11 -Wall -Wextra -Werror \
 cc -I/usr/src/decnet-iv-linux/include/uapi -O2 -std=c11 -Wall -Wextra -Werror \
     -o /usr/local/sbin/dnsignal /usr/src/decnet-iv-linux/tests/lab/dnsignal.c
 cc -I/usr/src/decnet-iv-linux/include/uapi -O2 -std=c11 -Wall -Wextra -Werror \
+    -o /usr/local/sbin/dnfair /usr/src/decnet-iv-linux/tests/lab/dnfair.c
+cc -I/usr/src/decnet-iv-linux/include/uapi -O2 -std=c11 -Wall -Wextra -Werror \
     -o /usr/local/sbin/dnbacklog /usr/src/decnet-iv-linux/tests/lab/dnbacklog.c
 cc -I/usr/src/decnet-iv-linux/include/uapi -O2 -std=c11 -Wall -Wextra -Werror \
     -o /usr/local/sbin/dnreset /usr/src/decnet-iv-linux/tests/lab/dnreset.c
@@ -197,6 +199,7 @@ sudo test -s "$mnt/usr/local/sbin/dnstream"
 sudo test -s "$mnt/usr/local/sbin/dnsocklife"
 sudo test -s "$mnt/usr/local/sbin/dnsockstress"
 sudo test -s "$mnt/usr/local/sbin/dnsignal"
+sudo test -s "$mnt/usr/local/sbin/dnfair"
 sudo test -s "$mnt/usr/local/sbin/dnbacklog"
 sudo test -s "$mnt/usr/local/sbin/dnreset"
 sudo test -s "$mnt/usr/local/sbin/dntermrace"

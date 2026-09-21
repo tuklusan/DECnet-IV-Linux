@@ -661,3 +661,6 @@ The first signal-interruption acceptance attempt failed before runtime in x64 in
 
 
 Exact-SHA fast socket acceptance for signal-interruption candidate `4a7f2ce6616b7937ac006a7628ecb0d5f588add6` is green: Repository Policy `35663912204`, Build Bootstrap `35663951694`, Project State Gate `35663953798`, Python QEMU VM Lab `35663955669` on x86_64 and ARM64, and x64 PyDECnet L1 interoperability `35663957177`. The live proof confirms blocking `accept()` and `recv()` return `EINTR` on a non-restarting signal and the interrupted connected socket immediately remains usable for normal MIRROR traffic.
+
+
+PP-06 receiver-stall and many-client fairness now have a live independent-peer proof. One native MIRROR link sends 20 records and intentionally leaves every reply unread, creating a receiver-stalled session with queued application data. While that link remains stalled, a second MIRROR connection must connect and complete an independent request/reply. The first socket must then drain all 20 replies in order. This proves one blocked consumer does not starve an independent valid session within the declared connection/window limits. Product behavior is unchanged. Next: exact-SHA fast socket acceptance, then continue remaining PP-06 negatives.
