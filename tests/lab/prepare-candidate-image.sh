@@ -97,6 +97,8 @@ cc -I/usr/src/decnet-iv-linux/include/uapi -O2 -std=c11 -Wall -Wextra -Werror \
 cc -I/usr/src/decnet-iv-linux/include/uapi -O2 -std=c11 -Wall -Wextra -Werror \
     -o /usr/local/sbin/dndrain /usr/src/decnet-iv-linux/tests/lab/dndrain.c
 cc -I/usr/src/decnet-iv-linux/include/uapi -O2 -std=c11 -Wall -Wextra -Werror \
+    -o /usr/local/sbin/dnflow /usr/src/decnet-iv-linux/tests/lab/dnflow.c
+cc -I/usr/src/decnet-iv-linux/include/uapi -O2 -std=c11 -Wall -Wextra -Werror \
     -o /usr/local/sbin/dnexhaust /usr/src/decnet-iv-linux/tests/lab/dnexhaust.c
 cc -I/usr/src/decnet-iv-linux/include/uapi -O2 -std=c11 -Wall -Wextra -Werror \
     -o /usr/local/sbin/dnconnectloss /usr/src/decnet-iv-linux/tests/lab/dnconnectloss.c
@@ -157,6 +159,7 @@ sudo test -s "$mnt/usr/local/sbin/dnraw"
 sudo test -s "$mnt/usr/local/sbin/dnmrr"
 sudo test -s "$mnt/usr/local/sbin/dnloss"
 sudo test -s "$mnt/usr/local/sbin/dndrain"
+sudo test -s "$mnt/usr/local/sbin/dnflow"
 sudo test -s "$mnt/usr/local/sbin/dnexhaust"
 sudo test -s "$mnt/usr/local/sbin/dnconnectloss"
 sudo test -s "$mnt/usr/local/sbin/dntimeout"

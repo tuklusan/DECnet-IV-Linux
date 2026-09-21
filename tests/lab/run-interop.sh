@@ -86,6 +86,8 @@ timer_proof=${DNIV_INTEROP_TIMER_PROOF:-0}
 [[ "$timer_proof" =~ ^[01]$ ]] || { echo "interop: bad timer-proof selector" >&2; exit 2; }
 peer_segsize=${DNIV_INTEROP_PEER_SEGMENT_SIZE:-0}
 [[ "$peer_segsize" =~ ^[0-9]+$ ]] || { echo "interop: bad peer segment size" >&2; exit 2; }
+flow_proof=${DNIV_INTEROP_FLOW_PROOF:-0}
+[[ "$flow_proof" =~ ^[01]$ ]] || { echo "interop: bad flow-proof selector" >&2; exit 2; }
 if (( peer_segsize != 0 && (peer_segsize < 64 || peer_segsize > 563) )); then
     echo "interop: peer segment size out of bounded proof range" >&2
     exit 2
@@ -308,7 +310,7 @@ if ! wait_marker "$ref1_log" "$reference_ready_marker" "$reference_ready_seconds
     exit 1
 fi
 
-candidate_common="root=LABEL=dniv-root rootfstype=ext4 rw dniv.interop=1 dniv.reference=$reference dniv.area=$area dniv.node=$node dniv.name=$name dniv.peer_node=$ref_area.$ref_node dniv.scenario=$scenario dniv.session=$session dniv.timer_proof=$timer_proof dniv.reserved_proof=$reserved_proof"
+candidate_common="root=LABEL=dniv-root rootfstype=ext4 rw dniv.interop=1 dniv.reference=$reference dniv.area=$area dniv.node=$node dniv.name=$name dniv.peer_node=$ref_area.$ref_node dniv.scenario=$scenario dniv.session=$session dniv.timer_proof=$timer_proof dniv.reserved_proof=$reserved_proof dniv.flow_proof=$flow_proof"
 start_vm "candidate-$scenario" "$candidate_disk" "$tap_candidate" "$candidate_hw" "$candidate_log" "$candidate_common" & CANDIDATE_PID=$!
 if [[ "$reference" == pydecnet ]]; then
     loss_marker="DNIV-INTEROP-LOSS-READY session=$session scenario=$scenario"

@@ -160,6 +160,7 @@ scenario=$(get_arg dniv.scenario || true)
 session=$(get_arg dniv.session || printf 'local')
 timer_proof=$(get_arg dniv.timer_proof || printf '0')
 reserved_proof=$(get_arg dniv.reserved_proof || printf '0')
+flow_proof=$(get_arg dniv.flow_proof || printf '0')
 
 case "$reference" in
     route20|pydecnet) ;;
@@ -244,6 +245,15 @@ if [ "$reference" = pydecnet ]; then
         exit 1
     fi
     echo "DNIV-INTEROP-DRAIN-PASS session=$session scenario=$scenario node=$name peer=$peer_node"
+    if [ "$flow_proof" = 1 ]; then
+        echo "DNIV-INTEROP-FLOW-READY session=$session scenario=$scenario node=$name peer=$peer_node"
+        sleep 2
+        if ! /usr/local/sbin/dnflow "$peer_node" "$session" "$scenario"; then
+            echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=nsp-flow-control"
+            exit 1
+        fi
+        echo "DNIV-INTEROP-FLOW-PASS session=$session scenario=$scenario node=$name peer=$peer_node"
+    fi
     if ! /usr/local/sbin/dnexhaust "$peer_node" "$session" "$scenario"; then
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=nsp-retransmit-exhaustion"
         exit 1
