@@ -382,6 +382,26 @@ if [[ "$reference" == pydecnet ]]; then
         exit 1
     fi
 
+    if [[ "$flow_proof" == 1 ]]; then
+        if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-FLOW-READY session=$session scenario=$scenario" 30 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+            tail -320 "$candidate_log" >&2 || true
+            tail -260 "$ref1_log" >&2 || true
+            exit 1
+        fi
+        if ! timeout 30s sudo python3 "$script_dir/inject-nsp-flow.py" \
+            "$bridge" "$bridge" "$candidate_mac" \
+            "$ref_area.$ref_node" "$area.$node"; then
+            tail -340 "$candidate_log" >&2 || true
+            tail -280 "$ref1_log" >&2 || true
+            exit 1
+        fi
+        if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-FLOW-PASS session=$session scenario=$scenario" 20 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+            tail -340 "$candidate_log" >&2 || true
+            tail -280 "$ref1_log" >&2 || true
+            exit 1
+        fi
+    fi
+
     exhaust_marker="DNIV-INTEROP-EXHAUST-READY session=$session scenario=$scenario"
     if ! wait_candidate_marker "$candidate_log" "$exhaust_marker" 30 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
         tail -280 "$candidate_log" >&2 || true
