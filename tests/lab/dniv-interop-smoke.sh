@@ -265,6 +265,13 @@ if [ "$reference" = pydecnet ]; then
             exit 1
         fi
         echo "DNIV-INTEROP-SEQWRAP-PASS session=$session scenario=$scenario node=$name peer=$peer_node"
+        echo "DNIV-INTEROP-INTLOSS-READY session=$session scenario=$scenario node=$name peer=$peer_node"
+        sleep 2
+        if ! /usr/local/sbin/dnintloss "$peer_node" "$session" "$scenario"; then
+            echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=nsp-interrupt-loss"
+            exit 1
+        fi
+        echo "DNIV-INTEROP-INTLOSS-PASS session=$session scenario=$scenario node=$name peer=$peer_node"
     fi
     if ! /usr/local/sbin/dnexhaust "$peer_node" "$session" "$scenario"; then
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=nsp-retransmit-exhaustion"

@@ -468,6 +468,49 @@ if [[ "$reference" == pydecnet ]]; then
             cat "$ackrange_fault_log" >&2 || true
             exit 1
         fi
+
+        if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-INTLOSS-READY session=$session scenario=$scenario" 30 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+            tail -400 "$candidate_log" >&2 || true
+            tail -340 "$ref1_log" >&2 || true
+            exit 1
+        fi
+        if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-INTLOSS-CONNECTED session=$session scenario=$scenario" 20 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+            tail -400 "$candidate_log" >&2 || true
+            tail -340 "$ref1_log" >&2 || true
+            exit 1
+        fi
+        intloss_fault_log="$work/nsp-intloss-fault.log"
+        : > "$intloss_fault_log"
+        sudo tc qdisc add dev "$tap_reference" clsact
+        LOSS_QDISC=1
+        sudo tc filter add dev "$tap_reference" ingress protocol all pref 10 flower \
+            src_mac "$reference_mac" dst_mac "$candidate_mac" action drop
+        printf 'fault=reference-unicast-drop-interrupt-ack source=%s destination=%s\n' \
+            "$reference_mac" "$candidate_mac" >> "$intloss_fault_log"
+        if ! timeout 30s sudo python3 "$script_dir/inject-nsp-intloss.py" \
+            "$bridge" "$bridge" "$candidate_mac" \
+            "$ref_area.$ref_node" "$area.$node"; then
+            tail -420 "$candidate_log" >&2 || true
+            tail -360 "$ref1_log" >&2 || true
+            sudo tc -s filter show dev "$tap_reference" ingress >> "$intloss_fault_log" 2>&1 || true
+            cat "$intloss_fault_log" >&2 || true
+            exit 1
+        fi
+        intloss_stats=$(sudo tc -s filter show dev "$tap_reference" ingress)
+        printf '%s\n' "$intloss_stats" >> "$intloss_fault_log"
+        if ! printf '%s\n' "$intloss_stats" | grep -Eq 'Sent [0-9]+ bytes [1-9][0-9]* pkt'; then
+            echo "interop: NSP interrupt-loss fault matched no reference replies" >&2
+            cat "$intloss_fault_log" >&2
+            exit 1
+        fi
+        sudo tc qdisc del dev "$tap_reference" clsact
+        unset LOSS_QDISC
+        if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-INTLOSS-PASS session=$session scenario=$scenario" 25 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+            tail -420 "$candidate_log" >&2 || true
+            tail -360 "$ref1_log" >&2 || true
+            cat "$intloss_fault_log" >&2 || true
+            exit 1
+        fi
     fi
 
     exhaust_marker="DNIV-INTEROP-EXHAUST-READY session=$session scenario=$scenario"
