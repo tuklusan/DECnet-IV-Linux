@@ -128,7 +128,7 @@ def main() -> int:
                 local_link, remote_link, 1, 1)
         print("flow-inject: XOFF sent", flush=True)
         time.sleep(4.0)
-        send_ls(sock, candidate, src_mac, src_node, dst_node,
+        send_ls(send, candidate, src_mac, src_node, dst_node,
                 local_link, remote_link, 2, 2)
 
         deadline = time.monotonic() + 10.0
