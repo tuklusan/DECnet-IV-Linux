@@ -667,6 +667,28 @@ if [[ "$reference" == pydecnet ]]; then
             tail -520 "$ref1_log" >&2 || true
             exit 1
         fi
+
+        if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-KEEPALIVE-READY session=$session scenario=$scenario" 20 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+            tail -600 "$candidate_log" >&2 || true
+            tail -540 "$ref1_log" >&2 || true
+            exit 1
+        fi
+        if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-KEEPALIVE-CONNECTED session=$session scenario=$scenario" 20 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+            tail -600 "$candidate_log" >&2 || true
+            tail -540 "$ref1_log" >&2 || true
+            exit 1
+        fi
+        if ! timeout 16s sudo python3 "$script_dir/observe-nsp-keepalive.py" \
+            "$bridge" "$candidate_mac" "$reference_mac"; then
+            tail -620 "$candidate_log" >&2 || true
+            tail -560 "$ref1_log" >&2 || true
+            exit 1
+        fi
+        if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-KEEPALIVE-PASS session=$session scenario=$scenario" 20 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+            tail -620 "$candidate_log" >&2 || true
+            tail -560 "$ref1_log" >&2 || true
+            exit 1
+        fi
     fi
 
     exhaust_marker="DNIV-INTEROP-EXHAUST-READY session=$session scenario=$scenario"

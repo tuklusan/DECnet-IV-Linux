@@ -294,6 +294,16 @@ if [ "$reference" = pydecnet ]; then
             exit 1
         fi
         echo "DNIV-INTEROP-DIEXHAUST-PASS session=$session scenario=$scenario node=$name peer=$peer_node"
+        echo 4 > /sys/module/decnet_iv/parameters/nsp_inactivity_seconds
+        echo "DNIV-INTEROP-KEEPALIVE-READY session=$session scenario=$scenario node=$name peer=$peer_node"
+        sleep 2
+        if ! /usr/local/sbin/dnkeepalive "$peer_node" "$session" "$scenario"; then
+            echo 300 > /sys/module/decnet_iv/parameters/nsp_inactivity_seconds
+            echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=nsp-keepalive"
+            exit 1
+        fi
+        echo 300 > /sys/module/decnet_iv/parameters/nsp_inactivity_seconds
+        echo "DNIV-INTEROP-KEEPALIVE-PASS session=$session scenario=$scenario node=$name peer=$peer_node"
     fi
     if ! /usr/local/sbin/dnexhaust "$peer_node" "$session" "$scenario"; then
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=nsp-retransmit-exhaustion"

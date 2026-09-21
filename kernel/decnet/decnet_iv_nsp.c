@@ -16,6 +16,7 @@
 #include <linux/errno.h>
 #include <linux/jiffies.h>
 #include <linux/list.h>
+#include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/string.h>
@@ -95,6 +96,22 @@ static DEFINE_SPINLOCK(dniv_nsp_lock);
 static struct dniv_nsp_connection dniv_nsp_connections[DNIV_NSP_MAX_CONNECTIONS];
 static __u16 dniv_nsp_next_link[DNIV_NSP_MAX_CONNECTIONS];
 static dniv_nsp_notify_fn dniv_nsp_notify;
+
+static unsigned short dniv_nsp_inactivity_seconds =
+    DNIV_NSP_INACTIVITY_SECONDS;
+module_param_named(nsp_inactivity_seconds, dniv_nsp_inactivity_seconds,
+                   ushort, 0644);
+MODULE_PARM_DESC(nsp_inactivity_seconds,
+                 "NSP inactivity keepalive interval in seconds (0 resets to default)");
+
+static unsigned long dniv_nsp_inactivity_jiffies(void)
+{
+    unsigned int seconds = READ_ONCE(dniv_nsp_inactivity_seconds);
+
+    if (!seconds)
+        seconds = DNIV_NSP_INACTIVITY_SECONDS;
+    return (unsigned long)seconds * HZ;
+}
 
 static void dniv_nsp_notify_link(__u16 local_link)
 {
@@ -200,7 +217,7 @@ static void dniv_nsp_set_state_locked(struct dniv_nsp_connection *conn,
     case DNIV_NSP_ST_RUN:
         conn->connect_deadline = 0U;
         conn->inactivity_deadline =
-            now + DNIV_NSP_INACTIVITY_SECONDS * HZ;
+            now + dniv_nsp_inactivity_jiffies();
         break;
     case DNIV_NSP_ST_DI:
     case DNIV_NSP_ST_CLOSED:
@@ -1217,7 +1234,7 @@ int dniv_nsp_receive(__u16 remote_node, const __u8 *wire, __u16 wire_len)
             channel = DNIV_NSP_CH_OTHER;
 
         conn->inactivity_deadline =
-            jiffies + DNIV_NSP_INACTIVITY_SECONDS * HZ;
+            jiffies + dniv_nsp_inactivity_jiffies();
 
         dniv_nsp_process_ack_locked(conn, channel, &pkt.ack1);
         dniv_nsp_process_ack_locked(conn, channel, &pkt.ack2);
@@ -1376,7 +1393,7 @@ static int dniv_nsp_prepare_keepalive_locked(
         return ret;
 
     conn->inactivity_deadline =
-        now + DNIV_NSP_INACTIVITY_SECONDS * HZ;
+        now + dniv_nsp_inactivity_jiffies();
     *remote_node = conn->remote_node;
     *wire_len = (__u16)len;
     return 0;
