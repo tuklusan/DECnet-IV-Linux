@@ -615,3 +615,6 @@ PP-06 syscall-fuzz coverage now includes a deterministic invalid-call corpus in 
 
 
 Static review of the new syscall-negative corpus found one test-ordering mistake before acceptance completed: `sendmsg()` validates unsupported message flags before connection state, so `MSG_PEEK` must return `EOPNOTSUPP`, not `ENOTCONN`, on an unconnected DECnet socket. The expectation is corrected to match the socket implementation; product behavior is unchanged.
+
+
+Exact-SHA fast socket acceptance for receiver-stall fairness candidate `ed5a1ecaf1eb6668de751f71b18e33dbe8ffbc6d` is green: Repository Policy `35665443669`, Build Bootstrap `35665485064`, Project State Gate `35665487460`, Python QEMU VM Lab `35665489800` on x86_64 and ARM64, and x64 PyDECnet L1 interoperability `35665492465`. The live proof confirms an unread 20-record MIRROR reply queue on one link does not prevent a second independent MIRROR session from connecting and completing traffic, and the stalled link then drains cleanly in order.
