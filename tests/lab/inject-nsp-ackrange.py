@@ -139,11 +139,19 @@ def main() -> int:
         # the Phase IV cross-subchannel qualifiers so the proof does not
         # consume the full retransmit budget before path recovery.
         cross_forged = (seq + 7) & 0x0fff
+        cross_half = (seq + 2048) & 0x0fff
         sent_at = time.monotonic()
         send_ack(send, candidate, src_mac, src_node, dst_node,
                  local_link, remote_link, cross_forged, 2, 0x14)
         print(
             f"ack-range-inject: cross XACK sent seq={seq} ack={cross_forged}",
+            flush=True,
+        )
+        send_ack(send, candidate, src_mac, src_node, dst_node,
+                 local_link, remote_link, cross_half, 2, 0x14)
+        print(
+            "ack-range-inject: cross half-space XACK sent "
+            f"seq={seq} ack={cross_half}",
             flush=True,
         )
 
@@ -158,17 +166,17 @@ def main() -> int:
                 elapsed = time.monotonic() - sent_at
                 if elapsed < 3.5:
                     raise RuntimeError(
-                        "candidate retransmitted too early after forged cross XACK"
+                        "candidate retransmitted too early after forged cross XACKs"
                     )
                 print(
-                    "ack-range-inject: cross XACK future ACK ignored "
+                    "ack-range-inject: cross XACK future/half-space ACKs ignored "
                     f"elapsed={elapsed:.3f}s",
                     flush=True,
                 )
                 break
         else:
             raise RuntimeError(
-                "candidate did not retransmit after forged cross XACK"
+                "candidate did not retransmit after forged cross XACKs"
             )
 
         nak = (seq - 1) & 0x0fff
@@ -187,7 +195,7 @@ def main() -> int:
                 elapsed = time.monotonic() - sent_at
                 print(
                     "ack-range-inject: pass cross_future_ack_ignored=1 "
-                    "cross_nak_retransmit=1 "
+                    "cross_halfspace_ack_ignored=1 cross_nak_retransmit=1 "
                     f"elapsed={elapsed:.3f}s"
                 )
                 return 0
