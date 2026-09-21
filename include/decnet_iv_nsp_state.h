@@ -41,6 +41,13 @@ dniv_nsp_retransmit_allowed(enum dniv_nsp_channel channel, int data_xon)
     return channel != DNIV_NSP_CH_DATA || data_xon;
 }
 
+static inline unsigned long
+dniv_nsp_ack_holdoff_deadline(int pending, unsigned long deadline,
+                              unsigned long now, unsigned long holdoff)
+{
+    return pending ? deadline : now + holdoff;
+}
+
 enum dniv_nsp_rx_order {
     DNIV_NSP_RX_EXPECTED = 0,
     DNIV_NSP_RX_FUTURE = 1,

@@ -458,3 +458,8 @@ The first peer-isolation rerun `25a3e47fedc5b87ecac6d09aef795ce340e2f2be` failed
 
 
 Exact-SHA fast acceptance for reserved-port wire proof `6c54859389257f7337c044f79c29b1a1e2ec8f35` is green: Repository Policy `35554033965`, Python QEMU VM Lab `35554063023`, and x64 PyDECnet L1 Independent Ethernet Interoperability `35554064466`. The corrected injector reached NSP with a canonical DECnet source MAC; reply isolation held slots long enough to produce both DC reason 41 (No Link) and DC reason 1 (No Resources). Next: flow-control/delayed-ACK and malformed receive-state negatives.
+
+
+Exact-SHA fast acceptance for continuity commit `a16acc77b63ac2faf6b21a1bd53f44cceca323b1` is green: Repository Policy `35555005673`, Build Bootstrap `35555026456`, Project State Gate `35555027572`, E1 `35555028576` on x86_64 and ARM64, and x64 PyDECnet L1 interoperability `35555029675`.
+
+The next Phase 5 correction tightens delayed-ACK semantics against the pinned PyDECnet reference. Once a delayed ACK is pending, additional DLY data no longer restart the holdoff deadline, preventing sustained traffic from postponing the ACK indefinitely. Only normal Data Segment bit 12 is treated/emitted as DLY; Interrupt and Link Service sequence high bits are ignored rather than creating a delayed-ACK request, matching their fixed `dly=0` reference semantics. Shared unit coverage locks the non-sliding holdoff and other-data high-bit behavior. Next: exact-SHA fast socket acceptance, then remaining malformed receive-state negatives.

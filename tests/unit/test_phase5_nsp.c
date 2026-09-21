@@ -117,9 +117,25 @@ static void test_interrupt_and_link_service(void)
     const unsigned char ls[] = {
         0x10,0x03,0x00,0x05,0x01,0x07,0x00,0x06,0xfd
     };
+    const unsigned char intr_hi[] = {
+        0x30,0x03,0x00,0x05,0x01,0x07,0xf0,'x'
+    };
+    const unsigned char ls_hi[] = {
+        0x10,0x03,0x00,0x05,0x01,0x07,0xf0,0x06,0xfd
+    };
+    unsigned char out[32];
     struct dniv_nsp_packet p;
+    int n;
 
     roundtrip(intr, sizeof(intr));
+    assert(dniv_nsp_parse(intr_hi, sizeof(intr_hi), &p) == DNIV_NSP_OK);
+    assert(p.segnum == 7U && p.dly == 0U);
+    n = dniv_nsp_build(out, sizeof(out), &p);
+    assert(n == (int)sizeof(intr_hi) && out[6] == 0x00U);
+    assert(dniv_nsp_parse(ls_hi, sizeof(ls_hi), &p) == DNIV_NSP_OK);
+    assert(p.segnum == 7U && p.dly == 0U);
+    n = dniv_nsp_build(out, sizeof(out), &p);
+    assert(n == (int)sizeof(ls_hi) && out[6] == 0x00U);
     assert(dniv_nsp_parse(ls, sizeof(ls), &p) == DNIV_NSP_OK);
     assert(p.type == DNIV_NSP_LINK_SVC);
     assert(p.fcmod == 2U && p.fcval_int == 1U && p.fcval == -3);
@@ -182,6 +198,13 @@ static void test_retransmit_flow(void)
     assert(dniv_nsp_retransmit_allowed(DNIV_NSP_CH_OTHER, 1));
 }
 
+static void test_ack_holdoff(void)
+{
+    assert(dniv_nsp_ack_holdoff_deadline(0, 0UL, 100UL, 3UL) == 103UL);
+    assert(dniv_nsp_ack_holdoff_deadline(1, 103UL, 101UL, 3UL) == 103UL);
+    assert(dniv_nsp_ack_holdoff_deadline(1, 103UL, 104UL, 3UL) == 103UL);
+}
+
 static void test_sequence(void)
 {
     assert(dniv_nsp_seq_norm(4096U) == 0U);
@@ -223,6 +246,7 @@ int main(void)
     test_interrupt_and_link_service();
     test_negative();
     test_retransmit_flow();
+    test_ack_holdoff();
     test_sequence();
     return 0;
 }

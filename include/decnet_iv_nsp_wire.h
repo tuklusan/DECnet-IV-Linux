@@ -248,7 +248,8 @@ static inline int dniv_nsp_parse(const __u8 *buf, __u32 len,
         return DNIV_NSP_MALFORMED;
     v = dniv_nsp_get_le16(buf + off);
     pkt->segnum = (__u16)(v & DNIV_NSP_SEQ_MASK);
-    pkt->dly = (__u8)((v >> 12) & 1U);
+    pkt->dly = pkt->type == DNIV_NSP_DATA ?
+               (__u8)((v >> 12) & 1U) : 0U;
     off += 2U;
 
     if (pkt->type == DNIV_NSP_LINK_SVC) {
@@ -380,7 +381,8 @@ static inline int dniv_nsp_build(__u8 *buf, __u32 cap,
         return -1;
     dniv_nsp_put_le16(buf + off,
         (__u16)((pkt->segnum & DNIV_NSP_SEQ_MASK) |
-                (pkt->dly ? 0x1000U : 0U)));
+                ((pkt->type == DNIV_NSP_DATA && pkt->dly) ?
+                 0x1000U : 0U)));
     off += 2U;
     if (pkt->type == DNIV_NSP_LINK_SVC) {
         if (pkt->fcmod > 2U || pkt->fcval_int > 1U || off + 2U > cap)

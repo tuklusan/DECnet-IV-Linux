@@ -1196,9 +1196,12 @@ int dniv_nsp_receive(__u16 remote_node, const __u8 *wire, __u16 wire_len)
 
             acknum = dniv_nsp_seq_norm((__u32)conn->rx_next[channel] - 1U);
             if (rx_order == DNIV_NSP_RX_EXPECTED && pkt.dly) {
-                conn->ack_pending[channel] = true;
                 conn->ack_deadline[channel] =
-                    jiffies + DNIV_NSP_ACK_HOLDOFF_SECONDS * HZ;
+                    dniv_nsp_ack_holdoff_deadline(
+                        conn->ack_pending[channel],
+                        conn->ack_deadline[channel], jiffies,
+                        DNIV_NSP_ACK_HOLDOFF_SECONDS * HZ);
+                conn->ack_pending[channel] = true;
                 break;
             }
 
