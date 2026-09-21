@@ -89,25 +89,28 @@ def send_ls(sock: socket.socket, dst_mac: bytes, src_mac: bytes,
 
 
 def main() -> int:
-    if len(sys.argv) != 5:
+    if len(sys.argv) != 6:
         raise SystemExit(
-            f"usage: {sys.argv[0]} IFACE CANDIDATE-MAC SRC-AREA.NODE DST-AREA.NODE"
+            f"usage: {sys.argv[0]} SNIFF-IFACE SEND-IFACE CANDIDATE-MAC "
+            "SRC-AREA.NODE DST-AREA.NODE"
         )
-    iface, candidate_s, src_s, dst_s = sys.argv[1:5]
+    sniff_iface, send_iface, candidate_s, src_s, dst_s = sys.argv[1:6]
     candidate = mac(candidate_s)
     src_node = nodeaddr(src_s)
     dst_node = nodeaddr(dst_s)
     src_mac = bytes((0xAA, 0x00, 0x04, 0x00,
                      src_node & 0xFF, (src_node >> 8) & 0xFF))
 
-    sock = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.htons(ETHERTYPE))
-    sock.bind((iface, 0))
-    sock.settimeout(15.0)
+    sniff = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.htons(ETHERTYPE))
+    send = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.htons(ETHERTYPE))
+    sniff.bind((sniff_iface, 0))
+    send.bind((send_iface, 0))
+    sniff.settimeout(15.0)
     try:
         deadline = time.monotonic() + 15.0
         links = None
         while time.monotonic() < deadline:
-            nsp = nsp_payload(sock.recv(4096))
+            nsp = nsp_payload(sniff.recv(4096))
             if nsp is None or FIRST not in nsp or len(nsp) < 5:
                 continue
             # Candidate Data has destination=peer link, source=local link.
@@ -117,7 +120,7 @@ def main() -> int:
             raise RuntimeError("flow-control probe Data not observed")
 
         local_link, remote_link = links
-        send_ls(sock, candidate, src_mac, src_node, dst_node,
+        send_ls(send, candidate, src_mac, src_node, dst_node,
                 local_link, remote_link, 1, 1)
         time.sleep(4.0)
         send_ls(sock, candidate, src_mac, src_node, dst_node,
@@ -125,13 +128,14 @@ def main() -> int:
 
         deadline = time.monotonic() + 10.0
         while time.monotonic() < deadline:
-            nsp = nsp_payload(sock.recv(4096))
+            nsp = nsp_payload(sniff.recv(4096))
             if nsp is not None and XON_TAG in nsp:
                 print("flow-inject: pass xoff=1 xon=1 resumed=1")
                 return 0
         raise RuntimeError("candidate did not resume Data after XON")
     finally:
-        sock.close()
+        sniff.close()
+        send.close()
 
 
 if __name__ == "__main__":
