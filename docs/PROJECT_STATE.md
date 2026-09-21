@@ -676,3 +676,6 @@ Static review of the new syscall-negative corpus found one test-ordering mistake
 
 
 Exact-SHA fast socket acceptance for receiver-stall fairness candidate `ed5a1ecaf1eb6668de751f71b18e33dbe8ffbc6d` is green: Repository Policy `35665443669`, Build Bootstrap `35665485064`, Project State Gate `35665487460`, Python QEMU VM Lab `35665489800` on x86_64 and ARM64, and x64 PyDECnet L1 interoperability `35665492465`. The live proof confirms an unread 20-record MIRROR reply queue on one link does not prevent a second independent MIRROR session from connecting and completing traffic, and the stalled link then drains cleanly in order.
+
+
+Exact-SHA fast socket acceptance for syscall-negative candidate `9c3b402bc4de7f2023a03c0592bbd32aa2233df8` is green: Repository Policy `35666650101`, Build Bootstrap `35666687690`, Project State Gate `35666689839`, Python QEMU VM Lab `35666691798` on x86_64 and ARM64, and x64 PyDECnet L1 interoperability `35666693616`. The deterministic invalid-call corpus returned the declared errno values without damaging subsequent socket lifecycle/churn behavior.
