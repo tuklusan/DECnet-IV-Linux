@@ -594,3 +594,6 @@ The first full-window live proof failed because the test encoded an eight-segmen
 
 
 - Exact-SHA fast socket acceptance for full-window backpressure candidate `2f4d54c26d3330badada1f4e9703b5384162403b` is green: Repository Policy `35661733498`, Build Bootstrap `35661771870`, Project State Gate `35661773813`, Python QEMU VM Lab `35661776097` on x86_64 and ARM64, and x64 PyDECnet L1 interoperability `35661778430`. The corrected live proof filled all 20 outstanding Data slots, observed nonblocking backpressure on the 21st send while peer replies were suppressed, then resumed and completed after replies were restored.
+
+
+PP-06 EINTR/signal handling now has live socket coverage. A native listener blocks in `accept()` with no pending connection and must return `EINTR` on a non-restarting SIGALRM. A connected MIRROR socket then blocks in `recv()` with no pending record and must likewise return `EINTR`; the same logical link must immediately complete a normal request/reply afterward, proving interruption does not corrupt socket or NSP state. Product behavior is unchanged. Next: exact-SHA fast socket acceptance, then continue remaining PP-06 negatives.
