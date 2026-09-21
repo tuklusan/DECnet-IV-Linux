@@ -86,8 +86,8 @@ def data_sequence(nsp: bytes) -> int:
 
 def send_ack(sock: socket.socket, dst_mac: bytes, src_mac: bytes,
              src_node: int, dst_node: int, dst_link: bytes, src_link: bytes,
-             ack: int) -> None:
-    ackword = 0x8000 | (ack & 0x0fff)
+             ack: int, qual: int = 0) -> None:
+    ackword = 0x8000 | ((qual & 0x3) << 12) | (ack & 0x0fff)
     nsp = b"\x04" + dst_link + src_link + struct.pack("<H", ackword)
     route = (
         b"\x02" + struct.pack("<H", dst_node)
@@ -147,9 +147,30 @@ def main() -> int:
             except TimeoutError:
                 continue
             if nsp is not None and TAG in nsp:
-                print("ack-range-inject: pass future_ack_ignored=1 retransmit=1")
+                break
+        else:
+            raise RuntimeError("candidate did not retransmit after forged future ACK")
+
+        nak = (seq - 1) & 0x0fff
+        sent_at = time.monotonic()
+        send_ack(send, candidate, src_mac, src_node, dst_node,
+                 local_link, remote_link, nak, 1)
+        print(f"ack-range-inject: NAK sent ack={nak}", flush=True)
+
+        deadline = sent_at + 2.5
+        while time.monotonic() < deadline:
+            try:
+                nsp = nsp_payload(sniff.recv(4096))
+            except TimeoutError:
+                continue
+            if nsp is not None and TAG in nsp:
+                elapsed = time.monotonic() - sent_at
+                print(
+                    "ack-range-inject: pass future_ack_ignored=1 "
+                    f"timer_retransmit=1 nak_retransmit=1 elapsed={elapsed:.3f}s"
+                )
                 return 0
-        raise RuntimeError("candidate did not retransmit after forged future ACK")
+        raise RuntimeError("candidate did not promptly retransmit after NAK")
     finally:
         sniff.close()
         send.close()
