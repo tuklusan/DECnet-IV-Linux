@@ -51,6 +51,13 @@ dniv_nsp_data_send_allowed(int data_xon, unsigned int data_outstanding,
            total_outstanding < total_limit;
 }
 
+static inline int
+dniv_nsp_data_delay_ack_allowed(unsigned int data_outstanding,
+                                unsigned int data_window)
+{
+    return data_outstanding <= data_window / 2U;
+}
+
 static inline unsigned long
 dniv_nsp_ack_holdoff_deadline(int pending, unsigned long deadline,
                               unsigned long now, unsigned long holdoff)

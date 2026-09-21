@@ -1625,6 +1625,7 @@ int dniv_nsp_send_data(__u16 local_link, const __u8 *payload,
     unsigned long flags;
     __u16 remote_node;
     __u16 sequence;
+    unsigned int data_outstanding = 0U;
     int len;
     int ret;
 
@@ -1639,7 +1640,6 @@ int dniv_nsp_send_data(__u16 local_link, const __u8 *payload,
     }
     {
         struct dniv_nsp_retransmit *queued;
-        unsigned int data_outstanding = 0U;
 
         list_for_each_entry(queued, &conn->retransmit, link) {
             if (queued->channel == DNIV_NSP_CH_DATA)
@@ -1659,6 +1659,8 @@ int dniv_nsp_send_data(__u16 local_link, const __u8 *payload,
     pkt.dst = conn->remote_link;
     pkt.src = conn->local_link;
     pkt.segnum = sequence;
+    pkt.dly = dniv_nsp_data_delay_ack_allowed(
+        data_outstanding, DNIV_NSP_MAX_WINDOW) ? 1U : 0U;
     pkt.bom = bom ? 1U : 0U;
     pkt.eom = eom ? 1U : 0U;
     pkt.payload = payload;

@@ -81,7 +81,7 @@ Implementation order:
 | Phase 4 accepted protocol candidate | `6c185b6d01f8a57ee9f0ea6a6c37d7112ddb77d2` |
 | Phase 4 closure commit | `571333bfd7aaa8b2fcc88715c1d61442af151f3c` |
 | Phase 4 tag | `PHASE-4-COMPLETE` |
-| Latest accepted Phase 5 candidate | `b91e122e97a77944358297c0bb507f2d736e684b` |
+| Latest accepted Phase 5 candidate | `0d916012d551943e3f20f03c4b8ca1a0c7b87694` |
 | Route20 pin | `a9ef7c0b7f875f0dd2e8abaf11213798a8e4474c` |
 | PyDECnet live pin | `295938c76c956a70957f4cf96b05685f555b2a18` |
 | VM lifecycle | direct QEMU/QMP |
@@ -502,3 +502,7 @@ Control-message compatibility review found that the empty Session Control I fiel
 Exact-SHA fast acceptance for omitted-control-I candidate `b91e122e97a77944358297c0bb507f2d736e684b` is green: Repository Policy `35559162597`, Build Bootstrap `35559181671`, Project State Gate `35559182650`, E1 `35559183636` on x86_64 and ARM64, and x64 PyDECnet L1 interoperability `35559184617`.
 
 Socket flow-control review found the normal-data writability gate counted all NSP retransmit entries against the 20-segment Data window. Other-Data traffic therefore reduced the effective Data window and could leave a blocking writer asleep after a Data ACK even though `dniv_nsp_send_data()` itself had room to send. Connection snapshots now expose per-subchannel outstanding counts, and send admission plus poll/wait readiness use the Data count for the 20-segment window while still enforcing the shared 64-entry retransmit bound and XON state. Unit coverage locks the mixed Data/Other case, the Data-window limit, the global limit and XOFF. Next: exact-SHA fast socket acceptance, then add outbound DLY selection and continue flow-control/loss negatives.
+
+Exact-SHA fast socket acceptance for data-window readiness candidate `0d916012d551943e3f20f03c4b8ca1a0c7b87694` is green: Repository Policy `35592768107`, Build Bootstrap `35592803268`, Project State Gate `35592806080`, E1 `35592808968` on x86_64 and ARM64, and x64 PyDECnet L1 interoperability `35592812174`.
+
+Pinned PyDECnet Phase IV transmit behavior requests delayed acknowledgement only while the Data queue is at most half full before enqueue. Native outbound Data now sets DLY at that same boundary: with the 20-segment window, existing outstanding counts 0 through 10 request delayed ACK, while 11 and above request immediate ACK. The wire flag is chosen before queueing so retransmissions preserve the original packet image. Unit coverage locks the boundary. Next: exact-SHA fast socket acceptance, then continue flow-control/loss negatives and clean-shutdown ordering.
