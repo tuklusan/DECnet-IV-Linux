@@ -658,3 +658,6 @@ PP-06 EINTR/signal handling now has live socket coverage. A native listener bloc
 
 
 The first signal-interruption acceptance attempt failed before runtime in x64 interoperability run `35663764985`: strict C11 compilation hid POSIX `sigaction`/`sigemptyset` declarations because the test lacked a POSIX feature-test macro. `dnsignal.c` now requests POSIX.1-2008 before headers. This is test-only; product behavior is unchanged. The failed run remains recorded rather than being treated as a protocol failure.
+
+
+Exact-SHA fast socket acceptance for signal-interruption candidate `4a7f2ce6616b7937ac006a7628ecb0d5f588add6` is green: Repository Policy `35663912204`, Build Bootstrap `35663951694`, Project State Gate `35663953798`, Python QEMU VM Lab `35663955669` on x86_64 and ARM64, and x64 PyDECnet L1 interoperability `35663957177`. The live proof confirms blocking `accept()` and `recv()` return `EINTR` on a non-restarting signal and the interrupted connected socket immediately remains usable for normal MIRROR traffic.
