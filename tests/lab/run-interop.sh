@@ -133,6 +133,7 @@ cleanup() {
     terminate_pid "${CANDIDATE_PID:-}"
     terminate_pid "${REFERENCE_PID:-}"
     terminate_pid "${HOST_PROBE_PID:-}"
+    terminate_pid "${CCRETRY_PID:-}"
     if [[ -n "${LOSS_QDISC:-}" || -n "${RESERVED_QDISC:-}" ]]; then
         sudo tc qdisc del dev "$tap_reference" clsact 2>/dev/null || true
     fi
@@ -532,6 +533,65 @@ if [[ "$reference" == pydecnet ]]; then
         if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-INTFLOW-PASS session=$session scenario=$scenario" 25 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
             tail -460 "$candidate_log" >&2 || true
             tail -400 "$ref1_log" >&2 || true
+            exit 1
+        fi
+
+        if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-CCRETRY-READY session=$session scenario=$scenario" 30 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+            tail -480 "$candidate_log" >&2 || true
+            tail -420 "$ref1_log" >&2 || true
+            exit 1
+        fi
+        cc_retry_peer_log="$work/nsp-ccretry-peer.log"
+        : > "$cc_retry_peer_log"
+        env PYTHONPATH="$host_pydecnet/pydecnet" python3 \
+            "$script_dir/pydecnet-ccretry.py" "$host_pydecnet_api" \
+            "$area.$node" "$ref_name" >"$cc_retry_peer_log" 2>&1 &
+        CCRETRY_PID=$!
+        if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-CCRETRY-ACCEPTED session=$session scenario=$scenario" 20 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+            cat "$cc_retry_peer_log" >&2 || true
+            tail -480 "$candidate_log" >&2 || true
+            tail -420 "$ref1_log" >&2 || true
+            exit 1
+        fi
+
+        cc_retry_fault_log="$work/nsp-ccretry-fault.log"
+        : > "$cc_retry_fault_log"
+        sudo tc qdisc add dev "$tap_reference" clsact
+        LOSS_QDISC=1
+        sudo tc filter add dev "$tap_reference" ingress protocol all pref 10 flower \
+            src_mac "$reference_mac" dst_mac "$candidate_mac" action drop
+        printf 'fault=reference-unicast-drop-cc-ack source=%s destination=%s\n' \
+            "$reference_mac" "$candidate_mac" >> "$cc_retry_fault_log"
+        if ! timeout 20s sudo python3 "$script_dir/observe-nsp-ccretry.py" \
+            "$bridge" "$candidate_mac" "$reference_mac"; then
+            sudo tc -s filter show dev "$tap_reference" ingress >> "$cc_retry_fault_log" 2>&1 || true
+            cat "$cc_retry_peer_log" >&2 || true
+            cat "$cc_retry_fault_log" >&2 || true
+            tail -500 "$candidate_log" >&2 || true
+            tail -440 "$ref1_log" >&2 || true
+            exit 1
+        fi
+        cc_retry_stats=$(sudo tc -s filter show dev "$tap_reference" ingress)
+        printf '%s\n' "$cc_retry_stats" >> "$cc_retry_fault_log"
+        if ! printf '%s\n' "$cc_retry_stats" | grep -Eq 'Sent [0-9]+ bytes [1-9][0-9]* pkt'; then
+            echo "interop: NSP CC retry fault matched no peer acknowledgements" >&2
+            cat "$cc_retry_fault_log" >&2
+            exit 1
+        fi
+        sudo tc qdisc del dev "$tap_reference" clsact
+        unset LOSS_QDISC
+        if ! wait "$CCRETRY_PID"; then
+            cat "$cc_retry_peer_log" >&2 || true
+            tail -500 "$candidate_log" >&2 || true
+            tail -440 "$ref1_log" >&2 || true
+            exit 1
+        fi
+        unset CCRETRY_PID
+        if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-CCRETRY-PASS session=$session scenario=$scenario" 25 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+            cat "$cc_retry_peer_log" >&2 || true
+            cat "$cc_retry_fault_log" >&2 || true
+            tail -500 "$candidate_log" >&2 || true
+            tail -440 "$ref1_log" >&2 || true
             exit 1
         fi
     fi

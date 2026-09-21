@@ -107,6 +107,8 @@ cc -I/usr/src/decnet-iv-linux/include/uapi -O2 -std=c11 -Wall -Wextra -Werror \
 cc -I/usr/src/decnet-iv-linux/include/uapi -O2 -std=c11 -Wall -Wextra -Werror \
     -o /usr/local/sbin/dnintflow /usr/src/decnet-iv-linux/tests/lab/dnintflow.c
 cc -I/usr/src/decnet-iv-linux/include/uapi -O2 -std=c11 -Wall -Wextra -Werror \
+    -o /usr/local/sbin/dnccretry /usr/src/decnet-iv-linux/tests/lab/dnccretry.c
+cc -I/usr/src/decnet-iv-linux/include/uapi -O2 -std=c11 -Wall -Wextra -Werror \
     -o /usr/local/sbin/dnexhaust /usr/src/decnet-iv-linux/tests/lab/dnexhaust.c
 cc -I/usr/src/decnet-iv-linux/include/uapi -O2 -std=c11 -Wall -Wextra -Werror \
     -o /usr/local/sbin/dnconnectloss /usr/src/decnet-iv-linux/tests/lab/dnconnectloss.c
@@ -172,6 +174,7 @@ sudo test -s "$mnt/usr/local/sbin/dnackrange"
 sudo test -s "$mnt/usr/local/sbin/dnseqwrap"
 sudo test -s "$mnt/usr/local/sbin/dnintloss"
 sudo test -s "$mnt/usr/local/sbin/dnintflow"
+sudo test -s "$mnt/usr/local/sbin/dnccretry"
 sudo test -s "$mnt/usr/local/sbin/dnexhaust"
 sudo test -s "$mnt/usr/local/sbin/dnconnectloss"
 sudo test -s "$mnt/usr/local/sbin/dntimeout"
