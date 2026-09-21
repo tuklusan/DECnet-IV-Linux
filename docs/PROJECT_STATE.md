@@ -621,3 +621,6 @@ Disconnect control loss now has the matching live proof. A candidate MIRROR conn
 
 
 Exact-SHA fast socket acceptance for lost-Disconnect-Confirm candidate `4c2e3f8f3cd40ee5c86bf398afbfd37a23f47ed8` is green: Repository Policy `35645429917`, Build Bootstrap `35645490482`, Project State Gate `35645493211`, E1 `35645496009` on x86_64 and ARM64, and x64 PyDECnet L1 interoperability `35645498585`. The live proof observed an identical Disconnect Initiate retransmission only after the response interval while peer confirmations were dropped, then restored the path and verified a fresh MIRROR connection.
+
+
+Disconnect-control exhaustion now extends the accepted transient loss proof. On a fresh MIRROR link, the host suppresses every PyDECnet-to-candidate unicast confirmation before native userspace calls SHUT_RDWR. The candidate must consume its five-attempt control retransmission budget, terminate the link with local reason 39 (node unreachable), expose that reason through DSO_DISDATA plus POLLERR|POLLHUP, and then recover on a fresh MIRROR connection after the fault is removed. This distinguishes terminal DI retry exhaustion from the previously accepted one-retry recovery path. Product behavior is unchanged. Next: exact-SHA fast socket acceptance, then keepalive/inactivity and remaining PP-06 negatives.

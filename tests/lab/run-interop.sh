@@ -631,6 +631,42 @@ if [[ "$reference" == pydecnet ]]; then
             tail -480 "$ref1_log" >&2 || true
             exit 1
         fi
+
+        if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-DIEXHAUST-READY session=$session scenario=$scenario" 30 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+            tail -560 "$candidate_log" >&2 || true
+            tail -500 "$ref1_log" >&2 || true
+            exit 1
+        fi
+        di_exhaust_fault_log="$work/nsp-di-exhaust-fault.log"
+        : > "$di_exhaust_fault_log"
+        sudo tc qdisc add dev "$tap_reference" clsact
+        LOSS_QDISC=1
+        sudo tc filter add dev "$tap_reference" ingress protocol all pref 10 flower \
+            src_mac "$reference_mac" dst_mac "$candidate_mac" action drop
+        printf 'fault=reference-unicast-drop-until-di-retry-exhaustion source=%s destination=%s\n' \
+            "$reference_mac" "$candidate_mac" >> "$di_exhaust_fault_log"
+        if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-DIEXHAUSTED session=$session scenario=$scenario errno=113" 38 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+            sudo tc -s filter show dev "$tap_reference" ingress >> "$di_exhaust_fault_log" 2>&1 || true
+            cat "$di_exhaust_fault_log" >&2 || true
+            tail -580 "$candidate_log" >&2 || true
+            tail -520 "$ref1_log" >&2 || true
+            exit 1
+        fi
+        di_exhaust_stats=$(sudo tc -s filter show dev "$tap_reference" ingress)
+        printf '%s\n' "$di_exhaust_stats" >> "$di_exhaust_fault_log"
+        if ! printf '%s\n' "$di_exhaust_stats" | grep -Eq 'Sent [0-9]+ bytes [1-9][0-9]* pkt'; then
+            echo "interop: NSP DI exhaustion fault matched no peer confirmations" >&2
+            cat "$di_exhaust_fault_log" >&2
+            exit 1
+        fi
+        sudo tc qdisc del dev "$tap_reference" clsact
+        unset LOSS_QDISC
+        if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-DIEXHAUST-PASS session=$session scenario=$scenario" 20 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+            cat "$di_exhaust_fault_log" >&2 || true
+            tail -580 "$candidate_log" >&2 || true
+            tail -520 "$ref1_log" >&2 || true
+            exit 1
+        fi
     fi
 
     exhaust_marker="DNIV-INTEROP-EXHAUST-READY session=$session scenario=$scenario"
