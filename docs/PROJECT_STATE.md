@@ -81,7 +81,7 @@ Implementation order:
 | Phase 4 accepted protocol candidate | `6c185b6d01f8a57ee9f0ea6a6c37d7112ddb77d2` |
 | Phase 4 closure commit | `571333bfd7aaa8b2fcc88715c1d61442af151f3c` |
 | Phase 4 tag | `PHASE-4-COMPLETE` |
-| Latest accepted Phase 5 candidate | `e80644dd485ea12815ab87e57904e57dd9ca9339` |
+| Latest accepted Phase 5 candidate | `6c54859389257f7337c044f79c29b1a1e2ec8f35` |
 | Route20 pin | `a9ef7c0b7f875f0dd2e8abaf11213798a8e4474c` |
 | PyDECnet live pin | `295938c76c956a70957f4cf96b05685f555b2a18` |
 | VM lifecycle | direct QEMU/QMP |
@@ -455,3 +455,6 @@ Fast acceptance of reserved-port wire-proof candidate `dda5f6d747ea026d4735280ed
 
 
 The first peer-isolation rerun `25a3e47fedc5b87ecac6d09aef795ce340e2f2be` failed earlier in the reserved-port discriminator: the egress isolation filter matched zero replies. Root cause is the injector's Ethernet source identity, not the protocol implementation. It emitted short-data frames with the host bridge MAC while embedding the live DECnet peer node address; the Routing Layer correctly rejects data whose Ethernet source is not the canonical DECnet MAC of an UP adjacency, so the non-hello receive counter advanced before NSP delivery but no reserved-port response could be generated. The injector now derives Ethernet source `AA-00-04-00-xx-xx` directly from the embedded source node, matching the already-UP PyDECnet adjacency. The candidate-to-peer egress drop from the prior correction then prevents the real peer from recycling rejected connections while bridge PCAP observes the candidate replies. Product behavior remains unchanged. Next: exact-SHA fast socket acceptance.
+
+
+Exact-SHA fast acceptance for reserved-port wire proof `6c54859389257f7337c044f79c29b1a1e2ec8f35` is green: Repository Policy `35554033965`, Python QEMU VM Lab `35554063023`, and x64 PyDECnet L1 Independent Ethernet Interoperability `35554064466`. The corrected injector reached NSP with a canonical DECnet source MAC; reply isolation held slots long enough to produce both DC reason 41 (No Link) and DC reason 1 (No Resources). Next: flow-control/delayed-ACK and malformed receive-state negatives.

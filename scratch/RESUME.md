@@ -397,3 +397,6 @@ Reserved-port proof candidate `dda5f6d747ea026d4735280ed1ae2ef0a2e12bb8` failed 
 
 
 The peer-isolation rerun `25a3e47fedc5b87ecac6d09aef795ce340e2f2be` exposed the preceding injector defect: synthetic short-data used the host bridge MAC, so the candidate Routing Layer correctly rejected it before NSP because data source identity must map to an UP DECnet adjacency. The injector now uses the canonical DECnet MAC derived from the embedded PyDECnet source node. Combined with the TAP-egress reply isolation, this should both admit the synthetic CIs and prevent the live peer from recycling connection slots during the burst. No product change. Next: exact-SHA fast socket acceptance.
+
+
+Exact-SHA fast acceptance for reserved-port wire proof `6c54859389257f7337c044f79c29b1a1e2ec8f35` is green: Repository Policy `35554033965`, Python QEMU VM Lab `35554063023`, and x64 PyDECnet L1 Independent Ethernet Interoperability `35554064466`. The corrected injector reached NSP with a canonical DECnet source MAC; reply isolation held slots long enough to produce both DC reason 41 (No Link) and DC reason 1 (No Resources). Next: flow-control/delayed-ACK and malformed receive-state negatives.
