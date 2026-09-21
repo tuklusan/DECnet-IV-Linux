@@ -279,6 +279,8 @@ def main() -> int:
         "candidate_accept_data": 0,
         "candidate_loss_probe": 0,
         "reference_loss_probe": 0,
+        "candidate_drain_probe": 0,
+        "candidate_drain_retransmit_before_di": 0,
         "candidate_exhaust_probe": 0,
         "candidate_ci_exhaust": 0,
         "candidate_ci_exhaust_rci": 0,
@@ -293,6 +295,8 @@ def main() -> int:
         "probes": 0,
     }
     bad_hello_hw = 0
+    drain_link = None
+    drain_data_seen = 0
 
     for frame in packets(args.pcap):
         parsed = routing_payload(frame)
@@ -305,6 +309,14 @@ def main() -> int:
                 counts["candidate_nsp"] += 1
                 if b"DNIV-LOSS-PROBE" in nsp:
                     counts["candidate_loss_probe"] += 1
+                if b"DNIV-DRAIN-PROBE" in nsp:
+                    counts["candidate_drain_probe"] += 1
+                    if len(nsp) >= 5:
+                        link = nsp[3:5]
+                        if drain_link is None:
+                            drain_link = link
+                        if link == drain_link:
+                            drain_data_seen += 1
                 if b"DNIV-EXHAUST-PROBE" in nsp:
                     counts["candidate_exhaust_probe"] += 1
                 if b"CI-EXHAUST" in nsp:
@@ -317,6 +329,9 @@ def main() -> int:
                     counts["candidate_ci_recover_data"] += 1
                 if b"DNIV-CR-TIMEOUT-RECOVER" in nsp:
                     counts["candidate_cr_timeout_recovery"] += 1
+                if nsp[0] == 0x38 and len(nsp) >= 5 and drain_link is not None and \
+                        nsp[3:5] == drain_link and drain_data_seen >= 2:
+                    counts["candidate_drain_retransmit_before_di"] += 1
                 if nsp[0] == 0x38 and len(nsp) >= 7 and \
                         int.from_bytes(nsp[5:7], "little") == 38:
                     counts["candidate_cr_timeout_reason38"] += 1
@@ -423,6 +438,10 @@ def main() -> int:
             raise SystemExit("interop pcap: missing candidate NSP timeout retransmission")
         if counts["reference_loss_probe"] < 1:
             raise SystemExit("interop pcap: missing post-fault reference loss-probe response")
+        if counts["candidate_drain_probe"] < 2:
+            raise SystemExit("interop pcap: clean disconnect did not retransmit unacknowledged Data")
+        if counts["candidate_drain_retransmit_before_di"] < 1:
+            raise SystemExit("interop pcap: clean disconnect DI preceded Data drain")
         if counts["candidate_exhaust_probe"] < 5:
             raise SystemExit("interop pcap: retransmit-limit probe did not reach all five attempts")
         if counts["candidate_ci_exhaust"] < 5 or counts["candidate_ci_exhaust_rci"] < 4:
