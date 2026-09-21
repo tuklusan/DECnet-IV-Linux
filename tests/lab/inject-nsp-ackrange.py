@@ -144,6 +144,16 @@ def main() -> int:
         if wrong_remote_value == 0:
             wrong_remote_value = 1
         wrong_remote_link = struct.pack("<H", wrong_remote_value)
+        wrong_local_value = (int.from_bytes(local_link, "little") + 1) & 0xffff
+        if wrong_local_value == 0:
+            wrong_local_value = 1
+        wrong_local_link = struct.pack("<H", wrong_local_value)
+        wrong_src_node = src_node ^ 1
+        if wrong_src_node == 0:
+            wrong_src_node = src_node ^ 2
+        wrong_src_mac = bytes((0xAA, 0x00, 0x04, 0x00,
+                               wrong_src_node & 0xFF,
+                               (wrong_src_node >> 8) & 0xFF))
         sent_at = time.monotonic()
         send_ack(send, candidate, src_mac, src_node, dst_node,
                  local_link, remote_link, cross_forged, 2, 0x14)
@@ -167,6 +177,20 @@ def main() -> int:
             f"ack={seq} src_link={wrong_remote_value}",
             flush=True,
         )
+        send_ack(send, candidate, src_mac, src_node, dst_node,
+                 wrong_local_link, remote_link, seq, 0, 0x04)
+        print(
+            "ack-range-inject: wrong-destination-link ACK sent "
+            f"ack={seq} dst_link={wrong_local_value}",
+            flush=True,
+        )
+        send_ack(send, candidate, wrong_src_mac, wrong_src_node, dst_node,
+                 local_link, remote_link, seq, 0, 0x04)
+        print(
+            "ack-range-inject: wrong-source-node ACK sent "
+            f"ack={seq} src_node={wrong_src_node}",
+            flush=True,
+        )
 
         sniff.settimeout(0.5)
         deadline = sent_at + 7.0
@@ -182,7 +206,7 @@ def main() -> int:
                         "candidate retransmitted too early after forged cross XACKs"
                     )
                 print(
-                    "ack-range-inject: cross XACK future/half-space and wrong-link ACKs ignored "
+                    "ack-range-inject: cross XACK future/half-space and spoofed-identity ACKs ignored "
                     f"elapsed={elapsed:.3f}s",
                     flush=True,
                 )
@@ -208,7 +232,8 @@ def main() -> int:
                 elapsed = time.monotonic() - sent_at
                 print(
                     "ack-range-inject: pass cross_future_ack_ignored=1 "
-                    "cross_halfspace_ack_ignored=1 wrong_link_ack_ignored=1 "
+                    "cross_halfspace_ack_ignored=1 wrong_source_link_ack_ignored=1 "
+                    "wrong_destination_link_ack_ignored=1 wrong_source_node_ack_ignored=1 "
                     "cross_nak_retransmit=1 "
                     f"elapsed={elapsed:.3f}s"
                 )
