@@ -944,6 +944,24 @@ out:
 }
 
 
+static int dniv_nsp_send_dc_reply(__u16 remote_node, __u16 dst, __u16 src,
+                                  __u16 reason)
+{
+    struct dniv_nsp_packet reply;
+    __u8 wire[DNIV_NSP_MAX_WIRE];
+    int len;
+
+    memset(&reply, 0, sizeof(reply));
+    reply.type = DNIV_NSP_DC;
+    reply.dst = dst;
+    reply.src = src;
+    reply.reason = reason;
+    len = dniv_nsp_build(wire, sizeof(wire), &reply);
+    if (len <= 0)
+        return -EINVAL;
+    return dniv_nsp_transmit(remote_node, wire, (__u16)len);
+}
+
 int dniv_nsp_receive(__u16 remote_node, const __u8 *wire, __u16 wire_len)
 {
     struct dniv_nsp_packet pkt;
@@ -994,12 +1012,14 @@ int dniv_nsp_receive(__u16 remote_node, const __u8 *wire, __u16 wire_len)
         }
         if (!conn) {
             spin_unlock_irqrestore(&dniv_nsp_lock, flags);
-            return -ENOSPC;
+            return dniv_nsp_send_dc_reply(
+                remote_node, pkt.src, 0U, DNIV_NSP_REASON_NO_RESOURCES);
         }
         link = dniv_nsp_take_link_locked(i);
         if (!link) {
             spin_unlock_irqrestore(&dniv_nsp_lock, flags);
-            return -ENOSPC;
+            return dniv_nsp_send_dc_reply(
+                remote_node, pkt.src, 0U, DNIV_NSP_REASON_NO_RESOURCES);
         }
         memset(conn, 0, sizeof(*conn));
         dniv_nsp_init_conn_lists(conn);
@@ -1034,7 +1054,14 @@ int dniv_nsp_receive(__u16 remote_node, const __u8 *wire, __u16 wire_len)
 
     conn = dniv_nsp_find_locked(pkt.dst);
     if (!conn || conn->remote_node != remote_node) {
+        bool no_link = pkt.type == DNIV_NSP_DATA ||
+                       pkt.type == DNIV_NSP_INT ||
+                       pkt.type == DNIV_NSP_LINK_SVC;
+
         spin_unlock_irqrestore(&dniv_nsp_lock, flags);
+        if (no_link && pkt.src)
+            return dniv_nsp_send_dc_reply(
+                remote_node, pkt.src, pkt.dst, DNIV_NSP_REASON_NO_LINK);
         return -ENOENT;
     }
     if (pkt.type != DNIV_NSP_ACK_CONN) {
@@ -1049,7 +1076,14 @@ int dniv_nsp_receive(__u16 remote_node, const __u8 *wire, __u16 wire_len)
             }
             conn->remote_link = pkt.src;
         } else if (conn->remote_link != pkt.src) {
+            bool no_link = pkt.type == DNIV_NSP_DATA ||
+                           pkt.type == DNIV_NSP_INT ||
+                           pkt.type == DNIV_NSP_LINK_SVC;
+
             spin_unlock_irqrestore(&dniv_nsp_lock, flags);
+            if (no_link && pkt.src)
+                return dniv_nsp_send_dc_reply(
+                    remote_node, pkt.src, pkt.dst, DNIV_NSP_REASON_NO_LINK);
             return -ENOENT;
         }
     }
@@ -1094,7 +1128,7 @@ int dniv_nsp_receive(__u16 remote_node, const __u8 *wire, __u16 wire_len)
         reply.type = DNIV_NSP_DC;
         reply.dst = conn->remote_link;
         reply.src = conn->local_link;
-        reply.reason = 42U;
+        reply.reason = DNIV_NSP_REASON_DISCONNECT_COMPLETE;
         reply_len = dniv_nsp_build(reply_wire, sizeof(reply_wire), &reply);
         reply_node = conn->remote_node;
         conn->disconnect_reason = pkt.reason;
@@ -1105,9 +1139,9 @@ int dniv_nsp_receive(__u16 remote_node, const __u8 *wire, __u16 wire_len)
         dniv_nsp_set_state_locked(conn, DNIV_NSP_ST_CLOSED, jiffies);
         break;
     case DNIV_NSP_DC:
+        conn->disconnect_reason = pkt.reason;
         dniv_nsp_purge_locked(conn);
-        memset(conn, 0, sizeof(*conn));
-        dniv_nsp_init_conn_lists(conn);
+        dniv_nsp_set_state_locked(conn, DNIV_NSP_ST_CLOSED, jiffies);
         break;
     case DNIV_NSP_DATA:
     case DNIV_NSP_INT:

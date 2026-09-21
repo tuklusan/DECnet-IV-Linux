@@ -376,3 +376,8 @@ Consolidated run `35547989271` found a concrete E4 harness race, not a timer-pro
 Exact-SHA consolidated acceptance for `8cf0e121ebe273447c500381ebe44ee374c440cc` is green: policy `35549058759`, build `35549108369`, state `35549109446`, references `35549110505`, E1 `35549111412` both architectures, E4 `35549112413` both architectures, and six-job interop `35549113555`.
 
 The next Phase 5 parser correction rejects trailing non-ACK bytes in ACK_DATA/ACK_OTHER while preserving the Phase IV/PyDECnet rule that an optional ACK word with invalid QUAL is ignored after consuming that word. Unit negatives cover both. Next: exact-SHA fast socket acceptance, then reserved-port No Resources/No Link receive-dispatch semantics.
+
+
+Exact-SHA fast acceptance for `37f82031790e7da584940259703f94074204a5fc` is green: policy `35550252765`, build `35550274983`, state `35550276263`, E1 `35550277558` both architectures, and x64 PyDECnet L1 interop `35550278702`.
+
+Reserved-port semantics are corrected next: CI/RCI allocation failure sends DC reason 1 (No Resources); unmapped or wrong-source Data/Interrupt/Link-Service sends DC reason 41 (No Link), while bad-mapped ACK remains ignored. Received DC reasons are retained in CLOSED state until socket release instead of immediately erasing the connection, preserving rejection/termination status for userspace. Next: exact-SHA fast socket acceptance, then bounded independent No Resources/No Link wire proof and sequence-boundary negatives.
