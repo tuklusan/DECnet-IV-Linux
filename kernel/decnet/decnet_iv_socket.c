@@ -543,8 +543,10 @@ static int dniv_can_send(struct dniv_sock *dsk)
         return -ENOTCONN;
     if (snapshot.state != DNIV_NSP_ST_RUN)
         return -ENOTCONN;
-    if (!snapshot.data_xon ||
-        snapshot.retransmit_count >= DNIV_NSP_MAX_WINDOW)
+    if (!dniv_nsp_data_send_allowed(
+            snapshot.data_xon, snapshot.data_retransmit_count,
+            snapshot.retransmit_count, DNIV_NSP_MAX_WINDOW,
+            DNIV_NSP_MAX_RETRANSMIT))
         return 0;
     return 1;
 }
@@ -1128,8 +1130,10 @@ static __poll_t dniv_sock_poll(struct file *file, struct socket *sock,
     if (dniv_nsp_conn_snapshot(dsk->local_link, &snapshot))
         return EPOLLERR | EPOLLHUP;
     if (snapshot.state == DNIV_NSP_ST_RUN) {
-        if (snapshot.data_xon &&
-            snapshot.retransmit_count < DNIV_NSP_MAX_WINDOW)
+        if (dniv_nsp_data_send_allowed(
+                snapshot.data_xon, snapshot.data_retransmit_count,
+                snapshot.retransmit_count, DNIV_NSP_MAX_WINDOW,
+                DNIV_NSP_MAX_RETRANSMIT))
             mask |= EPOLLOUT | EPOLLWRNORM;
         if (!dniv_nsp_rx_ready(dsk->local_link, &normal, &intr) && normal)
             mask |= EPOLLIN | EPOLLRDNORM;

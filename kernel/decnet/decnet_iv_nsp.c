@@ -683,6 +683,7 @@ int dniv_nsp_conn_snapshot(__u16 local_link,
                            struct dniv_nsp_conn_snapshot *snapshot)
 {
     struct dniv_nsp_connection *conn;
+    struct dniv_nsp_retransmit *entry;
     unsigned long flags;
 
     if (!snapshot)
@@ -702,6 +703,14 @@ int dniv_nsp_conn_snapshot(__u16 local_link,
     snapshot->other_tx_next = conn->tx_next[DNIV_NSP_CH_OTHER];
     snapshot->other_rx_next = conn->rx_next[DNIV_NSP_CH_OTHER];
     snapshot->retransmit_count = conn->retransmit_count;
+    snapshot->data_retransmit_count = 0U;
+    snapshot->other_retransmit_count = 0U;
+    list_for_each_entry(entry, &conn->retransmit, link) {
+        if (entry->channel == DNIV_NSP_CH_DATA)
+            snapshot->data_retransmit_count++;
+        else
+            snapshot->other_retransmit_count++;
+    }
     snapshot->rx_queued = conn->rx_queued;
     snapshot->interrupt_credit = conn->interrupt_credit;
     snapshot->disconnect_reason = conn->disconnect_reason;
@@ -1628,19 +1637,17 @@ int dniv_nsp_send_data(__u16 local_link, const __u8 *payload,
         spin_unlock_irqrestore(&dniv_nsp_lock, flags);
         return -ENOTCONN;
     }
-    if (!conn->data_xon) {
-        spin_unlock_irqrestore(&dniv_nsp_lock, flags);
-        return -EAGAIN;
-    }
     {
         struct dniv_nsp_retransmit *queued;
-        unsigned int in_flight = 0U;
+        unsigned int data_outstanding = 0U;
 
         list_for_each_entry(queued, &conn->retransmit, link) {
             if (queued->channel == DNIV_NSP_CH_DATA)
-                in_flight++;
+                data_outstanding++;
         }
-        if (in_flight >= DNIV_NSP_MAX_WINDOW) {
+        if (!dniv_nsp_data_send_allowed(
+                conn->data_xon, data_outstanding, conn->retransmit_count,
+                DNIV_NSP_MAX_WINDOW, DNIV_NSP_MAX_RETRANSMIT)) {
             spin_unlock_irqrestore(&dniv_nsp_lock, flags);
             return -EAGAIN;
         }

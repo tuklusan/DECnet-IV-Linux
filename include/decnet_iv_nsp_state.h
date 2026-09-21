@@ -41,6 +41,16 @@ dniv_nsp_retransmit_allowed(enum dniv_nsp_channel channel, int data_xon)
     return channel != DNIV_NSP_CH_DATA || data_xon;
 }
 
+static inline int
+dniv_nsp_data_send_allowed(int data_xon, unsigned int data_outstanding,
+                           unsigned int total_outstanding,
+                           unsigned int data_window,
+                           unsigned int total_limit)
+{
+    return data_xon && data_outstanding < data_window &&
+           total_outstanding < total_limit;
+}
+
 static inline unsigned long
 dniv_nsp_ack_holdoff_deadline(int pending, unsigned long deadline,
                               unsigned long now, unsigned long holdoff)

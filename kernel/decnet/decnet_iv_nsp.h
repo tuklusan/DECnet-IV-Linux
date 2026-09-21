@@ -58,6 +58,8 @@ struct dniv_nsp_conn_snapshot {
     __u16 other_tx_next;
     __u16 other_rx_next;
     __u16 retransmit_count;
+    __u16 data_retransmit_count;
+    __u16 other_retransmit_count;
     __u16 rx_queued;
     __u16 interrupt_credit;
     __u16 disconnect_reason;
