@@ -86,9 +86,9 @@ def data_sequence(nsp: bytes) -> int:
 
 def send_ack(sock: socket.socket, dst_mac: bytes, src_mac: bytes,
              src_node: int, dst_node: int, dst_link: bytes, src_link: bytes,
-             ack: int, qual: int = 0) -> None:
+             ack: int, qual: int = 0, msgflag: int = 0x04) -> None:
     ackword = 0x8000 | ((qual & 0x3) << 12) | (ack & 0x0fff)
-    nsp = b"\x04" + dst_link + src_link + struct.pack("<H", ackword)
+    nsp = bytes((msgflag,)) + dst_link + src_link + struct.pack("<H", ackword)
     route = (
         b"\x02" + struct.pack("<H", dst_node)
         + struct.pack("<H", src_node) + b"\x00" + nsp
@@ -166,11 +166,78 @@ def main() -> int:
             if nsp is not None and TAG in nsp:
                 elapsed = time.monotonic() - sent_at
                 print(
+                    "ack-range-inject: NAK fast retransmit "
+                    f"elapsed={elapsed:.3f}s",
+                    flush=True,
+                )
+                break
+        else:
+            raise RuntimeError("candidate did not promptly retransmit after NAK")
+
+        # Prove the same range and NAK rules through a cross-subchannel
+        # acknowledgment.  ACK_OTHER + XACK/XNAK addresses the Data
+        # subchannel in Phase IV.
+        sniff.settimeout(0.05)
+        while True:
+            try:
+                sniff.recv(4096)
+            except TimeoutError:
+                break
+
+        cross_forged = (seq + 7) & 0x0fff
+        sent_at = time.monotonic()
+        send_ack(send, candidate, src_mac, src_node, dst_node,
+                 local_link, remote_link, cross_forged, 2, 0x14)
+        print(
+            f"ack-range-inject: cross XACK sent seq={seq} ack={cross_forged}",
+            flush=True,
+        )
+
+        sniff.settimeout(0.5)
+        deadline = sent_at + 7.0
+        while time.monotonic() < deadline:
+            try:
+                nsp = nsp_payload(sniff.recv(4096))
+            except TimeoutError:
+                continue
+            if nsp is not None and TAG in nsp:
+                elapsed = time.monotonic() - sent_at
+                if elapsed < 3.5:
+                    raise RuntimeError(
+                        "candidate retransmitted too early after forged cross XACK"
+                    )
+                print(
+                    "ack-range-inject: cross XACK future ACK ignored "
+                    f"elapsed={elapsed:.3f}s",
+                    flush=True,
+                )
+                break
+        else:
+            raise RuntimeError(
+                "candidate did not retransmit after forged cross XACK"
+            )
+
+        sent_at = time.monotonic()
+        send_ack(send, candidate, src_mac, src_node, dst_node,
+                 local_link, remote_link, nak, 3, 0x14)
+        print(f"ack-range-inject: cross XNAK sent ack={nak}", flush=True)
+
+        deadline = sent_at + 2.5
+        while time.monotonic() < deadline:
+            try:
+                nsp = nsp_payload(sniff.recv(4096))
+            except TimeoutError:
+                continue
+            if nsp is not None and TAG in nsp:
+                elapsed = time.monotonic() - sent_at
+                print(
                     "ack-range-inject: pass future_ack_ignored=1 "
-                    f"timer_retransmit=1 nak_retransmit=1 elapsed={elapsed:.3f}s"
+                    "timer_retransmit=1 nak_retransmit=1 "
+                    "cross_future_ack_ignored=1 cross_nak_retransmit=1 "
+                    f"elapsed={elapsed:.3f}s"
                 )
                 return 0
-        raise RuntimeError("candidate did not promptly retransmit after NAK")
+        raise RuntimeError("candidate did not promptly retransmit after cross XNAK")
     finally:
         sniff.close()
         send.close()
