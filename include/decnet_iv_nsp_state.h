@@ -64,6 +64,22 @@ enum dniv_nsp_conn_state {
     DNIV_NSP_ST_DI,
 };
 
+enum dniv_nsp_cc_rx_action {
+    DNIV_NSP_CC_RX_INVALID = 0,
+    DNIV_NSP_CC_RX_ACCEPT,
+    DNIV_NSP_CC_RX_REACK,
+};
+
+static inline enum dniv_nsp_cc_rx_action
+dniv_nsp_cc_receive_action(enum dniv_nsp_conn_state state)
+{
+    if (state == DNIV_NSP_ST_CI || state == DNIV_NSP_ST_CD)
+        return DNIV_NSP_CC_RX_ACCEPT;
+    if (state == DNIV_NSP_ST_RUN)
+        return DNIV_NSP_CC_RX_REACK;
+    return DNIV_NSP_CC_RX_INVALID;
+}
+
 static inline __u16 dniv_nsp_seq_norm(__u32 v)
 {
     return (__u16)(v & 0x0fffU);

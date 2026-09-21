@@ -408,3 +408,8 @@ The next Phase 5 correction tightens delayed-ACK semantics against the pinned Py
 
 
 Build Bootstrap `35555522237` rejected delayed-ACK candidate `e8a21b8230d0e07dbc7b5b986574c66ff993da9e` on x64 unit coverage before kernel build: the new other-data high-bit vectors set bit 15, which is the ACK-present discriminator and therefore correctly entered optional-ACK decoding instead of the sequence field. The vectors now exercise only reserved sequence bits 12-14 (`0x70` high byte), leaving bit 15 clear. Product code is unchanged. Next: exact-SHA fast socket acceptance.
+
+
+Exact-SHA fast socket acceptance for `33385c8abce1533ab602bb191404e19961b740df` is green: Repository Policy `35555625293`, Build Bootstrap `35555646942`, Project State Gate `35555647917`, E1 `35555648936` on x86_64 and ARM64, and x64 PyDECnet L1 interoperability `35555649884`.
+
+Receive-state review found a loss-recovery gap for duplicate Connect Confirm. The pinned PyDECnet RUN handler explicitly acknowledges a retransmitted `ConnConf`; the candidate instead rejected CC once it had entered RUN. If the first data ACK of CC were lost, that could leave the peer retransmitting CC until failure. CC receive handling now distinguishes first acceptance (CI/CD), duplicate re-ACK (RUN), and invalid states; duplicate CC sends ACK_DATA(0) without replacing accept data or changing state. Shared state-action unit coverage locks the valid/duplicate/invalid matrix. Next: exact-SHA fast socket acceptance, then continue receive-state loss negatives.

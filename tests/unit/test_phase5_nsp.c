@@ -205,6 +205,24 @@ static void test_ack_holdoff(void)
     assert(dniv_nsp_ack_holdoff_deadline(1, 103UL, 104UL, 3UL) == 103UL);
 }
 
+static void test_cc_receive_state(void)
+{
+    assert(dniv_nsp_cc_receive_action(DNIV_NSP_ST_CI) ==
+           DNIV_NSP_CC_RX_ACCEPT);
+    assert(dniv_nsp_cc_receive_action(DNIV_NSP_ST_CD) ==
+           DNIV_NSP_CC_RX_ACCEPT);
+    assert(dniv_nsp_cc_receive_action(DNIV_NSP_ST_RUN) ==
+           DNIV_NSP_CC_RX_REACK);
+    assert(dniv_nsp_cc_receive_action(DNIV_NSP_ST_CLOSED) ==
+           DNIV_NSP_CC_RX_INVALID);
+    assert(dniv_nsp_cc_receive_action(DNIV_NSP_ST_CR) ==
+           DNIV_NSP_CC_RX_INVALID);
+    assert(dniv_nsp_cc_receive_action(DNIV_NSP_ST_CC) ==
+           DNIV_NSP_CC_RX_INVALID);
+    assert(dniv_nsp_cc_receive_action(DNIV_NSP_ST_DI) ==
+           DNIV_NSP_CC_RX_INVALID);
+}
+
 static void test_sequence(void)
 {
     assert(dniv_nsp_seq_norm(4096U) == 0U);
@@ -247,6 +265,7 @@ int main(void)
     test_negative();
     test_retransmit_flow();
     test_ack_holdoff();
+    test_cc_receive_state();
     test_sequence();
     return 0;
 }

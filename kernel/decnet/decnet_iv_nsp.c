@@ -1102,17 +1102,21 @@ int dniv_nsp_receive(__u16 remote_node, const __u8 *wire, __u16 wire_len)
         dniv_nsp_clear_control_locked(conn);
         dniv_nsp_set_state_locked(conn, DNIV_NSP_ST_CD, jiffies);
         break;
-    case DNIV_NSP_CC:
-        if (conn->state != DNIV_NSP_ST_CI &&
-            conn->state != DNIV_NSP_ST_CD) {
+    case DNIV_NSP_CC: {
+        enum dniv_nsp_cc_rx_action action =
+            dniv_nsp_cc_receive_action(conn->state);
+
+        if (action == DNIV_NSP_CC_RX_INVALID) {
             spin_unlock_irqrestore(&dniv_nsp_lock, flags);
             return -EINVAL;
         }
-        dniv_nsp_clear_control_locked(conn);
-        conn->accept_payload_len = (__u16)pkt.payload_len;
-        if (pkt.payload_len)
-            memcpy(conn->accept_payload, pkt.payload, pkt.payload_len);
-        dniv_nsp_set_state_locked(conn, DNIV_NSP_ST_RUN, jiffies);
+        if (action == DNIV_NSP_CC_RX_ACCEPT) {
+            dniv_nsp_clear_control_locked(conn);
+            conn->accept_payload_len = (__u16)pkt.payload_len;
+            if (pkt.payload_len)
+                memcpy(conn->accept_payload, pkt.payload, pkt.payload_len);
+            dniv_nsp_set_state_locked(conn, DNIV_NSP_ST_RUN, jiffies);
+        }
         memset(&reply, 0, sizeof(reply));
         reply.type = DNIV_NSP_ACK_DATA;
         reply.dst = conn->remote_link;
@@ -1123,6 +1127,7 @@ int dniv_nsp_receive(__u16 remote_node, const __u8 *wire, __u16 wire_len)
         reply_len = dniv_nsp_build(reply_wire, sizeof(reply_wire), &reply);
         reply_node = conn->remote_node;
         break;
+    }
     case DNIV_NSP_DI:
         if (!dniv_nsp_state_transition_valid(conn->state, DNIV_NSP_ST_DI)) {
             spin_unlock_irqrestore(&dniv_nsp_lock, flags);
