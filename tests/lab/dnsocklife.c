@@ -258,7 +258,7 @@ static int syscall_negative_corpus(const struct sockaddr_dn *peer)
         goto fail;
 
     errno = 0;
-    if (expect_errno_ssize(send(fd, &byte, 1U, MSG_PEEK), ENOTCONN))
+    if (expect_errno_ssize(send(fd, &byte, 1U, MSG_PEEK), EOPNOTSUPP))
         goto fail;
 
     close(fd);

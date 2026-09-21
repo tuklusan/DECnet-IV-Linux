@@ -670,3 +670,6 @@ Exact-SHA fast socket acceptance for receiver-stall fairness candidate `ed5a1eca
 
 
 PP-06 syscall-fuzz coverage now includes a deterministic invalid-call corpus in the live socket lifecycle test. It exercises short sockaddr lengths, wrong address family, conflicting object number/name selectors, unsupported sockaddr flags, invalid node-address lengths, remote addresses missing node identity, short option buffers, invalid accept mode, oversized access-field lengths, and unknown NSP socket options. Each call must fail with the implementation's declared errno while leaving the socket usable for the existing lifecycle/connect/churn proof. Product behavior is unchanged. The already-accepted reserved-port proof also directly demonstrates bounded NSP connection-table exhaustion by requiring Disconnect Confirm reason 1 (No Resources) after synthetic CIs fill the 256-entry table. Next: exact-SHA fast socket acceptance, then continue remaining PP-06 negatives.
+
+
+Static review of the new syscall-negative corpus found one test-ordering mistake before acceptance completed: `sendmsg()` validates unsupported message flags before connection state, so `MSG_PEEK` must return `EOPNOTSUPP`, not `ENOTCONN`, on an unconnected DECnet socket. The expectation is corrected to match the socket implementation; product behavior is unchanged.
