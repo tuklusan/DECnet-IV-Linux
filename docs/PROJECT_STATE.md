@@ -643,3 +643,6 @@ NSP inactivity keepalive is now independently testable without changing the prod
 
 
 Exact-SHA fast socket acceptance for inactivity-keepalive candidate `b2ab90a1a6dd6141114dbc0d0d5d51134583f916` is green: Repository Policy `35654640026`, Build Bootstrap `35654680497`, Project State Gate `35654682738`, E1 `35654684891` on x86_64 and ARM64, and x64 PyDECnet L1 interoperability `35654687240`. The live idle link emitted two acknowledged no-change Link Service keepalives on consecutive Other-Data sequence numbers at the shortened test interval, then completed normal MIRROR traffic on the same connection. Next: continue remaining NSP/PP-06 negatives.
+
+
+PP-06 full Data-window backpressure now has a live independent-peer proof. On a fresh MIRROR link the host suppresses every PyDECnet-to-candidate unicast reply while userspace submits eight one-segment records, filling the bounded NSP Data window. An immediate ninth nonblocking record must return EAGAIN rather than overrun the retransmit window. After the reverse path is restored, the blocked ninth record must resume on the same logical link. This complements the existing XOFF zero-window proof and distinguishes protocol flow control from socket-buffer behavior. Product behavior is unchanged. Next: exact-SHA fast socket acceptance, then continue remaining NSP/PP-06 negatives.

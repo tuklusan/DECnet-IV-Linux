@@ -689,6 +689,41 @@ if [[ "$reference" == pydecnet ]]; then
             tail -560 "$ref1_log" >&2 || true
             exit 1
         fi
+
+        if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-WINDOW-READY session=$session scenario=$scenario" 30 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+            tail -640 "$candidate_log" >&2 || true
+            tail -580 "$ref1_log" >&2 || true
+            exit 1
+        fi
+        window_fault_log="$work/nsp-window-fault.log"
+        : > "$window_fault_log"
+        sudo tc qdisc add dev "$tap_reference" clsact
+        LOSS_QDISC=1
+        sudo tc filter add dev "$tap_reference" ingress protocol all pref 10 flower \
+            src_mac "$reference_mac" dst_mac "$candidate_mac" action drop
+        printf 'fault=reference-unicast-drop-full-window source=%s destination=%s\n' \
+            "$reference_mac" "$candidate_mac" >> "$window_fault_log"
+        if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-WINDOW-FULL session=$session scenario=$scenario" 20 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+            tail -660 "$candidate_log" >&2 || true
+            tail -600 "$ref1_log" >&2 || true
+            sudo tc -s filter show dev "$tap_reference" ingress >> "$window_fault_log" 2>&1 || true
+            exit 1
+        fi
+        window_stats=$(sudo tc -s filter show dev "$tap_reference" ingress)
+        printf '%s\n' "$window_stats" >> "$window_fault_log"
+        if ! printf '%s\n' "$window_stats" | grep -Eq 'Sent [0-9]+ bytes [1-9][0-9]* pkt'; then
+            echo "interop: NSP full-window injector matched no frames" >&2
+            cat "$window_fault_log" >&2
+            exit 1
+        fi
+        sudo tc qdisc del dev "$tap_reference" clsact
+        unset LOSS_QDISC
+        if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-WINDOW-PASS session=$session scenario=$scenario" 45 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+            tail -680 "$candidate_log" >&2 || true
+            tail -620 "$ref1_log" >&2 || true
+            cat "$window_fault_log" >&2 || true
+            exit 1
+        fi
     fi
 
     exhaust_marker="DNIV-INTEROP-EXHAUST-READY session=$session scenario=$scenario"
