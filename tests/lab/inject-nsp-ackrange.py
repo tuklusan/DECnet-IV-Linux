@@ -101,6 +101,26 @@ def send_ack(sock: socket.socket, dst_mac: bytes, src_mac: bytes,
         raise RuntimeError("short AF_PACKET ACK send")
 
 
+def send_no_link_probe(
+    sock: socket.socket, dst_mac: bytes, src_mac: bytes,
+    src_node: int, dst_node: int, dst_link: bytes, src_link: bytes,
+) -> None:
+    nsp = (
+        b"\x60" + dst_link + src_link
+        + struct.pack("<H", 1) + b"DNIV-NOLINK"
+    )
+    route = (
+        b"\x02" + struct.pack("<H", dst_node)
+        + struct.pack("<H", src_node) + b"\x00" + nsp
+    )
+    frame = (
+        dst_mac + src_mac + struct.pack("!H", ETHERTYPE)
+        + struct.pack("<H", len(route)) + route
+    )
+    if sock.send(frame) != len(frame):
+        raise RuntimeError("short AF_PACKET no-link probe send")
+
+
 def main() -> int:
     if len(sys.argv) != 6:
         raise SystemExit(
@@ -192,6 +212,42 @@ def main() -> int:
             flush=True,
         )
 
+        send_no_link_probe(
+            send, candidate, src_mac, src_node, dst_node,
+            wrong_local_link, wrong_remote_link,
+        )
+        print(
+            "ack-range-inject: unknown-link Data probe sent "
+            f"dst_link={wrong_local_value} src_link={wrong_remote_value}",
+            flush=True,
+        )
+
+        sniff.settimeout(0.5)
+        no_link_deadline = time.monotonic() + 2.0
+        saw_no_link = False
+        while time.monotonic() < no_link_deadline:
+            try:
+                nsp = nsp_payload(sniff.recv(4096))
+            except TimeoutError:
+                continue
+            if nsp is None or len(nsp) < 7 or nsp[0] != 0x48:
+                continue
+            if nsp[1:3] != wrong_remote_link or nsp[3:5] != wrong_local_link:
+                continue
+            reason = int.from_bytes(nsp[5:7], "little")
+            if reason != 41:
+                raise RuntimeError(
+                    f"unknown-link Data returned DC reason={reason}, expected 41"
+                )
+            saw_no_link = True
+            print(
+                "ack-range-inject: unknown-link Data returned DC NO_LINK",
+                flush=True,
+            )
+            break
+        if not saw_no_link:
+            raise RuntimeError("unknown-link Data did not return DC NO_LINK")
+
         sniff.settimeout(0.5)
         deadline = sent_at + 7.0
         while time.monotonic() < deadline:
@@ -234,7 +290,7 @@ def main() -> int:
                     "ack-range-inject: pass cross_future_ack_ignored=1 "
                     "cross_halfspace_ack_ignored=1 wrong_source_link_ack_ignored=1 "
                     "wrong_destination_link_ack_ignored=1 wrong_source_node_ack_ignored=1 "
-                    "cross_nak_retransmit=1 "
+                    "unknown_link_data_no_link=1 cross_nak_retransmit=1 "
                     f"elapsed={elapsed:.3f}s"
                 )
                 return 0
