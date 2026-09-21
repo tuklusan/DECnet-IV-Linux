@@ -254,6 +254,38 @@ static bool dniv_listener_contains_locked(const struct dniv_sock *dsk,
     return false;
 }
 
+static bool dniv_listener_remove_pending_locked(struct dniv_sock *dsk,
+                                                 __u16 local_link)
+{
+    __u16 i;
+
+    for (i = 0U; i < dsk->pending_count; i++) {
+        __u16 slot = (__u16)((dsk->pending_head + i) %
+                             DNIV_SOCK_MAX_BACKLOG);
+        __u16 move;
+
+        if (dsk->pending[slot] != local_link)
+            continue;
+
+        for (move = i; move + 1U < dsk->pending_count; move++) {
+            __u16 to = (__u16)((dsk->pending_head + move) %
+                               DNIV_SOCK_MAX_BACKLOG);
+            __u16 from = (__u16)((dsk->pending_head + move + 1U) %
+                                 DNIV_SOCK_MAX_BACKLOG);
+
+            dsk->pending[to] = dsk->pending[from];
+        }
+        dsk->pending_tail =
+            (__u16)((dsk->pending_head + dsk->pending_count - 1U) %
+                    DNIV_SOCK_MAX_BACKLOG);
+        dsk->pending[dsk->pending_tail] = 0U;
+        dsk->pending_count--;
+        dsk->sk.sk_ack_backlog = dsk->pending_count;
+        return true;
+    }
+    return false;
+}
+
 static void dniv_sock_notify(__u16 local_link)
 {
     struct dniv_nsp_ci_snapshot ci;
@@ -303,6 +335,25 @@ static void dniv_sock_notify(__u16 local_link)
 
         if (reject_reason)
             dniv_nsp_reject(local_link, reject_reason, NULL, 0U);
+    } else if (local_link) {
+        struct dniv_nsp_conn_snapshot snapshot;
+
+        /*
+         * A request can leave CR before userspace accepts it (peer abort or
+         * Session-Control response timeout).  Remove that terminal link from
+         * any listener backlog immediately; otherwise stale entries can
+         * consume the bounded backlog indefinitely.
+         */
+        if (!dniv_nsp_conn_snapshot(local_link, &snapshot) &&
+            (snapshot.state == DNIV_NSP_ST_DI ||
+             snapshot.state == DNIV_NSP_ST_CLOSED)) {
+            spin_lock_irqsave(&dniv_listener_lock, flags);
+            list_for_each_entry(listener, &dniv_listeners, listener_link) {
+                if (dniv_listener_remove_pending_locked(listener, local_link))
+                    break;
+            }
+            spin_unlock_irqrestore(&dniv_listener_lock, flags);
+        }
     }
     wake_up_interruptible_all(&dniv_sock_waitq);
 }

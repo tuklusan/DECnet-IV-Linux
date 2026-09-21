@@ -18,7 +18,7 @@
 
 Annotated tag `PHASE-4-COMPLETE` is verified on closure commit `571333bfd7aaa8b2fcc88715c1d61442af151f3c`; the temporary tag workflow has been removed.
 
-Phase 4 is complete on exact protocol candidate `6c185b6d01f8a57ee9f0ea6a6c37d7112ddb77d2`; Phase 5 is active on `main`. The latest accepted Phase 5 candidate is `551029224a621c5f11b3ae3a280c51e14b965ca0`. Phase 3 remains frozen at tag `PHASE-3-COMPLETE` on commit `ae1bcb82a1539ccadda0661664205e360bd760b7`.
+Phase 4 is complete on exact protocol candidate `6c185b6d01f8a57ee9f0ea6a6c37d7112ddb77d2`; Phase 5 is active on `main`. The latest accepted Phase 5 candidate is `dfd249b02fe0b72b87d088523a9603630a641290`. Phase 3 remains frozen at tag `PHASE-3-COMPLETE` on commit `ae1bcb82a1539ccadda0661664205e360bd760b7`.
 
 The final Phase 3 acceptance set was green: Repository Policy `35343324826`, Build Bootstrap `35343357536`, Project State Gate `35343359444`, External Reference Baselines `35343361139`, Python QEMU VM Lab `35343362922`, and Independent Ethernet Interoperability run `35343364812`. The interoperability matrix passed all eight amd64/ARM64 Route20/PyDECnet routing/endnode role jobs.
 
@@ -358,3 +358,8 @@ Phase 5 receive buffering now fixes a concrete bounded-cache deadlock. The old g
 Exact-SHA fast acceptance for receive-cache candidate `551029224a621c5f11b3ae3a280c51e14b965ca0` is green: Repository Policy `35545504071`, Build Bootstrap `35545526646`, Project State Gate `35545527462`, E1 `35545528555` on both architectures, and x64 PyDECnet L1 interop `35545529422`.
 
 A harness audit invalidates the earlier listener-close proof: its special close-listener-with-pending-requests block was unreachable because it was nested under mutually exclusive `close_race` mode. Listener-close is now its own path: accept exactly one child, close the listener while two requests remain pending, prove the accepted child still echoes, and let PyDECnet require the other two outcomes to be reason-6 object-busy rejects. No product behavior changes. Next: exact-SHA fast socket acceptance; fix any concrete product failure exposed by the corrected discriminator before continuing NSP timer work.
+
+
+Exact-SHA fast acceptance for repaired listener-close coverage `dfd249b02fe0b72b87d088523a9603630a641290` is green: Repository Policy `35545967240`, Build Bootstrap `35545980316`, Project State Gate `35545981269`, E1 `35545982418` on both architectures, and x64 PyDECnet L1 interop `35545983392`. The object-245 path really ran: accepted=1 and busy=2.
+
+Connection-response timeouts are corrected next. CI/CC no longer lose their retry-limit/node-unreachable semantics merely because delayed timer work crosses the generic 30-second deadline. An unanswered inbound CR now emits DI reason 38 through the reliable control retransmit path; an outbound CD response timeout retains CLOSED reason 38 locally. Terminal pre-accept links are removed immediately from listener pending rings so timeout or peer abort cannot leak backlog capacity. Next: exact-SHA fast socket acceptance, then bounded timer-specific evidence.

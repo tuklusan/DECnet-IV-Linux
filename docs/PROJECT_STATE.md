@@ -81,7 +81,7 @@ Implementation order:
 | Phase 4 accepted protocol candidate | `6c185b6d01f8a57ee9f0ea6a6c37d7112ddb77d2` |
 | Phase 4 closure commit | `571333bfd7aaa8b2fcc88715c1d61442af151f3c` |
 | Phase 4 tag | `PHASE-4-COMPLETE` |
-| Latest accepted Phase 5 candidate | `551029224a621c5f11b3ae3a280c51e14b965ca0` |
+| Latest accepted Phase 5 candidate | `dfd249b02fe0b72b87d088523a9603630a641290` |
 | Route20 pin | `a9ef7c0b7f875f0dd2e8abaf11213798a8e4474c` |
 | PyDECnet live pin | `295938c76c956a70957f4cf96b05685f555b2a18` |
 | VM lifecycle | direct QEMU/QMP |
@@ -416,3 +416,8 @@ NSP receive-resource review found a bounded-cache deadlock and subchannel-isolat
 Exact-SHA fast acceptance for receive-cache deadlock candidate `551029224a621c5f11b3ae3a280c51e14b965ca0` is green: Repository Policy `35545504071`, Build Bootstrap `35545526646`, Project State Gate `35545527462`, E1 Python QEMU VM Lab `35545528555` on x86_64 and ARM64, and x64 PyDECnet L1 Independent Ethernet Interoperability `35545529422`.
 
 Audit of the socket-lifecycle harness found a false-green discriminator defect in `dnbacklog.c`: the listener-close implementation was nested inside `if (close_race)`, but the command-line modes are mutually exclusive. The intended path that accepts one child, closes the listener with two requests still pending, then proves the accepted child remains usable was therefore unreachable. Listener-close mode instead fell through the generic one-accept path and did not prove the intended lifetime ordering. The listener-close block is now a separate mode before the close-race loop. No kernel/protocol behavior changes in this candidate. Prior listener-close acceptance evidence is superseded; exact-SHA fast acceptance must re-prove one accepted child, two reason-6 pending rejections, and surviving child I/O.
+
+
+Exact-SHA fast acceptance for corrected listener-close coverage candidate `dfd249b02fe0b72b87d088523a9603630a641290` is green: Repository Policy `35545967240`, Build Bootstrap `35545980316`, Project State Gate `35545981269`, E1 Python QEMU VM Lab `35545982418` on x86_64 and ARM64, and x64 PyDECnet L1 Independent Ethernet Interoperability `35545983392`. The repaired discriminator actually executed and proved one accepted object-245 child remained usable while the two still-pending requests were rejected with reason 6.
+
+Connection-response timer review found two Phase 5 liveness defects. First, the generic 30-second connection deadline could erase CI/CC state before delayed timer work reached the normal retransmit-limit path, replacing the proven node-unreachable terminal result with an anonymous reset under scheduler stalls. CI and CC are now left to their response/retransmit timers. Second, an inbound CR or outbound CD Session-Control response timeout was silently erased. The pinned PyDECnet NSP reference rejects an unanswered inbound CI with reason 38 and reports the same reason locally when a delivered outbound connect is never accepted/rejected. CR timeout now sends a retransmitted DI reason 38; CD timeout retains a CLOSED reason-38 terminal state. Socket listener notification also removes terminal pre-accept links from the circular pending queue immediately, preventing timed-out or peer-aborted requests from permanently consuming backlog slots. Next: exact-SHA fast socket acceptance, then add bounded timer-specific evidence without extending every fast interop path.

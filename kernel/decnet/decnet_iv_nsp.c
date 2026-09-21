@@ -1335,14 +1335,54 @@ static void dniv_nsp_timer_workfn(struct work_struct *work)
 
         if (conn->connect_deadline &&
             time_after_eq(now, conn->connect_deadline) &&
-            (conn->state == DNIV_NSP_ST_CI ||
-             conn->state == DNIV_NSP_ST_CD ||
-             conn->state == DNIV_NSP_ST_CR ||
-             conn->state == DNIV_NSP_ST_CC)) {
+            conn->state == DNIV_NSP_ST_CR) {
+            struct dniv_nsp_packet pkt;
+            int len;
+
+            /*
+             * Session Control did not answer the inbound CI.  Reject the
+             * request with reason 38 and use the normal DI retransmission
+             * path.  Keep the CR alive if the control buffer cannot be
+             * allocated so a later timer pass can retry without silently
+             * dropping the remote request.
+             */
+            memset(&pkt, 0, sizeof(pkt));
+            pkt.type = DNIV_NSP_DI;
+            pkt.dst = conn->remote_link;
+            pkt.src = conn->local_link;
+            pkt.reason = DNIV_NSP_REASON_OBJECT_FAILED;
+            len = dniv_nsp_build(wire, sizeof(wire), &pkt);
+            if (len > 0 &&
+                !dniv_nsp_set_control_locked(
+                    conn, wire, (__u16)len,
+                    now + DNIV_NSP_DEFAULT_RESPONSE_SECONDS * HZ)) {
+                notify_link = conn->local_link;
+                remote_node = conn->remote_node;
+                wire_len = (__u16)len;
+                dniv_nsp_set_state_locked(conn, DNIV_NSP_ST_DI, now);
+                spin_unlock_irqrestore(&dniv_nsp_lock, flags);
+                dniv_nsp_notify_link(notify_link);
+                (void)dniv_nsp_transmit(remote_node, wire, wire_len);
+                continue;
+            }
+            spin_unlock_irqrestore(&dniv_nsp_lock, flags);
+            continue;
+        }
+
+        if (conn->connect_deadline &&
+            time_after_eq(now, conn->connect_deadline) &&
+            conn->state == DNIV_NSP_ST_CD) {
+            /*
+             * The remote NSP acknowledged our CI but its Session Control
+             * never accepted or rejected it.  Preserve reason 38 locally
+             * instead of erasing the connection so the socket waiter sees
+             * a deterministic terminal state.
+             */
             notify_link = conn->local_link;
             dniv_nsp_purge_locked(conn);
-            memset(conn, 0, sizeof(*conn));
-            dniv_nsp_init_conn_lists(conn);
+            conn->disconnect_reason = DNIV_NSP_REASON_OBJECT_FAILED;
+            conn->disconnect_payload_len = 0U;
+            dniv_nsp_set_state_locked(conn, DNIV_NSP_ST_CLOSED, now);
             spin_unlock_irqrestore(&dniv_nsp_lock, flags);
             dniv_nsp_notify_link(notify_link);
             continue;
