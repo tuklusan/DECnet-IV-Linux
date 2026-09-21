@@ -1115,8 +1115,13 @@ int dniv_nsp_receive(__u16 remote_node, const __u8 *wire, __u16 wire_len)
             conn->accept_payload_len = (__u16)pkt.payload_len;
             if (pkt.payload_len)
                 memcpy(conn->accept_payload, pkt.payload, pkt.payload_len);
-            dniv_nsp_set_state_locked(conn, DNIV_NSP_ST_RUN, jiffies);
         }
+        /*
+         * PyDECnet restarts RUN inactivity on every received packet,
+         * including a duplicate CC whose original ACK may have been lost.
+         * Re-entering RUN is otherwise idempotent here.
+         */
+        dniv_nsp_set_state_locked(conn, DNIV_NSP_ST_RUN, jiffies);
         memset(&reply, 0, sizeof(reply));
         reply.type = DNIV_NSP_ACK_DATA;
         reply.dst = conn->remote_link;
