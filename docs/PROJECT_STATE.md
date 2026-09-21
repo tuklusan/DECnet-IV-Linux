@@ -81,7 +81,7 @@ Implementation order:
 | Phase 4 accepted protocol candidate | `6c185b6d01f8a57ee9f0ea6a6c37d7112ddb77d2` |
 | Phase 4 closure commit | `571333bfd7aaa8b2fcc88715c1d61442af151f3c` |
 | Phase 4 tag | `PHASE-4-COMPLETE` |
-| Latest accepted Phase 5 candidate | `2958449c9c37d7c8a3fec2141bf08f65e3a05595` |
+| Latest accepted Phase 5 candidate | `ef929e81326dbce0ea9dda270159429dd0a98dc9` |
 | Route20 pin | `a9ef7c0b7f875f0dd2e8abaf11213798a8e4474c` |
 | PyDECnet live pin | `295938c76c956a70957f4cf96b05685f555b2a18` |
 | VM lifecycle | direct QEMU/QMP |
@@ -492,3 +492,8 @@ Receive-state mapping review found stale Connect Ack handling differed from the 
 Exact-SHA fast acceptance for stale-ACK_CONN discard candidate `2958449c9c37d7c8a3fec2141bf08f65e3a05595` is green: Repository Policy `35558135839`, Build Bootstrap `35558155273`, Project State Gate `35558156428`, E1 `35558157531` on x86_64 and ARM64, and x64 PyDECnet L1 interoperability `35558158493`.
 
 Malformed-control review against the pinned PyDECnet packet decoder and LinuxDECnet DC receive path found that fixed-format control packets still accepted unparsed trailing bytes. Connect Confirm and Disconnect Initiate now require their declared image field to consume the entire packet, and Disconnect Confirm now requires its exact seven-byte wire length. CI/RCI remain variable-payload messages and are unchanged. Unit negatives lock trailing-byte rejection for CC, DI and DC. Next: exact-SHA fast socket acceptance, then continue receive-dispatch silent-drop and flow-control negatives.
+
+
+Exact-SHA fast acceptance for malformed-control candidate `ef929e81326dbce0ea9dda270159429dd0a98dc9` is green: Repository Policy `35558671026`, Build Bootstrap `35558692168`, Project State Gate `35558693029`, E1 `35558693935` on x86_64 and ARM64, and x64 PyDECnet L1 interoperability `35558694959`.
+
+Control-message compatibility review found that the empty Session Control I field is optional on the wire. Pinned PyDECnet's tolerant I decoder accepts a fixed-header-only Connect Confirm or Disconnect Initiate as an empty field, and LinuxDECnet likewise only parses the field when bytes remain. The candidate previously rejected those valid empty forms. CC now accepts its 9-byte fixed header and DI its 7-byte fixed header/reason as empty Session Control data, while retaining exact declared-length consumption, the 16-byte bound, and exact-length DC validation. Unit coverage locks both omitted-I forms. Next: exact-SHA fast socket acceptance, then continue receive-dispatch silent-drop and flow-control negatives.

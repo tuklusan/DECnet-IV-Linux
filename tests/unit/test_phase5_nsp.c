@@ -93,6 +93,12 @@ static void test_control(void)
         0x38,0x0b,0x00,0x03,0x00,0x05,0x00,0x07,
         'p','a','y','l','o','a','d'
     };
+    const unsigned char cc_no_data_ctl[] = {
+        0x28,0x0b,0x00,0x03,0x00,0x05,0x02,0x04,0x02
+    };
+    const unsigned char di_no_data_ctl[] = {
+        0x38,0x0b,0x00,0x03,0x00,0x05,0x00
+    };
     const unsigned char dc[] = {0x48,0x0b,0x00,0x03,0x00,0x2a,0x00};
     const unsigned char ca[] = {0x24,0x03,0x00};
     struct dniv_nsp_packet p;
@@ -103,7 +109,13 @@ static void test_control(void)
     roundtrip(ci, sizeof(ci));
     roundtrip(rci, sizeof(rci));
     roundtrip(cc, sizeof(cc));
+    assert(dniv_nsp_parse(cc_no_data_ctl, sizeof(cc_no_data_ctl), &p) ==
+           DNIV_NSP_OK);
+    assert(p.type == DNIV_NSP_CC && p.payload_len == 0U);
     roundtrip(di, sizeof(di));
+    assert(dniv_nsp_parse(di_no_data_ctl, sizeof(di_no_data_ctl), &p) ==
+           DNIV_NSP_OK);
+    assert(p.type == DNIV_NSP_DI && p.reason == 5U && p.payload_len == 0U);
     roundtrip(dc, sizeof(dc));
     roundtrip(ca, sizeof(ca));
 }

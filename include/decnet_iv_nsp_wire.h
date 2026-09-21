@@ -198,8 +198,13 @@ static inline int dniv_nsp_parse(const __u8 *buf, __u32 len,
         off = 9U;
         if (pkt->type == DNIV_NSP_CC) {
             __u8 n;
-            if (off >= len)
-                return DNIV_NSP_MALFORMED;
+
+            /*
+             * The Session Control I field is optional when empty.  Both
+             * PyDECnet and LinuxDECnet accept a fixed-header-only CC.
+             */
+            if (off == len)
+                return DNIV_NSP_OK;
             n = buf[off++];
             if (n > DNIV_NSP_MAX_CTL_DATA || off + n != len)
                 return DNIV_NSP_MALFORMED;
@@ -214,10 +219,13 @@ static inline int dniv_nsp_parse(const __u8 *buf, __u32 len,
 
     if (pkt->type == DNIV_NSP_DI) {
         __u8 n;
-        if (len < 8U)
+
+        if (len < 7U)
             return DNIV_NSP_MALFORMED;
         pkt->reason = dniv_nsp_get_le16(buf + 5U);
         off = 7U;
+        if (off == len)
+            return DNIV_NSP_OK;
         n = buf[off++];
         if (n > DNIV_NSP_MAX_CTL_DATA || off + n != len)
             return DNIV_NSP_MALFORMED;
