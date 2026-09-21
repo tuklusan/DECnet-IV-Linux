@@ -381,3 +381,8 @@ The next Phase 5 parser correction rejects trailing non-ACK bytes in ACK_DATA/AC
 Exact-SHA fast acceptance for `37f82031790e7da584940259703f94074204a5fc` is green: policy `35550252765`, build `35550274983`, state `35550276263`, E1 `35550277558` both architectures, and x64 PyDECnet L1 interop `35550278702`.
 
 Reserved-port semantics are corrected next: CI/RCI allocation failure sends DC reason 1 (No Resources); unmapped or wrong-source Data/Interrupt/Link-Service sends DC reason 41 (No Link), while bad-mapped ACK remains ignored. Received DC reasons are retained in CLOSED state until socket release instead of immediately erasing the connection, preserving rejection/termination status for userspace. Next: exact-SHA fast socket acceptance, then bounded independent No Resources/No Link wire proof and sequence-boundary negatives.
+
+
+Exact-SHA fast acceptance for `b6932bc3bbb1589a9d7022cb714deb16e1170d7d` is green: policy `35550914584`, build `35550933006`, state `35550934357`, E1 `35550935699` both architectures, and x64 PyDECnet L1 interop `35550937333`.
+
+Pinned PyDECnet receive-dispatch semantics add CC and DI to the No-Link response set. Candidate unknown-destination and wrong-source mapping now send DC reason 41 for CC, DI, Data, Interrupt and Link Service; ACK/DC remain excluded. Next: exact-SHA fast socket acceptance, then independent reserved-port wire proof and sequence-boundary negatives.

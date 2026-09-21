@@ -1054,7 +1054,9 @@ int dniv_nsp_receive(__u16 remote_node, const __u8 *wire, __u16 wire_len)
 
     conn = dniv_nsp_find_locked(pkt.dst);
     if (!conn || conn->remote_node != remote_node) {
-        bool no_link = pkt.type == DNIV_NSP_DATA ||
+        bool no_link = pkt.type == DNIV_NSP_CC ||
+                       pkt.type == DNIV_NSP_DI ||
+                       pkt.type == DNIV_NSP_DATA ||
                        pkt.type == DNIV_NSP_INT ||
                        pkt.type == DNIV_NSP_LINK_SVC;
 
@@ -1076,7 +1078,9 @@ int dniv_nsp_receive(__u16 remote_node, const __u8 *wire, __u16 wire_len)
             }
             conn->remote_link = pkt.src;
         } else if (conn->remote_link != pkt.src) {
-            bool no_link = pkt.type == DNIV_NSP_DATA ||
+            bool no_link = pkt.type == DNIV_NSP_CC ||
+                           pkt.type == DNIV_NSP_DI ||
+                           pkt.type == DNIV_NSP_DATA ||
                            pkt.type == DNIV_NSP_INT ||
                            pkt.type == DNIV_NSP_LINK_SVC;
 
