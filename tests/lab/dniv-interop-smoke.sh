@@ -159,6 +159,7 @@ reference=$(get_arg dniv.reference || true)
 scenario=$(get_arg dniv.scenario || true)
 session=$(get_arg dniv.session || printf 'local')
 timer_proof=$(get_arg dniv.timer_proof || printf '0')
+reserved_proof=$(get_arg dniv.reserved_proof || printf '0')
 
 case "$reference" in
     route20|pydecnet) ;;
@@ -167,6 +168,10 @@ esac
 case "$timer_proof" in
     0|1) ;;
     *) echo "DNIV-INTEROP-FAIL session=$session reason=bad-timer-proof"; exit 1 ;;
+esac
+case "$reserved_proof" in
+    0|1) ;;
+    *) echo "DNIV-INTEROP-FAIL session=$session reason=bad-reserved-proof"; exit 1 ;;
 esac
 case "$scenario" in
     l1) local_type=2; peer_kind='L1 router' ;;
@@ -306,6 +311,38 @@ if [ "$reference" = pydecnet ]; then
             exit 1
         fi
         echo "DNIV-INTEROP-TERM-RACE-PASS session=$session scenario=$scenario node=$name peer=$peer_node"
+    fi
+    if [ "$reserved_proof" = 1 ]; then
+        reserved_before=$(nonhello_value || true)
+        case "$reserved_before" in
+            ''|*[!0-9]*)
+                echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=reserved-stats"
+                exit 1
+                ;;
+        esac
+        echo "DNIV-INTEROP-RESERVED-READY session=$session scenario=$scenario node=$name"
+        i=0
+        reserved_seen=0
+        while [ "$i" -lt 200 ]; do
+            reserved_now=$(nonhello_value || true)
+            case "$reserved_now" in
+                ''|*[!0-9]*)
+                    echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=reserved-stats"
+                    exit 1
+                    ;;
+            esac
+            if [ "$((reserved_now - reserved_before))" -ge 260 ]; then
+                reserved_seen=1
+                break
+            fi
+            i=$((i + 1))
+            sleep 0.1
+        done
+        if [ "$reserved_seen" -ne 1 ]; then
+            echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=reserved-injection-timeout"
+            exit 1
+        fi
+        echo "DNIV-INTEROP-RESERVED-PASS session=$session scenario=$scenario node=$name"
     fi
 fi
 

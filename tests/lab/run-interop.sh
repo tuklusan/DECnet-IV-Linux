@@ -84,6 +84,10 @@ session=${DNIV_INTEROP_SESSION_ID:-"local-$(date -u +%Y%m%dT%H%M%SZ)-$-$referenc
 [[ "$session" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "interop: bad session id" >&2; exit 2; }
 timer_proof=${DNIV_INTEROP_TIMER_PROOF:-0}
 [[ "$timer_proof" =~ ^[01]$ ]] || { echo "interop: bad timer-proof selector" >&2; exit 2; }
+reserved_proof=0
+if [[ "$reference" == pydecnet && "$scenario" == l1 && "$(uname -m)" == x86_64 ]]; then
+    reserved_proof=1
+fi
 work="$artifacts/$session"
 mkdir -p "$work"
 pcap="$work/lan.pcap"
@@ -292,7 +296,7 @@ if ! wait_marker "$ref1_log" "$reference_ready_marker" "$reference_ready_seconds
     exit 1
 fi
 
-candidate_common="root=LABEL=dniv-root rootfstype=ext4 rw dniv.interop=1 dniv.reference=$reference dniv.area=$area dniv.node=$node dniv.name=$name dniv.peer_node=$ref_area.$ref_node dniv.scenario=$scenario dniv.session=$session dniv.timer_proof=$timer_proof"
+candidate_common="root=LABEL=dniv-root rootfstype=ext4 rw dniv.interop=1 dniv.reference=$reference dniv.area=$area dniv.node=$node dniv.name=$name dniv.peer_node=$ref_area.$ref_node dniv.scenario=$scenario dniv.session=$session dniv.timer_proof=$timer_proof dniv.reserved_proof=$reserved_proof"
 start_vm "candidate-$scenario" "$candidate_disk" "$tap_candidate" "$candidate_hw" "$candidate_log" "$candidate_common" & CANDIDATE_PID=$!
 if [[ "$reference" == pydecnet ]]; then
     loss_marker="DNIV-INTEROP-LOSS-READY session=$session scenario=$scenario"
@@ -552,6 +556,23 @@ if [[ "$reference" == pydecnet && "$scenario" != router-endnode ]]; then
         exit 1
     fi
 fi
+if [[ "$reserved_proof" == 1 ]]; then
+    if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-RESERVED-READY session=$session scenario=$scenario" 30 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+        tail -320 "$candidate_log" >&2 || true
+        tail -260 "$ref1_log" >&2 || true
+        exit 1
+    fi
+    if ! sudo python3 "$script_dir/inject-nsp-reserved.py" "$bridge" "$candidate_mac" "$ref_area.$ref_node" "$area.$node"; then
+        tail -320 "$candidate_log" >&2 || true
+        tail -260 "$ref1_log" >&2 || true
+        exit 1
+    fi
+    if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-RESERVED-PASS session=$session scenario=$scenario" 30 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+        tail -340 "$candidate_log" >&2 || true
+        tail -280 "$ref1_log" >&2 || true
+        exit 1
+    fi
+fi
 if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-READY-STOP session=$session scenario=$scenario" "$timeout_seconds" "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
     tail -220 "$candidate_log" >&2 || true
     tail -160 "$ref1_log" >&2 || true
@@ -588,6 +609,9 @@ unset TCPDUMP_PID
 validator_args=()
 if [[ "$timer_proof" == 1 ]]; then
     validator_args+=(--timer-proof)
+fi
+if [[ "$reserved_proof" == 1 ]]; then
+    validator_args+=(--reserved-proof)
 fi
 python3 "$script_dir/validate-interop-pcap.py" "$pcap" "$reference" "$scenario" \
     "$candidate_mac" "$candidate_hw" "$candidate_changed_hw" \

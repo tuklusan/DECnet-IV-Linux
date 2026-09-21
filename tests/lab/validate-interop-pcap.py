@@ -254,6 +254,7 @@ def main() -> int:
     p.add_argument("reference_mac", type=mac)
     p.add_argument("reference_hw", type=mac)
     p.add_argument("--timer-proof", action="store_true")
+    p.add_argument("--reserved-proof", action="store_true")
     args = p.parse_args()
 
     counts = {
@@ -287,6 +288,8 @@ def main() -> int:
         "candidate_cr_timeout_reason38": 0,
         "candidate_cr_timeout_recovery": 0,
         "reference_cr_timeout_recovery": 0,
+        "candidate_no_resources_dc": 0,
+        "candidate_no_link_dc": 0,
         "probes": 0,
     }
     bad_hello_hw = 0
@@ -317,6 +320,12 @@ def main() -> int:
                 if nsp[0] == 0x38 and len(nsp) >= 7 and \
                         int.from_bytes(nsp[5:7], "little") == 38:
                     counts["candidate_cr_timeout_reason38"] += 1
+                if nsp[0] == 0x48 and len(nsp) >= 7:
+                    reason = int.from_bytes(nsp[5:7], "little")
+                    if reason == 1:
+                        counts["candidate_no_resources_dc"] += 1
+                    elif reason == 41:
+                        counts["candidate_no_link_dc"] += 1
                 if nsp[0] == 0x30:
                     counts["candidate_interrupt"] += 1
                 opts = session_ci_options(nsp)
@@ -428,6 +437,11 @@ def main() -> int:
             if counts["candidate_cr_timeout_recovery"] < 1 or \
                     counts["reference_cr_timeout_recovery"] < 1:
                 raise SystemExit("interop pcap: missing CR-timeout fresh-link recovery")
+        if args.reserved_proof:
+            if counts["candidate_no_resources_dc"] < 1:
+                raise SystemExit("interop pcap: missing candidate DC No Resources response")
+            if counts["candidate_no_link_dc"] < 1:
+                raise SystemExit("interop pcap: missing candidate DC No Link response")
         if args.scenario != "router-endnode":
             if counts["candidate_interrupt"] < 2:
                 raise SystemExit("interop pcap: missing candidate NSP interrupt traffic")

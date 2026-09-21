@@ -18,7 +18,7 @@
 
 Annotated tag `PHASE-4-COMPLETE` is verified on closure commit `571333bfd7aaa8b2fcc88715c1d61442af151f3c`; the temporary tag workflow has been removed.
 
-Phase 4 is complete on exact protocol candidate `6c185b6d01f8a57ee9f0ea6a6c37d7112ddb77d2`; Phase 5 is active on `main`. The latest accepted Phase 5 candidate is `8cf0e121ebe273447c500381ebe44ee374c440cc`. Phase 3 remains frozen at tag `PHASE-3-COMPLETE` on commit `ae1bcb82a1539ccadda0661664205e360bd760b7`.
+Phase 4 is complete on exact protocol candidate `6c185b6d01f8a57ee9f0ea6a6c37d7112ddb77d2`; Phase 5 is active on `main`. The latest accepted Phase 5 candidate is `e80644dd485ea12815ab87e57904e57dd9ca9339`. Phase 3 remains frozen at tag `PHASE-3-COMPLETE` on commit `ae1bcb82a1539ccadda0661664205e360bd760b7`.
 
 The final Phase 3 acceptance set was green: Repository Policy `35343324826`, Build Bootstrap `35343357536`, Project State Gate `35343359444`, External Reference Baselines `35343361139`, Python QEMU VM Lab `35343362922`, and Independent Ethernet Interoperability run `35343364812`. The interoperability matrix passed all eight amd64/ARM64 Route20/PyDECnet routing/endnode role jobs.
 
@@ -386,3 +386,8 @@ Reserved-port semantics are corrected next: CI/RCI allocation failure sends DC r
 Exact-SHA fast acceptance for `b6932bc3bbb1589a9d7022cb714deb16e1170d7d` is green: policy `35550914584`, build `35550933006`, state `35550934357`, E1 `35550935699` both architectures, and x64 PyDECnet L1 interop `35550937333`.
 
 Pinned PyDECnet receive-dispatch semantics add CC and DI to the No-Link response set. Candidate unknown-destination and wrong-source mapping now send DC reason 41 for CC, DI, Data, Interrupt and Link Service; ACK/DC remain excluded. Next: exact-SHA fast socket acceptance, then independent reserved-port wire proof and sequence-boundary negatives.
+
+
+Exact-SHA fast acceptance for complete NSP No-Link receive dispatch `e80644dd485ea12815ab87e57904e57dd9ca9339` is green: policy `35551483227`, build `35551507570`, state `35551508723`, E1 `35551509771` on both architectures, and x64 PyDECnet L1 interop `35551510921`.
+
+The next test-only successor adds an x64 PyDECnet L1 reserved-port wire proof after ordinary socket tests: one unknown-link CC must yield DC reason 41, and 320 unique valid CIs must exhaust the 256-entry table and yield DC reason 1. Candidate progress is tied to a >=260 non-hello receive delta, while PCAP independently requires both response reasons. Unit tests add exact half-range and wrap-boundary negative sequence cases. Next: exact-SHA fast socket acceptance, then flow-control/delayed-ACK and malformed receive-state negatives.

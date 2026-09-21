@@ -81,7 +81,7 @@ Implementation order:
 | Phase 4 accepted protocol candidate | `6c185b6d01f8a57ee9f0ea6a6c37d7112ddb77d2` |
 | Phase 4 closure commit | `571333bfd7aaa8b2fcc88715c1d61442af151f3c` |
 | Phase 4 tag | `PHASE-4-COMPLETE` |
-| Latest accepted Phase 5 candidate | `8cf0e121ebe273447c500381ebe44ee374c440cc` |
+| Latest accepted Phase 5 candidate | `e80644dd485ea12815ab87e57904e57dd9ca9339` |
 | Route20 pin | `a9ef7c0b7f875f0dd2e8abaf11213798a8e4474c` |
 | PyDECnet live pin | `295938c76c956a70957f4cf96b05685f555b2a18` |
 | VM lifecycle | direct QEMU/QMP |
@@ -444,3 +444,8 @@ Reserved-port receive-dispatch review found two Phase IV gaps against the pinned
 Exact-SHA fast acceptance for reserved-port error reply candidate `b6932bc3bbb1589a9d7022cb714deb16e1170d7d` is green: Repository Policy `35550914584`, Build Bootstrap `35550933006`, Project State Gate `35550934357`, E1 Python QEMU VM Lab `35550935699` on x86_64 and ARM64, and x64 PyDECnet L1 Independent Ethernet Interoperability `35550937333`.
 
 A receive-dispatch cross-check against pinned PyDECnet's Phase IV reserved-port `nolinkset` found the prior No-Link predicate incomplete: unmapped or wrong-source Connect Confirm and Disconnect Initiate are also No-Link cases, alongside Data, Interrupt and Link Service. ACKs and Disconnect Confirm remain excluded to avoid inappropriate responses/loops. Both unknown-destination and bad-source-link mapping paths now use the complete Phase IV set. Next: exact-SHA fast socket acceptance, then bounded independent No Resources/No Link wire evidence and sequence-boundary negatives.
+
+
+Exact-SHA fast acceptance for complete NSP No-Link receive dispatch candidate `e80644dd485ea12815ab87e57904e57dd9ca9339` is green: Repository Policy `35551483227`, Build Bootstrap `35551507570`, Project State Gate `35551508723`, E1 Python QEMU VM Lab `35551509771` on x86_64 and ARM64, and x64 PyDECnet L1 Independent Ethernet Interoperability `35551510921`.
+
+The next test-only successor proves reserved-port responses on the wire and locks sequence-boundary negatives. The x64 PyDECnet L1 path waits until all ordinary socket/lifecycle tests finish, then injects one valid CC to an unmapped local link plus 320 valid CIs with unique source-link IDs. The burst must drive the bounded 256-link NSP table to exhaustion. Candidate PCAP evidence must contain DC reason 41 (No Link) and DC reason 1 (No Resources), and the guest requires at least 260 additional non-hello receives before it may continue. Shared unit coverage now locks 12-bit wrap, the 2048 half-range boundary, cumulative-ACK half-range exclusion, and wrap-window rejection. No product behavior changes. Next: exact-SHA fast socket acceptance, then continue NSP flow-control/delayed-ACK and malformed receive-state negatives.
