@@ -597,3 +597,6 @@ The first full-window live proof failed because the test encoded an eight-segmen
 
 
 PP-06 EINTR/signal handling now has live socket coverage. A native listener blocks in `accept()` with no pending connection and must return `EINTR` on a non-restarting SIGALRM. A connected MIRROR socket then blocks in `recv()` with no pending record and must likewise return `EINTR`; the same logical link must immediately complete a normal request/reply afterward, proving interruption does not corrupt socket or NSP state. Product behavior is unchanged. Next: exact-SHA fast socket acceptance, then continue remaining PP-06 negatives.
+
+
+The first signal-interruption acceptance attempt failed before runtime in x64 interoperability run `35663764985`: strict C11 compilation hid POSIX `sigaction`/`sigemptyset` declarations because the test lacked a POSIX feature-test macro. `dnsignal.c` now requests POSIX.1-2008 before headers. This is test-only; product behavior is unchanged. The failed run remains recorded rather than being treated as a protocol failure.
