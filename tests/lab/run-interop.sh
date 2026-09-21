@@ -125,7 +125,7 @@ cleanup() {
     terminate_pid "${CANDIDATE_PID:-}"
     terminate_pid "${REFERENCE_PID:-}"
     terminate_pid "${HOST_PROBE_PID:-}"
-    if [[ -n "${LOSS_QDISC:-}" ]]; then
+    if [[ -n "${LOSS_QDISC:-}" || -n "${RESERVED_QDISC:-}" ]]; then
         sudo tc qdisc del dev "$tap_reference" clsact 2>/dev/null || true
     fi
     rm -f "${host_pydecnet_api:-}"
@@ -562,6 +562,17 @@ if [[ "$reserved_proof" == 1 ]]; then
         tail -260 "$ref1_log" >&2 || true
         exit 1
     fi
+
+    # The synthetic CIs use the live peer's node address so candidate replies
+    # have a valid route.  Prevent the independent peer from consuming those
+    # replies and immediately confirming each rejected CI, which would recycle
+    # connection slots before the bounded table can actually be exhausted.
+    # Bridge capture still sees candidate replies before this TAP egress drop.
+    sudo tc qdisc add dev "$tap_reference" clsact
+    RESERVED_QDISC=1
+    sudo tc filter add dev "$tap_reference" egress protocol all pref 20 flower \
+        src_mac "$candidate_mac" dst_mac "$reference_mac" action drop
+
     if ! sudo python3 "$script_dir/inject-nsp-reserved.py" "$bridge" "$candidate_mac" "$ref_area.$ref_node" "$area.$node"; then
         tail -320 "$candidate_log" >&2 || true
         tail -260 "$ref1_log" >&2 || true
@@ -572,6 +583,14 @@ if [[ "$reserved_proof" == 1 ]]; then
         tail -280 "$ref1_log" >&2 || true
         exit 1
     fi
+    reserved_stats=$(sudo tc -s filter show dev "$tap_reference" egress)
+    if ! printf '%s\n' "$reserved_stats" | grep -Eq 'Sent [0-9]+ bytes [1-9][0-9]* pkt'; then
+        echo "interop: reserved-port peer-isolation filter matched no replies" >&2
+        printf '%s\n' "$reserved_stats" >&2
+        exit 1
+    fi
+    sudo tc qdisc del dev "$tap_reference" clsact
+    unset RESERVED_QDISC
 fi
 if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-READY-STOP session=$session scenario=$scenario" "$timeout_seconds" "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
     tail -220 "$candidate_log" >&2 || true
