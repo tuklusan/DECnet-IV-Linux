@@ -167,6 +167,15 @@ static void test_negative(void)
     const unsigned char bad_ls[] = {
         0x10,0x03,0x00,0x05,0x01,0x07,0x00,0x03,0x01
     };
+    const unsigned char bad_cc_trailing[] = {
+        0x28,0x0b,0x00,0x03,0x00,0x05,0x02,0x04,0x02,0x00,0xaa
+    };
+    const unsigned char bad_di_trailing[] = {
+        0x38,0x0b,0x00,0x03,0x00,0x05,0x00,0x00,0xaa
+    };
+    const unsigned char bad_dc_trailing[] = {
+        0x48,0x0b,0x00,0x03,0x00,0x2a,0x00,0xaa
+    };
     struct dniv_nsp_packet p;
 
     assert(dniv_nsp_parse(NULL, 0, &p) == DNIV_NSP_MALFORMED);
@@ -183,6 +192,12 @@ static void test_negative(void)
     assert(dniv_nsp_parse(bad_ci_dst, sizeof(bad_ci_dst), &p) ==
            DNIV_NSP_MALFORMED);
     assert(dniv_nsp_parse(bad_ls, sizeof(bad_ls), &p) ==
+           DNIV_NSP_MALFORMED);
+    assert(dniv_nsp_parse(bad_cc_trailing, sizeof(bad_cc_trailing), &p) ==
+           DNIV_NSP_MALFORMED);
+    assert(dniv_nsp_parse(bad_di_trailing, sizeof(bad_di_trailing), &p) ==
+           DNIV_NSP_MALFORMED);
+    assert(dniv_nsp_parse(bad_dc_trailing, sizeof(bad_dc_trailing), &p) ==
            DNIV_NSP_MALFORMED);
     assert(dniv_nsp_parse(empty_intr, sizeof(empty_intr), &p) ==
            DNIV_NSP_MALFORMED);

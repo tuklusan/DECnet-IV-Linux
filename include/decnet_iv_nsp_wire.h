@@ -201,7 +201,7 @@ static inline int dniv_nsp_parse(const __u8 *buf, __u32 len,
             if (off >= len)
                 return DNIV_NSP_MALFORMED;
             n = buf[off++];
-            if (n > DNIV_NSP_MAX_CTL_DATA || off + n > len)
+            if (n > DNIV_NSP_MAX_CTL_DATA || off + n != len)
                 return DNIV_NSP_MALFORMED;
             pkt->payload = buf + off;
             pkt->payload_len = n;
@@ -219,14 +219,14 @@ static inline int dniv_nsp_parse(const __u8 *buf, __u32 len,
         pkt->reason = dniv_nsp_get_le16(buf + 5U);
         off = 7U;
         n = buf[off++];
-        if (n > DNIV_NSP_MAX_CTL_DATA || off + n > len)
+        if (n > DNIV_NSP_MAX_CTL_DATA || off + n != len)
             return DNIV_NSP_MALFORMED;
         pkt->payload = buf + off;
         pkt->payload_len = n;
         return DNIV_NSP_OK;
     }
     if (pkt->type == DNIV_NSP_DC) {
-        if (len < 7U)
+        if (len != 7U)
             return DNIV_NSP_MALFORMED;
         pkt->reason = dniv_nsp_get_le16(buf + 5U);
         return DNIV_NSP_OK;
