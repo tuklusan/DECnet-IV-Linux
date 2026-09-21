@@ -101,7 +101,10 @@ def main() -> int:
     src_mac = bytes((0xAA, 0x00, 0x04, 0x00,
                      src_node & 0xFF, (src_node >> 8) & 0xFF))
 
-    sniff = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.htons(ETHERTYPE))
+    # TAP ingress is not protocol-demultiplexed reliably to an AF_PACKET
+    # socket opened on a nonstandard EtherType.  Sniff ETH_P_ALL and filter
+    # the decoded frame ourselves; keep transmission scoped to DECnet.
+    sniff = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.htons(0x0003))
     send = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.htons(ETHERTYPE))
     sniff.bind((sniff_iface, 0))
     send.bind((send_iface, 0))
@@ -120,8 +123,10 @@ def main() -> int:
             raise RuntimeError("flow-control probe Data not observed")
 
         local_link, remote_link = links
+        print("flow-inject: observed tagged candidate Data", flush=True)
         send_ls(send, candidate, src_mac, src_node, dst_node,
                 local_link, remote_link, 1, 1)
+        print("flow-inject: XOFF sent", flush=True)
         time.sleep(4.0)
         send_ls(sock, candidate, src_mac, src_node, dst_node,
                 local_link, remote_link, 2, 2)
