@@ -18,7 +18,7 @@
 
 Annotated tag `PHASE-4-COMPLETE` is verified on closure commit `571333bfd7aaa8b2fcc88715c1d61442af151f3c`; the temporary tag workflow has been removed.
 
-Phase 4 is complete on exact protocol candidate `6c185b6d01f8a57ee9f0ea6a6c37d7112ddb77d2`; Phase 5 is active on `main`. The latest accepted Phase 5 candidate is `0d916012d551943e3f20f03c4b8ca1a0c7b87694`. Phase 3 remains frozen at tag `PHASE-3-COMPLETE` on commit `ae1bcb82a1539ccadda0661664205e360bd760b7`.
+Phase 4 is complete on exact protocol candidate `6c185b6d01f8a57ee9f0ea6a6c37d7112ddb77d2`; Phase 5 is active on `main`. The latest accepted Phase 5 candidate is `80f31de7ebf970e648878c7cac51746da3ac0715`. Phase 3 remains frozen at tag `PHASE-3-COMPLETE` on commit `ae1bcb82a1539ccadda0661664205e360bd760b7`.
 
 The final Phase 3 acceptance set was green: Repository Policy `35343324826`, Build Bootstrap `35343357536`, Project State Gate `35343359444`, External Reference Baselines `35343361139`, Python QEMU VM Lab `35343362922`, and Independent Ethernet Interoperability run `35343364812`. The interoperability matrix passed all eight amd64/ARM64 Route20/PyDECnet routing/endnode role jobs.
 
@@ -448,3 +448,7 @@ Socket flow-control review found the normal-data writability gate counted all NS
 Exact-SHA fast socket acceptance for data-window readiness candidate `0d916012d551943e3f20f03c4b8ca1a0c7b87694` is green: Repository Policy `35592768107`, Build Bootstrap `35592803268`, Project State Gate `35592806080`, E1 `35592808968` on x86_64 and ARM64, and x64 PyDECnet L1 interoperability `35592812174`.
 
 Pinned PyDECnet Phase IV transmit behavior requests delayed acknowledgement only while the Data queue is at most half full before enqueue. Native outbound Data now sets DLY at that same boundary: with the 20-segment window, existing outstanding counts 0 through 10 request delayed ACK, while 11 and above request immediate ACK. The wire flag is chosen before queueing so retransmissions preserve the original packet image. Unit coverage locks the boundary. Next: exact-SHA fast socket acceptance, then continue flow-control/loss negatives and clean-shutdown ordering.
+
+Exact-SHA fast socket acceptance for outbound-DLY candidate `80f31de7ebf970e648878c7cac51746da3ac0715` is green: Repository Policy `35593564409`, Build Bootstrap `35593599143`, Project State Gate `35593601067`, E1 `35593603024` on x86_64 and ARM64, and x64 PyDECnet L1 interoperability `35593605238`.
+
+Clean local disconnect now follows the pinned PyDECnet ordering when normal Data remains unacknowledged: RUN is retained, the disconnect reason/data is saved, new Data/Interrupt transmission is blocked, delayed receive ACKs are suppressed, and DI is deferred until the Data retransmit queue is fully acknowledged. Socket writability is suppressed during that drain and inactivity keepalive generation is paused. Unit coverage locks the defer and delayed-ACK shutdown predicates. Next: exact-SHA fast socket acceptance, then add a deterministic live clean-shutdown/loss proof and continue NSP flow-control negatives.

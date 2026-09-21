@@ -232,6 +232,12 @@ static void test_retransmit_flow(void)
     assert(dniv_nsp_data_delay_ack_allowed(0U, 20U));
     assert(dniv_nsp_data_delay_ack_allowed(10U, 20U));
     assert(!dniv_nsp_data_delay_ack_allowed(11U, 20U));
+
+    assert(!dniv_nsp_clean_shutdown_defer(0U));
+    assert(dniv_nsp_clean_shutdown_defer(1U));
+    assert(dniv_nsp_delay_ack_allowed(1, 0));
+    assert(!dniv_nsp_delay_ack_allowed(1, 1));
+    assert(!dniv_nsp_delay_ack_allowed(0, 0));
 }
 
 static void test_ack_holdoff(void)

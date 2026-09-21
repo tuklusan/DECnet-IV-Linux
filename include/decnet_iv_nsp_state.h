@@ -58,6 +58,18 @@ dniv_nsp_data_delay_ack_allowed(unsigned int data_outstanding,
     return data_outstanding <= data_window / 2U;
 }
 
+static inline int
+dniv_nsp_clean_shutdown_defer(unsigned int data_outstanding)
+{
+    return data_outstanding != 0U;
+}
+
+static inline int
+dniv_nsp_delay_ack_allowed(int requested, int shutdown_pending)
+{
+    return requested && !shutdown_pending;
+}
+
 static inline unsigned long
 dniv_nsp_ack_holdoff_deadline(int pending, unsigned long deadline,
                               unsigned long now, unsigned long holdoff)

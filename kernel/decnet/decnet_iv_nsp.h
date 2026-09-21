@@ -64,6 +64,7 @@ struct dniv_nsp_conn_snapshot {
     __u16 interrupt_credit;
     __u16 disconnect_reason;
     __u8 data_xon;
+    __u8 shutdown_pending;
     unsigned long connect_deadline;
     unsigned long inactivity_deadline;
     enum dniv_nsp_conn_state state;
