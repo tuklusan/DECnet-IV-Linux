@@ -199,8 +199,7 @@ static void test_negative(void)
            DNIV_NSP_MALFORMED);
     assert(dniv_nsp_parse(ignored_bad_optional_ack,
                           sizeof(ignored_bad_optional_ack), &p) ==
-           DNIV_NSP_OK);
-    assert(p.ack1.present && !p.ack2.present);
+           DNIV_NSP_MALFORMED);
     assert(dniv_nsp_parse(bad_ci_dst, sizeof(bad_ci_dst), &p) ==
            DNIV_NSP_MALFORMED);
     assert(dniv_nsp_parse(bad_ls, sizeof(bad_ls), &p) ==

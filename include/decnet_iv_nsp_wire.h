@@ -115,8 +115,8 @@ static inline __u16 dniv_nsp_ack_word(__u16 num, __u8 qual)
                    (num & DNIV_NSP_SEQ_MASK));
 }
 
-static inline void dniv_nsp_decode_ack(const __u8 *buf, __u32 len,
-                                       __u32 *off, struct dniv_nsp_ack *ack)
+static inline int dniv_nsp_decode_ack(const __u8 *buf, __u32 len,
+                                      __u32 *off, struct dniv_nsp_ack *ack)
 {
     __u16 v;
     __u8 qual;
@@ -125,17 +125,18 @@ static inline void dniv_nsp_decode_ack(const __u8 *buf, __u32 len,
     ack->num = 0U;
     ack->qual = 0U;
     if (*off + 2U > len)
-        return;
+        return 0;
     v = dniv_nsp_get_le16(buf + *off);
     if (!(v & DNIV_NSP_ACK_PRESENT))
-        return;
+        return 0;
     *off += 2U;
     qual = (__u8)((v >> DNIV_NSP_ACK_QUAL_SHIFT) & 7U);
     if (qual > 3U)
-        return;
+        return -1;
     ack->present = 1U;
     ack->qual = qual;
     ack->num = (__u16)(v & DNIV_NSP_SEQ_MASK);
+    return 1;
 }
 
 static inline int dniv_nsp_parse(const __u8 *buf, __u32 len,
@@ -240,8 +241,9 @@ static inline int dniv_nsp_parse(const __u8 *buf, __u32 len,
         return DNIV_NSP_OK;
     }
 
-    dniv_nsp_decode_ack(buf, len, &off, &pkt->ack1);
-    dniv_nsp_decode_ack(buf, len, &off, &pkt->ack2);
+    if (dniv_nsp_decode_ack(buf, len, &off, &pkt->ack1) < 0 ||
+        dniv_nsp_decode_ack(buf, len, &off, &pkt->ack2) < 0)
+        return DNIV_NSP_MALFORMED;
     if (pkt->ack1.present && pkt->ack2.present &&
         dniv_nsp_ack_cross(&pkt->ack1) == dniv_nsp_ack_cross(&pkt->ack2))
         return DNIV_NSP_MALFORMED;
