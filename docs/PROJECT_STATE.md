@@ -81,7 +81,7 @@ Implementation order:
 | Phase 4 accepted protocol candidate | `6c185b6d01f8a57ee9f0ea6a6c37d7112ddb77d2` |
 | Phase 4 closure commit | `571333bfd7aaa8b2fcc88715c1d61442af151f3c` |
 | Phase 4 tag | `PHASE-4-COMPLETE` |
-| Latest accepted Phase 5 candidate | `dfd249b02fe0b72b87d088523a9603630a641290` |
+| Latest accepted Phase 5 candidate | `ad754ae503ba0bf7d0fa9b7d877db6c148dae547` |
 | Route20 pin | `a9ef7c0b7f875f0dd2e8abaf11213798a8e4474c` |
 | PyDECnet live pin | `295938c76c956a70957f4cf96b05685f555b2a18` |
 | VM lifecycle | direct QEMU/QMP |
@@ -421,3 +421,8 @@ Audit of the socket-lifecycle harness found a false-green discriminator defect i
 Exact-SHA fast acceptance for corrected listener-close coverage candidate `dfd249b02fe0b72b87d088523a9603630a641290` is green: Repository Policy `35545967240`, Build Bootstrap `35545980316`, Project State Gate `35545981269`, E1 Python QEMU VM Lab `35545982418` on x86_64 and ARM64, and x64 PyDECnet L1 Independent Ethernet Interoperability `35545983392`. The repaired discriminator actually executed and proved one accepted object-245 child remained usable while the two still-pending requests were rejected with reason 6.
 
 Connection-response timer review found two Phase 5 liveness defects. First, the generic 30-second connection deadline could erase CI/CC state before delayed timer work reached the normal retransmit-limit path, replacing the proven node-unreachable terminal result with an anonymous reset under scheduler stalls. CI and CC are now left to their response/retransmit timers. Second, an inbound CR or outbound CD Session-Control response timeout was silently erased. The pinned PyDECnet NSP reference rejects an unanswered inbound CI with reason 38 and reports the same reason locally when a delivered outbound connect is never accepted/rejected. CR timeout now sends a retransmitted DI reason 38; CD timeout retains a CLOSED reason-38 terminal state. Socket listener notification also removes terminal pre-accept links from the circular pending queue immediately, preventing timed-out or peer-aborted requests from permanently consuming backlog slots. Next: exact-SHA fast socket acceptance, then add bounded timer-specific evidence without extending every fast interop path.
+
+
+Exact-SHA fast acceptance for connection-response timeout semantics candidate `ad754ae503ba0bf7d0fa9b7d877db6c148dae547` is green: Repository Policy `35546873484`, Build Bootstrap `35546897584`, Project State Gate `35546898681`, E1 Python QEMU VM Lab `35546899879` on x86_64 and ARM64, and x64 PyDECnet L1 Independent Ethernet Interoperability `35546901103`.
+
+A bounded independent timer discriminator is now added at consolidated/full depth only. In the x64 PyDECnet L1 job, native object 247 uses backlog one and intentionally leaves the first inbound CI in CR beyond the 30-second Session-Control response bound. PyDECnet must receive reject reason 38, packet capture must prove that the candidate actually emitted a reason-38 DI, and a second connection must then be accepted and echo `DNIV-CR-TIMEOUT-RECOVER`. The second connection is also the backlog-leak discriminator: it cannot succeed if the expired first CR remains in the listener's one-slot pending ring. Fast development runs retain their existing duration; the timer case executes once per consolidated/full interoperability matrix. Next: consolidated exact-SHA acceptance, then continue DC/no-resources and malformed ACK/sequence negatives.

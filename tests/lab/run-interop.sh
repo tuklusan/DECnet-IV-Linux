@@ -80,8 +80,10 @@ if [[ -z "$timeout_seconds" ]]; then
     fi
 fi
 [[ "$timeout_seconds" =~ ^[1-9][0-9]*$ ]] || { echo "interop: bad timeout" >&2; exit 2; }
-session=${DNIV_INTEROP_SESSION_ID:-"local-$(date -u +%Y%m%dT%H%M%SZ)-$$-$reference-$scenario"}
+session=${DNIV_INTEROP_SESSION_ID:-"local-$(date -u +%Y%m%dT%H%M%SZ)-$-$reference-$scenario"}
 [[ "$session" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "interop: bad session id" >&2; exit 2; }
+timer_proof=${DNIV_INTEROP_TIMER_PROOF:-0}
+[[ "$timer_proof" =~ ^[01]$ ]] || { echo "interop: bad timer-proof selector" >&2; exit 2; }
 work="$artifacts/$session"
 mkdir -p "$work"
 pcap="$work/lan.pcap"
@@ -290,7 +292,7 @@ if ! wait_marker "$ref1_log" "$reference_ready_marker" "$reference_ready_seconds
     exit 1
 fi
 
-candidate_common="root=LABEL=dniv-root rootfstype=ext4 rw dniv.interop=1 dniv.reference=$reference dniv.area=$area dniv.node=$node dniv.name=$name dniv.peer_node=$ref_area.$ref_node dniv.scenario=$scenario dniv.session=$session"
+candidate_common="root=LABEL=dniv-root rootfstype=ext4 rw dniv.interop=1 dniv.reference=$reference dniv.area=$area dniv.node=$node dniv.name=$name dniv.peer_node=$ref_area.$ref_node dniv.scenario=$scenario dniv.session=$session dniv.timer_proof=$timer_proof"
 start_vm "candidate-$scenario" "$candidate_disk" "$tap_candidate" "$candidate_hw" "$candidate_log" "$candidate_common" & CANDIDATE_PID=$!
 if [[ "$reference" == pydecnet ]]; then
     loss_marker="DNIV-INTEROP-LOSS-READY session=$session scenario=$scenario"
@@ -399,6 +401,30 @@ if [[ "$reference" == pydecnet ]]; then
         tail -280 "$ref1_log" >&2 || true
         cat "$ci_fault_log" >&2 || true
         exit 1
+    fi
+
+    if [[ "$timer_proof" == 1 ]]; then
+        if [[ "$scenario" != l1 ]]; then
+            echo "interop: timer proof requires PyDECnet L1" >&2
+            exit 2
+        fi
+        if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-CR-TIMEOUT-READY session=$session scenario=$scenario" 30 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+            tail -360 "$candidate_log" >&2 || true
+            tail -300 "$ref1_log" >&2 || true
+            exit 1
+        fi
+        if ! timeout 60s env PYTHONPATH="$host_pydecnet/pydecnet" python3 \
+            "$script_dir/pydecnet-timeout.py" "$host_pydecnet_api" \
+            "$area.$node" "$ref_name"; then
+            tail -380 "$candidate_log" >&2 || true
+            tail -320 "$ref1_log" >&2 || true
+            exit 1
+        fi
+        if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-CR-TIMEOUT-PASS session=$session scenario=$scenario" 20 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+            tail -380 "$candidate_log" >&2 || true
+            tail -320 "$ref1_log" >&2 || true
+            exit 1
+        fi
     fi
 fi
 if [[ "$reference" == pydecnet && "$scenario" != router-endnode ]]; then
@@ -559,9 +585,13 @@ sudo kill "$TCPDUMP_PID" 2>/dev/null || true
 wait "$TCPDUMP_PID" 2>/dev/null || true
 unset TCPDUMP_PID
 
+validator_args=()
+if [[ "$timer_proof" == 1 ]]; then
+    validator_args+=(--timer-proof)
+fi
 python3 "$script_dir/validate-interop-pcap.py" "$pcap" "$reference" "$scenario" \
     "$candidate_mac" "$candidate_hw" "$candidate_changed_hw" \
-    "$reference_mac" "$reference_hw"
+    "$reference_mac" "$reference_hw" "${validator_args[@]}"
 
 grep -Fq "DNIV-INTEROP-RECOVERED session=$session scenario=$scenario" "$candidate_log"
 ! grep -Fq 'DNIV-INTEROP-FAIL' "$candidate_log"

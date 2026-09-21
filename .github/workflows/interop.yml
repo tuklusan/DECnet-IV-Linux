@@ -258,11 +258,19 @@ jobs:
           reference='${{ matrix.reference }}'
           scenarios='${{ matrix.scenarios }}'
           bundle="$RUNNER_TEMP/bundle-$reference"
+          timer_proof=0
+          if [[ '${{ inputs.profile }}' != fast &&
+                '${{ matrix.suite }}' == py-l1 &&
+                '${{ matrix.arch }}' == amd64 ]]; then
+            timer_proof=1
+          fi
           for scenario in $scenarios; do
             session="run-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${{ matrix.arch }}-${reference}-${scenario}"
             printf '%s %s %s\n' "$reference" "$scenario" "$session" >> \
               "$DNIV_SCRATCH_DIR/sessions.tsv"
-            DNIV_INTEROP_SESSION_ID="$session" tests/lab/run-interop.sh \
+            DNIV_INTEROP_SESSION_ID="$session" \
+              DNIV_INTEROP_TIMER_PROOF="$timer_proof" \
+              tests/lab/run-interop.sh \
               "$DNIV_CANDIDATE_IMAGE" "$DNIV_REFERENCE_IMAGE" \
               "$DNIV_KERNEL" "$DNIV_INITRD" "$reference" "$bundle" "$scenario" 2>&1 | \
               tee "$DNIV_SCRATCH_DIR/interop-${reference}-${scenario}.log"

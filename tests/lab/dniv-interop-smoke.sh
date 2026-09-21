@@ -158,10 +158,15 @@ peer_node=$(get_arg dniv.peer_node || true)
 reference=$(get_arg dniv.reference || true)
 scenario=$(get_arg dniv.scenario || true)
 session=$(get_arg dniv.session || printf 'local')
+timer_proof=$(get_arg dniv.timer_proof || printf '0')
 
 case "$reference" in
     route20|pydecnet) ;;
     *) echo "DNIV-INTEROP-FAIL session=$session reason=bad-reference"; exit 1 ;;
+esac
+case "$timer_proof" in
+    0|1) ;;
+    *) echo "DNIV-INTEROP-FAIL session=$session reason=bad-timer-proof"; exit 1 ;;
 esac
 case "$scenario" in
     l1) local_type=2; peer_kind='L1 router' ;;
@@ -240,6 +245,17 @@ if [ "$reference" = pydecnet ]; then
         exit 1
     fi
     echo "DNIV-INTEROP-CI-EXHAUST-PASS session=$session scenario=$scenario node=$name peer=$peer_node"
+    if [ "$timer_proof" = 1 ]; then
+        if [ "$scenario" != l1 ]; then
+            echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=timer-proof-scenario"
+            exit 1
+        fi
+        if ! /usr/local/sbin/dntimeout "$peer_node" "$session" "$scenario"; then
+            echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=cr-timeout"
+            exit 1
+        fi
+        echo "DNIV-INTEROP-CR-TIMEOUT-PASS session=$session scenario=$scenario node=$name peer=$peer_node"
+    fi
     if [ "$scenario" != router-endnode ]; then
         /usr/local/sbin/dnaccept "$peer_node" "$session" "$scenario" &
         accept_pid=$!

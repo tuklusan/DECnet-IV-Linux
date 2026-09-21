@@ -253,6 +253,7 @@ def main() -> int:
     p.add_argument("candidate_changed_hw", type=mac)
     p.add_argument("reference_mac", type=mac)
     p.add_argument("reference_hw", type=mac)
+    p.add_argument("--timer-proof", action="store_true")
     args = p.parse_args()
 
     counts = {
@@ -283,6 +284,9 @@ def main() -> int:
         "candidate_ci_recover": 0,
         "candidate_ci_recover_data": 0,
         "reference_ci_recover_data": 0,
+        "candidate_cr_timeout_reason38": 0,
+        "candidate_cr_timeout_recovery": 0,
+        "reference_cr_timeout_recovery": 0,
         "probes": 0,
     }
     bad_hello_hw = 0
@@ -308,6 +312,11 @@ def main() -> int:
                     counts["candidate_ci_recover"] += 1
                 if b"DNIV-CI-RECOVER-DATA" in nsp:
                     counts["candidate_ci_recover_data"] += 1
+                if b"DNIV-CR-TIMEOUT-RECOVER" in nsp:
+                    counts["candidate_cr_timeout_recovery"] += 1
+                if nsp[0] == 0x38 and len(nsp) >= 7 and \
+                        int.from_bytes(nsp[5:7], "little") == 38:
+                    counts["candidate_cr_timeout_reason38"] += 1
                 if nsp[0] == 0x30:
                     counts["candidate_interrupt"] += 1
                 opts = session_ci_options(nsp)
@@ -324,6 +333,8 @@ def main() -> int:
                     counts["reference_loss_probe"] += 1
                 if b"DNIV-CI-RECOVER-DATA" in nsp:
                     counts["reference_ci_recover_data"] += 1
+                if b"DNIV-CR-TIMEOUT-RECOVER" in nsp:
+                    counts["reference_cr_timeout_recovery"] += 1
                 if nsp[0] == 0x30:
                     counts["reference_interrupt"] += 1
                 opts = session_ci_options(nsp)
@@ -411,6 +422,12 @@ def main() -> int:
             raise SystemExit("interop pcap: missing fresh CI after connect retry exhaustion")
         if counts["candidate_ci_recover_data"] < 1 or counts["reference_ci_recover_data"] < 1:
             raise SystemExit("interop pcap: missing data recovery after connect retry exhaustion")
+        if args.timer_proof:
+            if counts["candidate_cr_timeout_reason38"] < 1:
+                raise SystemExit("interop pcap: missing candidate CR-timeout reason-38 DI")
+            if counts["candidate_cr_timeout_recovery"] < 1 or \
+                    counts["reference_cr_timeout_recovery"] < 1:
+                raise SystemExit("interop pcap: missing CR-timeout fresh-link recovery")
         if args.scenario != "router-endnode":
             if counts["candidate_interrupt"] < 2:
                 raise SystemExit("interop pcap: missing candidate NSP interrupt traffic")
