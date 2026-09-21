@@ -18,7 +18,7 @@
 
 Annotated tag `PHASE-4-COMPLETE` is verified on closure commit `571333bfd7aaa8b2fcc88715c1d61442af151f3c`; the temporary tag workflow has been removed.
 
-Phase 4 is complete on exact protocol candidate `6c185b6d01f8a57ee9f0ea6a6c37d7112ddb77d2`; Phase 5 is active on `main`. The latest accepted Phase 5 candidate is `ad754ae503ba0bf7d0fa9b7d877db6c148dae547`. Phase 3 remains frozen at tag `PHASE-3-COMPLETE` on commit `ae1bcb82a1539ccadda0661664205e360bd760b7`.
+Phase 4 is complete on exact protocol candidate `6c185b6d01f8a57ee9f0ea6a6c37d7112ddb77d2`; Phase 5 is active on `main`. The latest accepted Phase 5 candidate is `8cf0e121ebe273447c500381ebe44ee374c440cc`. Phase 3 remains frozen at tag `PHASE-3-COMPLETE` on commit `ae1bcb82a1539ccadda0661664205e360bd760b7`.
 
 The final Phase 3 acceptance set was green: Repository Policy `35343324826`, Build Bootstrap `35343357536`, Project State Gate `35343359444`, External Reference Baselines `35343361139`, Python QEMU VM Lab `35343362922`, and Independent Ethernet Interoperability run `35343364812`. The interoperability matrix passed all eight amd64/ARM64 Route20/PyDECnet routing/endnode role jobs.
 
@@ -371,3 +371,8 @@ The next test-only successor adds one consolidated/full-only timer proof on x64 
 
 
 Consolidated run `35547989271` found a concrete E4 harness race, not a timer-proof protocol failure: ARM64 L1A self-terminated after the fixed 600-second router sleep before both endpoints completed, and the controller reported `E4 guest exited early: L1A`. Transit-router lifetime is controller-owned, so E4 L1/L2 guests now stay alive indefinitely after READY and are stopped by controller QMP teardown. The new x64 PyDECnet timer proof on `4263ee43307c5c6842bcb8b2f342a05f5d27949d` itself passed reason 38 plus fresh connection recovery and PCAP evidence. Next: repeat exact-SHA consolidated acceptance.
+
+
+Exact-SHA consolidated acceptance for `8cf0e121ebe273447c500381ebe44ee374c440cc` is green: policy `35549058759`, build `35549108369`, state `35549109446`, references `35549110505`, E1 `35549111412` both architectures, E4 `35549112413` both architectures, and six-job interop `35549113555`.
+
+The next Phase 5 parser correction rejects trailing non-ACK bytes in ACK_DATA/ACK_OTHER while preserving the Phase IV/PyDECnet rule that an optional ACK word with invalid QUAL is ignored after consuming that word. Unit negatives cover both. Next: exact-SHA fast socket acceptance, then reserved-port No Resources/No Link receive-dispatch semantics.

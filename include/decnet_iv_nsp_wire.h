@@ -239,7 +239,7 @@ static inline int dniv_nsp_parse(const __u8 *buf, __u32 len,
         return DNIV_NSP_MALFORMED;
 
     if (pkt->type == DNIV_NSP_ACK_DATA || pkt->type == DNIV_NSP_ACK_OTHER) {
-        if (!pkt->ack1.present)
+        if (!pkt->ack1.present || off != len)
             return DNIV_NSP_MALFORMED;
         return DNIV_NSP_OK;
     }

@@ -81,7 +81,7 @@ Implementation order:
 | Phase 4 accepted protocol candidate | `6c185b6d01f8a57ee9f0ea6a6c37d7112ddb77d2` |
 | Phase 4 closure commit | `571333bfd7aaa8b2fcc88715c1d61442af151f3c` |
 | Phase 4 tag | `PHASE-4-COMPLETE` |
-| Latest accepted Phase 5 candidate | `ad754ae503ba0bf7d0fa9b7d877db6c148dae547` |
+| Latest accepted Phase 5 candidate | `8cf0e121ebe273447c500381ebe44ee374c440cc` |
 | Route20 pin | `a9ef7c0b7f875f0dd2e8abaf11213798a8e4474c` |
 | PyDECnet live pin | `295938c76c956a70957f4cf96b05685f555b2a18` |
 | VM lifecycle | direct QEMU/QMP |
@@ -429,3 +429,8 @@ A bounded independent timer discriminator is now added at consolidated/full dept
 
 
 Consolidated acceptance of timer-proof candidate `4263ee43307c5c6842bcb8b2f342a05f5d27949d` exposed an unrelated ARM64 E4 harness lifetime race in VM Lab run `35547989271`, job `106177300615`. L1A, L2A and L1B reached their E4 pass path, but L1A's fixed 600-second post-readiness sleep expired while endpoint evidence was still in progress; the controller then correctly failed with `E4 guest exited early: L1A`. The E4 controller already owns transit-router teardown and checks that routers remain alive until both endpoints finish, so fixed router self-termination contradicts that ownership and creates a false failure under slow six-guest ARM64 TCG skew. L1/L2 E4 guests now remain alive after READY until the controller terminates them through QMP. No routing or NSP behavior changes. The x64 PyDECnet L1 timer discriminator itself passed reason-38 rejection and fresh-link recovery, with PCAP counts `candidate_cr_timeout_reason38=1`, `candidate_cr_timeout_recovery=1`, and `reference_cr_timeout_recovery=1`. Next: repeat exact-SHA consolidated acceptance.
+
+
+Exact-SHA consolidated acceptance for E4 controller-owned transit-router candidate `8cf0e121ebe273447c500381ebe44ee374c440cc` is fully green: Repository Policy `35549058759`, Build Bootstrap `35549108369`, Project State Gate `35549109446`, External Reference Baselines `35549110505`, E1 Python QEMU VM Lab `35549111412` on x86_64 and ARM64, E4 Python QEMU VM Lab `35549112413` on x86_64 and ARM64, and all six Independent Ethernet Interoperability jobs in `35549113555`. The consolidated x64 PyDECnet L1 path also re-proved CR response timeout reason 38 and fresh-link recovery.
+
+Malformed ACK review found a parser acceptance gap against the pinned PyDECnet negative corpus: ACK_DATA/ACK_OTHER accepted arbitrary non-ACK trailing bytes after a valid mandatory ACK field. The parser now requires the ACK message to be fully consumed. An optional present ACK word with invalid QUAL remains deliberately tolerated and ignored, matching the independent reference, because that word is consumed before QUAL validation. Unit coverage locks both cases. Next: exact-SHA fast socket acceptance, then reserved-port No Resources/No Link receive-dispatch semantics.
