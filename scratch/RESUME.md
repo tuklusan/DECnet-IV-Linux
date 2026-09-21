@@ -606,3 +606,6 @@ Exact-SHA fast socket acceptance for signal-interruption candidate `4a7f2ce6616b
 
 
 PP-06 receiver-stall and many-client fairness now have a live independent-peer proof. One native MIRROR link sends 20 records and intentionally leaves every reply unread, creating a receiver-stalled session with queued application data. While that link remains stalled, a second MIRROR connection must connect and complete an independent request/reply. The first socket must then drain all 20 replies in order. This proves one blocked consumer does not starve an independent valid session within the declared connection/window limits. Product behavior is unchanged. Next: exact-SHA fast socket acceptance, then continue remaining PP-06 negatives.
+
+
+Exact-SHA fast socket acceptance for receiver-stall fairness candidate `ed5a1ecaf1eb6668de751f71b18e33dbe8ffbc6d` is green: Repository Policy `35665443669`, Build Bootstrap `35665485064`, Project State Gate `35665487460`, Python QEMU VM Lab `35665489800` on x86_64 and ARM64, and x64 PyDECnet L1 interoperability `35665492465`. The live proof kept 20 MIRROR replies unread on one connection while a second independent session connected and completed a request/reply, then drained all stalled replies in order.
