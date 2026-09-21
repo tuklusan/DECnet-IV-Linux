@@ -234,6 +234,32 @@ def main() -> int:
             flush=True,
         )
 
+        malformed_probes = (
+            (
+                "ACK qualifier",
+                b"\x04" + local_link + remote_link
+                + struct.pack("<H", 0xC000 | seq),
+            ),
+            (
+                "Link Service flow modifier",
+                b"\x10" + local_link + remote_link
+                + struct.pack("<H", 1) + b"\x03\x00",
+            ),
+            (
+                "empty Interrupt",
+                b"\x30" + local_link + remote_link
+                + struct.pack("<H", 1),
+            ),
+        )
+        for label, probe in malformed_probes:
+            send_nsp_probe(
+                send, candidate, src_mac, src_node, dst_node, probe,
+            )
+            print(
+                f"ack-range-inject: malformed {label} probe sent",
+                flush=True,
+            )
+
         no_link_probes = (
             (
                 "Data",
@@ -317,7 +343,9 @@ def main() -> int:
                     "wrong_destination_link_ack_ignored=1 wrong_source_node_ack_ignored=1 "
                     "unknown_link_data_no_link=1 unknown_link_cc_no_link=1 "
                     "unknown_link_di_no_link=1 unknown_link_interrupt_no_link=1 "
-                    "unknown_link_link_service_no_link=1 cross_nak_retransmit=1 "
+                    "unknown_link_link_service_no_link=1 malformed_ack_ignored=1 "
+                    "malformed_link_service_ignored=1 malformed_interrupt_ignored=1 "
+                    "cross_nak_retransmit=1 "
                     f"elapsed={elapsed:.3f}s"
                 )
                 return 0
