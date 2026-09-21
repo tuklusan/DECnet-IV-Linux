@@ -358,14 +358,14 @@ if [[ "$reference" == pydecnet ]]; then
     LOSS_QDISC=1
     sudo tc filter add dev "$tap_reference" ingress protocol all pref 10 flower \
         src_mac "$reference_mac" dst_mac "$candidate_mac" action drop
-    printf 'fault=reference-unicast-drop-clean-drain duration=4s source=%s destination=%s\n' \
+    printf 'fault=reference-unicast-drop-clean-drain duration=7s source=%s destination=%s\n' \
         "$reference_mac" "$candidate_mac" >> "$drain_fault_log"
     if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-DRAIN-CLOSED session=$session scenario=$scenario" 15 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
         tail -300 "$candidate_log" >&2 || true
         tail -240 "$ref1_log" >&2 || true
         exit 1
     fi
-    sleep 4
+    sleep 7
     drain_stats=$(sudo tc -s filter show dev "$tap_reference" ingress)
     printf '%s\n' "$drain_stats" >> "$drain_fault_log"
     if ! printf '%s\n' "$drain_stats" | grep -Eq 'Sent [0-9]+ bytes [1-9][0-9]* pkt'; then
