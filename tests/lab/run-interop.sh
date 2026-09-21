@@ -84,6 +84,12 @@ session=${DNIV_INTEROP_SESSION_ID:-"local-$(date -u +%Y%m%dT%H%M%SZ)-$-$referenc
 [[ "$session" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "interop: bad session id" >&2; exit 2; }
 timer_proof=${DNIV_INTEROP_TIMER_PROOF:-0}
 [[ "$timer_proof" =~ ^[01]$ ]] || { echo "interop: bad timer-proof selector" >&2; exit 2; }
+peer_segsize=${DNIV_INTEROP_PEER_SEGMENT_SIZE:-0}
+[[ "$peer_segsize" =~ ^[0-9]+$ ]] || { echo "interop: bad peer segment size" >&2; exit 2; }
+if (( peer_segsize != 0 && (peer_segsize < 64 || peer_segsize > 563) )); then
+    echo "interop: peer segment size out of bounded proof range" >&2
+    exit 2
+fi
 reserved_proof=0
 if [[ "$reference" == pydecnet && "$scenario" == l1 && "$(uname -m)" == x86_64 ]]; then
     reserved_proof=1
@@ -172,6 +178,12 @@ if [[ "$reference" == pydecnet ]]; then
     host_pydecnet="$work/host-pydecnet"
     mkdir -p "$host_pydecnet"
     tar -xf "$bundle/pydecnet.tar" -C "$host_pydecnet"
+    if (( peer_segsize != 0 )); then
+        cat > "$host_pydecnet/pydecnet/sitecustomize.py" <<EOF_SITE
+import decnet.common as _dniv_common
+_dniv_common.MSS = $peer_segsize
+EOF_SITE
+    fi
 fi
 accel=tcg
 if [[ -e /dev/kvm && -r /dev/kvm && -w /dev/kvm ]]; then accel=kvm; fi
@@ -667,6 +679,9 @@ if [[ "$timer_proof" == 1 ]]; then
 fi
 if [[ "$reserved_proof" == 1 ]]; then
     validator_args+=(--reserved-proof)
+fi
+if (( peer_segsize != 0 )); then
+    validator_args+=(--peer-segsize "$peer_segsize")
 fi
 python3 "$script_dir/validate-interop-pcap.py" "$pcap" "$reference" "$scenario" \
     "$candidate_mac" "$candidate_hw" "$candidate_changed_hw" \

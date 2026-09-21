@@ -259,6 +259,12 @@ jobs:
           scenarios='${{ matrix.scenarios }}'
           bundle="$RUNNER_TEMP/bundle-$reference"
           timer_proof=0
+          peer_segsize=0
+          if [[ '${{ inputs.scope }}' == socket &&
+                '${{ matrix.suite }}' == py-l1 &&
+                '${{ matrix.arch }}' == amd64 ]]; then
+            peer_segsize=128
+          fi
           if [[ '${{ inputs.profile }}' != fast &&
                 '${{ matrix.suite }}' == py-l1 &&
                 '${{ matrix.arch }}' == amd64 ]]; then
@@ -270,6 +276,7 @@ jobs:
               "$DNIV_SCRATCH_DIR/sessions.tsv"
             DNIV_INTEROP_SESSION_ID="$session" \
               DNIV_INTEROP_TIMER_PROOF="$timer_proof" \
+              DNIV_INTEROP_PEER_SEGMENT_SIZE="$peer_segsize" \
               tests/lab/run-interop.sh \
               "$DNIV_CANDIDATE_IMAGE" "$DNIV_REFERENCE_IMAGE" \
               "$DNIV_KERNEL" "$DNIV_INITRD" "$reference" "$bundle" "$scenario" 2>&1 | \

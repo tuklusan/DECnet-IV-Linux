@@ -160,6 +160,18 @@ def session_ci_options(nsp: bytes) -> tuple[tuple[bytes, bytes, bytes], bytes] |
     return access, conndata
 
 
+def data_payload_len(nsp: bytes) -> int | None:
+    if not nsp or (nsp[0] & 0x9F) != 0:
+        return None
+    off = 5
+    for _ in range(2):
+        if off + 2 <= len(nsp) and int.from_bytes(nsp[off:off + 2], "little") & 0x8000:
+            off += 2
+    if off + 2 > len(nsp):
+        raise ValueError("truncated NSP Data segment")
+    return len(nsp) - off - 2
+
+
 def cc_data(nsp: bytes) -> bytes | None:
     if not nsp or nsp[0] != 0x28:
         return None
@@ -255,6 +267,7 @@ def main() -> int:
     p.add_argument("reference_hw", type=mac)
     p.add_argument("--timer-proof", action="store_true")
     p.add_argument("--reserved-proof", action="store_true")
+    p.add_argument("--peer-segsize", type=int, default=0)
     args = p.parse_args()
 
     counts = {
@@ -292,6 +305,9 @@ def main() -> int:
         "reference_cr_timeout_recovery": 0,
         "candidate_no_resources_dc": 0,
         "candidate_no_link_dc": 0,
+        "candidate_data_segments": 0,
+        "candidate_full_peer_segments": 0,
+        "reference_peer_segsize_cc": 0,
         "probes": 0,
     }
     bad_hello_hw = 0
@@ -307,6 +323,15 @@ def main() -> int:
         if nsp is not None:
             if src == args.candidate_mac:
                 counts["candidate_nsp"] += 1
+                dlen = data_payload_len(nsp)
+                if dlen is not None:
+                    counts["candidate_data_segments"] += 1
+                    if args.peer_segsize:
+                        if dlen > args.peer_segsize:
+                            raise ValueError(
+                                f"candidate Data payload {dlen} exceeds negotiated {args.peer_segsize}")
+                        if dlen == args.peer_segsize:
+                            counts["candidate_full_peer_segments"] += 1
                 if b"DNIV-LOSS-PROBE" in nsp:
                     counts["candidate_loss_probe"] += 1
                 if b"DNIV-DRAIN-PROBE" in nsp:
@@ -353,6 +378,9 @@ def main() -> int:
                     counts["candidate_accept_data"] += 1
             elif src == args.reference_mac:
                 counts["reference_nsp"] += 1
+                if args.peer_segsize and nsp[0] == 0x28 and len(nsp) >= 9 and \
+                        int.from_bytes(nsp[7:9], "little") == args.peer_segsize:
+                    counts["reference_peer_segsize_cc"] += 1
                 if b"DNIV-LOSS-PROBE" in nsp:
                     counts["reference_loss_probe"] += 1
                 if b"DNIV-CI-RECOVER-DATA" in nsp:
@@ -434,6 +462,11 @@ def main() -> int:
             raise SystemExit("interop pcap: insufficient bidirectional NSP socket traffic")
         if counts["candidate_option_ci"] < 1:
             raise SystemExit("interop pcap: missing candidate access/connect-data CI")
+        if args.peer_segsize:
+            if counts["reference_peer_segsize_cc"] < 1:
+                raise SystemExit("interop pcap: peer never advertised requested small NSP segment size")
+            if counts["candidate_full_peer_segments"] < 2:
+                raise SystemExit("interop pcap: candidate did not segment normal Data at peer limit")
         if counts["candidate_loss_probe"] < 2:
             raise SystemExit("interop pcap: missing candidate NSP timeout retransmission")
         if counts["reference_loss_probe"] < 1:
