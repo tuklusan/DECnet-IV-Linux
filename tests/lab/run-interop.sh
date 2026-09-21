@@ -388,16 +388,36 @@ if [[ "$reference" == pydecnet ]]; then
             tail -260 "$ref1_log" >&2 || true
             exit 1
         fi
-        if ! timeout 30s sudo python3 "$script_dir/inject-nsp-flow.py" \
+        flow_fault_log="$work/nsp-flow-fault.log"
+        : > "$flow_fault_log"
+        sudo tc qdisc add dev "$tap_reference" clsact
+        LOSS_QDISC=1
+        sudo tc filter add dev "$tap_reference" ingress protocol all pref 10 flower \
+            src_mac "$reference_mac" dst_mac "$candidate_mac" action drop
+        printf 'fault=reference-unicast-drop-flow-xoff source=%s destination=%s\n' \
+            "$reference_mac" "$candidate_mac" >> "$flow_fault_log"
+        if ! timeout 40s sudo python3 "$script_dir/inject-nsp-flow.py" \
             "$bridge" "$bridge" "$candidate_mac" \
             "$ref_area.$ref_node" "$area.$node"; then
             tail -340 "$candidate_log" >&2 || true
             tail -280 "$ref1_log" >&2 || true
+            sudo tc -s filter show dev "$tap_reference" ingress >> "$flow_fault_log" 2>&1 || true
+            cat "$flow_fault_log" >&2 || true
             exit 1
         fi
+        flow_stats=$(sudo tc -s filter show dev "$tap_reference" ingress)
+        printf '%s\n' "$flow_stats" >> "$flow_fault_log"
+        if ! printf '%s\n' "$flow_stats" | grep -Eq 'Sent [0-9]+ bytes [1-9][0-9]* pkt'; then
+            echo "interop: NSP flow-control fault matched no reference replies" >&2
+            cat "$flow_fault_log" >&2
+            exit 1
+        fi
+        sudo tc qdisc del dev "$tap_reference" clsact
+        unset LOSS_QDISC
         if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-FLOW-PASS session=$session scenario=$scenario" 20 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
             tail -340 "$candidate_log" >&2 || true
             tail -280 "$ref1_log" >&2 || true
+            cat "$flow_fault_log" >&2 || true
             exit 1
         fi
     fi

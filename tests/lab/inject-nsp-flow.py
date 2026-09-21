@@ -132,7 +132,21 @@ def main() -> int:
         send_ls(send, candidate, src_mac, src_node, dst_node,
                 local_link, remote_link, 3, 2)
         print("flow-inject: future XON sent", flush=True)
-        time.sleep(3.0)
+
+        # The first candidate Data is deliberately left unacknowledged by
+        # the host fault injector.  Its response timer expires while XOFF is
+        # active; no retransmission is permitted until the in-order XON.
+        sniff.settimeout(0.25)
+        hold_deadline = time.monotonic() + 6.0
+        while time.monotonic() < hold_deadline:
+            try:
+                nsp = nsp_payload(sniff.recv(4096))
+            except TimeoutError:
+                continue
+            if nsp is not None and FIRST in nsp:
+                raise RuntimeError("candidate retransmitted Data while XOFF was active")
+        print("flow-inject: XOFF suppressed due retransmit", flush=True)
+
         send_ls(send, candidate, src_mac, src_node, dst_node,
                 local_link, remote_link, 2, 2)
         print("flow-inject: in-order XON sent", flush=True)
@@ -141,24 +155,31 @@ def main() -> int:
                 local_link, remote_link, 1, 1)
         print("flow-inject: stale XOFF sent", flush=True)
 
+        seen_retransmit = False
         seen_xon = False
         seen_after_dup = False
         deadline = time.monotonic() + 10.0
         while time.monotonic() < deadline:
-            nsp = nsp_payload(sniff.recv(4096))
+            try:
+                nsp = nsp_payload(sniff.recv(4096))
+            except TimeoutError:
+                continue
             if nsp is None:
                 continue
+            if FIRST in nsp:
+                seen_retransmit = True
             if XON_TAG in nsp:
                 seen_xon = True
             if AFTER_DUP in nsp:
                 seen_after_dup = True
-            if seen_xon and seen_after_dup:
+            if seen_retransmit and seen_xon and seen_after_dup:
                 print(
                     "flow-inject: pass xoff=1 future_xon_blocked=1 "
+                    "xoff_retransmit_suppressed=1 xon_retransmit_resumed=1 "
                     "stale_xoff_ignored=1 resumed=1"
                 )
                 return 0
-        raise RuntimeError("candidate did not preserve XON state after reordered flow control")
+        raise RuntimeError("candidate did not resume queued Data after XON")
     finally:
         sniff.close()
         send.close()
