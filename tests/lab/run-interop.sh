@@ -388,6 +388,11 @@ if [[ "$reference" == pydecnet ]]; then
             tail -260 "$ref1_log" >&2 || true
             exit 1
         fi
+        if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-FLOW-CONNECTED session=$session scenario=$scenario" 20 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+            tail -340 "$candidate_log" >&2 || true
+            tail -280 "$ref1_log" >&2 || true
+            exit 1
+        fi
         flow_fault_log="$work/nsp-flow-fault.log"
         : > "$flow_fault_log"
         sudo tc qdisc add dev "$tap_reference" clsact

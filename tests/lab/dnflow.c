@@ -89,6 +89,9 @@ int main(int argc, char **argv)
         close(fd);
         return 1;
     }
+    printf("DNIV-INTEROP-FLOW-CONNECTED session=%s scenario=%s peer=%s\n",
+           argv[2], argv[3], argv[1]);
+    sleep(3);
 
     if (send_record(fd, "DNIV-FLOW-FIRST", 0)) {
         perror("send(flow first)");
