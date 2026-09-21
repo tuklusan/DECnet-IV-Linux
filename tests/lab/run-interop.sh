@@ -511,6 +511,29 @@ if [[ "$reference" == pydecnet ]]; then
             cat "$intloss_fault_log" >&2 || true
             exit 1
         fi
+
+        if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-INTFLOW-READY session=$session scenario=$scenario" 30 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+            tail -440 "$candidate_log" >&2 || true
+            tail -380 "$ref1_log" >&2 || true
+            exit 1
+        fi
+        if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-INTFLOW-CONNECTED session=$session scenario=$scenario" 20 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+            tail -440 "$candidate_log" >&2 || true
+            tail -380 "$ref1_log" >&2 || true
+            exit 1
+        fi
+        if ! timeout 35s sudo python3 "$script_dir/inject-nsp-intflow.py" \
+            "$bridge" "$bridge" "$candidate_mac" \
+            "$ref_area.$ref_node" "$area.$node"; then
+            tail -460 "$candidate_log" >&2 || true
+            tail -400 "$ref1_log" >&2 || true
+            exit 1
+        fi
+        if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-INTFLOW-PASS session=$session scenario=$scenario" 25 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+            tail -460 "$candidate_log" >&2 || true
+            tail -400 "$ref1_log" >&2 || true
+            exit 1
+        fi
     fi
 
     exhaust_marker="DNIV-INTEROP-EXHAUST-READY session=$session scenario=$scenario"
