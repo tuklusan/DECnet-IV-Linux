@@ -566,3 +566,6 @@ Exact-SHA fast socket acceptance for lost-Disconnect-Confirm candidate `4c2e3f8f
 
 
 Disconnect-control exhaustion now extends the accepted transient loss proof. On a fresh MIRROR link, the host suppresses every PyDECnet-to-candidate unicast confirmation before native userspace calls SHUT_RDWR. The candidate must consume its five-attempt control retransmission budget, terminate the link with local reason 39 (node unreachable), expose that reason through DSO_DISDATA plus POLLERR|POLLHUP, and then recover on a fresh MIRROR connection after the fault is removed. This distinguishes terminal DI retry exhaustion from the previously accepted one-retry recovery path. Product behavior is unchanged. Next: exact-SHA fast socket acceptance, then keepalive/inactivity and remaining PP-06 negatives.
+
+
+Exact-SHA fast socket acceptance for Disconnect Initiate exhaustion candidate `b0beba6fa23aa20d4d4e79f4f9cf28cb97050ea0` is green: Repository Policy `35648395182`, Build Bootstrap `35648447878`, Project State Gate `35648450806`, E1 `35648453673` on x86_64 and ARM64, and x64 PyDECnet L1 interoperability `35648456285`. With every peer confirmation suppressed, the native link consumed its five-attempt DI control budget, exposed reason 39 through DSO_DISDATA with POLLERR|POLLHUP, and recovered on a fresh MIRROR connection after fault removal.
