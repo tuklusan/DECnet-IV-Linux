@@ -425,6 +425,49 @@ if [[ "$reference" == pydecnet ]]; then
             cat "$flow_fault_log" >&2 || true
             exit 1
         fi
+
+        if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-ACKRANGE-READY session=$session scenario=$scenario" 30 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+            tail -360 "$candidate_log" >&2 || true
+            tail -300 "$ref1_log" >&2 || true
+            exit 1
+        fi
+        if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-ACKRANGE-CONNECTED session=$session scenario=$scenario" 20 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+            tail -360 "$candidate_log" >&2 || true
+            tail -300 "$ref1_log" >&2 || true
+            exit 1
+        fi
+        ackrange_fault_log="$work/nsp-ackrange-fault.log"
+        : > "$ackrange_fault_log"
+        sudo tc qdisc add dev "$tap_reference" clsact
+        LOSS_QDISC=1
+        sudo tc filter add dev "$tap_reference" ingress protocol all pref 10 flower \
+            src_mac "$reference_mac" dst_mac "$candidate_mac" action drop
+        printf 'fault=reference-unicast-drop-ackrange source=%s destination=%s\n' \
+            "$reference_mac" "$candidate_mac" >> "$ackrange_fault_log"
+        if ! timeout 30s sudo python3 "$script_dir/inject-nsp-ackrange.py" \
+            "$bridge" "$bridge" "$candidate_mac" \
+            "$ref_area.$ref_node" "$area.$node"; then
+            tail -380 "$candidate_log" >&2 || true
+            tail -320 "$ref1_log" >&2 || true
+            sudo tc -s filter show dev "$tap_reference" ingress >> "$ackrange_fault_log" 2>&1 || true
+            cat "$ackrange_fault_log" >&2 || true
+            exit 1
+        fi
+        ackrange_stats=$(sudo tc -s filter show dev "$tap_reference" ingress)
+        printf '%s\n' "$ackrange_stats" >> "$ackrange_fault_log"
+        if ! printf '%s\n' "$ackrange_stats" | grep -Eq 'Sent [0-9]+ bytes [1-9][0-9]* pkt'; then
+            echo "interop: NSP ack-range fault matched no reference replies" >&2
+            cat "$ackrange_fault_log" >&2
+            exit 1
+        fi
+        sudo tc qdisc del dev "$tap_reference" clsact
+        unset LOSS_QDISC
+        if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-ACKRANGE-PASS session=$session scenario=$scenario" 20 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+            tail -380 "$candidate_log" >&2 || true
+            tail -320 "$ref1_log" >&2 || true
+            cat "$ackrange_fault_log" >&2 || true
+            exit 1
+        fi
     fi
 
     exhaust_marker="DNIV-INTEROP-EXHAUST-READY session=$session scenario=$scenario"
