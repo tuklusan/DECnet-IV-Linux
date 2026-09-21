@@ -394,3 +394,6 @@ The next test-only successor adds an x64 PyDECnet L1 reserved-port wire proof af
 
 
 Reserved-port proof candidate `dda5f6d747ea026d4735280ed1ae2ef0a2e12bb8` failed only interop job `106189987949`: 320 CIs were injected, but the live PyDECnet peer was receiving candidate rejects and confirming them, so slots recycled before persistent table exhaustion and no reason-1 DC appeared in PCAP. The harness now isolates candidate-to-peer unicast on TAP egress only during the synthetic burst, requires a nonzero tc match counter, preserves bridge capture of candidate responses, and removes the filter immediately after the candidate observes the burst. No product change. Next: exact-SHA fast socket acceptance.
+
+
+The peer-isolation rerun `25a3e47fedc5b87ecac6d09aef795ce340e2f2be` exposed the preceding injector defect: synthetic short-data used the host bridge MAC, so the candidate Routing Layer correctly rejected it before NSP because data source identity must map to an UP DECnet adjacency. The injector now uses the canonical DECnet MAC derived from the embedded PyDECnet source node. Combined with the TAP-egress reply isolation, this should both admit the synthetic CIs and prevent the live peer from recycling connection slots during the burst. No product change. Next: exact-SHA fast socket acceptance.

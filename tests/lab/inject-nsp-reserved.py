@@ -19,7 +19,6 @@ import socket
 import struct
 import sys
 import time
-from pathlib import Path
 
 ETHERTYPE = 0x6003
 UNKNOWN_LOCAL = 0x6A42
@@ -74,7 +73,12 @@ def main() -> int:
     candidate_mac = mac(candidate_mac_s)
     src_node = nodeaddr(src_s)
     dst_node = nodeaddr(dst_s)
-    src_mac = mac(Path(f"/sys/class/net/{iface}/address").read_text().strip())
+    # Data packets are accepted only from an UP DECnet adjacency, and the
+    # Ethernet source must therefore be the canonical DECnet MAC for the
+    # embedded source node.  The host bridge MAC is deliberately not valid
+    # DECnet source identity.
+    src_mac = bytes((0xAA, 0x00, 0x04, 0x00,
+                     src_node & 0xFF, (src_node >> 8) & 0xFF))
 
     sock = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.htons(ETHERTYPE))
     try:
