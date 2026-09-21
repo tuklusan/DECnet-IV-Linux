@@ -26,6 +26,7 @@ LONG_DATA = 0x06
 DATA_CLASS_MASK = 0xC7
 FIRST = b"DNIV-FLOW-FIRST"
 XON_TAG = b"DNIV-FLOW-XON"
+AFTER_DUP = b"DNIV-FLOW-AFTER-DUP"
 
 
 def nodeaddr(text: str) -> int:
@@ -127,17 +128,37 @@ def main() -> int:
         send_ls(send, candidate, src_mac, src_node, dst_node,
                 local_link, remote_link, 1, 1)
         print("flow-inject: XOFF sent", flush=True)
-        time.sleep(4.0)
+        time.sleep(1.0)
+        send_ls(send, candidate, src_mac, src_node, dst_node,
+                local_link, remote_link, 3, 2)
+        print("flow-inject: future XON sent", flush=True)
+        time.sleep(3.0)
         send_ls(send, candidate, src_mac, src_node, dst_node,
                 local_link, remote_link, 2, 2)
+        print("flow-inject: in-order XON sent", flush=True)
+        time.sleep(0.5)
+        send_ls(send, candidate, src_mac, src_node, dst_node,
+                local_link, remote_link, 1, 1)
+        print("flow-inject: stale XOFF sent", flush=True)
 
+        seen_xon = False
+        seen_after_dup = False
         deadline = time.monotonic() + 10.0
         while time.monotonic() < deadline:
             nsp = nsp_payload(sniff.recv(4096))
-            if nsp is not None and XON_TAG in nsp:
-                print("flow-inject: pass xoff=1 xon=1 resumed=1")
+            if nsp is None:
+                continue
+            if XON_TAG in nsp:
+                seen_xon = True
+            if AFTER_DUP in nsp:
+                seen_after_dup = True
+            if seen_xon and seen_after_dup:
+                print(
+                    "flow-inject: pass xoff=1 future_xon_blocked=1 "
+                    "stale_xoff_ignored=1 resumed=1"
+                )
                 return 0
-        raise RuntimeError("candidate did not resume Data after XON")
+        raise RuntimeError("candidate did not preserve XON state after reordered flow control")
     finally:
         sniff.close()
         send.close()
