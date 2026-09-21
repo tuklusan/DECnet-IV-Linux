@@ -216,6 +216,17 @@ static void test_duplicate_ci_state(void)
     assert(!dniv_nsp_duplicate_ci_reack_allowed(DNIV_NSP_ST_DI));
 }
 
+static void test_ack_conn_state(void)
+{
+    assert(dniv_nsp_ack_conn_expected(DNIV_NSP_ST_CI));
+    assert(!dniv_nsp_ack_conn_expected(DNIV_NSP_ST_CLOSED));
+    assert(!dniv_nsp_ack_conn_expected(DNIV_NSP_ST_CD));
+    assert(!dniv_nsp_ack_conn_expected(DNIV_NSP_ST_CR));
+    assert(!dniv_nsp_ack_conn_expected(DNIV_NSP_ST_CC));
+    assert(!dniv_nsp_ack_conn_expected(DNIV_NSP_ST_RUN));
+    assert(!dniv_nsp_ack_conn_expected(DNIV_NSP_ST_DI));
+}
+
 static void test_cc_receive_state(void)
 {
     assert(dniv_nsp_cc_receive_action(DNIV_NSP_ST_CI) ==
@@ -277,6 +288,7 @@ int main(void)
     test_retransmit_flow();
     test_ack_holdoff();
     test_duplicate_ci_state();
+    test_ack_conn_state();
     test_cc_receive_state();
     test_sequence();
     return 0;

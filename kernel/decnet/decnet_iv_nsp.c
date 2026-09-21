@@ -1098,9 +1098,13 @@ int dniv_nsp_receive(__u16 remote_node, const __u8 *wire, __u16 wire_len)
     notify_link = conn->local_link;
     switch (pkt.type) {
     case DNIV_NSP_ACK_CONN:
-        if (conn->state != DNIV_NSP_ST_CI) {
+        if (!dniv_nsp_ack_conn_expected(conn->state)) {
+            /*
+             * NSP port mapping treats Connect Ack as valid only in CI.
+             * In every other state the packet is silently discarded.
+             */
             spin_unlock_irqrestore(&dniv_nsp_lock, flags);
-            return -EINVAL;
+            return 0;
         }
         dniv_nsp_clear_control_locked(conn);
         dniv_nsp_set_state_locked(conn, DNIV_NSP_ST_CD, jiffies);

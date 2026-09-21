@@ -81,7 +81,7 @@ Implementation order:
 | Phase 4 accepted protocol candidate | `6c185b6d01f8a57ee9f0ea6a6c37d7112ddb77d2` |
 | Phase 4 closure commit | `571333bfd7aaa8b2fcc88715c1d61442af151f3c` |
 | Phase 4 tag | `PHASE-4-COMPLETE` |
-| Latest accepted Phase 5 candidate | `33385c8abce1533ab602bb191404e19961b740df` |
+| Latest accepted Phase 5 candidate | `1d39475fd258f877063809f26b0cc6c7a9072bef` |
 | Route20 pin | `a9ef7c0b7f875f0dd2e8abaf11213798a8e4474c` |
 | PyDECnet live pin | `295938c76c956a70957f4cf96b05685f555b2a18` |
 | VM lifecycle | direct QEMU/QMP |
@@ -481,3 +481,9 @@ Pinned PyDECnet restarts RUN inactivity on every received packet before handling
 Exact-SHA fast socket acceptance for inactivity-rearm candidate `136aedce9aa49f0344d2d082cc9c9057575507ff` is green: Repository Policy `35557146528`, Build Bootstrap `35557164398`, Project State Gate `35557165658`, E1 `35557167128` on x86_64 and ARM64, and x64 PyDECnet L1 interoperability `35557168496`.
 
 Receive-state cross-check found duplicate CI/RCI handling was still too broad. Pinned PyDECnet only re-ACKs an already-mapped incoming CI while the connection is CR or CC; once that link has advanced to RUN or a terminal state, the unexpected duplicate is discarded. Route20 agrees that RUN/default states do not emit a new Connect Ack. The candidate previously sent ACK_CONN for any remote-link match, including RUN/CLOSED. Duplicate CI/RCI re-ACK is now restricted to CR/CC, with all other mapped states discarded without Session re-notification or wire response. Shared unit coverage locks the state matrix. Next: exact-SHA fast socket acceptance, then continue receive-state loss negatives.
+
+
+
+Exact-SHA fast acceptance for duplicate-CI mapping candidate `1d39475fd258f877063809f26b0cc6c7a9072bef` is green: Repository Policy `35557627099`, Build Bootstrap `35557644703`, Project State Gate `35557646170`, E1 `35557647643` on x86_64 and ARM64, and x64 PyDECnet L1 interoperability `35557648866`.
+
+Receive-state mapping review found stale Connect Ack handling differed from the pinned PyDECnet NSP port-mapping rules. ACK_CONN is valid only while an outbound connection is in CI; once the connection has moved to CD, RUN, or any other state, the packet must be silently discarded. The candidate previously returned `EINVAL` for these stale/duplicate ACK_CONN packets. It now drops them without changing state or producing a response, while CI still clears the outstanding connect control and enters CD. Shared unit coverage locks the one-valid-state matrix. Next: exact-SHA fast socket acceptance, then continue receive-state and flow-control loss negatives.
