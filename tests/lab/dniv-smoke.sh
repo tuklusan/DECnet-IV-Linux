@@ -570,10 +570,12 @@ e4)
             fi
             echo "DNIV-E4-ROUTER-READY session=$session node=$name"
             # The E4 controller owns transit-router teardown after both
-            # endpoint evidence markers. Slow ARM64 TCG boot must not remove
-            # a router before the forwarding proof is complete.
-            sleep 600
-            poweroff_pass "DNIV-E4-PASS session=$session node=$name"
+            # endpoint evidence markers.  Do not put an independent lifetime
+            # on a transit router: slow ARM64 TCG boot/route convergence can
+            # legitimately outlive any fixed guest-local sleep.
+            while :; do
+                sleep 60
+            done
             ;;
         L2)
             modprobe decnet_iv default_area="$area" default_node="$node" default_name="$name" \
@@ -592,14 +594,12 @@ e4)
                 exit 1
             fi
             echo "DNIV-E4-ROUTER-READY session=$session node=$name"
-            # Six-guest hosted boots are intentionally unsynchronized. Keep
-            # transit routing alive through route propagation and endpoint
-            # evidence instead of racing a short fixed lifetime.
-            # The E4 controller owns transit-router teardown after both
-            # endpoint evidence markers. Six ARM64 TCG guests can have large
-            # boot skew, so no router may disappear on a short local timer.
-            sleep 600
-            poweroff_pass "DNIV-E4-PASS session=$session node=$name"
+            # Six-guest hosted boots are intentionally unsynchronized.
+            # The E4 controller owns transit-router teardown after endpoint
+            # evidence; keep this router alive until the controller stops it.
+            while :; do
+                sleep 60
+            done
             ;;
         *)
             echo "DNIV-E4-FAIL session=$session node=$name reason=bad-role"
