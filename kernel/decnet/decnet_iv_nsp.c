@@ -989,10 +989,13 @@ int dniv_nsp_receive(__u16 remote_node, const __u8 *wire, __u16 wire_len)
         }
         conn = dniv_nsp_find_remote_locked(remote_node, pkt.src);
         if (conn) {
+            bool reack = dniv_nsp_duplicate_ci_reack_allowed(conn->state);
             int ret;
 
             link = conn->local_link;
             spin_unlock_irqrestore(&dniv_nsp_lock, flags);
+            if (!reack)
+                return 0;
             memset(&reply, 0, sizeof(reply));
             reply.type = DNIV_NSP_ACK_CONN;
             reply.dst = pkt.src;

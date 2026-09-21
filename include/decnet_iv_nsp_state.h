@@ -80,6 +80,12 @@ dniv_nsp_cc_receive_action(enum dniv_nsp_conn_state state)
     return DNIV_NSP_CC_RX_INVALID;
 }
 
+static inline int
+dniv_nsp_duplicate_ci_reack_allowed(enum dniv_nsp_conn_state state)
+{
+    return state == DNIV_NSP_ST_CR || state == DNIV_NSP_ST_CC;
+}
+
 static inline __u16 dniv_nsp_seq_norm(__u32 v)
 {
     return (__u16)(v & 0x0fffU);
