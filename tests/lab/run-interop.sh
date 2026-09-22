@@ -314,6 +314,22 @@ fi
 candidate_common="root=LABEL=dniv-root rootfstype=ext4 rw dniv.interop=1 dniv.reference=$reference dniv.area=$area dniv.node=$node dniv.name=$name dniv.peer_node=$ref_area.$ref_node dniv.scenario=$scenario dniv.session=$session dniv.timer_proof=$timer_proof dniv.reserved_proof=$reserved_proof dniv.flow_proof=$flow_proof"
 start_vm "candidate-$scenario" "$candidate_disk" "$tap_candidate" "$candidate_hw" "$candidate_log" "$candidate_common" & CANDIDATE_PID=$!
 if [[ "$reference" == pydecnet ]]; then
+    if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-CTERM-READY session=$session scenario=$scenario" 30 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+        tail -220 "$candidate_log" >&2 || true
+        tail -160 "$ref1_log" >&2 || true
+        exit 1
+    fi
+    if ! timeout 30s env PYTHONPATH="$host_pydecnet/pydecnet" python3 \
+        "$script_dir/pydecnet-cterm.py" "$host_pydecnet_api" "$ref_name"; then
+        tail -240 "$candidate_log" >&2 || true
+        tail -180 "$ref1_log" >&2 || true
+        exit 1
+    fi
+    if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-CTERM-PASS session=$session scenario=$scenario" 30 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+        tail -240 "$candidate_log" >&2 || true
+        tail -180 "$ref1_log" >&2 || true
+        exit 1
+    fi
     if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-NML-READY session=$session scenario=$scenario" "$timeout_seconds" "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
         tail -220 "$candidate_log" >&2 || true
         tail -160 "$ref1_log" >&2 || true
@@ -363,22 +379,6 @@ if [[ "$reference" == pydecnet ]]; then
     if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-NML-RESTART-PASS session=$session scenario=$scenario" 30 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
         tail -220 "$candidate_log" >&2 || true
         tail -160 "$ref1_log" >&2 || true
-        exit 1
-    fi
-    if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-CTERM-READY session=$session scenario=$scenario" 30 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
-        tail -220 "$candidate_log" >&2 || true
-        tail -160 "$ref1_log" >&2 || true
-        exit 1
-    fi
-    if ! timeout 30s env PYTHONPATH="$host_pydecnet/pydecnet" python3 \
-        "$script_dir/pydecnet-cterm.py" "$host_pydecnet_api" "$ref_name"; then
-        tail -240 "$candidate_log" >&2 || true
-        tail -180 "$ref1_log" >&2 || true
-        exit 1
-    fi
-    if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-CTERM-PASS session=$session scenario=$scenario" 30 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
-        tail -240 "$candidate_log" >&2 || true
-        tail -180 "$ref1_log" >&2 || true
         exit 1
     fi
     if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-MIRROR-READY session=$session scenario=$scenario" 30 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
