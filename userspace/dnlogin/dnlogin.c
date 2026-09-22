@@ -254,10 +254,12 @@ static int read_terminal(unsigned char *out, size_t cap, size_t requested,
         }
         out[used++] = ch;
         if (echo && isatty(STDIN_FILENO)) {
-            if (ch == '\r')
-                (void)write(STDOUT_FILENO, "\r\n", 2);
-            else
-                (void)write(STDOUT_FILENO, &ch, 1);
+            if (ch == '\r') {
+                if (write(STDOUT_FILENO, "\r\n", 2) != 2)
+                    return -1;
+            } else if (write(STDOUT_FILENO, &ch, 1) != 1) {
+                return -1;
+            }
         }
         if (is_terminator(ch))
             break;
