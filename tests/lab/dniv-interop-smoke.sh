@@ -299,7 +299,18 @@ if [ "$reference" = pydecnet ]; then
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=cterm-foundation"
         exit 1
     fi
-    echo "DNIV-INTEROP-CTERM-PASS session=$session scenario=$scenario node=$name peer=$peer_node"
+    if ! cterm_output=$(printf 'phase7\\r' | /usr/local/sbin/dnlogin "$peer_node" 2>&1); then
+        printf '%s\\n' "$cterm_output"
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=cterm-interactive"
+        exit 1
+    fi
+    printf '%s\\n' "$cterm_output"
+    if ! printf '%s\\n' "$cterm_output" | grep -Fq "CTERM-READY" ||
+       ! printf '%s\\n' "$cterm_output" | grep -Fq "CTERM-DONE"; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=cterm-write-read"
+        exit 1
+    fi
+    echo "DNIV-INTEROP-CTERM-PASS session=$session scenario=$scenario node=$name peer=$peer_node mode=interactive"
     /usr/local/sbin/dnnml --once &
     nml_pid=$!
     sleep 2
