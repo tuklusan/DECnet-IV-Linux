@@ -351,6 +351,41 @@ def main() -> int:
                     f"{sorted(seen_counter_circuits)!r}"
                 )
 
+        malformed_requests = (
+            b"\x13\x10\x00\x00\x00",
+            b"\x14\x10",
+            b"\x14\x17\xff",
+            b"\x14\x13\x05ETH",
+        )
+        for malformed in malformed_requests:
+            connection.data(malformed)
+            response = connection.recv()
+            if response.type != "data" or bytes(response) != b"\xff":
+                raise RuntimeError(
+                    f"malformed NICE request was not rejected: "
+                    f"{malformed!r} -> {bytes(response)!r}"
+                )
+
+        connection.data(STATUS_REQUEST)
+        response = connection.recv()
+        if response.type != "data":
+            raise RuntimeError(
+                f"NML session lost after malformed NICE input: "
+                f"{response.type!r}"
+            )
+        recovered = bytes(response)
+        if (len(recovered) < 20 or
+                recovered[:4] != b"\x01\xff\xff\x00"):
+            raise RuntimeError(
+                f"bad post-malformed NICE status response: {recovered!r}"
+            )
+        recovered_name_len = recovered[6] & 0x7f
+        recovered_off = 7 + recovered_name_len
+        if recovered[recovered_off:recovered_off + 4] != b"\x00\x00\x81\x00":
+            raise RuntimeError(
+                f"NICE state missing after malformed input: {recovered!r}"
+            )
+
         connection.data(CIRCUIT_COUNTERS_REQUEST)
         response = connection.recv()
         if response.type != "data":
@@ -405,6 +440,7 @@ def main() -> int:
         f"multi_node_reads=known,active,adjacent "
         f"multi_circuit_reads=known,active "
         f"multi_circuit_counters=known,active "
+        f"malformed_nice_recovery={len(malformed_requests)} "
         f"circuit_rx_bytes={circuit_rx_bytes} "
         f"circuit_tx_bytes={circuit_tx_bytes} "
         f"circuit_rx_blocks={circuit_rx_blocks} "

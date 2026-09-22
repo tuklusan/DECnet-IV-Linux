@@ -735,3 +735,6 @@ Phase 6 plural circuit coverage now includes READ CIRCUIT counters for Known (-1
 
 
 Exact-SHA fast acceptance for plural NICE circuit-counter candidate `e954ee76c70c734a61c475a7a9f1b56312749d23` is green: Repository Policy `35693426128`, Build Bootstrap `35693454698`, Project State Gate `35693456129`, Python QEMU VM Lab `35693457418` on x86_64 and ARM64, and x64 PyDECnet L1 interoperability `35693458896`. Known and Active multi-entity circuit counter reads included live ETH-0 with nonzero standard receive/transmit byte and block counters.
+
+
+Phase 6 PP-07 negative coverage now injects malformed NICE requests over an established object-19 session: wrong function, truncated node request, unsupported entity class and inconsistent circuit-name length. Each must return NICE -1 without closing or corrupting the management session, after which a valid executor status read must still succeed with State=On. Product behavior is unchanged; this locks malformed-management rejection and session recovery against the independent peer path. Next: exact-SHA fast acceptance, then daemon/session restart and concurrent-management coverage.
