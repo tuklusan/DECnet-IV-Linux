@@ -741,3 +741,6 @@ Phase 6 PP-07 negative coverage now injects malformed NICE requests over an esta
 
 
 Exact-SHA fast acceptance for malformed NICE session-recovery candidate `7d34c5a016b8e79909625d8ee8c165b562e5f962` is green: Repository Policy `35694162276`, Build Bootstrap `35694195705`, Project State Gate `35694197206`, Python QEMU VM Lab `35694198772` on x86_64 and ARM64, and x64 PyDECnet L1 interoperability `35694200328`. Malformed NICE requests returned -1 without terminating the object-19 session, and a subsequent valid executor status read succeeded.
+
+
+Phase 6 daemon/session robustness now adds concurrent and restart coverage for object 19. The NML daemon can fork independent management-session workers; normal daemon mode reaps children automatically and bounded `--sessions N` mode waits for every child and propagates failure. The live pinned-PyDECnet proof holds three simultaneous NICE sessions open, requires valid executor status from all three, then restarts the daemon and reruns the full NICE management suite on a fresh session. This covers PP-07 many-client isolation plus daemon/session restart without weakening the existing malformed-request recovery proof. Next: exact-SHA fast acceptance, then continue Session Control/NICE management operations.

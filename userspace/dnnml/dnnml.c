@@ -12,14 +12,19 @@
 // patent, trademark, and governing-law provisions.
 // ============================================================================
 
+#define _POSIX_C_SOURCE 200809L
+
 #include <errno.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 #include <sys/time.h>
 #include <unistd.h>
 
@@ -684,15 +689,88 @@ static int serve_connection(int fd)
     }
 }
 
+#define DNIV_NML_MAX_BOUNDED_SESSIONS 32U
+
+static int serve_forked_sessions(int listener, unsigned int limit)
+{
+    pid_t children[DNIV_NML_MAX_BOUNDED_SESSIONS];
+    unsigned int accepted = 0U;
+    unsigned int i;
+    int failed = 0;
+
+    for (;;) {
+        pid_t child;
+        int fd;
+
+        if (limit && accepted >= limit)
+            break;
+        fd = accept(listener, NULL, NULL);
+        if (fd < 0) {
+            if (errno == EINTR)
+                continue;
+            perror("dnnml: accept");
+            return -1;
+        }
+
+        child = fork();
+        if (child < 0) {
+            perror("dnnml: fork");
+            close(fd);
+            return -1;
+        }
+        if (child == 0) {
+            int ret;
+
+            close(listener);
+            ret = serve_connection(fd);
+            close(fd);
+            if (!ret)
+                puts("dnnml: served NICE management session");
+            _exit(ret ? 1 : 0);
+        }
+
+        close(fd);
+        if (limit)
+            children[accepted] = child;
+        accepted++;
+    }
+
+    for (i = 0U; i < accepted; i++) {
+        int status = 0;
+        pid_t waited;
+
+        do {
+            waited = waitpid(children[i], &status, 0);
+        } while (waited < 0 && errno == EINTR);
+        if (waited != children[i] || !WIFEXITED(status) ||
+            WEXITSTATUS(status) != 0)
+            failed = 1;
+    }
+    return failed ? -1 : 0;
+}
+
 int main(int argc, char **argv)
 {
+    unsigned int sessions = 0U;
     int once = 0;
     int listener;
 
-    if (argc == 2 && strcmp(argv[1], "--once") == 0)
+    if (argc == 2 && strcmp(argv[1], "--once") == 0) {
         once = 1;
-    else if (argc != 1) {
-        fprintf(stderr, "usage: %s [--once]\n", argv[0]);
+    } else if (argc == 3 && strcmp(argv[1], "--sessions") == 0) {
+        unsigned long parsed;
+        char *end = NULL;
+
+        errno = 0;
+        parsed = strtoul(argv[2], &end, 10);
+        if (errno || end == argv[2] || *end != '\0' || parsed == 0U ||
+            parsed > DNIV_NML_MAX_BOUNDED_SESSIONS) {
+            fprintf(stderr, "dnnml: invalid session count\n");
+            return 2;
+        }
+        sessions = (unsigned int)parsed;
+    } else if (argc != 1) {
+        fprintf(stderr, "usage: %s [--once | --sessions COUNT]\n", argv[0]);
         return 2;
     }
 
@@ -703,6 +781,19 @@ int main(int argc, char **argv)
         return 1;
     }
     puts("dnnml: ready object=19 version=4.0.0");
+
+    if (!once) {
+        int ret;
+
+        if (!sessions && signal(SIGCHLD, SIG_IGN) == SIG_ERR) {
+            perror("dnnml: signal");
+            close(listener);
+            return 1;
+        }
+        ret = serve_forked_sessions(listener, sessions);
+        close(listener);
+        return ret ? 1 : 0;
+    }
 
     for (;;) {
         int fd = accept(listener, NULL, NULL);
@@ -723,8 +814,7 @@ int main(int argc, char **argv)
             return 1;
         }
         puts("dnnml: served NICE management session");
-        if (once)
-            break;
+        break;
     }
 
     close(listener);

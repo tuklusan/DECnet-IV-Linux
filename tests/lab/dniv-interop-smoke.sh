@@ -228,6 +228,32 @@ if [ "$reference" = pydecnet ]; then
         exit 1
     fi
     echo "DNIV-INTEROP-NML-PASS session=$session scenario=$scenario node=$name peer=$peer_node"
+    /usr/local/sbin/dnnml --sessions 3 &
+    nml_pid=$!
+    sleep 1
+    if ! kill -0 "$nml_pid" 2>/dev/null; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=nml-concurrent-listener-start"
+        exit 1
+    fi
+    echo "DNIV-INTEROP-NML-CONCURRENT-READY session=$session scenario=$scenario node=$name peer=$peer_node"
+    if ! wait "$nml_pid"; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=nml-concurrent-sessions"
+        exit 1
+    fi
+    echo "DNIV-INTEROP-NML-CONCURRENT-PASS session=$session scenario=$scenario node=$name peer=$peer_node"
+    /usr/local/sbin/dnnml --once &
+    nml_pid=$!
+    sleep 1
+    if ! kill -0 "$nml_pid" 2>/dev/null; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=nml-restart-listener-start"
+        exit 1
+    fi
+    echo "DNIV-INTEROP-NML-RESTART-READY session=$session scenario=$scenario node=$name peer=$peer_node"
+    if ! wait "$nml_pid"; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=nml-restart-session"
+        exit 1
+    fi
+    echo "DNIV-INTEROP-NML-RESTART-PASS session=$session scenario=$scenario node=$name peer=$peer_node"
     if ! /usr/local/sbin/dnmrr "$peer_node"; then
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=nsp-mirror"
         exit 1
