@@ -707,3 +707,6 @@ Phase 6 now adds the first repository-owned Phase IV NICE codec boundary. It par
 
 
 The first NICE-codec acceptance attempt on `40e7bf5726cc66a7190cd62bceb8519358c3a3da` failed only in Build Bootstrap `35677719942` on both architectures. The codec produced the correct 30-byte reply (11-byte success/entity prefix plus the 19-byte Identification parameter), while the new host test incorrectly asserted 26 bytes. The expected length is corrected to 30; protocol/codecs are unchanged and the failed build remains recorded.
+
+
+Phase 6 now exposes NICE through the standard Session Control object 19 boundary. New userspace daemon `dnnml` binds native `AF_DECnet` object 19, negotiates NICE version 4.0.0 in Session connect data, reads the live executor identity from the kernel management UAPI, and answers the accepted READ NODE executor request with the repository-owned NICE codec. Independent PyDECnet now opens object 19, verifies the version accept data, sends the exact five-byte executor request, and validates the returned address/name plus Identification parameter. This is the first end-to-end remote NICE/NML path; additional node/circuit/link information and counters follow. Next: exact-SHA fast acceptance, then extend NICE READ NODE information from current management snapshots.
