@@ -92,6 +92,8 @@ make -C /usr/src/decnet-iv-linux/userspace/dnnml clean all
 install -m 0755 /usr/src/decnet-iv-linux/userspace/dnnml/dnnml /usr/local/sbin/dnnml
 make -C /usr/src/decnet-iv-linux/userspace/dnnice clean all
 install -m 0755 /usr/src/decnet-iv-linux/userspace/dnnice/dnnice /usr/local/sbin/dnnice
+make -C /usr/src/decnet-iv-linux/userspace/dnmirror clean all
+install -m 0755 /usr/src/decnet-iv-linux/userspace/dnmirror/dnmirror /usr/local/sbin/dnmirror
 cc -O2 -std=c11 -Wall -Wextra -Werror \
     -o /usr/local/sbin/dnraw /usr/src/decnet-iv-linux/tests/lab/dnraw.c
 cc -I/usr/src/decnet-iv-linux/include/uapi -O2 -std=c11 -Wall -Wextra -Werror \
@@ -183,6 +185,7 @@ sudo test "$(sudo cat "$mnt/etc/dniv-candidate-sha")" = "$source_commit"
 sudo test -s "$mnt/usr/local/sbin/dnctl"
 sudo test -s "$mnt/usr/local/sbin/dnnml"
 sudo test -s "$mnt/usr/local/sbin/dnnice"
+sudo test -s "$mnt/usr/local/sbin/dnmirror"
 sudo test -s "$mnt/usr/local/sbin/dnraw"
 sudo test -s "$mnt/usr/local/sbin/dnmrr"
 sudo test -s "$mnt/usr/local/sbin/dnloss"
