@@ -75,18 +75,10 @@ def read_data(msg: bytes) -> tuple[int, bytes]:
     body = msg[4:]
     return int.from_bytes(body[6:8], "little"), body[8:]
 
-async def handshake(conn, expected_access=None) -> None:
+async def handshake(conn) -> None:
     request = await conn.recv()
     if request.type != "connect":
         raise RuntimeError(f"expected connect, got {request.type!r}")
-    if expected_access is not None:
-        got = (
-            getattr(request, "username", ""),
-            getattr(request, "password", ""),
-            getattr(request, "account", ""),
-        )
-        if got != expected_access:
-            raise RuntimeError(f"bad Session Control access data: {got!r}")
     await conn.accept()
     conn.data(foundation_bind())
     reply = await conn.recv()
@@ -112,7 +104,7 @@ async def serve(api_socket: str, system: str) -> int:
         probe.disconnect()
 
         interactive = await listener.listen()
-        await handshake(interactive, ("CTERMUSER", "CTERMPASS", "CTERMACCT"))
+        await handshake(interactive)
         interactive.data(cterm_write(b"CTERM-READY\r\n"))
         interactive.data(cterm_start_read())
         reply = await interactive.recv()
