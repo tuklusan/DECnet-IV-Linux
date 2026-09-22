@@ -743,3 +743,6 @@ Exact-SHA fast acceptance for NICE circuit-codec candidate `cf19a74a95ba75849f26
 
 
 Phase 6 now wires READ CIRCUIT status to live kernel adjacency state. The object-19 server maps logical circuit names ETH-N to distinct active kernel interfaces from DNIV_IOC_GET_ADJACENCY, requires an UP adjacency, and reports the live negotiated block size rather than a fixture value. The reciprocal pinned-PyDECnet management proof now reads ETH-0 on the same object-19 session after executor characteristics/status and requires State=On plus a sane live Block Size. Next: exact-SHA fast acceptance, then add adjacency/node information and management counters.
+
+
+Exact-SHA fast acceptance for live NICE circuit-status candidate `da0b4864741ce5220a2b7d7743631a479a871957` is green: Repository Policy `35685198705`, Build Bootstrap `35685229625`, Project State Gate `35685231343`, Python QEMU VM Lab `35685233059` on x86_64 and ARM64, and x64 PyDECnet L1 interoperability `35685234915`. The reciprocal object-19 session validated executor characteristics/status plus live `ETH-0` State=On and kernel-adjacency Block Size.
