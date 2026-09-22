@@ -776,3 +776,6 @@ Phase 6 READ NODE status now handles a specific live remote node instead of only
 
 
 The first live remote READ NODE acceptance attempt failed only x64 PyDECnet interoperability run `35690144066`. The server returned NICE error -1 because the test exposed a representation mismatch in the userspace route lookup: L1 route UAPI entries carry the 10-bit node number in `destination`, with area supplied by `next_hop`, while the new NML code compared `destination` to the full 16-bit area.node address. The lookup now matches L1 node plus area correctly (and retains L2 area matching). Build/policy/state were green; product routing itself was not implicated. The failed run remains recorded.
+
+
+Exact-SHA fast acceptance for live remote READ NODE corrective candidate `cf5b3fe104c988a393e1fc33956d613bb5df24ff` is green: Repository Policy `35690455115`, Build Bootstrap `35690484236`, Project State Gate `35690486057`, Python QEMU VM Lab `35690487637` on x86_64 and ARM64, and x64 PyDECnet L1 interoperability `35690489477`. The reciprocal object-19 session successfully read the live adjacent remote node and validated Reachable state, node type, route cost/hops, circuit and next-node fields. Next: add multiple-entity known/active/adjacent node reads and management error semantics.
