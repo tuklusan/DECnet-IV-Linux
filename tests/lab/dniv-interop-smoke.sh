@@ -312,6 +312,19 @@ if [ "$reference" = pydecnet ]; then
         exit 1
     fi
     echo "DNIV-INTEROP-MIRROR-PASS session=$session scenario=$scenario node=$name peer=$peer_node"
+    /usr/local/sbin/dnmirror --once --name &
+    mirror_pid=$!
+    sleep 1
+    if ! kill -0 "$mirror_pid" 2>/dev/null; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=mirror-name-listener-start"
+        exit 1
+    fi
+    echo "DNIV-INTEROP-MIRROR-NAME-READY session=$session scenario=$scenario node=$name peer=$peer_node"
+    if ! wait "$mirror_pid"; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=mirror-name-session"
+        exit 1
+    fi
+    echo "DNIV-INTEROP-MIRROR-NAME-PASS session=$session scenario=$scenario node=$name peer=$peer_node"
     if ! /usr/local/sbin/dnmrr "$peer_node"; then
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=nsp-mirror"
         exit 1

@@ -23,6 +23,7 @@
 #include <linux/dn.h>
 
 #define DNIV_MIRROR_OBJECT 25U
+#define DNIV_MIRROR_NAME "MIRROR"
 #define DNIV_MIRROR_BACKLOG 8
 
 static __le16 cpu_to_le16_u(uint16_t value)
@@ -34,7 +35,7 @@ static __le16 cpu_to_le16_u(uint16_t value)
 #endif
 }
 
-static int make_listener(void)
+static int make_listener(int use_name)
 {
     static const unsigned char accept_data[] = { 0xffU, 0xffU };
     struct optdata_dn conndata;
@@ -54,7 +55,14 @@ static int make_listener(void)
 
     memset(&local, 0, sizeof(local));
     local.sdn_family = AF_DECnet;
-    local.sdn_objnum = DNIV_MIRROR_OBJECT;
+    if (use_name) {
+        size_t name_len = sizeof(DNIV_MIRROR_NAME) - 1U;
+
+        local.sdn_objnamel = cpu_to_le16_u((uint16_t)name_len);
+        memcpy(local.sdn_objname, DNIV_MIRROR_NAME, name_len);
+    } else {
+        local.sdn_objnum = DNIV_MIRROR_OBJECT;
+    }
     if (bind(fd, (struct sockaddr *)&local, sizeof(local)) < 0 ||
         listen(fd, DNIV_MIRROR_BACKLOG) < 0)
         goto fail;
@@ -104,17 +112,23 @@ static int serve_connection(int fd)
 
 int main(int argc, char **argv)
 {
+    int use_name = 0;
     int once = 0;
     int listener;
+    int i;
 
-    if (argc == 2 && strcmp(argv[1], "--once") == 0)
-        once = 1;
-    else if (argc != 1) {
-        fprintf(stderr, "usage: %s [--once]\n", argv[0]);
-        return 2;
+    for (i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--once") == 0) {
+            once = 1;
+        } else if (strcmp(argv[i], "--name") == 0) {
+            use_name = 1;
+        } else {
+            fprintf(stderr, "usage: %s [--once] [--name]\n", argv[0]);
+            return 2;
+        }
     }
 
-    listener = make_listener();
+    listener = make_listener(use_name);
     if (listener < 0) {
         perror("dnmirror: listen");
         return 1;

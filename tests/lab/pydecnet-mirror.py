@@ -29,18 +29,20 @@ PAYLOADS = (
 
 
 def main() -> int:
-    if len(sys.argv) != 4:
+    if len(sys.argv) not in (4, 5):
         raise SystemExit(
-            f"usage: {sys.argv[0]} API-SOCKET AREA.NODE PYDECNET-SYSTEM"
+            f"usage: {sys.argv[0]} API-SOCKET AREA.NODE PYDECNET-SYSTEM [OBJECT]"
         )
 
-    api_socket, destination, system = sys.argv[1:]
+    api_socket, destination, system = sys.argv[1:4]
+    selector = sys.argv[4] if len(sys.argv) == 5 else "25"
+    remuser = int(selector) if selector.isdigit() else selector
     connector = SimpleApiConnector(api_socket)
     try:
         connection, response = connector.connect(
             system=system,
             dest=destination,
-            remuser=25,
+            remuser=remuser,
             localuser="PYMIRROR",
         )
         if connection is None or response.type != "accept":
@@ -70,7 +72,7 @@ def main() -> int:
         connector.close()
 
     print(
-        f"pydecnet-mirror: pass peer={destination} object=25 "
+        f"pydecnet-mirror: pass peer={destination} object={selector} "
         f"records={len(PAYLOADS)} negative=1"
     )
     return 0
