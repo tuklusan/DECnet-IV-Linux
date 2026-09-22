@@ -429,9 +429,52 @@ static int append_characteristic(unsigned char *out, size_t cap,
     out[(*used)++] = (unsigned char)((selector >> 8) & 0x03U);
 
     switch (selector) {
+    case 0x0001U:
+    case 0x0002U:
+        value = 9600U;
+        width = 2U;
+        break;
     case 0x0003U:
         value = 8U;
         width = 2U;
+        break;
+    case 0x0004U:
+        value = 0U;
+        width = 1U;
+        break;
+    case 0x0005U:
+        value = 1U;
+        width = 2U;
+        break;
+    case 0x0006U:
+    case 0x0007U:
+    case 0x0008U:
+    case 0x000bU:
+    case 0x000cU:
+        value = 0U;
+        width = 1U;
+        break;
+    case 0x0101U:
+        value = 0U;
+        width = 1U;
+        break;
+    case 0x0102U:
+        value = 3U;
+        width = 2U;
+        break;
+    case 0x0103U:
+        if (*used + 6U > cap)
+            return -1;
+        memcpy(out + *used, "\x05VT200", 6U);
+        *used += 6U;
+        return 0;
+    case 0x0104U:
+    case 0x0105U:
+    case 0x0106U:
+    case 0x0107U:
+    case 0x0108U:
+        value = 1U;
+        width = 1U;
         break;
     case 0x0109U:
         value = 80U;
@@ -445,11 +488,41 @@ static int append_characteristic(unsigned char *out, size_t cap,
             value = ws.ws_row;
         width = 2U;
         break;
+    case 0x010bU:
+    case 0x010cU:
+    case 0x010dU:
+        value = 0U;
+        width = 2U;
+        break;
+    case 0x010eU:
+    case 0x010fU:
+    case 0x0110U:
+    case 0x0111U:
+        value = 1U;
+        width = 2U;
+        break;
+    case 0x0201U:
+    case 0x0203U:
+    case 0x0204U:
+    case 0x0209U:
+    case 0x020aU:
+        value = 0U;
+        width = 1U;
+        break;
     case 0x0205U:
         value = 1U;
         if (isatty(STDIN_FILENO) && !tcgetattr(STDIN_FILENO, &tio))
             value = (tio.c_lflag & ECHO) ? 1U : 0U;
         width = 1U;
+        break;
+    case 0x0206U:
+    case 0x0207U:
+        value = 1U;
+        width = 1U;
+        break;
+    case 0x0208U:
+        value = 1U;
+        width = 2U;
         break;
     default:
         return -1;

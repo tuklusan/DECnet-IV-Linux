@@ -64,7 +64,11 @@ def cterm_check_input() -> bytes:
     return common(bytes((CTERM_CHECK_INPUT, 0)))
 
 def cterm_read_characteristics() -> bytes:
-    selectors = (0x0003, 0x0109, 0x010A, 0x0205)
+    selectors = (
+        0x0001, 0x0002, 0x0003, 0x0004, 0x0005,
+        0x0101, 0x0102, 0x0103, 0x0104, 0x0107, 0x0109, 0x010A, 0x010E,
+        0x0201, 0x0205, 0x0206, 0x0207, 0x0208,
+    )
     body = bytearray((CTERM_READ_CHARACTERISTICS, 0))
     for selector in selectors:
         body += selector.to_bytes(2, "little")
@@ -162,16 +166,34 @@ async def serve(api_socket: str, system: str) -> int:
         if reply.type != "data":
             raise RuntimeError(f"expected CHARACTERISTICS, got {reply.type!r}")
         body = common_body(bytes(reply), CTERM_CHARACTERISTICS)
-        if len(body) != 17:
-            raise RuntimeError(f"bad CHARACTERISTICS size/body: {body!r}")
-        if body[2:4] != bytes((0x03, 0x00)) or int.from_bytes(body[4:6], "little") != 8:
-            raise RuntimeError(f"bad character-size characteristic: {body!r}")
-        if body[6:8] != bytes((0x09, 0x01)) or int.from_bytes(body[8:10], "little") < 1:
-            raise RuntimeError(f"bad line-width characteristic: {body!r}")
-        if body[10:12] != bytes((0x0A, 0x01)) or int.from_bytes(body[12:14], "little") < 1:
-            raise RuntimeError(f"bad page-length characteristic: {body!r}")
-        if body[14:16] != bytes((0x05, 0x02)):
-            raise RuntimeError(f"bad normal-echo selector: {body!r}")
+        expected_prefix = (
+            bytes((CTERM_CHARACTERISTICS, 0))
+            + bytes((0x01, 0x00)) + (9600).to_bytes(2, "little")
+            + bytes((0x02, 0x00)) + (9600).to_bytes(2, "little")
+            + bytes((0x03, 0x00)) + (8).to_bytes(2, "little")
+            + bytes((0x04, 0x00, 0))
+            + bytes((0x05, 0x00)) + (1).to_bytes(2, "little")
+            + bytes((0x01, 0x01, 0))
+            + bytes((0x02, 0x01)) + (3).to_bytes(2, "little")
+            + bytes((0x03, 0x01, 5)) + b"VT200"
+            + bytes((0x04, 0x01, 1))
+            + bytes((0x07, 0x01, 1))
+        )
+        if not body.startswith(expected_prefix):
+            raise RuntimeError(f"bad fixed CHARACTERISTICS prefix: {body!r}")
+        rest = body[len(expected_prefix):]
+        expected_tail = (
+            bytes((0x09, 0x01)) + (80).to_bytes(2, "little")
+            + bytes((0x0A, 0x01)) + (24).to_bytes(2, "little")
+            + bytes((0x0E, 0x01)) + (1).to_bytes(2, "little")
+            + bytes((0x01, 0x02, 0))
+            + bytes((0x05, 0x02, 1))
+            + bytes((0x06, 0x02, 1))
+            + bytes((0x07, 0x02, 1))
+            + bytes((0x08, 0x02)) + (1).to_bytes(2, "little")
+        )
+        if rest != expected_tail:
+            raise RuntimeError(f"bad remaining CHARACTERISTICS body: {rest!r}")
 
         interactive.data(cterm_start_read())
         reply = await interactive.recv()
