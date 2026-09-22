@@ -23,6 +23,7 @@ from decnet.connectors import SimpleApiConnector
 
 REQUEST = bytes.fromhex("14 20 00 00 00")
 STATUS_REQUEST = bytes.fromhex("14 10 00 00 00")
+CIRCUIT_REQUEST = bytes.fromhex("14 13 05") + b"ETH-0"
 VERSION = bytes((4, 0, 0))
 IDENT = b"DECnet-IV-Linux"
 
@@ -90,6 +91,28 @@ def main() -> int:
                                       "little")
         if active_links < 1:
             raise RuntimeError(f"invalid NICE active-links value: {status!r}")
+
+        connection.data(CIRCUIT_REQUEST)
+        response = connection.recv()
+        if response.type != "data":
+            raise RuntimeError(
+                f"unexpected NICE circuit response type {response.type!r}"
+            )
+        circuit = bytes(response)
+        if len(circuit) < 19 or circuit[:4] != b"\x01\xff\xff\x00":
+            raise RuntimeError(f"bad NICE circuit header: {circuit!r}")
+        name_len = circuit[4]
+        if circuit[5:5 + name_len] != b"ETH-0":
+            raise RuntimeError(f"bad NICE circuit entity: {circuit!r}")
+        off = 5 + name_len
+        if circuit[off:off + 4] != b"\x00\x00\x81\x00":
+            raise RuntimeError(f"missing NICE circuit state: {circuit!r}")
+        off += 4
+        if circuit[off:off + 3] != b"\x2a\x03\x02":
+            raise RuntimeError(f"missing NICE circuit block size: {circuit!r}")
+        block_size = int.from_bytes(circuit[off + 3:off + 5], "little")
+        if block_size < 576:
+            raise RuntimeError(f"invalid NICE circuit block size: {circuit!r}")
         connection.disconnect()
     finally:
         connector.close()
@@ -97,7 +120,7 @@ def main() -> int:
     print(
         f"pydecnet-nice: pass peer={destination} "
         f"executor={address >> 10}.{address & 1023} name={name.decode('ascii')} "
-        f"active_links={active_links}"
+        f"active_links={active_links} circuit=ETH-0 block_size={block_size}"
     )
     return 0
 

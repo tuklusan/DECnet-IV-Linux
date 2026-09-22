@@ -678,3 +678,6 @@ The first NICE circuit-codec acceptance attempt failed only the ARM64 E1 VM job 
 
 
 Exact-SHA fast acceptance for NICE circuit-codec candidate `cf19a74a95ba75849f26141c4d63e28df6e64cb5` is green after the narrowly bounded ARM64 E1 correction: Repository Policy `35684075406`, Build Bootstrap `35684098766`, Project State Gate `35684100061`, Python QEMU VM Lab `35684101313` on x86_64 and ARM64, and x64 PyDECnet L1 interoperability `35684102599`. The standard READ CIRCUIT request parser and CircuitReply State/Block Size encoding are accepted; the 375-second ARM64 E1 bound also completed green.
+
+
+Phase 6 now wires READ CIRCUIT status to live kernel adjacency state. The object-19 server maps logical circuit names ETH-N to distinct active kernel interfaces from DNIV_IOC_GET_ADJACENCY, requires an UP adjacency, and reports the live negotiated block size rather than a fixture value. The reciprocal pinned-PyDECnet management proof now reads ETH-0 on the same object-19 session after executor characteristics/status and requires State=On plus a sane live Block Size. Next: exact-SHA fast acceptance, then add adjacency/node information and management counters.

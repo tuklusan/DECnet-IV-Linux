@@ -16,6 +16,7 @@
 #include <fcntl.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
@@ -119,6 +120,73 @@ static int count_active_links(__u16 *active)
     return 0;
 }
 
+static int read_circuit_block_size(const char *name, __u16 *block_size)
+{
+    struct dniv_adjacency adjacency;
+    int ifindices[32];
+    unsigned long wanted;
+    char *end;
+    __u32 index;
+    size_t circuits = 0U;
+    int target_ifindex = 0;
+    __u16 target_block = 0U;
+    int fd;
+
+    if (!name || !block_size || strncmp(name, "ETH-", 4U) != 0)
+        return -1;
+    errno = 0;
+    wanted = strtoul(name + 4U, &end, 10);
+    if (errno || end == name + 4U || *end != '\0' || wanted >= 32U)
+        return -1;
+
+    fd = open(DNIV_DEVICE, O_RDONLY);
+    if (fd < 0)
+        return -1;
+    for (index = 0U;; index++) {
+        size_t i;
+        int known = 0;
+
+        memset(&adjacency, 0, sizeof(adjacency));
+        adjacency.uapi_version = DNIV_UAPI_VERSION;
+        adjacency.index = index;
+        if (ioctl(fd, DNIV_IOC_GET_ADJACENCY, &adjacency) < 0) {
+            if (errno == ENOENT)
+                break;
+            close(fd);
+            return -1;
+        }
+        if (adjacency.uapi_version != DNIV_UAPI_VERSION) {
+            close(fd);
+            return -1;
+        }
+        for (i = 0U; i < circuits; i++) {
+            if (ifindices[i] == adjacency.ifindex) {
+                known = 1;
+                break;
+            }
+        }
+        if (!known) {
+            if (circuits >= sizeof(ifindices) / sizeof(ifindices[0])) {
+                close(fd);
+                return -1;
+            }
+            ifindices[circuits] = adjacency.ifindex;
+            if (circuits == wanted)
+                target_ifindex = adjacency.ifindex;
+            circuits++;
+        }
+        if (target_ifindex == adjacency.ifindex &&
+            adjacency.state == DNIV_ADJ_STATE_UP &&
+            adjacency.block_size != 0U)
+            target_block = adjacency.block_size;
+    }
+    close(fd);
+    if (!target_ifindex || !target_block)
+        return -1;
+    *block_size = target_block;
+    return 0;
+}
+
 static int serve_connection(int fd)
 {
     struct timeval timeout = { .tv_sec = 30, .tv_usec = 0 };
@@ -144,13 +212,35 @@ static int serve_connection(int fd)
         if (got < 0)
             return -1;
 
-        if (dniv_nice_parse_read_node(in, (size_t)got, &request) ||
-            request.permanent || request.node != 0U ||
-            read_identity(&identity)) {
-            const signed char error = -1;
+        if (dniv_nice_parse_read_node(in, (size_t)got, &request) == 0) {
+            if (request.permanent || request.node != 0U ||
+                read_identity(&identity)) {
+                const signed char error = -1;
 
-            if (send(fd, &error, sizeof(error),
-                     MSG_EOR | MSG_NOSIGNAL) != (ssize_t)sizeof(error))
+                if (send(fd, &error, sizeof(error),
+                         MSG_EOR | MSG_NOSIGNAL) != (ssize_t)sizeof(error))
+                    return -1;
+                continue;
+            }
+        } else {
+            struct dniv_nice_read_circuit circuit;
+            __u16 block_size = 0U;
+
+            if (dniv_nice_parse_read_circuit(in, (size_t)got, &circuit) ||
+                circuit.permanent ||
+                circuit.info != DNIV_NICE_INFO_STATUS ||
+                read_circuit_block_size(circuit.name, &block_size) ||
+                dniv_nice_build_circuit_status_reply(
+                    out, sizeof(out), &out_len, circuit.name, block_size)) {
+                const signed char error = -1;
+
+                if (send(fd, &error, sizeof(error),
+                         MSG_EOR | MSG_NOSIGNAL) != (ssize_t)sizeof(error))
+                    return -1;
+                continue;
+            }
+            if (send(fd, out, out_len, MSG_EOR | MSG_NOSIGNAL) !=
+                (ssize_t)out_len)
                 return -1;
             continue;
         }
