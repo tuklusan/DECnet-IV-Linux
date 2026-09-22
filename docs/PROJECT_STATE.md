@@ -22,7 +22,7 @@ Build a complete native DECnet Phase IV stack for maintained Linux as an out-of-
 
 ## References and licensing
 
-Preferred exact reference pins are Route20 `a9ef7c0b7f875f0dd2e8abaf11213798a8e4474c`, PyDECnet live `295938c76c956a70957f4cf96b05685f555b2a18`, PyDECnet tests `9a844987bf3a1450632dee8d37e60a23a453bad3`, LinuxDECnet `ff39eef045d1e4b7b72a3d40111e89c07a473398`, and SIMH `5b73b1032b52d19bf80752ea4d9cbbdc92e7b5e0`.
+Preferred exact reference pins are Route20 `a9ef7c0b7f875f0dd2e8abaf11213798a8e4474c`, PyDECnet live `8d93c2a546317c67aba0adf9433f5f3efdf1f85c`, PyDECnet tests `9a844987bf3a1450632dee8d37e60a23a453bad3`, LinuxDECnet `ff39eef045d1e4b7b72a3d40111e89c07a473398`, and SIMH `5b73b1032b52d19bf80752ea4d9cbbdc92e7b5e0`.
 
 Digital DNA Phase IV functional specifications are normative. PyDECnet and Route20 are independent implementation cross-checks; LinuxDECnet is the Linux ABI/userspace compatibility reference; SIMH plus genuine DEC operating systems are interoperability oracles. Third-party material retains its original license.
 
@@ -83,7 +83,7 @@ Implementation order:
 | Phase 4 tag | `PHASE-4-COMPLETE` |
 | Phase 5 accepted protocol candidate | `2d54dbf252120b42a5c2a60fa202371382af5dc9` |
 | Route20 pin | `a9ef7c0b7f875f0dd2e8abaf11213798a8e4474c` |
-| PyDECnet live pin | `295938c76c956a70957f4cf96b05685f555b2a18` |
+| PyDECnet live pin | `8d93c2a546317c67aba0adf9433f5f3efdf1f85c` |
 | VM lifecycle | direct QEMU/QMP |
 | Persistent VM state | source-independent amd64/arm64 foundations |
 | Candidate/reference images | disposable |
@@ -876,3 +876,6 @@ Full Phase 6 promotion run `35754816703` on `6bccad0cb5f9b0cf42dbb5a46e3d1bbae10
 
 
 Follow-up review of the same preserved x86_64 PyDECnet plural-read exchange found that the standard end-of-multiple-items control record is likewise sent in full NICE reply-header form as `80 00 00 00`, not only the candidate server's compact one-byte `80`. The plural decoder now applies the same bounded full-or-compact framing rule to both the retcode-2 opener and retcode--128 terminator. This is client-only compatibility handling; candidate NML/kernel behavior is unchanged. Next: exact-SHA fast acceptance, then isolate the reproduced ARM64 PyDECnet router-endnode reason-39/No-Link transition.
+
+
+The reproduced ARM64 router-to-PyDECnet-endnode reverse-NML reason-39 failure is now concretely isolated to the independent reference. In pinned PyDECnet endnode routing, a send through an existing previous-hop cache entry physically transmitted the CI but returned `None`; endnode `routing.send(..., rqr=True)` interpreted that false result as send failure and immediately returned the same CI to local NSP. PyDECnet therefore closed its outbound NML link as destination-unreachable (Session reason 39) even though the candidate received the CI and correctly returned CA/CC; the later valid CC then found no PyDECnet connection and elicited internal NSP No Link reason 41. Fork commit `8d93c2a546317c67aba0adf9433f5f3efdf1f85c` corrects the cached-send return to `True` and adds a regression assertion. The live PyDECnet pin is advanced to that exact fork commit; candidate routing/NSP/Session behavior is unchanged. Fast acceptance of `3defe1bfa232f4aafd94d5e63bbee62fbf6c5ad3` was green in Repository Policy `35762127955`, Build Bootstrap `35762175317`, Project State Gate `35762178140`, Python QEMU VM Lab `35762181236`, and Independent Ethernet Interoperability `35762184295`. Next: exact-SHA acceptance with the corrected PyDECnet live pin, then repeat full Phase 6 promotion.

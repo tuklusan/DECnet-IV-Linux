@@ -28,7 +28,7 @@ These are implementation references, not substitutes for the Digital functional 
 ## PyDECnet
 
 - Repository: https://github.com/tuklusan/pydecnet
-- Exact live/reference pin: `295938c76c956a70957f4cf96b05685f555b2a18`
+- Exact live/reference pin: `8d93c2a546317c67aba0adf9433f5f3efdf1f85c`
 - Exact tests pin: `9a844987bf3a1450632dee8d37e60a23a453bad3`
 - Its README states that it is written to conform to published DNA Phase II, III and IV specifications and covers Ethernet, routing endnode/L1/L2, NSP, Session Control, NICE/NML, MOP, DAP/FAL and the MULTINET transport used by this project's Internet lab gateway.
 - Best use here: independent whole-stack cross-check, edge cases and interoperability.
