@@ -793,3 +793,6 @@ Exact-SHA fast acceptance for sparse adjacent-node status candidate `279cabd631f
 
 
 Exact-SHA fast acceptance for native MIRROR object 25 candidate `a494979e410cbedbf4adc4f13fa5a4cb5d4d1c2d` is green: Repository Policy `35742145930`, Build Bootstrap `35742206543`, Project State Gate `35742209944`, Python QEMU VM Lab `35742213010` on x86_64 and ARM64, and x64 PyDECnet interoperability `35742216169`. Phase 6 Session Control now also proves object-name registration and dispatch: `dnmirror --name` binds the standard `MIRROR` object name through the native AF_DECnet socket ABI, and the pinned PyDECnet peer connects by name and runs the same positive, 1 KiB and negative MIRROR record checks. Numeric object 25 behavior is retained unchanged. Next: exact-SHA fast acceptance, then continue Session Control coverage toward access control/task dispatch and Phase 6 closure.
+
+
+Acceptance attempt `35743974462` for `904da60b5e83bef6322bfad98e5d673a3059f8cd` stopped in Repository Policy before protocol execution because the Git-data commit accidentally reset executable modes on three interoperability scripts. This packaging-only defect is corrected by restoring `100755` on `dniv-interop-smoke.sh`, `pydecnet-mirror.py`, and `run-interop.sh`; Session Control and MIRROR protocol content is unchanged. Next: exact-SHA fast acceptance, then continue Phase 6.
