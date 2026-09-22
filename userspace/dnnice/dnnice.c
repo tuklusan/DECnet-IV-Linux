@@ -453,13 +453,62 @@ static int print_circuit_counters(const unsigned char *buf, size_t length)
     return 0;
 }
 
+enum dnnice_query_entity {
+    QUERY_EXECUTOR,
+    QUERY_NODE,
+    QUERY_CIRCUIT,
+    QUERY_NODES,
+    QUERY_CIRCUITS
+};
+
+static int receive_multiple(int fd, enum dnnice_query_entity entity,
+                            unsigned int info)
+{
+    unsigned char response[512];
+    unsigned int saw_header = 0U;
+
+    for (;;) {
+        ssize_t got = recv(fd, response, sizeof(response), 0);
+        int bad;
+
+        if (got <= 0) {
+            if (got < 0)
+                perror("dnnice: recv");
+            else
+                fprintf(stderr, "dnnice: truncated multiple NICE reply\n");
+            return -1;
+        }
+        if (!saw_header) {
+            if (got != 1 || response[0] != 2U) {
+                fprintf(stderr, "dnnice: missing multiple-items header\n");
+                return -1;
+            }
+            saw_header = 1U;
+            continue;
+        }
+        if (got == 1 && response[0] == 0x80U)
+            return 0;
+        if ((int8_t)response[0] < 0) {
+            fprintf(stderr, "dnnice: NICE error %d\n",
+                    (int8_t)response[0]);
+            return -1;
+        }
+
+        if (entity == QUERY_NODES)
+            bad = print_remote_node(response, (size_t)got);
+        else if (info == DNIV_NICE_INFO_STATUS)
+            bad = print_circuit_status(response, (size_t)got);
+        else
+            bad = print_circuit_counters(response, (size_t)got);
+        if (bad) {
+            fprintf(stderr, "dnnice: malformed multiple-item reply\n");
+            return -1;
+        }
+    }
+}
+
 int main(int argc, char **argv)
 {
-    enum query_entity {
-        QUERY_EXECUTOR,
-        QUERY_NODE,
-        QUERY_CIRCUIT
-    };
     static const unsigned char version[] = { 4U, 0U, 0U };
     struct dniv_nice_node_reply reply;
     struct sockaddr_dn peer;
@@ -468,7 +517,7 @@ int main(int argc, char **argv)
     struct timeval timeout = { .tv_sec = 20, .tv_usec = 0 };
     unsigned char request[256];
     unsigned char response[512];
-    enum query_entity entity = QUERY_EXECUTOR;
+    enum dnnice_query_entity entity = QUERY_EXECUTOR;
     const char *query = "summary";
     const char *circuit_name = NULL;
     size_t request_len = 0U;
@@ -483,8 +532,10 @@ int main(int argc, char **argv)
         fprintf(stderr,
                 "usage: %s AREA.NODE [summary|status|characteristics|counters]\n"
                 "       %s AREA.NODE node AREA.NODE [summary|status]\n"
-                "       %s AREA.NODE circuit NAME [status|counters]\n",
-                argv[0], argv[0], argv[0]);
+                "       %s AREA.NODE circuit NAME [status|counters]\n"
+                "       %s AREA.NODE nodes known|active|adjacent [summary|status]\n"
+                "       %s AREA.NODE circuits known|active [status|counters]\n",
+                argv[0], argv[0], argv[0], argv[0], argv[0]);
         return 2;
     }
 
@@ -521,6 +572,48 @@ int main(int argc, char **argv)
             fprintf(stderr, "dnnice: circuit query must be status or counters\n");
             return 2;
         }
+    } else if (argc >= 4 && strcmp(argv[2], "nodes") == 0) {
+        entity = QUERY_NODES;
+        if (strcmp(argv[3], "known") == 0)
+            request[2] = 0xffU;
+        else if (strcmp(argv[3], "active") == 0)
+            request[2] = 0xfeU;
+        else if (strcmp(argv[3], "adjacent") == 0)
+            request[2] = 0xfcU;
+        else {
+            fprintf(stderr,
+                    "dnnice: nodes selector must be known, active, or adjacent\n");
+            return 2;
+        }
+        query = argc == 5 ? argv[4] : "status";
+        if (strcmp(query, "summary") == 0)
+            info = DNIV_NICE_INFO_SUMMARY;
+        else if (strcmp(query, "status") == 0)
+            info = DNIV_NICE_INFO_STATUS;
+        else {
+            fprintf(stderr, "dnnice: nodes query must be summary or status\n");
+            return 2;
+        }
+    } else if (argc >= 4 && strcmp(argv[2], "circuits") == 0) {
+        entity = QUERY_CIRCUITS;
+        if (strcmp(argv[3], "known") == 0)
+            request[2] = 0xffU;
+        else if (strcmp(argv[3], "active") == 0)
+            request[2] = 0xfeU;
+        else {
+            fprintf(stderr,
+                    "dnnice: circuits selector must be known or active\n");
+            return 2;
+        }
+        query = argc == 5 ? argv[4] : "status";
+        if (strcmp(query, "status") == 0)
+            info = DNIV_NICE_INFO_STATUS;
+        else if (strcmp(query, "counters") == 0)
+            info = DNIV_NICE_INFO_COUNTERS;
+        else {
+            fprintf(stderr, "dnnice: circuits query must be status or counters\n");
+            return 2;
+        }
     } else {
         if (argc > 3) {
             fprintf(stderr,
@@ -554,6 +647,12 @@ int main(int argc, char **argv)
         request[2] = (unsigned char)name_len;
         memcpy(request + 3U, circuit_name, name_len);
         request_len = 3U + name_len;
+    } else if (entity == QUERY_NODES) {
+        request[1] = (unsigned char)(info << 4);
+        request_len = 3U;
+    } else if (entity == QUERY_CIRCUITS) {
+        request[1] = (unsigned char)((info << 4) | DNIV_NICE_ENTITY_CIRCUIT);
+        request_len = 3U;
     } else {
         uint16_t requested = entity == QUERY_NODE ? target_node : 0U;
 
@@ -609,6 +708,12 @@ int main(int argc, char **argv)
         perror("dnnice: send");
         close(fd);
         return 1;
+    }
+    if (entity == QUERY_NODES || entity == QUERY_CIRCUITS) {
+        int bad = receive_multiple(fd, entity, info);
+
+        close(fd);
+        return bad ? 1 : 0;
     }
     got = recv(fd, response, sizeof(response), 0);
     if (got <= 0) {

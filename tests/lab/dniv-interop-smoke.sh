@@ -232,7 +232,34 @@ if [ "$reference" = pydecnet ]; then
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=remote-nice-circuit-counters"
         exit 1
     fi
-    echo "DNIV-INTEROP-REMOTE-NICE session=$session scenario=$scenario node=$name peer=$peer_node queries=summary,status,characteristics,counters,specific-node,circuit-status,circuit-counters"
+    multi_nodes=$(/usr/local/sbin/dnnice "$peer_node" nodes adjacent status) || {
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=remote-nice-multiple-nodes"
+        exit 1
+    }
+    printf '%s\n' "$multi_nodes"
+    if ! printf '%s\n' "$multi_nodes" | grep -Fq "Node = $area.$node"; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=remote-nice-multiple-node-missing"
+        exit 1
+    fi
+    multi_circuits=$(/usr/local/sbin/dnnice "$peer_node" circuits active status) || {
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=remote-nice-multiple-circuits"
+        exit 1
+    }
+    printf '%s\n' "$multi_circuits"
+    if ! printf '%s\n' "$multi_circuits" | grep -Fq "Circuit = ETH-0"; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=remote-nice-multiple-circuit-missing"
+        exit 1
+    fi
+    multi_counters=$(/usr/local/sbin/dnnice "$peer_node" circuits active counters) || {
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=remote-nice-multiple-circuit-counters"
+        exit 1
+    }
+    printf '%s\n' "$multi_counters"
+    if ! printf '%s\n' "$multi_counters" | grep -Fq "Circuit = ETH-0"; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=remote-nice-multiple-circuit-counter-missing"
+        exit 1
+    fi
+    echo "DNIV-INTEROP-REMOTE-NICE session=$session scenario=$scenario node=$name peer=$peer_node queries=summary,status,characteristics,counters,specific-node,circuit-status,circuit-counters,multiple-nodes,multiple-circuits,multiple-circuit-counters"
     /usr/local/sbin/dnnml --once &
     nml_pid=$!
     sleep 2
