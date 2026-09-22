@@ -185,29 +185,65 @@ static int print_characteristics(const unsigned char *buf, size_t length)
 static int print_counters(const unsigned char *buf, size_t length)
 {
     static const uint16_t expected[] = { 608U, 609U, 610U, 611U };
-    uint32_t values[4];
+    uint32_t values[4] = { 0U, 0U, 0U, 0U };
+    unsigned int found = 0U;
     uint16_t address;
     char name[128];
     size_t off;
-    size_t i;
 
     if (entity_offset(buf, length, &off, &address, name, sizeof(name)))
         return -1;
-    for (i = 0U; i < 4U; i++) {
-        uint16_t encoded;
 
-        if (length - off < 6U)
+    while (length - off >= 3U) {
+        uint16_t encoded = (uint16_t)((uint16_t)buf[off] |
+                                      ((uint16_t)buf[off + 1U] << 8));
+        uint16_t param = encoded & 0x0fffU;
+        uint16_t kind = encoded & 0xf000U;
+        size_t width;
+        size_t value_off = off + 2U;
+        size_t i;
+        uint32_t value = 0U;
+
+        switch (kind) {
+        case 0xa000U:
+            width = 1U;
+            break;
+        case 0xc000U:
+            width = 2U;
+            break;
+        case 0xe000U:
+            width = 4U;
+            break;
+        case 0xb000U:
+            width = 1U;
+            value_off += 2U;
+            break;
+        case 0xd000U:
+            width = 2U;
+            value_off += 2U;
+            break;
+        case 0xf000U:
+            width = 4U;
+            value_off += 2U;
+            break;
+        default:
             return -1;
-        encoded = (uint16_t)((uint16_t)buf[off] |
-                             ((uint16_t)buf[off + 1U] << 8));
-        if (encoded != (uint16_t)(expected[i] | 0xe000U))
+        }
+        if (value_off > length || length - value_off < width)
             return -1;
-        values[i] = (uint32_t)buf[off + 2U] |
-                    ((uint32_t)buf[off + 3U] << 8) |
-                    ((uint32_t)buf[off + 4U] << 16) |
-                    ((uint32_t)buf[off + 5U] << 24);
-        off += 6U;
+        for (i = 0U; i < width; i++)
+            value |= (uint32_t)buf[value_off + i] << (8U * i);
+        for (i = 0U; i < sizeof(expected) / sizeof(expected[0]); i++) {
+            if (param == expected[i]) {
+                values[i] = value;
+                found |= 1U << i;
+                break;
+            }
+        }
+        off = value_off + width;
     }
+    if (off != length || found != 0x0fU)
+        return -1;
 
     printf("Executor node = %u.%u (%s) "
            "rx-bytes=%u tx-bytes=%u rx-messages=%u tx-messages=%u\n",
