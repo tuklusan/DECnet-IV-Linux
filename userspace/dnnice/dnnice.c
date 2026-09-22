@@ -524,7 +524,10 @@ static int receive_multiple(int fd, enum dnnice_query_entity entity,
             fprintf(stderr, "dnnice: missing multiple-items header\n");
             return -1;
         }
-        if (got == 1 && response[0] == 0x80U)
+        if (response[0] == 0x80U &&
+            (got == 1 ||
+             (got >= 4 &&
+              (size_t)got == 4U + (size_t)response[3])))
             return 0;
         if ((int8_t)response[0] < 0) {
             fprintf(stderr, "dnnice: NICE error %d\n",
