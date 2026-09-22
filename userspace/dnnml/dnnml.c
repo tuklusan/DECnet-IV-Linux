@@ -316,8 +316,22 @@ static int read_node_state(__u16 address, __u8 *node_type,
             return 0;
         }
     }
+
+    {
+        int written = snprintf(circuit, circuit_size, "ETH-%zu",
+                               target_circuit);
+
+        if (written < 0 || (size_t)written >= circuit_size) {
+            close(fd);
+            return -1;
+        }
+    }
+    *node_type = target_type;
+    *cost = 1U;
+    *hops = 1U;
+    *next_node = address;
     close(fd);
-    return -1;
+    return 0;
 }
 
 struct dniv_nml_node_status {
@@ -358,34 +372,34 @@ static int collect_node_status(__s8 entity_code,
     if (fd < 0)
         return -1;
 
-    if (entity_code == -4) {
-        for (index = 0U;; index++) {
-            struct dniv_adjacency adjacency;
-            size_t i;
-            int duplicate = 0;
+    for (index = 0U;; index++) {
+        struct dniv_adjacency adjacency;
+        size_t i;
+        int duplicate = 0;
 
-            memset(&adjacency, 0, sizeof(adjacency));
-            adjacency.uapi_version = DNIV_UAPI_VERSION;
-            adjacency.index = index;
-            if (ioctl(fd, DNIV_IOC_GET_ADJACENCY, &adjacency) < 0) {
-                if (errno == ENOENT)
-                    break;
-                close(fd);
-                return -1;
-            }
-            if (adjacency.state != DNIV_ADJ_STATE_UP)
-                continue;
-            for (i = 0U; i < address_count; i++) {
-                if (addresses[i] == adjacency.address) {
-                    duplicate = 1;
-                    break;
-                }
-            }
-            if (!duplicate && address_count <
-                sizeof(addresses) / sizeof(addresses[0]))
-                addresses[address_count++] = adjacency.address;
+        memset(&adjacency, 0, sizeof(adjacency));
+        adjacency.uapi_version = DNIV_UAPI_VERSION;
+        adjacency.index = index;
+        if (ioctl(fd, DNIV_IOC_GET_ADJACENCY, &adjacency) < 0) {
+            if (errno == ENOENT)
+                break;
+            close(fd);
+            return -1;
         }
-    } else {
+        if (adjacency.state != DNIV_ADJ_STATE_UP)
+            continue;
+        for (i = 0U; i < address_count; i++) {
+            if (addresses[i] == adjacency.address) {
+                duplicate = 1;
+                break;
+            }
+        }
+        if (!duplicate && address_count <
+            sizeof(addresses) / sizeof(addresses[0]))
+            addresses[address_count++] = adjacency.address;
+    }
+
+    if (entity_code != -4) {
         for (index = 0U;; index++) {
             struct dniv_route route;
             __u16 address;
