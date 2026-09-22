@@ -92,29 +92,75 @@ static int entity_offset(const unsigned char *buf, size_t length,
     return 0;
 }
 
+static int nice_value_length(const unsigned char *buf, size_t length,
+                             size_t *value_length)
+{
+    unsigned char type;
+
+    if (!buf || !value_length || !length)
+        return -1;
+    type = buf[0];
+    if (type == 0x20U || type == 0x40U) {
+        if (length < 2U || length < 2U + (size_t)buf[1])
+            return -1;
+        *value_length = 2U + (size_t)buf[1];
+        return 0;
+    }
+    if ((type >= 0x01U && type <= 0x1fU) ||
+        (type >= 0x81U && type <= 0x9fU)) {
+        size_t width = (size_t)(type & 0x1fU);
+
+        if (!width || length < 1U + width)
+            return -1;
+        *value_length = 1U + width;
+        return 0;
+    }
+    if (type >= 0xc1U && type <= 0xdfU) {
+        size_t width;
+
+        if (length < 2U)
+            return -1;
+        width = (size_t)buf[1];
+        if (length < 2U + width)
+            return -1;
+        *value_length = 2U + width;
+        return 0;
+    }
+    return -1;
+}
+
 static int print_characteristics(const unsigned char *buf, size_t length)
 {
     uint16_t address;
     char name[128];
+    const unsigned char *ident = NULL;
+    size_t ident_len = 0U;
     size_t off;
-    uint16_t param;
-    size_t value_len;
 
-    if (entity_offset(buf, length, &off, &address, name, sizeof(name)) ||
-        length - off < 4U)
+    if (entity_offset(buf, length, &off, &address, name, sizeof(name)))
         return -1;
-    param = (uint16_t)((uint16_t)buf[off] |
-                       ((uint16_t)buf[off + 1U] << 8));
-    if (param != DNIV_NICE_PARAM_IDENTIFICATION ||
-        buf[off + 2U] != DNIV_NICE_TYPE_ASCII)
-        return -1;
-    value_len = buf[off + 3U];
-    if (length - off < 4U + value_len)
+
+    while (length - off >= 3U) {
+        uint16_t param = (uint16_t)((uint16_t)buf[off] |
+                                    ((uint16_t)buf[off + 1U] << 8));
+        size_t encoded_len;
+
+        off += 2U;
+        if (nice_value_length(buf + off, length - off, &encoded_len))
+            return -1;
+        if (param == DNIV_NICE_PARAM_IDENTIFICATION &&
+            buf[off] == DNIV_NICE_TYPE_ASCII) {
+            ident_len = buf[off + 1U];
+            ident = buf + off + 2U;
+        }
+        off += encoded_len;
+    }
+    if (off != length || !ident)
         return -1;
 
     printf("Executor node = %u.%u (%s) identification=",
            address >> 10, address & 1023U, name);
-    fwrite(buf + off + 4U, 1U, value_len, stdout);
+    fwrite(ident, 1U, ident_len, stdout);
     putchar('\n');
     return 0;
 }
