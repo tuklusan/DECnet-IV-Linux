@@ -63,6 +63,21 @@ static int parse_node(const char *text, uint16_t *address)
     return 0;
 }
 
+static int reply_offset(const unsigned char *buf, size_t length,
+                        size_t *offset)
+{
+    size_t off;
+
+    if (!buf || !offset || length < 4U ||
+        buf[0] != DNIV_NICE_RET_SUCCESS)
+        return -1;
+    off = 4U + (size_t)buf[3];
+    if (off > length)
+        return -1;
+    *offset = off;
+    return 0;
+}
+
 static int entity_offset(const unsigned char *buf, size_t length,
                          size_t *offset, uint16_t *address,
                          char *name, size_t name_size)
@@ -70,13 +85,10 @@ static int entity_offset(const unsigned char *buf, size_t length,
     size_t name_len;
     size_t off;
 
-    if (!buf || !offset || !address || !name || name_size < 2U ||
-        length < 7U || buf[0] != DNIV_NICE_RET_SUCCESS)
+    if (!address || !name || name_size < 2U ||
+        reply_offset(buf, length, &off) || length - off < 3U)
         return -1;
 
-    off = 4U + (size_t)buf[3];
-    if (off > length || length - off < 3U)
-        return -1;
     *address = (uint16_t)((uint16_t)buf[off] |
                           ((uint16_t)buf[off + 1U] << 8));
     off += 2U;
@@ -90,6 +102,26 @@ static int entity_offset(const unsigned char *buf, size_t length,
     } else {
         name[0] = '\0';
     }
+    *offset = off;
+    return 0;
+}
+
+static int circuit_entity_offset(const unsigned char *buf, size_t length,
+                                 size_t *offset, char *name,
+                                 size_t name_size)
+{
+    size_t name_len;
+    size_t off;
+
+    if (!offset || !name || name_size < 2U ||
+        reply_offset(buf, length, &off) || off >= length)
+        return -1;
+    name_len = buf[off++] & 0x7fU;
+    if (!name_len || name_len >= name_size || length - off < name_len)
+        return -1;
+    memcpy(name, buf + off, name_len);
+    name[name_len] = '\0';
+    off += name_len;
     *offset = off;
     return 0;
 }
@@ -182,16 +214,14 @@ static int print_characteristics(const unsigned char *buf, size_t length)
     return 0;
 }
 
-static int print_counters(const unsigned char *buf, size_t length)
+static int decode_counter_stream(const unsigned char *buf, size_t length,
+                                 size_t off, const uint16_t *expected,
+                                 size_t expected_count, uint32_t *values)
 {
-    static const uint16_t expected[] = { 608U, 609U, 610U, 611U };
-    uint32_t values[4] = { 0U, 0U, 0U, 0U };
     unsigned int found = 0U;
-    uint16_t address;
-    char name[128];
-    size_t off;
 
-    if (entity_offset(buf, length, &off, &address, name, sizeof(name)))
+    if (!buf || !expected || !values || !expected_count ||
+        expected_count > 31U)
         return -1;
 
     while (length - off >= 3U) {
@@ -233,7 +263,7 @@ static int print_counters(const unsigned char *buf, size_t length)
             return -1;
         for (i = 0U; i < width; i++)
             value |= (uint32_t)buf[value_off + i] << (8U * i);
-        for (i = 0U; i < sizeof(expected) / sizeof(expected[0]); i++) {
+        for (i = 0U; i < expected_count; i++) {
             if (param == expected[i]) {
                 values[i] = value;
                 found |= 1U << i;
@@ -242,7 +272,24 @@ static int print_counters(const unsigned char *buf, size_t length)
         }
         off = value_off + width;
     }
-    if (off != length || found != 0x0fU)
+
+    if (off != length ||
+        found != ((1U << expected_count) - 1U))
+        return -1;
+    return 0;
+}
+
+static int print_counters(const unsigned char *buf, size_t length)
+{
+    static const uint16_t expected[] = { 608U, 609U, 610U, 611U };
+    uint32_t values[4] = { 0U, 0U, 0U, 0U };
+    uint16_t address;
+    char name[128];
+    size_t off;
+
+    if (entity_offset(buf, length, &off, &address, name, sizeof(name)) ||
+        decode_counter_stream(buf, length, off, expected,
+                              sizeof(expected) / sizeof(expected[0]), values))
         return -1;
 
     printf("Executor node = %u.%u (%s) "
@@ -252,43 +299,269 @@ static int print_counters(const unsigned char *buf, size_t length)
     return 0;
 }
 
+static int print_remote_node(const unsigned char *buf, size_t length)
+{
+    uint16_t address;
+    uint16_t cost = 0U;
+    uint16_t next_node = 0U;
+    unsigned int state = 0U;
+    unsigned int node_type = 0U;
+    unsigned int hops = 0U;
+    unsigned int have_state = 0U;
+    unsigned int have_type = 0U;
+    unsigned int have_cost = 0U;
+    unsigned int have_hops = 0U;
+    unsigned int have_circuit = 0U;
+    unsigned int have_next = 0U;
+    char name[128];
+    char circuit[128] = "";
+    size_t off;
+
+    if (entity_offset(buf, length, &off, &address, name, sizeof(name)))
+        return -1;
+
+    while (length - off >= 3U) {
+        uint16_t param = (uint16_t)((uint16_t)buf[off] |
+                                    ((uint16_t)buf[off + 1U] << 8));
+        const unsigned char *value;
+        size_t encoded_len;
+
+        off += 2U;
+        value = buf + off;
+        if (nice_value_length(value, length - off, &encoded_len))
+            return -1;
+
+        if (param == 0U && value[0] == 0x81U && encoded_len >= 2U) {
+            state = value[1];
+            have_state = 1U;
+        } else if (param == 810U && value[0] == 0x81U &&
+                   encoded_len >= 2U) {
+            node_type = value[1];
+            have_type = 1U;
+        } else if (param == 820U && value[0] == 0x02U &&
+                   encoded_len == 3U) {
+            cost = (uint16_t)((uint16_t)value[1] |
+                              ((uint16_t)value[2] << 8));
+            have_cost = 1U;
+        } else if (param == 821U && value[0] == 0x01U &&
+                   encoded_len == 2U) {
+            hops = value[1];
+            have_hops = 1U;
+        } else if (param == 822U && value[0] == DNIV_NICE_TYPE_ASCII &&
+                   encoded_len >= 2U &&
+                   (size_t)value[1] + 2U == encoded_len &&
+                   (size_t)value[1] < sizeof(circuit)) {
+            memcpy(circuit, value + 2U, value[1]);
+            circuit[value[1]] = '\0';
+            have_circuit = 1U;
+        } else if (param == 830U && value[0] == 0xc1U &&
+                   encoded_len == 4U && value[1] == 0x02U) {
+            next_node = (uint16_t)((uint16_t)value[2] |
+                                   ((uint16_t)value[3] << 8));
+            have_next = 1U;
+        }
+        off += encoded_len;
+    }
+    if (off != length || !have_state)
+        return -1;
+
+    printf("Node = %u.%u", address >> 10, address & 1023U);
+    if (name[0] != '\0')
+        printf(" (%s)", name);
+    printf(" state=%u", state);
+    if (have_type)
+        printf(" type=%u", node_type);
+    if (have_cost)
+        printf(" cost=%u", cost);
+    if (have_hops)
+        printf(" hops=%u", hops);
+    if (have_circuit)
+        printf(" circuit=%s", circuit);
+    if (have_next)
+        printf(" next-node=%u.%u", next_node >> 10, next_node & 1023U);
+    putchar('\n');
+    return 0;
+}
+
+static int print_circuit_status(const unsigned char *buf, size_t length)
+{
+    uint16_t adjacent = 0U;
+    uint16_t block_size = 0U;
+    unsigned int state = 0U;
+    unsigned int have_state = 0U;
+    unsigned int have_adjacent = 0U;
+    unsigned int have_block = 0U;
+    char name[128];
+    size_t off;
+
+    if (circuit_entity_offset(buf, length, &off, name, sizeof(name)))
+        return -1;
+
+    while (length - off >= 3U) {
+        uint16_t param = (uint16_t)((uint16_t)buf[off] |
+                                    ((uint16_t)buf[off + 1U] << 8));
+        const unsigned char *value;
+        size_t encoded_len;
+
+        off += 2U;
+        value = buf + off;
+        if (nice_value_length(value, length - off, &encoded_len))
+            return -1;
+        if (param == 0U && value[0] == 0x81U && encoded_len >= 2U) {
+            state = value[1];
+            have_state = 1U;
+        } else if (param == 800U && value[0] == 0xc1U &&
+                   encoded_len == 4U && value[1] == 0x02U) {
+            adjacent = (uint16_t)((uint16_t)value[2] |
+                                  ((uint16_t)value[3] << 8));
+            have_adjacent = 1U;
+        } else if (param == 810U && value[0] == 0x02U &&
+                   encoded_len == 3U) {
+            block_size = (uint16_t)((uint16_t)value[1] |
+                                    ((uint16_t)value[2] << 8));
+            have_block = 1U;
+        }
+        off += encoded_len;
+    }
+    if (off != length || !have_state)
+        return -1;
+
+    printf("Circuit = %s state=%u", name, state);
+    if (have_adjacent)
+        printf(" adjacent=%u.%u", adjacent >> 10, adjacent & 1023U);
+    if (have_block)
+        printf(" block-size=%u", block_size);
+    putchar('\n');
+    return 0;
+}
+
+static int print_circuit_counters(const unsigned char *buf, size_t length)
+{
+    static const uint16_t expected[] = { 1000U, 1001U, 1010U, 1011U };
+    uint32_t values[4] = { 0U, 0U, 0U, 0U };
+    char name[128];
+    size_t off;
+
+    if (circuit_entity_offset(buf, length, &off, name, sizeof(name)) ||
+        decode_counter_stream(buf, length, off, expected,
+                              sizeof(expected) / sizeof(expected[0]), values))
+        return -1;
+
+    printf("Circuit = %s rx-bytes=%u tx-bytes=%u "
+           "rx-blocks=%u tx-blocks=%u\n",
+           name, values[0], values[1], values[2], values[3]);
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
+    enum query_entity {
+        QUERY_EXECUTOR,
+        QUERY_NODE,
+        QUERY_CIRCUIT
+    };
     static const unsigned char version[] = { 4U, 0U, 0U };
     struct dniv_nice_node_reply reply;
     struct sockaddr_dn peer;
     struct optdata_dn conndata;
     struct optdata_dn acceptdata;
     struct timeval timeout = { .tv_sec = 20, .tv_usec = 0 };
-    unsigned char request[] = { 0x14U, 0x00U, 0x00U, 0x00U, 0x00U };
+    unsigned char request[256];
     unsigned char response[512];
+    enum query_entity entity = QUERY_EXECUTOR;
     const char *query = "summary";
+    const char *circuit_name = NULL;
+    size_t request_len = 0U;
     socklen_t optlen;
     uint16_t address;
+    uint16_t target_node = 0U;
+    unsigned int info = DNIV_NICE_INFO_SUMMARY;
     ssize_t got;
     int fd;
 
-    if (argc < 2 || argc > 3 || parse_node(argv[1], &address)) {
+    if (argc < 2 || argc > 5 || parse_node(argv[1], &address)) {
         fprintf(stderr,
-                "usage: %s AREA.NODE [summary|status|characteristics|counters]\n",
-                argv[0]);
+                "usage: %s AREA.NODE [summary|status|characteristics|counters]\n"
+                "       %s AREA.NODE node AREA.NODE [summary|status]\n"
+                "       %s AREA.NODE circuit NAME [status|counters]\n",
+                argv[0], argv[0], argv[0]);
         return 2;
     }
-    if (argc == 3)
-        query = argv[2];
-    if (strcmp(query, "summary") == 0) {
-        request[1] = 0x00U;
-    } else if (strcmp(query, "status") == 0) {
-        request[1] = 0x10U;
-    } else if (strcmp(query, "characteristics") == 0) {
-        request[1] = 0x20U;
-    } else if (strcmp(query, "counters") == 0) {
-        request[1] = 0x30U;
+
+    if (argc >= 4 && strcmp(argv[2], "node") == 0) {
+        entity = QUERY_NODE;
+        if (parse_node(argv[3], &target_node)) {
+            fprintf(stderr, "dnnice: invalid target node %s\n", argv[3]);
+            return 2;
+        }
+        query = argc == 5 ? argv[4] : "status";
+        if (strcmp(query, "summary") == 0)
+            info = DNIV_NICE_INFO_SUMMARY;
+        else if (strcmp(query, "status") == 0)
+            info = DNIV_NICE_INFO_STATUS;
+        else {
+            fprintf(stderr, "dnnice: node query must be summary or status\n");
+            return 2;
+        }
+    } else if (argc >= 4 && strcmp(argv[2], "circuit") == 0) {
+        size_t name_len = strlen(argv[3]);
+
+        entity = QUERY_CIRCUIT;
+        circuit_name = argv[3];
+        if (!name_len || name_len > 127U) {
+            fprintf(stderr, "dnnice: invalid circuit name\n");
+            return 2;
+        }
+        query = argc == 5 ? argv[4] : "status";
+        if (strcmp(query, "status") == 0)
+            info = DNIV_NICE_INFO_STATUS;
+        else if (strcmp(query, "counters") == 0)
+            info = DNIV_NICE_INFO_COUNTERS;
+        else {
+            fprintf(stderr, "dnnice: circuit query must be status or counters\n");
+            return 2;
+        }
     } else {
-        fprintf(stderr,
-                "usage: %s AREA.NODE [summary|status|characteristics|counters]\n",
-                argv[0]);
-        return 2;
+        if (argc > 3) {
+            fprintf(stderr,
+                    "usage: %s AREA.NODE [summary|status|characteristics|counters]\n",
+                    argv[0]);
+            return 2;
+        }
+        if (argc == 3)
+            query = argv[2];
+        if (strcmp(query, "summary") == 0)
+            info = DNIV_NICE_INFO_SUMMARY;
+        else if (strcmp(query, "status") == 0)
+            info = DNIV_NICE_INFO_STATUS;
+        else if (strcmp(query, "characteristics") == 0)
+            info = DNIV_NICE_INFO_CHARACTERISTICS;
+        else if (strcmp(query, "counters") == 0)
+            info = DNIV_NICE_INFO_COUNTERS;
+        else {
+            fprintf(stderr,
+                    "usage: %s AREA.NODE [summary|status|characteristics|counters]\n",
+                    argv[0]);
+            return 2;
+        }
+    }
+
+    request[0] = DNIV_NICE_FUNC_READ_INFO;
+    if (entity == QUERY_CIRCUIT) {
+        size_t name_len = strlen(circuit_name);
+
+        request[1] = (unsigned char)((info << 4) | DNIV_NICE_ENTITY_CIRCUIT);
+        request[2] = (unsigned char)name_len;
+        memcpy(request + 3U, circuit_name, name_len);
+        request_len = 3U + name_len;
+    } else {
+        uint16_t requested = entity == QUERY_NODE ? target_node : 0U;
+
+        request[1] = (unsigned char)(info << 4);
+        request[2] = 0U;
+        request[3] = (unsigned char)(requested & 0xffU);
+        request[4] = (unsigned char)(requested >> 8);
+        request_len = 5U;
     }
 
     fd = socket(AF_DECnet, SOCK_SEQPACKET, DNPROTO_NSP);
@@ -331,8 +604,8 @@ int main(int argc, char **argv)
         close(fd);
         return 1;
     }
-    if (send(fd, request, sizeof(request), MSG_EOR | MSG_NOSIGNAL) !=
-        (ssize_t)sizeof(request)) {
+    if (send(fd, request, request_len, MSG_EOR | MSG_NOSIGNAL) !=
+        (ssize_t)request_len) {
         perror("dnnice: send");
         close(fd);
         return 1;
@@ -346,8 +619,31 @@ int main(int argc, char **argv)
         close(fd);
         return 1;
     }
+    if ((int8_t)response[0] < 0) {
+        fprintf(stderr, "dnnice: NICE error %d\n", (int8_t)response[0]);
+        close(fd);
+        return 1;
+    }
 
-    if (strcmp(query, "characteristics") == 0) {
+    if (entity == QUERY_NODE) {
+        if (print_remote_node(response, (size_t)got)) {
+            fprintf(stderr, "dnnice: malformed remote-node reply\n");
+            close(fd);
+            return 1;
+        }
+    } else if (entity == QUERY_CIRCUIT) {
+        int bad;
+
+        if (info == DNIV_NICE_INFO_STATUS)
+            bad = print_circuit_status(response, (size_t)got);
+        else
+            bad = print_circuit_counters(response, (size_t)got);
+        if (bad) {
+            fprintf(stderr, "dnnice: malformed circuit %s reply\n", query);
+            close(fd);
+            return 1;
+        }
+    } else if (strcmp(query, "characteristics") == 0) {
         if (print_characteristics(response, (size_t)got)) {
             size_t i;
 

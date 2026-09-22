@@ -220,7 +220,19 @@ if [ "$reference" = pydecnet ]; then
             exit 1
         fi
     done
-    echo "DNIV-INTEROP-REMOTE-NICE session=$session scenario=$scenario node=$name peer=$peer_node queries=summary,status,characteristics,counters"
+    if ! /usr/local/sbin/dnnice "$peer_node" node "$area.$node" status; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=remote-nice-specific-node"
+        exit 1
+    fi
+    if ! /usr/local/sbin/dnnice "$peer_node" circuit ETH-0 status; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=remote-nice-circuit-status"
+        exit 1
+    fi
+    if ! /usr/local/sbin/dnnice "$peer_node" circuit ETH-0 counters; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=remote-nice-circuit-counters"
+        exit 1
+    fi
+    echo "DNIV-INTEROP-REMOTE-NICE session=$session scenario=$scenario node=$name peer=$peer_node queries=summary,status,characteristics,counters,specific-node,circuit-status,circuit-counters"
     /usr/local/sbin/dnnml --once &
     nml_pid=$!
     sleep 2
