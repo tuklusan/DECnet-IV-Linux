@@ -375,6 +375,77 @@ static int handle_check_input(int fd)
     return send_common(fd, reply, sizeof(reply));
 }
 
+static int append_characteristic(unsigned char *out, size_t cap,
+                                 size_t *used, uint16_t selector)
+{
+    struct winsize ws;
+    struct termios tio;
+    unsigned int value = 0U;
+    size_t width = 0U;
+
+    if (*used + 2U > cap)
+        return -1;
+    out[(*used)++] = (unsigned char)(selector & 0xffU);
+    out[(*used)++] = (unsigned char)((selector >> 8) & 0x03U);
+
+    switch (selector) {
+    case 0x0003U:
+        value = 8U;
+        width = 2U;
+        break;
+    case 0x0109U:
+        value = 80U;
+        if (!ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) && ws.ws_col)
+            value = ws.ws_col;
+        width = 2U;
+        break;
+    case 0x010aU:
+        value = 24U;
+        if (!ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) && ws.ws_row)
+            value = ws.ws_row;
+        width = 2U;
+        break;
+    case 0x0205U:
+        value = 1U;
+        if (isatty(STDIN_FILENO) && !tcgetattr(STDIN_FILENO, &tio))
+            value = (tio.c_lflag & ECHO) ? 1U : 0U;
+        width = 1U;
+        break;
+    default:
+        return -1;
+    }
+
+    if (*used + width > cap)
+        return -1;
+    out[(*used)++] = (unsigned char)(value & 0xffU);
+    if (width == 2U)
+        out[(*used)++] = (unsigned char)((value >> 8) & 0xffU);
+    return 0;
+}
+
+static int handle_read_characteristics(int fd, const unsigned char *body,
+                                       size_t len)
+{
+    unsigned char reply[128];
+    size_t used = 2U;
+    size_t off = 2U;
+
+    if (len < 2U)
+        return -1;
+    reply[0] = CTERM_CHARACTERISTICS;
+    reply[1] = 0U;
+    while (off + 1U < len) {
+        uint16_t selector = get_le16(body + off);
+
+        if (append_characteristic(reply, sizeof(reply), &used, selector))
+            return -1;
+        off += 2U;
+    }
+    if (off != len)
+        return -1;
+    return send_common(fd, reply, used);
+}
+
 static int handle_common(int fd, const unsigned char *record, size_t len)
 {
     const unsigned char *body;
@@ -393,6 +464,8 @@ static int handle_common(int fd, const unsigned char *record, size_t len)
         return handle_start_read(fd, body, inner);
     case CTERM_CHECK_INPUT:
         return handle_check_input(fd);
+    case CTERM_READ_CHARACTERISTICS:
+        return handle_read_characteristics(fd, body, inner);
     default:
         fprintf(stderr, "dnlogin: unsupported CTERM message %u\n", body[0]);
         return -1;

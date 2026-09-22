@@ -30,6 +30,8 @@ CTERM_WRITE = 7
 CTERM_WRITE_COMPLETE = 8
 CTERM_CHECK_INPUT = 12
 CTERM_INPUT_COUNT = 13
+CTERM_READ_CHARACTERISTICS = 10
+CTERM_CHARACTERISTICS = 11
 
 def foundation_bind() -> bytes:
     msg = bytearray(17)
@@ -52,6 +54,13 @@ def cterm_write(data: bytes, request_complete: bool = False) -> bytes:
 
 def cterm_check_input() -> bytes:
     return common(bytes((CTERM_CHECK_INPUT, 0)))
+
+def cterm_read_characteristics() -> bytes:
+    selectors = (0x0003, 0x0109, 0x010A, 0x0205)
+    body = bytearray((CTERM_READ_CHARACTERISTICS, 0))
+    for selector in selectors:
+        body += selector.to_bytes(2, "little")
+    return common(bytes(body))
 
 def cterm_start_read(maximum: int = 80) -> bytes:
     body = bytearray(17)
@@ -140,6 +149,22 @@ async def serve(api_socket: str, system: str) -> int:
         if len(body) != 4 or int.from_bytes(body[2:4], "little") != 7:
             raise RuntimeError(f"bad INPUT COUNT body: {body!r}")
 
+        interactive.data(cterm_read_characteristics())
+        reply = await interactive.recv()
+        if reply.type != "data":
+            raise RuntimeError(f"expected CHARACTERISTICS, got {reply.type!r}")
+        body = common_body(bytes(reply), CTERM_CHARACTERISTICS)
+        if len(body) != 16:
+            raise RuntimeError(f"bad CHARACTERISTICS size/body: {body!r}")
+        if body[2:4] != bytes((0x03, 0x00)) or int.from_bytes(body[4:6], "little") != 8:
+            raise RuntimeError(f"bad character-size characteristic: {body!r}")
+        if body[6:8] != bytes((0x09, 0x01)) or int.from_bytes(body[8:10], "little") < 1:
+            raise RuntimeError(f"bad line-width characteristic: {body!r}")
+        if body[10:12] != bytes((0x0A, 0x01)) or int.from_bytes(body[12:14], "little") < 1:
+            raise RuntimeError(f"bad page-length characteristic: {body!r}")
+        if body[14:16] != bytes((0x05, 0x02)):
+            raise RuntimeError(f"bad normal-echo selector: {body!r}")
+
         interactive.data(cterm_start_read())
         reply = await interactive.recv()
         if reply.type != "data":
@@ -151,7 +176,7 @@ async def serve(api_socket: str, system: str) -> int:
             )
         interactive.data(cterm_write(b"CTERM-DONE\r\n"))
         interactive.disconnect()
-        print("pydecnet-cterm: pass object=42 sessions=2 interactive=1 controls=write-complete,input-count", flush=True)
+        print("pydecnet-cterm: pass object=42 sessions=2 interactive=1 controls=write-complete,input-count,characteristics", flush=True)
         return 0
     finally:
         listener.close()
