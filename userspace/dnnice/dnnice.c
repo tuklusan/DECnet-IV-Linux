@@ -362,13 +362,16 @@ static int print_remote_node(const unsigned char *buf, size_t length)
         }
         off += encoded_len;
     }
-    if (off != length || !have_state)
+    if (off != length ||
+        (!have_state && !have_type && !have_cost && !have_hops &&
+         !have_circuit && !have_next))
         return -1;
 
     printf("Node = %u.%u", address >> 10, address & 1023U);
     if (name[0] != '\0')
         printf(" (%s)", name);
-    printf(" state=%u", state);
+    if (have_state)
+        printf(" state=%u", state);
     if (have_type)
         printf(" type=%u", node_type);
     if (have_cost)
