@@ -922,3 +922,6 @@ Exact-SHA fast acceptance for CTERM control candidate `97f7ab4597a54f395d976e00f
 
 
 Build Bootstrap `35793464970` for CTERM terminal-characteristics candidate `af57567ff9d3587619189720ebb0cce9151a4feb` failed before protocol execution because the new READ CHARACTERISTICS/CHARACTERISTICS handlers referenced message constants that were added to the PyDECnet harness but omitted from the C client constant block. This follow-up adds only those two protocol constants; behavior is otherwise unchanged. Next: exact-SHA fast acceptance, then continue broader CTERM controls.
+
+
+Fast acceptance for CTERM characteristics build-fix candidate `c680618716c485545c1ad7cae2375ba8f7c05fef` passed Repository Policy `35793631849`, Build Bootstrap `35793664515`, and Project State Gate `35793666201`; x64 PyDECnet interoperability job `106967845923` in run `35793669863` then proved the candidate emitted the requested four characteristics correctly but exposed a harness length mistake. The response is 17 bytes, not 16: two-byte CHARACTERISTICS header plus 4-byte character-size tuple, 4-byte line-width tuple, 4-byte page-length tuple, and 3-byte normal-echo tuple. The harness now validates the full 17-byte body and the echo value byte. Candidate protocol behavior is unchanged. Next: exact-SHA fast acceptance, then continue broader CTERM controls.

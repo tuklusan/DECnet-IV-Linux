@@ -154,7 +154,7 @@ async def serve(api_socket: str, system: str) -> int:
         if reply.type != "data":
             raise RuntimeError(f"expected CHARACTERISTICS, got {reply.type!r}")
         body = common_body(bytes(reply), CTERM_CHARACTERISTICS)
-        if len(body) != 16:
+        if len(body) != 17:
             raise RuntimeError(f"bad CHARACTERISTICS size/body: {body!r}")
         if body[2:4] != bytes((0x03, 0x00)) or int.from_bytes(body[4:6], "little") != 8:
             raise RuntimeError(f"bad character-size characteristic: {body!r}")
