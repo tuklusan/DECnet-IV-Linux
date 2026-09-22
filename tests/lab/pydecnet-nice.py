@@ -148,7 +148,8 @@ def main() -> int:
     print(
         f"pydecnet-nice: pass peer={destination} "
         f"executor={address >> 10}.{address & 1023} name={name.decode('ascii')} "
-        f"active_links={active_links} total_bytes={total_bytes} "\n        f"total_messages={total_messages} circuit=ETH-0 block_size={block_size}"
+        f"active_links={active_links} total_bytes={total_bytes} "
+        f"total_messages={total_messages} circuit=ETH-0 block_size={block_size}"
     )
     return 0
 

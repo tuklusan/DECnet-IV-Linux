@@ -752,3 +752,6 @@ Phase 6 executor management now serves standard READ NODE counters on object 19.
 
 
 The first executor-counter acceptance attempt failed only x64 PyDECnet interoperability run `35686193367` before the counter request executed: the test script contained a literal `\\n` between the STATUS_REQUEST and COUNTERS_REQUEST assignments, causing Python SyntaxError. Policy/build/state were green and the product codec/server compiled. The harness source now contains a real newline; product/NICE semantics are unchanged. The failed run remains recorded.
+
+
+The corrective executor-counter acceptance still failed only x64 PyDECnet interoperability run `35686568655` before management traffic because a second literal `\\n` remained in the test script's final formatted print statement. The request declarations were fixed and policy/build/state were green, but Python again stopped at parse time. All literal newline escapes in executable Python source are now removed; product/NICE semantics remain unchanged. Both failed harness runs remain recorded.
