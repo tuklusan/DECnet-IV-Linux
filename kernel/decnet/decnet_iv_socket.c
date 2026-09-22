@@ -1514,6 +1514,21 @@ static int dniv_sock_setsockopt(struct socket *sock, int level, int optname,
             if (!ret) {
                 timeo = sock_rcvtimeo(sock->sk, 0);
                 ret = dniv_wait_running(sock->sk, &timeo);
+                if (ret == -ECONNREFUSED) {
+                    struct dniv_nsp_conn_snapshot closed;
+
+                    /*
+                     * CC may already have reached the peer.  A peer is
+                     * allowed to disconnect immediately after accepting it,
+                     * before this waiter happens to sample RUN.  Match the
+                     * immediate-accept path: preserve the accepted socket so
+                     * userspace observes orderly EOF instead of a false
+                     * accept failure.
+                     */
+                    if (!dniv_nsp_conn_snapshot(dsk->local_link, &closed) &&
+                        closed.state == DNIV_NSP_ST_CLOSED)
+                        ret = 0;
+                }
                 if (!ret)
                     sock->state = SS_CONNECTED;
             }
