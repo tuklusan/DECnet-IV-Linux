@@ -49,7 +49,7 @@ int main(void)
     assert(dniv_nice_build_node_reply(reply, sizeof(reply), &reply_len,
                                       DNIV_ADDR(31, 70), "DN70",
                                       "DECnet-IV-Linux") == 0);
-    assert(reply_len == 26U);
+    assert(reply_len == 30U);
     assert(reply[0] == 1U);
     assert(reply[1] == 0xffU && reply[2] == 0xffU);
     assert(reply[3] == 0U);
