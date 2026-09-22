@@ -284,6 +284,22 @@ if [ "$reference" = pydecnet ]; then
         exit 1
     fi
     echo "DNIV-INTEROP-NCP session=$session scenario=$scenario node=$name peer=$peer_node command=show-executor-status"
+    echo "DNIV-INTEROP-CTERM-READY session=$session scenario=$scenario node=$name peer=$peer_node"
+    cterm_ok=0
+    i=0
+    while [ "$i" -lt 40 ]; do
+        if /usr/local/sbin/dnlogin --probe "$peer_node"; then
+            cterm_ok=1
+            break
+        fi
+        i=$((i + 1))
+        sleep 0.25
+    done
+    if [ "$cterm_ok" -ne 1 ]; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=cterm-foundation"
+        exit 1
+    fi
+    echo "DNIV-INTEROP-CTERM-PASS session=$session scenario=$scenario node=$name peer=$peer_node"
     /usr/local/sbin/dnnml --once &
     nml_pid=$!
     sleep 2
