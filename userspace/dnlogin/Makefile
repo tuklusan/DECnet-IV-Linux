@@ -18,13 +18,16 @@ CFLAGS ?= -O2 -g
 CFLAGS += -std=c11 -Wall -Wextra -Werror
 
 .PHONY: all clean check
-all: dnlogin check
+all: dnlogin sethost check
 
 dnlogin: dnlogin.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ $<
+
+sethost: dnlogin
+	ln -sf dnlogin sethost
 
 check: dnlogin
 	./dnlogin --selftest
 
 clean:
-	rm -f dnlogin
+	rm -f dnlogin sethost

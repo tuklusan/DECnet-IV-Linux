@@ -151,6 +151,10 @@ async def serve(api_socket: str, system: str) -> int:
         await handshake(probe)
         probe.disconnect()
 
+        sethost_probe = await listener.listen()
+        await handshake(sethost_probe)
+        sethost_probe.disconnect()
+
         interactive = await listener.listen()
         await handshake(interactive)
 
@@ -254,7 +258,7 @@ async def serve(api_socket: str, system: str) -> int:
 
         interactive.data(cterm_write(b"CTERM-DONE\r\n"))
         interactive.disconnect()
-        print("pydecnet-cterm: pass object=42 sessions=2 interactive=1 controls=oob,input-state,write-complete,input-count,characteristics-set-read,clear-input,unread", flush=True)
+        print("pydecnet-cterm: pass object=42 sessions=3 interactive=1 controls=oob,input-state,write-complete,input-count,characteristics-set-read,clear-input,unread", flush=True)
         return 0
     finally:
         listener.close()
