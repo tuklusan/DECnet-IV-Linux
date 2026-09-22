@@ -26,6 +26,8 @@ FOUND_COMMON_DATA = 9
 CTERM_INITIATE = 1
 CTERM_START_READ = 2
 CTERM_READ_DATA = 3
+CTERM_UNREAD = 5
+CTERM_CLEAR_INPUT = 6
 CTERM_WRITE = 7
 CTERM_WRITE_COMPLETE = 8
 CTERM_CHECK_INPUT = 12
@@ -45,6 +47,12 @@ def common(body: bytes) -> bytes:
 
 def cterm_initiate() -> bytes:
     return common(bytes((CTERM_INITIATE, 0, 1, 4, 0)))
+
+def cterm_unread() -> bytes:
+    return common(bytes((CTERM_UNREAD, 0)))
+
+def cterm_clear_input() -> bytes:
+    return common(bytes((CTERM_CLEAR_INPUT, 0)))
 
 def cterm_write(data: bytes, request_complete: bool = False) -> bytes:
     flags = 0x0400 if request_complete else 0
@@ -174,9 +182,18 @@ async def serve(api_socket: str, system: str) -> int:
             raise RuntimeError(
                 f"bad interactive input term_pos={term_pos} data={data!r}"
             )
+        interactive.data(cterm_clear_input())
+        interactive.data(cterm_unread())
+        reply = await interactive.recv()
+        if reply.type != "data":
+            raise RuntimeError(f"expected UNREAD READ DATA, got {reply.type!r}")
+        body = common_body(bytes(reply), CTERM_READ_DATA)
+        if len(body) != 9 or body[1] != 6 or body[8] != 0:
+            raise RuntimeError(f"bad UNREAD READ DATA body: {body!r}")
+
         interactive.data(cterm_write(b"CTERM-DONE\r\n"))
         interactive.disconnect()
-        print("pydecnet-cterm: pass object=42 sessions=2 interactive=1 controls=write-complete,input-count,characteristics", flush=True)
+        print("pydecnet-cterm: pass object=42 sessions=2 interactive=1 controls=write-complete,input-count,characteristics,clear-input,unread", flush=True)
         return 0
     finally:
         listener.close()

@@ -39,6 +39,8 @@
 #define CTERM_INITIATE 1U
 #define CTERM_START_READ 2U
 #define CTERM_READ_DATA 3U
+#define CTERM_UNREAD 5U
+#define CTERM_CLEAR_INPUT 6U
 #define CTERM_WRITE 7U
 #define CTERM_WRITE_COMPLETE 8U
 #define CTERM_READ_CHARACTERISTICS 10U
@@ -345,6 +347,42 @@ static int handle_start_read(int fd, const unsigned char *body, size_t len)
     return send_common(fd, reply, input_len + 8U);
 }
 
+static int handle_unread(int fd)
+{
+    unsigned char reply[9] = { CTERM_READ_DATA, 6U, 0, 0, 0, 0, 0, 0, 0 };
+
+    return send_common(fd, reply, sizeof(reply));
+}
+
+static int handle_clear_input(void)
+{
+    unsigned char discard[128];
+    int available = 0;
+
+    if (isatty(STDIN_FILENO))
+        return tcflush(STDIN_FILENO, TCIFLUSH) ? -1 : 0;
+    for (;;) {
+        ssize_t got;
+        size_t chunk;
+
+        if (ioctl(STDIN_FILENO, FIONREAD, &available) < 0)
+            return -1;
+        if (available <= 0)
+            return 0;
+        chunk = (size_t)available;
+        if (chunk > sizeof(discard))
+            chunk = sizeof(discard);
+        got = read(STDIN_FILENO, discard, chunk);
+        if (got < 0) {
+            if (errno == EINTR)
+                continue;
+            return -1;
+        }
+        if (got == 0)
+            return 0;
+    }
+}
+
 static int handle_write(int fd, const unsigned char *body, size_t len)
 {
     unsigned char complete[6] = { CTERM_WRITE_COMPLETE, 0, 0, 0, 0, 0 };
@@ -464,6 +502,10 @@ static int handle_common(int fd, const unsigned char *record, size_t len)
         return handle_write(fd, body, inner);
     case CTERM_START_READ:
         return handle_start_read(fd, body, inner);
+    case CTERM_UNREAD:
+        return handle_unread(fd);
+    case CTERM_CLEAR_INPUT:
+        return handle_clear_input();
     case CTERM_CHECK_INPUT:
         return handle_check_input(fd);
     case CTERM_READ_CHARACTERISTICS:
