@@ -100,6 +100,31 @@ int main(void)
         assert(dniv_nice_parse_node_reply(reply, 9U, &parsed) != 0);
     }
 
+    {
+        const __u8 circuit_request[] = {
+            0x14U, 0x13U, 0x05U, 'E', 'T', 'H', '-', '0'
+        };
+        struct dniv_nice_read_circuit circuit;
+
+        assert(dniv_nice_parse_read_circuit(circuit_request,
+                                             sizeof(circuit_request),
+                                             &circuit) == 0);
+        assert(circuit.info == DNIV_NICE_INFO_STATUS);
+        assert(circuit.permanent == 0U);
+        assert(strcmp(circuit.name, "ETH-0") == 0);
+        assert(dniv_nice_build_circuit_status_reply(
+                   reply, sizeof(reply), &reply_len, "ETH-0", 1498U) == 0);
+        assert(reply_len == 19U);
+        assert(reply[0] == 1U && reply[1] == 0xffU && reply[2] == 0xffU);
+        assert(reply[3] == 0U && reply[4] == 5U);
+        assert(memcmp(reply + 5U, "ETH-0", 5U) == 0);
+        assert(reply[10] == 0U && reply[11] == 0U &&
+               reply[12] == 0x81U && reply[13] == 0U);
+        assert(reply[14] == 0x2aU && reply[15] == 0x03U &&
+               reply[16] == 0x02U && reply[17] == 0xdaU &&
+               reply[18] == 0x05U);
+    }
+
     puts("Phase 6 NICE codec tests passed");
     return 0;
 }

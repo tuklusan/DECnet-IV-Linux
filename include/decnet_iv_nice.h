@@ -21,6 +21,7 @@
 
 #define DNIV_NICE_FUNC_READ_INFO 20U
 #define DNIV_NICE_ENTITY_NODE 0U
+#define DNIV_NICE_ENTITY_CIRCUIT 3U
 #define DNIV_NICE_INFO_SUMMARY 0U
 #define DNIV_NICE_INFO_STATUS 1U
 #define DNIV_NICE_INFO_CHARACTERISTICS 2U
@@ -108,6 +109,84 @@ dniv_nice_build_node_reply(__u8 *buf, size_t capacity, size_t *used,
 }
 
 
+
+struct dniv_nice_read_circuit {
+    __u8 info;
+    __u8 permanent;
+    char name[128];
+};
+
+static inline int
+dniv_nice_parse_read_circuit(const __u8 *buf, size_t length,
+                             struct dniv_nice_read_circuit *request)
+{
+    size_t name_len;
+    __u8 selector;
+
+    if (!buf || !request || length < 4U)
+        return -1;
+    if (buf[0] != DNIV_NICE_FUNC_READ_INFO)
+        return -1;
+
+    selector = buf[1];
+    if ((selector & 0x08U) != 0U ||
+        (selector & 0x07U) != DNIV_NICE_ENTITY_CIRCUIT)
+        return -1;
+    name_len = buf[2];
+    if (!name_len || name_len >= sizeof(request->name) ||
+        length != 3U + name_len)
+        return -1;
+
+    memset(request, 0, sizeof(*request));
+    request->info = (__u8)((selector >> 4) & 0x07U);
+    request->permanent = (__u8)((selector >> 7) & 0x01U);
+    memcpy(request->name, buf + 3U, name_len);
+    request->name[name_len] = '\0';
+    return 0;
+}
+
+static inline int
+dniv_nice_build_circuit_status_reply(__u8 *buf, size_t capacity,
+                                     size_t *used, const char *name,
+                                     __u16 block_size)
+{
+    size_t name_len;
+    size_t needed;
+    size_t off = 0U;
+
+    if (!buf || !used || !name)
+        return -1;
+    name_len = strlen(name);
+    if (!name_len || name_len > 127U)
+        return -1;
+    needed = 4U + 1U + name_len + 4U + 5U;
+    if (capacity < needed)
+        return -1;
+
+    buf[off++] = (__u8)DNIV_NICE_RET_SUCCESS;
+    buf[off++] = 0xffU;
+    buf[off++] = 0xffU;
+    buf[off++] = 0U;
+    buf[off++] = (__u8)name_len;
+    memcpy(buf + off, name, name_len);
+    off += name_len;
+
+    /* Circuit state, parameter 0, coded one-byte value: On. */
+    buf[off++] = 0U;
+    buf[off++] = 0U;
+    buf[off++] = 0x81U;
+    buf[off++] = 0U;
+
+    /* Block size, parameter 810, unsigned two-byte value. */
+    buf[off++] = (__u8)(810U & 0xffU);
+    buf[off++] = (__u8)(810U >> 8);
+    buf[off++] = 0x02U;
+    buf[off++] = (__u8)(block_size & 0xffU);
+    buf[off++] = (__u8)(block_size >> 8);
+
+    *used = off;
+    return 0;
+}
 
 struct dniv_nice_node_reply {
     __u16 address;

@@ -731,3 +731,6 @@ The candidate NML server now keeps an accepted management session open for multi
 
 
 Exact-SHA fast acceptance for repeated NICE management-session candidate `040424959fd4067f3b4d5035d10c0a984dac4fad` is green: Repository Policy `35682678214`, Build Bootstrap `35682702215`, Project State Gate `35682703575`, Python QEMU VM Lab `35682704849` on x86_64 and ARM64, and x64 PyDECnet L1 interoperability `35682706361`. One negotiated object-19 session successfully served executor characteristics followed by status with State=On and live Active Links.
+
+
+Phase 6 NICE codec coverage now includes standard READ CIRCUIT status framing. The repository-owned codec parses the Phase IV entity-class 3 request form used by the pinned PyDECnet reference and emits a CircuitReply with the named circuit, State=On and parameter 810 Block Size. This establishes the deterministic wire boundary needed to map live adjacency/circuit snapshots into object-19 replies next; no kernel or Session behavior changes in this increment. Next: exact-SHA fast acceptance, then wire live circuit/adjacency status through `dnnml` and reciprocal PyDECnet validation.
