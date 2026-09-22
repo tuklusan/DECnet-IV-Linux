@@ -63,25 +63,135 @@ static int parse_node(const char *text, uint16_t *address)
     return 0;
 }
 
+static int entity_offset(const unsigned char *buf, size_t length,
+                         size_t *offset, uint16_t *address,
+                         char *name, size_t name_size)
+{
+    size_t name_len;
+    size_t off;
+
+    if (!buf || !offset || !address || !name || name_size < 2U ||
+        length < 7U || buf[0] != DNIV_NICE_RET_SUCCESS ||
+        buf[1] != 0xffU || buf[2] != 0xffU || buf[3] != 0U)
+        return -1;
+
+    *address = (uint16_t)((uint16_t)buf[4] |
+                          ((uint16_t)buf[5] << 8));
+    name_len = buf[6] & 0x7fU;
+    if (name_len >= name_size || length < 7U + name_len)
+        return -1;
+    off = 7U;
+    if (name_len) {
+        memcpy(name, buf + off, name_len);
+        name[name_len] = '\0';
+        off += name_len;
+    } else {
+        name[0] = '\0';
+    }
+    *offset = off;
+    return 0;
+}
+
+static int print_characteristics(const unsigned char *buf, size_t length)
+{
+    uint16_t address;
+    char name[128];
+    size_t off;
+    uint16_t param;
+    size_t value_len;
+
+    if (entity_offset(buf, length, &off, &address, name, sizeof(name)) ||
+        length - off < 4U)
+        return -1;
+    param = (uint16_t)((uint16_t)buf[off] |
+                       ((uint16_t)buf[off + 1U] << 8));
+    if (param != DNIV_NICE_PARAM_IDENTIFICATION ||
+        buf[off + 2U] != DNIV_NICE_TYPE_ASCII)
+        return -1;
+    value_len = buf[off + 3U];
+    if (length - off < 4U + value_len)
+        return -1;
+
+    printf("Executor node = %u.%u (%s) identification=",
+           address >> 10, address & 1023U, name);
+    fwrite(buf + off + 4U, 1U, value_len, stdout);
+    putchar('\n');
+    return 0;
+}
+
+static int print_counters(const unsigned char *buf, size_t length)
+{
+    static const uint16_t expected[] = { 608U, 609U, 610U, 611U };
+    uint32_t values[4];
+    uint16_t address;
+    char name[128];
+    size_t off;
+    size_t i;
+
+    if (entity_offset(buf, length, &off, &address, name, sizeof(name)))
+        return -1;
+    for (i = 0U; i < 4U; i++) {
+        uint16_t encoded;
+
+        if (length - off < 6U)
+            return -1;
+        encoded = (uint16_t)((uint16_t)buf[off] |
+                             ((uint16_t)buf[off + 1U] << 8));
+        if (encoded != (uint16_t)(expected[i] | 0xe000U))
+            return -1;
+        values[i] = (uint32_t)buf[off + 2U] |
+                    ((uint32_t)buf[off + 3U] << 8) |
+                    ((uint32_t)buf[off + 4U] << 16) |
+                    ((uint32_t)buf[off + 5U] << 24);
+        off += 6U;
+    }
+
+    printf("Executor node = %u.%u (%s) "
+           "rx-bytes=%u tx-bytes=%u rx-messages=%u tx-messages=%u\n",
+           address >> 10, address & 1023U, name,
+           values[0], values[1], values[2], values[3]);
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     static const unsigned char version[] = { 4U, 0U, 0U };
-    static const unsigned char request[] = { 0x14U, 0x00U, 0x00U, 0x00U, 0x00U };
     struct dniv_nice_node_reply reply;
     struct sockaddr_dn peer;
     struct optdata_dn conndata;
     struct optdata_dn acceptdata;
     struct timeval timeout = { .tv_sec = 20, .tv_usec = 0 };
+    unsigned char request[] = { 0x14U, 0x00U, 0x00U, 0x00U, 0x00U };
     unsigned char response[512];
+    const char *query = "summary";
     socklen_t optlen;
     uint16_t address;
     ssize_t got;
     int fd;
 
-    if (argc != 2 || parse_node(argv[1], &address)) {
-        fprintf(stderr, "usage: %s AREA.NODE\n", argv[0]);
+    if (argc < 2 || argc > 3 || parse_node(argv[1], &address)) {
+        fprintf(stderr,
+                "usage: %s AREA.NODE [summary|status|characteristics|counters]\n",
+                argv[0]);
         return 2;
     }
+    if (argc == 3)
+        query = argv[2];
+    if (strcmp(query, "summary") == 0) {
+        request[1] = 0x00U;
+    } else if (strcmp(query, "status") == 0) {
+        request[1] = 0x10U;
+    } else if (strcmp(query, "characteristics") == 0) {
+        request[1] = 0x20U;
+    } else if (strcmp(query, "counters") == 0) {
+        request[1] = 0x30U;
+    } else {
+        fprintf(stderr,
+                "usage: %s AREA.NODE [summary|status|characteristics|counters]\n",
+                argv[0]);
+        return 2;
+    }
+
     fd = socket(AF_DECnet, SOCK_SEQPACKET, DNPROTO_NSP);
     if (fd < 0) {
         perror("dnnice: socket");
@@ -129,21 +239,41 @@ int main(int argc, char **argv)
         return 1;
     }
     got = recv(fd, response, sizeof(response), 0);
-    if (got <= 0 || dniv_nice_parse_node_reply(response, (size_t)got, &reply)) {
+    if (got <= 0) {
         if (got < 0)
             perror("dnnice: recv");
         else
-            fprintf(stderr, "dnnice: malformed READ NODE reply\n");
+            fprintf(stderr, "dnnice: empty NICE reply\n");
         close(fd);
         return 1;
     }
+
+    if (strcmp(query, "characteristics") == 0) {
+        if (print_characteristics(response, (size_t)got)) {
+            fprintf(stderr, "dnnice: malformed characteristics reply\n");
+            close(fd);
+            return 1;
+        }
+    } else if (strcmp(query, "counters") == 0) {
+        if (print_counters(response, (size_t)got)) {
+            fprintf(stderr, "dnnice: malformed counters reply\n");
+            close(fd);
+            return 1;
+        }
+    } else {
+        if (dniv_nice_parse_node_reply(response, (size_t)got, &reply)) {
+            fprintf(stderr, "dnnice: malformed READ NODE reply\n");
+            close(fd);
+            return 1;
+        }
+        printf("Executor node = %u.%u (%s)",
+               reply.address >> 10, reply.address & 1023U, reply.name);
+        if (reply.has_state)
+            printf(" state=%u", reply.state);
+        if (reply.has_active_links)
+            printf(" active-links=%u", reply.active_links);
+        putchar('\n');
+    }
     close(fd);
-    printf("Executor node = %u.%u (%s)",
-           reply.address >> 10, reply.address & 1023U, reply.name);
-    if (reply.has_state)
-        printf(" state=%u", reply.state);
-    if (reply.has_active_links)
-        printf(" active-links=%u", reply.active_links);
-    putchar('\n');
     return 0;
 }

@@ -809,3 +809,8 @@ Phase 6 daemon/session robustness now adds concurrent and restart coverage for o
 
 
 Full interoperability run `35713822257` against `d95dc1131ed0c8985bfc25399155b871ea2f59a9` exposed management-coverage gaps outside the earlier x64 L1 fast slice: direct UP adjacencies without a matching route entry could return NICE -8, Known/Active plural node reads could omit a live cross-area adjacency, and one ARM64 restart attempt hit a transient object-19 registration race. The NML snapshot now treats every UP adjacency as a live node, uses route metrics when available with a direct-adjacency cost/hop fallback when they are not, and gives bounded NML lifecycle probes an additional guest second before publishing readiness. Next: exact-SHA fast acceptance, then re-run the affected PyDECnet interoperability roles before continuing Phase 6.
+
+
+Exact-SHA fast acceptance for the live-node coverage corrective candidate `28b7503965fe8a72723911a9f886db20ed6dc4e6` is green: Repository Policy `35721733232`, Build Bootstrap `35721773410`, Project State Gate `35721775148`, Python QEMU VM Lab `35721777173` on x86_64 and ARM64, and x64 PyDECnet L1 interoperability `35721779005`. Direct-adjacency fallback, plural live-node coverage and the bounded NML restart allowance all passed the fast gate.
+
+Phase 6 local/remote management usability now extends `dnnice` from a fixed executor summary query to explicit executor summary, status, characteristics and counters queries over object 19. The command validates NML version negotiation and decodes standard identification plus node traffic counters for interactive use. Next: exact-SHA fast acceptance, then add specific remote-node and circuit query modes to the same client.
