@@ -341,7 +341,7 @@ int dniv_route_lookup(__u8 level, __u16 destination,
 int dniv_route_get_index(__u32 index, struct dniv_route_result *result)
 {
     unsigned long flags;
-    __u32 current = 0U;
+    __u32 cursor = 0U;
     unsigned int level;
     unsigned int destination;
 
@@ -373,7 +373,7 @@ int dniv_route_get_index(__u32 index, struct dniv_route_result *result)
             }
             if (!best)
                 continue;
-            if (current++ != index)
+            if (cursor++ != index)
                 continue;
 
             result->destination = (__u16)destination;
