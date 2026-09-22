@@ -71,16 +71,18 @@ static int entity_offset(const unsigned char *buf, size_t length,
     size_t off;
 
     if (!buf || !offset || !address || !name || name_size < 2U ||
-        length < 7U || buf[0] != DNIV_NICE_RET_SUCCESS ||
-        buf[1] != 0xffU || buf[2] != 0xffU || buf[3] != 0U)
+        length < 7U || buf[0] != DNIV_NICE_RET_SUCCESS)
         return -1;
 
-    *address = (uint16_t)((uint16_t)buf[4] |
-                          ((uint16_t)buf[5] << 8));
-    name_len = buf[6] & 0x7fU;
-    if (name_len >= name_size || length < 7U + name_len)
+    off = 4U + (size_t)buf[3];
+    if (off > length || length - off < 3U)
         return -1;
-    off = 7U;
+    *address = (uint16_t)((uint16_t)buf[off] |
+                          ((uint16_t)buf[off + 1U] << 8));
+    off += 2U;
+    name_len = buf[off++] & 0x7fU;
+    if (name_len >= name_size || length - off < name_len)
+        return -1;
     if (name_len) {
         memcpy(name, buf + off, name_len);
         name[name_len] = '\0';
