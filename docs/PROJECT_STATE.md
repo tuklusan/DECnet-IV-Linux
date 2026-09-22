@@ -755,3 +755,6 @@ The first executor-counter acceptance attempt failed only x64 PyDECnet interoper
 
 
 The corrective executor-counter acceptance still failed only x64 PyDECnet interoperability run `35686568655` before management traffic because a second literal `\\n` remained in the test script's final formatted print statement. The request declarations were fixed and policy/build/state were green, but Python again stopped at parse time. All literal newline escapes in executable Python source are now removed; product/NICE semantics remain unchanged. Both failed harness runs remain recorded.
+
+
+Exact-SHA fast acceptance for executor-counter corrective candidate `4512d0ac92c2fda7ee7ba1e4e69babae9c7f30a8` is green: Repository Policy `35686827735`, Build Bootstrap `35686857571`, Project State Gate `35686858893`, Python QEMU VM Lab `35686860051` on x86_64 and ARM64, and x64 PyDECnet L1 interoperability `35686861521`. One object-19 session successfully validated executor characteristics, status, live node receive counters and live circuit status after the two recorded test-script syntax failures were corrected.
