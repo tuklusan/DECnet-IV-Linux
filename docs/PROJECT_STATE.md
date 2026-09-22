@@ -794,3 +794,6 @@ Exact-SHA fast acceptance for plural NICE circuit-status candidate `07ff9eb6fe5a
 
 
 Phase 6 plural circuit coverage now includes READ CIRCUIT counters for Known (-1) and Active (-2), exercising the already-implemented multiple-item counter path against pinned PyDECnet. Each returned live circuit must carry the standard 1000/1001/1010/1011 receive/transmit byte/block counters and ETH-0 must appear with nonzero traffic. Product behavior is unchanged. Next: exact-SHA fast acceptance, then continue Session Control/NICE management operations and negative handling.
+
+
+Exact-SHA fast acceptance for plural NICE circuit-counter candidate `e954ee76c70c734a61c475a7a9f1b56312749d23` is green: Repository Policy `35693426128`, Build Bootstrap `35693454698`, Project State Gate `35693456129`, Python QEMU VM Lab `35693457418` on x86_64 and ARM64, and x64 PyDECnet L1 interoperability `35693458896`. Known and Active multi-entity circuit counter reads included live ETH-0 with nonzero standard receive/transmit byte and block counters.
