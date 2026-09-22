@@ -705,3 +705,6 @@ Exact-SHA fast acceptance for bidirectional/per-circuit NICE traffic-counter can
 
 
 Phase 6 live READ CIRCUIT status now includes standard NICE parameter 800 Adjacent node from the same UP kernel adjacency that supplies the circuit block size. The codec emits the pinned-reference CM-1 node-address form, and the reciprocal PyDECnet object-19 proof requires a nonzero live adjacent address before accepting the block-size parameter. Next: exact-SHA fast acceptance, then extend READ NODE beyond the executor using live adjacency/route snapshots.
+
+
+Exact-SHA fast acceptance for live NICE circuit-adjacent status candidate `4952895102e3e121b233e93e31e0f905860ad94f` is green: Repository Policy `35689217606`, Build Bootstrap `35689242761`, Project State Gate `35689244385`, Python QEMU VM Lab `35689245952` on x86_64 and ARM64, and x64 PyDECnet L1 interoperability `35689247610`. The reciprocal object-19 session validated live ETH-0 State=On, standard parameter 800 Adjacent node, Block Size, and the accepted circuit counters. Next: extend READ NODE beyond the executor using live adjacency/route snapshots.
