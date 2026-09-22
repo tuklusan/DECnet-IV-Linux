@@ -116,14 +116,21 @@ static int nice_value_length(const unsigned char *buf, size_t length,
         return 0;
     }
     if (type >= 0xc1U && type <= 0xdfU) {
-        size_t width;
+        size_t count = (size_t)(type & 0x1fU);
+        size_t off = 1U;
+        size_t i;
 
-        if (length < 2U)
+        if (!count)
             return -1;
-        width = (size_t)buf[1];
-        if (length < 2U + width)
-            return -1;
-        *value_length = 2U + width;
+        for (i = 0U; i < count; i++) {
+            size_t component_len;
+
+            if (off >= length ||
+                nice_value_length(buf + off, length - off, &component_len))
+                return -1;
+            off += component_len;
+        }
+        *value_length = off;
         return 0;
     }
     return -1;
