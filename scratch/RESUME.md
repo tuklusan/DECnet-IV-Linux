@@ -687,3 +687,6 @@ Exact-SHA fast acceptance for live NICE circuit-status candidate `da0b4864741ce5
 
 
 Phase 6 executor management now serves standard READ NODE counters on object 19. The response exposes NICE node counter 608 (Total bytes received) and 610 (Total messages received) from the kernel's live DECnet receive accounting, with standard CTR4 encoding and saturation. The pinned PyDECnet reciprocal session now validates characteristics, status, counters and live circuit status on one NML connection. Next: exact-SHA fast acceptance, then add transmit/per-circuit accounting and richer circuit/adjacency NICE information.
+
+
+The first executor-counter acceptance attempt failed only x64 PyDECnet interoperability run `35686193367` before the counter request executed: the test script contained a literal `\\n` between the STATUS_REQUEST and COUNTERS_REQUEST assignments, causing Python SyntaxError. Policy/build/state were green and the product codec/server compiled. The harness source now contains a real newline; product/NICE semantics are unchanged. The failed run remains recorded.

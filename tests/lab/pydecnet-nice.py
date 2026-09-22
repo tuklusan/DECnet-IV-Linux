@@ -22,7 +22,8 @@ import sys
 from decnet.connectors import SimpleApiConnector
 
 REQUEST = bytes.fromhex("14 20 00 00 00")
-STATUS_REQUEST = bytes.fromhex("14 10 00 00 00")\nCOUNTERS_REQUEST = bytes.fromhex("14 30 00 00 00")
+STATUS_REQUEST = bytes.fromhex("14 10 00 00 00")
+COUNTERS_REQUEST = bytes.fromhex("14 30 00 00 00")
 CIRCUIT_REQUEST = bytes.fromhex("14 13 05") + b"ETH-0"
 VERSION = bytes((4, 0, 0))
 IDENT = b"DECnet-IV-Linux"
