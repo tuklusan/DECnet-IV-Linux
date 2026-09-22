@@ -43,6 +43,8 @@ static void usage(FILE *stream)
           "  ncp show circuit NAME [status|counters]\n"
           "  ncp show known|active circuits [status|counters]\n"
           "  ncp tell AREA.NODE <show-command>\n"
+          "  ncp set executor name NAME\n"
+          "  ncp zero executor\n"
           "  ncp\n", stream);
 }
 
@@ -160,9 +162,10 @@ static int build_plan(char **word, int nword, const char *local,
     return 0;
 }
 
-static int run_plan(struct ncp_plan *plan)
+static int run_tool(const char *envname, const char *path,
+                    const char *name, char **argv)
 {
-    const char *tool = getenv("DNIV_DNNICE");
+    const char *tool = getenv(envname);
     pid_t pid = fork();
     int status;
 
@@ -172,10 +175,10 @@ static int run_plan(struct ncp_plan *plan)
     }
     if (pid == 0) {
         if (tool && *tool)
-            execv(tool, plan->argv);
-        execv("/usr/local/sbin/dnnice", plan->argv);
-        execvp("dnnice", plan->argv);
-        perror("ncp: dnnice");
+            execv(tool, argv);
+        execv(path, argv);
+        execvp(name, argv);
+        perror(name);
         _exit(127);
     }
     while (waitpid(pid, &status, 0) < 0) {
@@ -187,6 +190,12 @@ static int run_plan(struct ncp_plan *plan)
     if (WIFEXITED(status))
         return WEXITSTATUS(status);
     return 1;
+}
+
+static int run_plan(struct ncp_plan *plan)
+{
+    return run_tool("DNIV_DNNICE", "/usr/local/sbin/dnnice",
+                    "dnnice", plan->argv);
 }
 
 static int split_line(char *line, char **word)
@@ -244,6 +253,21 @@ static int one_command(char **word, int nword)
     }
     if (local_target(target))
         return 1;
+    if (nword == 2 && strcmp(word[0], "zero") == 0 &&
+        strcmp(word[1], "executor") == 0) {
+        char *argv[] = { "dnctl", "reset-stats", NULL };
+
+        return run_tool("DNIV_DNCTL", "/usr/local/sbin/dnctl",
+                        "dnctl", argv);
+    }
+    if (nword == 4 && strcmp(word[0], "set") == 0 &&
+        strcmp(word[1], "executor") == 0 &&
+        strcmp(word[2], "name") == 0) {
+        char *argv[] = { "dnctl", "set", target, word[3], NULL };
+
+        return run_tool("DNIV_DNCTL", "/usr/local/sbin/dnctl",
+                        "dnctl", argv);
+    }
     if (build_plan(word, nword, target, &plan)) {
         usage(stderr);
         return 2;
