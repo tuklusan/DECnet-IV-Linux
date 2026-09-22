@@ -126,6 +126,7 @@ dniv_nice_build_node_reply(__u8 *buf, size_t capacity, size_t *used,
 struct dniv_nice_read_circuit {
     __u8 info;
     __u8 permanent;
+    __s8 entity_code;
     char name[128];
 };
 
@@ -136,7 +137,9 @@ dniv_nice_parse_read_circuit(const __u8 *buf, size_t length,
     size_t name_len;
     __u8 selector;
 
-    if (!buf || !request || length < 4U)
+    __s8 entity_code;
+
+    if (!buf || !request || length < 3U)
         return -1;
     if (buf[0] != DNIV_NICE_FUNC_READ_INFO)
         return -1;
@@ -145,14 +148,19 @@ dniv_nice_parse_read_circuit(const __u8 *buf, size_t length,
     if ((selector & 0x08U) != 0U ||
         (selector & 0x07U) != DNIV_NICE_ENTITY_CIRCUIT)
         return -1;
+
+    entity_code = (__s8)buf[2];
+    memset(request, 0, sizeof(*request));
+    request->info = (__u8)((selector >> 4) & 0x07U);
+    request->permanent = (__u8)((selector >> 7) & 0x01U);
+    request->entity_code = entity_code;
+    if (entity_code < 0)
+        return entity_code >= -5 && length == 3U ? 0 : -1;
+
     name_len = buf[2];
     if (!name_len || name_len >= sizeof(request->name) ||
         length != 3U + name_len)
         return -1;
-
-    memset(request, 0, sizeof(*request));
-    request->info = (__u8)((selector >> 4) & 0x07U);
-    request->permanent = (__u8)((selector >> 7) & 0x01U);
     memcpy(request->name, buf + 3U, name_len);
     request->name[name_len] = '\0';
     return 0;

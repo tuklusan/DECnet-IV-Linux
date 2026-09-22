@@ -267,6 +267,39 @@ def main() -> int:
                 f"permanent read did not return NICE -1: {bytes(response)!r}"
             )
 
+        for selector_code, selector_name in (
+                (0xff, "known-circuit"), (0xfe, "active-circuit")):
+            connection.data(bytes((0x14, 0x13, selector_code)))
+            response = connection.recv()
+            if response.type != "data" or bytes(response) != b"\x02":
+                raise RuntimeError(
+                    f"missing {selector_name} multi-item header: "
+                    f"{bytes(response)!r}"
+                )
+            seen_circuits = set()
+            while True:
+                response = connection.recv()
+                if response.type != "data":
+                    raise RuntimeError(
+                        f"unexpected {selector_name} response "
+                        f"{response.type!r}"
+                    )
+                item = bytes(response)
+                if item == b"\x80":
+                    break
+                if len(item) < 10 or item[:4] != b"\x01\xff\xff\x00":
+                    raise RuntimeError(
+                        f"bad {selector_name} item: {item!r}"
+                    )
+                item_name_len = item[4]
+                item_name = item[5:5 + item_name_len]
+                seen_circuits.add(item_name)
+            if b"ETH-0" not in seen_circuits:
+                raise RuntimeError(
+                    f"{selector_name} omitted live ETH-0: "
+                    f"{sorted(seen_circuits)!r}"
+                )
+
         connection.data(CIRCUIT_COUNTERS_REQUEST)
         response = connection.recv()
         if response.type != "data":
@@ -319,6 +352,7 @@ def main() -> int:
         f"remote_type={remote_type} remote_cost={remote_cost} "
         f"remote_hops={remote_hops} remote_circuit={remote_circuit.decode('ascii')} "
         f"multi_node_reads=known,active,adjacent "
+        f"multi_circuit_reads=known,active "
         f"circuit_rx_bytes={circuit_rx_bytes} "
         f"circuit_tx_bytes={circuit_tx_bytes} "
         f"circuit_rx_blocks={circuit_rx_blocks} "

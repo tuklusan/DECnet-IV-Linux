@@ -174,6 +174,19 @@ int main(void)
         assert(circuit.info == DNIV_NICE_INFO_STATUS);
         assert(circuit.permanent == 0U);
         assert(strcmp(circuit.name, "ETH-0") == 0);
+        assert(circuit.entity_code == 5);
+        {
+            const __u8 known_circuits[] = { 0x14U, 0x13U, 0xffU };
+            const __u8 active_circuits[] = { 0x14U, 0x13U, 0xfeU };
+
+            assert(dniv_nice_parse_read_circuit(
+                       known_circuits, sizeof(known_circuits), &circuit) == 0);
+            assert(circuit.entity_code == -1);
+            assert(circuit.info == DNIV_NICE_INFO_STATUS);
+            assert(dniv_nice_parse_read_circuit(
+                       active_circuits, sizeof(active_circuits), &circuit) == 0);
+            assert(circuit.entity_code == -2);
+        }
         assert(dniv_nice_build_circuit_status_reply(
                    reply, sizeof(reply), &reply_len, "ETH-0",
                    DNIV_ADDR(31, 80), 1498U) == 0);

@@ -785,3 +785,6 @@ Phase 6 NICE node management now supports multiple-entity READ NODE status for K
 
 
 Exact-SHA fast acceptance for plural NICE node-status candidate `1189d35b2886036b006f456fc0d8812878cfbe34` is green: Repository Policy `35691397184`, Build Bootstrap `35691422005`, Project State Gate `35691423342`, Python QEMU VM Lab `35691424646` on x86_64 and ARM64, and x64 PyDECnet L1 interoperability `35691426004`. Known, Active and Adjacent multi-entity READ NODE status all included the live adjacent peer, while specific-unknown and unsupported-permanent reads returned the required NICE errors.
+
+
+Phase 6 NICE circuit management now supports multiple-entity READ CIRCUIT status for Known (-1) and Active (-2). The circuit parser accepts the standard three-byte plural selector, the NML server enumerates live ETH-N circuit snapshots, emits NICE multiple-items framing and per-circuit State/Adjacent-node/Block-size replies, and the reciprocal pinned-PyDECnet session requires ETH-0 to appear in both plural reads. Unsupported plural circuit classes or information classes remain explicit NICE errors. Next: exact-SHA fast acceptance, then continue Session Control/NICE management coverage.

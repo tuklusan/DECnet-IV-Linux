@@ -450,6 +450,52 @@ static int send_nice_code(int fd, signed char code)
            (ssize_t)sizeof(code) ? 0 : -1;
 }
 
+static int serve_multiple_circuits(int fd, __s8 entity_code, __u8 info,
+                                   unsigned char *out, size_t out_capacity)
+{
+    unsigned int index;
+
+    if ((entity_code != -1 && entity_code != -2) ||
+        (info != DNIV_NICE_INFO_STATUS &&
+         info != DNIV_NICE_INFO_COUNTERS))
+        return send_nice_code(fd, -1);
+    if (send_nice_code(fd, 2))
+        return -1;
+
+    for (index = 0U; index < 32U; index++) {
+        struct dniv_traffic_stats traffic;
+        char name[16];
+        size_t out_len = 0U;
+        int ifindex = 0;
+        __u16 block_size = 0U;
+        __u16 adjacent_node = 0U;
+        int written;
+
+        written = snprintf(name, sizeof(name), "ETH-%u", index);
+        if (written < 0 || (size_t)written >= sizeof(name))
+            return -1;
+        if (read_circuit_state(name, &ifindex, &block_size, &adjacent_node))
+            continue;
+        if (info == DNIV_NICE_INFO_STATUS) {
+            if (dniv_nice_build_circuit_status_reply(
+                    out, out_capacity, &out_len, name,
+                    adjacent_node, block_size))
+                return -1;
+        } else {
+            if (read_traffic_stats(ifindex, &traffic) ||
+                dniv_nice_build_circuit_counters_reply(
+                    out, out_capacity, &out_len, name,
+                    traffic.rx_bytes, traffic.tx_bytes,
+                    traffic.rx_frames, traffic.tx_frames))
+                return -1;
+        }
+        if (send(fd, out, out_len, MSG_EOR | MSG_NOSIGNAL) !=
+            (ssize_t)out_len)
+            return -1;
+    }
+    return send_nice_code(fd, -128);
+}
+
 static int serve_multiple_nodes(int fd, __s8 entity_code, __u8 info,
                                 unsigned char *out, size_t out_capacity)
 {
@@ -557,11 +603,18 @@ static int serve_connection(int fd)
             int build_failed = 0;
 
             if (dniv_nice_parse_read_circuit(in, (size_t)got, &circuit) ||
-                circuit.permanent ||
-                (circuit.info != DNIV_NICE_INFO_STATUS &&
-                 circuit.info != DNIV_NICE_INFO_COUNTERS) ||
-                read_circuit_state(circuit.name, &ifindex, &block_size,
-                                   &adjacent_node)) {
+                circuit.permanent) {
+                build_failed = 1;
+            } else if (circuit.entity_code < 0) {
+                if (serve_multiple_circuits(fd, circuit.entity_code,
+                                            circuit.info,
+                                            out, sizeof(out)))
+                    return -1;
+                continue;
+            } else if ((circuit.info != DNIV_NICE_INFO_STATUS &&
+                        circuit.info != DNIV_NICE_INFO_COUNTERS) ||
+                       read_circuit_state(circuit.name, &ifindex, &block_size,
+                                          &adjacent_node)) {
                 build_failed = 1;
             } else if (circuit.info == DNIV_NICE_INFO_STATUS) {
                 build_failed = dniv_nice_build_circuit_status_reply(
