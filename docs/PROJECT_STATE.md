@@ -758,3 +758,6 @@ The corrective executor-counter acceptance still failed only x64 PyDECnet intero
 
 
 Exact-SHA fast acceptance for executor-counter corrective candidate `4512d0ac92c2fda7ee7ba1e4e69babae9c7f30a8` is green: Repository Policy `35686827735`, Build Bootstrap `35686857571`, Project State Gate `35686858893`, Python QEMU VM Lab `35686860051` on x86_64 and ARM64, and x64 PyDECnet L1 interoperability `35686861521`. One object-19 session successfully validated executor characteristics, status, live node receive counters and live circuit status after the two recorded test-script syntax failures were corrected.
+
+
+Phase 6 management accounting now covers both directions and circuit scope. A new additive read-only traffic snapshot reports aggregate or per-interface DECnet receive/transmit frames and bytes without changing the existing UAPI structures. Ethernet receive and all successful hello/routing/data transmit paths feed the counters. NICE READ NODE counters now serve standard 608-611 Total bytes/messages received/sent, while READ CIRCUIT counters serve standard 1000/1001 bytes and 1010/1011 data blocks for the live ETH-N interface. The reciprocal pinned-PyDECnet object-19 session validates all eight live counters. Next: exact-SHA fast acceptance, then enrich circuit status with adjacent-node information and continue NICE node/adjacency management coverage.

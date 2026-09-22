@@ -34,6 +34,7 @@
 
 #define DNIV_MAX_ADJACENCIES 64U
 #define DNIV_MAX_DR_STATES 64U
+#define DNIV_MAX_TRAFFIC_STATS 64U
 #define DNIV_DR_DELAY_SECONDS 5U
 #define DNIV_ETH_LENGTH_LEN 2U
 #define DNIV_ROUTE_L1_BATCH_SIZE 64U
@@ -64,7 +65,17 @@ struct dniv_dr_state {
     unsigned long candidate_since;
 };
 
+struct dniv_traffic_entry {
+    bool used;
+    int ifindex;
+    __u64 rx_frames;
+    __u64 rx_bytes;
+    __u64 tx_frames;
+    __u64 tx_bytes;
+};
+
 static DEFINE_SPINLOCK(dniv_adj_lock);
+static DEFINE_SPINLOCK(dniv_traffic_lock);
 static struct dniv_adj_entry dniv_adjacencies[DNIV_MAX_ADJACENCIES];
 static struct dniv_dr_state dniv_dr_states[DNIV_MAX_DR_STATES];
 static __u16 dniv_local_address;
@@ -73,8 +84,11 @@ static __u16 dniv_eth_cost;
 static __u8 dniv_local_node_type;
 static __u8 dniv_local_priority;
 
+static struct dniv_traffic_entry dniv_traffic[DNIV_MAX_TRAFFIC_STATS];
 static atomic64_t dniv_rx_frames = ATOMIC64_INIT(0);
 static atomic64_t dniv_rx_bytes = ATOMIC64_INIT(0);
+static atomic64_t dniv_tx_frames = ATOMIC64_INIT(0);
+static atomic64_t dniv_tx_bytes = ATOMIC64_INIT(0);
 static atomic64_t dniv_hello_rx = ATOMIC64_INIT(0);
 static atomic64_t dniv_hello_tx = ATOMIC64_INIT(0);
 static atomic64_t dniv_hello_errors = ATOMIC64_INIT(0);
@@ -91,6 +105,79 @@ static __u64 dniv_last_route_generation;
 static unsigned long dniv_last_route_full;
 static __u16 dniv_route_l1_snapshot[1024];
 static __u16 dniv_route_l2_snapshot[64];
+
+static struct dniv_traffic_entry *dniv_find_traffic_locked(int ifindex)
+{
+    unsigned int i;
+
+    for (i = 0; i < DNIV_MAX_TRAFFIC_STATS; i++) {
+        if (dniv_traffic[i].used && dniv_traffic[i].ifindex == ifindex)
+            return &dniv_traffic[i];
+    }
+    return NULL;
+}
+
+static struct dniv_traffic_entry *dniv_get_traffic_locked(int ifindex)
+{
+    struct dniv_traffic_entry *entry;
+    unsigned int i;
+
+    entry = dniv_find_traffic_locked(ifindex);
+    if (entry)
+        return entry;
+    for (i = 0; i < DNIV_MAX_TRAFFIC_STATS; i++) {
+        if (!dniv_traffic[i].used) {
+            entry = &dniv_traffic[i];
+            memset(entry, 0, sizeof(*entry));
+            entry->used = true;
+            entry->ifindex = ifindex;
+            return entry;
+        }
+    }
+    return NULL;
+}
+
+static void dniv_account_rx(int ifindex, unsigned int bytes)
+{
+    struct dniv_traffic_entry *entry;
+    unsigned long flags;
+
+    spin_lock_irqsave(&dniv_traffic_lock, flags);
+    entry = dniv_get_traffic_locked(ifindex);
+    if (entry) {
+        entry->rx_frames++;
+        entry->rx_bytes += bytes;
+    }
+    spin_unlock_irqrestore(&dniv_traffic_lock, flags);
+}
+
+static void dniv_account_tx(int ifindex, unsigned int bytes)
+{
+    struct dniv_traffic_entry *entry;
+    unsigned long flags;
+
+    atomic64_inc(&dniv_tx_frames);
+    atomic64_add(bytes, &dniv_tx_bytes);
+    spin_lock_irqsave(&dniv_traffic_lock, flags);
+    entry = dniv_get_traffic_locked(ifindex);
+    if (entry) {
+        entry->tx_frames++;
+        entry->tx_bytes += bytes;
+    }
+    spin_unlock_irqrestore(&dniv_traffic_lock, flags);
+}
+
+static void dniv_drop_traffic(int ifindex)
+{
+    struct dniv_traffic_entry *entry;
+    unsigned long flags;
+
+    spin_lock_irqsave(&dniv_traffic_lock, flags);
+    entry = dniv_find_traffic_locked(ifindex);
+    if (entry)
+        memset(entry, 0, sizeof(*entry));
+    spin_unlock_irqrestore(&dniv_traffic_lock, flags);
+}
 
 static struct dniv_adj_entry *dniv_find_adj_locked(int ifindex, __u16 address)
 {
@@ -329,8 +416,10 @@ static int dniv_netdev_event(struct notifier_block *nb, unsigned long event,
 
     (void)nb;
     if (event == NETDEV_DOWN || event == NETDEV_UNREGISTER) {
-        if (event == NETDEV_UNREGISTER)
+        if (event == NETDEV_UNREGISTER) {
             dniv_remove_dev_filters(dev, READ_ONCE(dniv_local_address));
+            dniv_drop_traffic(dev->ifindex);
+        }
         spin_lock_irqsave(&dniv_adj_lock, flags);
         dniv_drop_if_adjacencies_locked(dev->ifindex);
         dniv_drop_dr_state_locked(dev->ifindex);
@@ -387,7 +476,11 @@ static int dniv_xmit_routing(struct net_device *dev,
     skb_set_network_header(skb, ETH_HLEN + DNIV_ETH_LENGTH_LEN);
 
     ret = dev_queue_xmit(skb);
-    return ret == NET_XMIT_SUCCESS || ret == NET_XMIT_CN ? 0 : -EIO;
+    if (ret == NET_XMIT_SUCCESS || ret == NET_XMIT_CN) {
+        dniv_account_tx(dev->ifindex, DNIV_ETH_LENGTH_LEN + payload_len);
+        return 0;
+    }
+    return -EIO;
 }
 
 static bool dniv_has_up_router_adjacency(int ifindex, __u8 level)
@@ -561,6 +654,7 @@ static int dniv_xmit_hello(struct net_device *dev, const __u8 dst[ETH_ALEN],
     ret = dev_queue_xmit(skb);
     if (ret == NET_XMIT_SUCCESS || ret == NET_XMIT_CN) {
         atomic64_inc(&dniv_hello_tx);
+        dniv_account_tx(dev->ifindex, DNIV_ETH_LENGTH_LEN + payload_len);
         return 0;
     }
     return -EIO;
@@ -995,7 +1089,11 @@ static int dniv_xmit_data(struct net_device *dev, __u16 next_hop,
     skb_set_network_header(skb, ETH_HLEN + DNIV_ETH_LENGTH_LEN);
 
     ret = dev_queue_xmit(skb);
-    return ret == NET_XMIT_SUCCESS || ret == NET_XMIT_CN ? 0 : -EIO;
+    if (ret == NET_XMIT_SUCCESS || ret == NET_XMIT_CN) {
+        dniv_account_tx(dev->ifindex, DNIV_ETH_LENGTH_LEN + payload_len);
+        return 0;
+    }
+    return -EIO;
 }
 
 static int dniv_endnode_route(__u16 destination,
@@ -1210,6 +1308,7 @@ static int dniv_packet_rcv(struct sk_buff *skb, struct net_device *dev,
         goto out;
     atomic64_inc(&dniv_rx_frames);
     atomic64_add(skb->len, &dniv_rx_bytes);
+    dniv_account_rx(dev->ifindex, skb->len);
 
     if (skb->len < DNIV_ETH_LENGTH_LEN ||
         skb_copy_bits(skb, 0, length, DNIV_ETH_LENGTH_LEN) != 0)
@@ -1297,6 +1396,7 @@ int dniv_eth_init(__u16 address, __u8 node_type, __u8 priority,
     dniv_eth_cost = ethernet_cost;
     memset(dniv_adjacencies, 0, sizeof(dniv_adjacencies));
     memset(dniv_dr_states, 0, sizeof(dniv_dr_states));
+    memset(dniv_traffic, 0, sizeof(dniv_traffic));
     dniv_last_route_generation = 0U;
     dniv_last_route_full = 0U;
 
@@ -1395,15 +1495,53 @@ void dniv_eth_get_stats(struct dniv_stats *stats)
     stats->adjacency_down = atomic64_read(&dniv_adjacency_down);
 }
 
+int dniv_eth_get_traffic_stats(int ifindex, struct dniv_traffic_stats *stats)
+{
+    struct dniv_traffic_entry *entry;
+    unsigned long flags;
+
+    if (!stats || ifindex < 0)
+        return -EINVAL;
+
+    memset(stats, 0, sizeof(*stats));
+    stats->uapi_version = DNIV_UAPI_VERSION;
+    stats->ifindex = ifindex;
+    if (ifindex == 0) {
+        stats->rx_frames = atomic64_read(&dniv_rx_frames);
+        stats->rx_bytes = atomic64_read(&dniv_rx_bytes);
+        stats->tx_frames = atomic64_read(&dniv_tx_frames);
+        stats->tx_bytes = atomic64_read(&dniv_tx_bytes);
+        return 0;
+    }
+
+    spin_lock_irqsave(&dniv_traffic_lock, flags);
+    entry = dniv_find_traffic_locked(ifindex);
+    if (entry) {
+        stats->rx_frames = entry->rx_frames;
+        stats->rx_bytes = entry->rx_bytes;
+        stats->tx_frames = entry->tx_frames;
+        stats->tx_bytes = entry->tx_bytes;
+    }
+    spin_unlock_irqrestore(&dniv_traffic_lock, flags);
+    return entry ? 0 : -ENOENT;
+}
+
 void dniv_eth_reset_stats(void)
 {
+    unsigned long flags;
+
     atomic64_set(&dniv_rx_frames, 0);
     atomic64_set(&dniv_rx_bytes, 0);
+    atomic64_set(&dniv_tx_frames, 0);
+    atomic64_set(&dniv_tx_bytes, 0);
     atomic64_set(&dniv_hello_rx, 0);
     atomic64_set(&dniv_hello_tx, 0);
     atomic64_set(&dniv_hello_errors, 0);
     atomic64_set(&dniv_adjacency_up, 0);
     atomic64_set(&dniv_adjacency_down, 0);
+    spin_lock_irqsave(&dniv_traffic_lock, flags);
+    memset(dniv_traffic, 0, sizeof(dniv_traffic));
+    spin_unlock_irqrestore(&dniv_traffic_lock, flags);
 }
 
 int dniv_eth_get_adjacency(__u32 index, struct dniv_adjacency *out)

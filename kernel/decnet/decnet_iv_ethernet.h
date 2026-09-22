@@ -24,6 +24,7 @@ void dniv_eth_exit(void);
 int dniv_eth_set_address(__u16 address);
 __u16 dniv_eth_get_address(void);
 void dniv_eth_get_stats(struct dniv_stats *stats);
+int dniv_eth_get_traffic_stats(int ifindex, struct dniv_traffic_stats *stats);
 void dniv_eth_reset_stats(void);
 int dniv_eth_get_adjacency(__u32 index, struct dniv_adjacency *adjacency);
 int dniv_eth_send_payload(__u16 destination, const __u8 *payload,

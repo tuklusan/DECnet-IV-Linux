@@ -90,22 +90,25 @@ fail:
     return -1;
 }
 
-static int read_stats(struct dniv_stats *stats)
+static int read_traffic_stats(int ifindex, struct dniv_traffic_stats *stats)
 {
     int fd;
 
-    if (!stats)
+    if (!stats || ifindex < 0)
         return -1;
     fd = open(DNIV_DEVICE, O_RDONLY);
     if (fd < 0)
         return -1;
     memset(stats, 0, sizeof(*stats));
-    if (ioctl(fd, DNIV_IOC_GET_STATS, stats) < 0) {
+    stats->uapi_version = DNIV_UAPI_VERSION;
+    stats->ifindex = ifindex;
+    if (ioctl(fd, DNIV_IOC_GET_TRAFFIC_STATS, stats) < 0) {
         close(fd);
         return -1;
     }
     close(fd);
-    return stats->uapi_version == DNIV_UAPI_VERSION ? 0 : -1;
+    return stats->uapi_version == DNIV_UAPI_VERSION &&
+           stats->ifindex == ifindex ? 0 : -1;
 }
 
 static int count_active_links(__u16 *active)
@@ -138,7 +141,8 @@ static int count_active_links(__u16 *active)
     return 0;
 }
 
-static int read_circuit_block_size(const char *name, __u16 *block_size)
+static int read_circuit_state(const char *name, int *ifindex,
+                              __u16 *block_size)
 {
     struct dniv_adjacency adjacency;
     int ifindices[32];
@@ -150,7 +154,7 @@ static int read_circuit_block_size(const char *name, __u16 *block_size)
     __u16 target_block = 0U;
     int fd;
 
-    if (!name || !block_size || strncmp(name, "ETH-", 4U) != 0)
+    if (!name || !ifindex || !block_size || strncmp(name, "ETH-", 4U) != 0)
         return -1;
     errno = 0;
     wanted = strtoul(name + 4U, &end, 10);
@@ -201,6 +205,7 @@ static int read_circuit_block_size(const char *name, __u16 *block_size)
     close(fd);
     if (!target_ifindex || !target_block)
         return -1;
+    *ifindex = target_ifindex;
     *block_size = target_block;
     return 0;
 }
@@ -242,14 +247,29 @@ static int serve_connection(int fd)
             }
         } else {
             struct dniv_nice_read_circuit circuit;
+            struct dniv_traffic_stats traffic;
+            int ifindex = 0;
             __u16 block_size = 0U;
+            int build_failed = 0;
 
             if (dniv_nice_parse_read_circuit(in, (size_t)got, &circuit) ||
                 circuit.permanent ||
-                circuit.info != DNIV_NICE_INFO_STATUS ||
-                read_circuit_block_size(circuit.name, &block_size) ||
-                dniv_nice_build_circuit_status_reply(
-                    out, sizeof(out), &out_len, circuit.name, block_size)) {
+                (circuit.info != DNIV_NICE_INFO_STATUS &&
+                 circuit.info != DNIV_NICE_INFO_COUNTERS) ||
+                read_circuit_state(circuit.name, &ifindex, &block_size)) {
+                build_failed = 1;
+            } else if (circuit.info == DNIV_NICE_INFO_STATUS) {
+                build_failed = dniv_nice_build_circuit_status_reply(
+                    out, sizeof(out), &out_len, circuit.name, block_size);
+            } else if (read_traffic_stats(ifindex, &traffic)) {
+                build_failed = 1;
+            } else {
+                build_failed = dniv_nice_build_circuit_counters_reply(
+                    out, sizeof(out), &out_len, circuit.name,
+                    traffic.rx_bytes, traffic.tx_bytes,
+                    traffic.rx_frames, traffic.tx_frames);
+            }
+            if (build_failed) {
                 const signed char error = -1;
 
                 if (send(fd, &error, sizeof(error),
@@ -280,12 +300,13 @@ static int serve_connection(int fd)
                 return -1;
             break;
         case DNIV_NICE_INFO_COUNTERS: {
-            struct dniv_stats stats;
+            struct dniv_traffic_stats traffic;
 
-            if (read_stats(&stats) ||
+            if (read_traffic_stats(0, &traffic) ||
                 dniv_nice_build_node_counters_reply(
                     out, sizeof(out), &out_len, identity.address,
-                    identity.name, stats.rx_bytes, stats.rx_frames))
+                    identity.name, traffic.rx_bytes, traffic.tx_bytes,
+                    traffic.rx_frames, traffic.tx_frames))
                 return -1;
             break;
         }

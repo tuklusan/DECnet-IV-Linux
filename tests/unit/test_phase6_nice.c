@@ -112,22 +112,34 @@ int main(void)
         assert(dniv_nice_build_node_counters_reply(
                    reply, sizeof(reply), &reply_len,
                    DNIV_ADDR(31, 70), "DN70",
-                   0x01020304ULL, 0x05060708ULL) == 0);
-        assert(reply_len == 23U);
+                   0x01020304ULL, 0x11121314ULL,
+                   0x05060708ULL, 0x15161718ULL) == 0);
+        assert(reply_len == 35U);
         assert(reply[11] == 0x60U && reply[12] == 0xe2U);
         assert(reply[13] == 0x04U && reply[14] == 0x03U &&
                reply[15] == 0x02U && reply[16] == 0x01U);
-        assert(reply[17] == 0x62U && reply[18] == 0xe2U);
-        assert(reply[19] == 0x08U && reply[20] == 0x07U &&
-               reply[21] == 0x06U && reply[22] == 0x05U);
+        assert(reply[17] == 0x61U && reply[18] == 0xe2U);
+        assert(reply[19] == 0x14U && reply[20] == 0x13U &&
+               reply[21] == 0x12U && reply[22] == 0x11U);
+        assert(reply[23] == 0x62U && reply[24] == 0xe2U);
+        assert(reply[25] == 0x08U && reply[26] == 0x07U &&
+               reply[27] == 0x06U && reply[28] == 0x05U);
+        assert(reply[29] == 0x63U && reply[30] == 0xe2U);
+        assert(reply[31] == 0x18U && reply[32] == 0x17U &&
+               reply[33] == 0x16U && reply[34] == 0x15U);
         assert(dniv_nice_build_node_counters_reply(
                    reply, sizeof(reply), &reply_len,
                    DNIV_ADDR(31, 70), "DN70",
+                   0x100000000ULL, 0x100000000ULL,
                    0x100000000ULL, 0x100000000ULL) == 0);
         assert(reply[13] == 0xffU && reply[14] == 0xffU &&
                reply[15] == 0xffU && reply[16] == 0xffU);
         assert(reply[19] == 0xffU && reply[20] == 0xffU &&
                reply[21] == 0xffU && reply[22] == 0xffU);
+        assert(reply[25] == 0xffU && reply[26] == 0xffU &&
+               reply[27] == 0xffU && reply[28] == 0xffU);
+        assert(reply[31] == 0xffU && reply[32] == 0xffU &&
+               reply[33] == 0xffU && reply[34] == 0xffU);
     }
 
     {
@@ -153,6 +165,34 @@ int main(void)
         assert(reply[14] == 0x2aU && reply[15] == 0x03U &&
                reply[16] == 0x02U && reply[17] == 0xdaU &&
                reply[18] == 0x05U);
+
+        {
+            const __u8 counters_request[] = {
+                0x14U, 0x33U, 0x05U, 'E', 'T', 'H', '-', '0'
+            };
+
+            assert(dniv_nice_parse_read_circuit(
+                       counters_request, sizeof(counters_request),
+                       &circuit) == 0);
+            assert(circuit.info == DNIV_NICE_INFO_COUNTERS);
+            assert(dniv_nice_build_circuit_counters_reply(
+                       reply, sizeof(reply), &reply_len, "ETH-0",
+                       0x01020304ULL, 0x11121314ULL,
+                       0x05060708ULL, 0x15161718ULL) == 0);
+            assert(reply_len == 34U);
+            assert(reply[10] == 0xe8U && reply[11] == 0xe3U);
+            assert(reply[12] == 0x04U && reply[13] == 0x03U &&
+                   reply[14] == 0x02U && reply[15] == 0x01U);
+            assert(reply[16] == 0xe9U && reply[17] == 0xe3U);
+            assert(reply[18] == 0x14U && reply[19] == 0x13U &&
+                   reply[20] == 0x12U && reply[21] == 0x11U);
+            assert(reply[22] == 0xf2U && reply[23] == 0xe3U);
+            assert(reply[24] == 0x08U && reply[25] == 0x07U &&
+                   reply[26] == 0x06U && reply[27] == 0x05U);
+            assert(reply[28] == 0xf3U && reply[29] == 0xe3U);
+            assert(reply[30] == 0x18U && reply[31] == 0x17U &&
+                   reply[32] == 0x16U && reply[33] == 0x15U);
+        }
     }
 
     puts("Phase 6 NICE codec tests passed");

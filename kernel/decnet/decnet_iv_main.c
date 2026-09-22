@@ -111,6 +111,7 @@ static long dniv_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
     struct dniv_link link;
     struct dniv_route route;
     struct dniv_stats stats;
+    struct dniv_traffic_stats traffic;
     int err;
 
     (void)file;
@@ -154,6 +155,18 @@ static long dniv_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
         if (!capable(CAP_NET_ADMIN))
             return -EPERM;
         dniv_eth_reset_stats();
+        return 0;
+
+    case DNIV_IOC_GET_TRAFFIC_STATS:
+        if (copy_from_user(&traffic, (void __user *)arg, sizeof(traffic)))
+            return -EFAULT;
+        if (traffic.uapi_version != DNIV_UAPI_VERSION)
+            return -EPROTO;
+        err = dniv_eth_get_traffic_stats(traffic.ifindex, &traffic);
+        if (err)
+            return err;
+        if (copy_to_user((void __user *)arg, &traffic, sizeof(traffic)))
+            return -EFAULT;
         return 0;
 
     case DNIV_IOC_GET_ROUTE:

@@ -194,25 +194,38 @@ dniv_nice_counter32(__u64 value)
     return value > 0xffffffffULL ? 0xffffffffU : (__u32)value;
 }
 
+static inline void
+dniv_nice_put_counter32(__u8 *buf, size_t *off, __u16 number, __u64 value)
+{
+    __u32 counter = dniv_nice_counter32(value);
+    __u16 pnum = (__u16)(number | 0xe000U);
+
+    buf[(*off)++] = (__u8)(pnum & 0xffU);
+    buf[(*off)++] = (__u8)(pnum >> 8);
+    buf[(*off)++] = (__u8)(counter & 0xffU);
+    buf[(*off)++] = (__u8)((counter >> 8) & 0xffU);
+    buf[(*off)++] = (__u8)((counter >> 16) & 0xffU);
+    buf[(*off)++] = (__u8)(counter >> 24);
+}
+
 static inline int
 dniv_nice_build_node_counters_reply(__u8 *buf, size_t capacity, size_t *used,
                                     __u16 address, const char *name,
                                     __u64 total_bytes_received,
-                                    __u64 total_messages_received)
+                                    __u64 total_bytes_sent,
+                                    __u64 total_messages_received,
+                                    __u64 total_messages_sent)
 {
     size_t name_len;
     size_t needed;
     size_t off = 0U;
-    __u32 bytes_value;
-    __u32 messages_value;
-    __u16 pnum;
 
     if (!buf || !used || !name)
         return -1;
     name_len = strlen(name);
     if (!name_len || name_len > 127U)
         return -1;
-    needed = 1U + 2U + 1U + 2U + 1U + name_len + 6U + 6U;
+    needed = 1U + 2U + 1U + 2U + 1U + name_len + 4U * 6U;
     if (capacity < needed)
         return -1;
 
@@ -226,23 +239,48 @@ dniv_nice_build_node_counters_reply(__u8 *buf, size_t capacity, size_t *used,
     memcpy(buf + off, name, name_len);
     off += name_len;
 
-    bytes_value = dniv_nice_counter32(total_bytes_received);
-    pnum = (__u16)(608U | 0xe000U);
-    buf[off++] = (__u8)(pnum & 0xffU);
-    buf[off++] = (__u8)(pnum >> 8);
-    buf[off++] = (__u8)(bytes_value & 0xffU);
-    buf[off++] = (__u8)((bytes_value >> 8) & 0xffU);
-    buf[off++] = (__u8)((bytes_value >> 16) & 0xffU);
-    buf[off++] = (__u8)(bytes_value >> 24);
+    dniv_nice_put_counter32(buf, &off, 608U, total_bytes_received);
+    dniv_nice_put_counter32(buf, &off, 609U, total_bytes_sent);
+    dniv_nice_put_counter32(buf, &off, 610U, total_messages_received);
+    dniv_nice_put_counter32(buf, &off, 611U, total_messages_sent);
 
-    messages_value = dniv_nice_counter32(total_messages_received);
-    pnum = (__u16)(610U | 0xe000U);
-    buf[off++] = (__u8)(pnum & 0xffU);
-    buf[off++] = (__u8)(pnum >> 8);
-    buf[off++] = (__u8)(messages_value & 0xffU);
-    buf[off++] = (__u8)((messages_value >> 8) & 0xffU);
-    buf[off++] = (__u8)((messages_value >> 16) & 0xffU);
-    buf[off++] = (__u8)(messages_value >> 24);
+    *used = off;
+    return 0;
+}
+
+static inline int
+dniv_nice_build_circuit_counters_reply(__u8 *buf, size_t capacity,
+                                       size_t *used, const char *name,
+                                       __u64 bytes_received,
+                                       __u64 bytes_sent,
+                                       __u64 blocks_received,
+                                       __u64 blocks_sent)
+{
+    size_t name_len;
+    size_t needed;
+    size_t off = 0U;
+
+    if (!buf || !used || !name)
+        return -1;
+    name_len = strlen(name);
+    if (!name_len || name_len > 127U)
+        return -1;
+    needed = 4U + 1U + name_len + 4U * 6U;
+    if (capacity < needed)
+        return -1;
+
+    buf[off++] = (__u8)DNIV_NICE_RET_SUCCESS;
+    buf[off++] = 0xffU;
+    buf[off++] = 0xffU;
+    buf[off++] = 0U;
+    buf[off++] = (__u8)name_len;
+    memcpy(buf + off, name, name_len);
+    off += name_len;
+
+    dniv_nice_put_counter32(buf, &off, 1000U, bytes_received);
+    dniv_nice_put_counter32(buf, &off, 1001U, bytes_sent);
+    dniv_nice_put_counter32(buf, &off, 1010U, blocks_received);
+    dniv_nice_put_counter32(buf, &off, 1011U, blocks_sent);
 
     *used = off;
     return 0;
