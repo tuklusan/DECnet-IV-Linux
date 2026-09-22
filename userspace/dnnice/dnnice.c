@@ -479,12 +479,26 @@ static int receive_multiple(int fd, enum dnnice_query_entity entity,
             return -1;
         }
         if (!saw_header) {
-            if (got != 1 || response[0] != 2U) {
-                fprintf(stderr, "dnnice: missing multiple-items header\n");
+            if (got == 1 && response[0] == 2U) {
+                saw_header = 1U;
+                continue;
+            }
+            if ((int8_t)response[0] < 0) {
+                fprintf(stderr, "dnnice: NICE error %d\n",
+                        (int8_t)response[0]);
                 return -1;
             }
-            saw_header = 1U;
-            continue;
+            if (response[0] == DNIV_NICE_RET_SUCCESS) {
+                if (entity == QUERY_NODES)
+                    bad = print_remote_node(response, (size_t)got);
+                else if (info == DNIV_NICE_INFO_STATUS)
+                    bad = print_circuit_status(response, (size_t)got);
+                else
+                    bad = print_circuit_counters(response, (size_t)got);
+                return bad ? -1 : 0;
+            }
+            fprintf(stderr, "dnnice: missing multiple-items header\n");
+            return -1;
         }
         if (got == 1 && response[0] == 0x80U)
             return 0;
