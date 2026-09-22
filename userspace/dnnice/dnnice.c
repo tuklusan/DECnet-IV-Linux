@@ -311,7 +311,12 @@ int main(int argc, char **argv)
 
     if (strcmp(query, "characteristics") == 0) {
         if (print_characteristics(response, (size_t)got)) {
-            fprintf(stderr, "dnnice: malformed characteristics reply\n");
+            size_t i;
+
+            fprintf(stderr, "dnnice: malformed characteristics reply:");
+            for (i = 0U; i < (size_t)got; i++)
+                fprintf(stderr, " %02x", response[i]);
+            fputc('\n', stderr);
             close(fd);
             return 1;
         }
