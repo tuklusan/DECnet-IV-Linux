@@ -825,3 +825,6 @@ Fast interoperability run `35723583203` for `3ab65e446ed08b49df587eefd28c2bb93db
 
 
 The first characteristics-decoder correction still failed exact-SHA PyDECnet interoperability in run `35725003342`. The remaining defect was CM-n handling: NICE coded-multiple type 0xC1..0xDF encodes a count of nested typed values, not a byte-length prefix. PyDECnet's pinned `CM1.decode` confirms this. The generic `dnnice` value walker now recursively consumes exactly that many nested NICE values, allowing Management Version (CM-3) and other compound parameters to coexist with Identification. This remains a client decoder correction only. Next: exact-SHA fast acceptance.
+
+
+Fast interoperability run `35726017085` for `df4f954b1526be186ee9b420b50a4fa063fd525f` still reached the PyDECnet characteristics query but rejected its typed parameter stream. The remaining client-only decoder gap was the standard H-n/O-n numeric NICE families (type codes 0x21..0x2f and 0x31..0x3f); the generic value walker had handled DU/DS, coded, ASCII/hex-image and CM-n values but not those fixed-width numeric encodings. The walker now consumes H-n/O-n using the standard low-nibble width while retaining CM-n recursion. Product routing/NSP/NML semantics remain unchanged. Next: exact-SHA fast acceptance, then add specific remote-node and circuit query modes to `dnnice`.

@@ -106,8 +106,16 @@ static int nice_value_length(const unsigned char *buf, size_t length,
         *value_length = 2U + (size_t)buf[1];
         return 0;
     }
-    if ((type >= 0x01U && type <= 0x1fU) ||
-        (type >= 0x81U && type <= 0x9fU)) {
+    if (type >= 0x01U && type <= 0x3fU && type != 0x20U &&
+        type != 0x30U) {
+        size_t width = (size_t)(type & 0x0fU);
+
+        if (!width || length < 1U + width)
+            return -1;
+        *value_length = 1U + width;
+        return 0;
+    }
+    if (type >= 0x81U && type <= 0x9fU) {
         size_t width = (size_t)(type & 0x1fU);
 
         if (!width || length < 1U + width)
