@@ -46,6 +46,12 @@ struct terminal_state {
     int active;
 };
 
+struct login_options {
+    const char *user;
+    const char *password;
+    const char *account;
+};
+
 static uint16_t get_le16(const unsigned char *p)
 {
     return (uint16_t)p[0] | ((uint16_t)p[1] << 8);
@@ -125,9 +131,27 @@ static int validate_cterm_initiate(const unsigned char *buf, size_t len)
     return buf[4] == CTERM_INITIATE ? 0 : -1;
 }
 
-static int connect_cterm(const char *node_text)
+static int set_access_field(unsigned char *dst, size_t cap, __u8 *len,
+                            const char *text)
+{
+    size_t n;
+
+    if (!text) {
+        *len = 0U;
+        return 0;
+    }
+    n = strlen(text);
+    if (n > cap)
+        return -1;
+    memcpy(dst, text, n);
+    *len = (__u8)n;
+    return 0;
+}
+
+static int connect_cterm(const char *node_text, const struct login_options *options)
 {
     struct sockaddr_dn peer;
+    struct accessdata_dn access;
     struct timeval tv = { 15, 0 };
     uint16_t address;
     int fd;
@@ -146,6 +170,24 @@ static int connect_cterm(const char *node_text)
         perror("dnlogin: timeout");
         close(fd);
         return -1;
+    }
+    if (options && (options->user || options->password || options->account)) {
+        memset(&access, 0, sizeof(access));
+        if (set_access_field(access.acc_user, sizeof(access.acc_user),
+                             &access.acc_userl, options->user) ||
+            set_access_field(access.acc_pass, sizeof(access.acc_pass),
+                             &access.acc_passl, options->password) ||
+            set_access_field(access.acc_acc, sizeof(access.acc_acc),
+                             &access.acc_accl, options->account)) {
+            fprintf(stderr, "dnlogin: access field exceeds %u bytes\n", DN_MAXACCL);
+            close(fd);
+            return -2;
+        }
+        if (setsockopt(fd, DNPROTO_NSP, SO_CONACCESS, &access, sizeof(access))) {
+            perror("dnlogin: access data");
+            close(fd);
+            return -1;
+        }
     }
     memset(&peer, 0, sizeof(peer));
     peer.sdn_family = AF_DECnet;
@@ -373,7 +415,7 @@ static int selftest(void)
 
 static int probe(const char *node_text)
 {
-    int fd = connect_cterm(node_text);
+    int fd = connect_cterm(node_text, NULL);
 
     if (fd == -2)
         return 2;
@@ -388,13 +430,13 @@ static int probe(const char *node_text)
     return 0;
 }
 
-static int session(const char *node_text)
+static int session(const char *node_text, const struct login_options *options)
 {
     struct terminal_state terminal;
     struct timeval none = { 0, 0 };
     unsigned char buf[2048];
     ssize_t got;
-    int fd = connect_cterm(node_text);
+    int fd = connect_cterm(node_text, options);
     int rc = 1;
 
     if (fd == -2)
@@ -440,13 +482,40 @@ out:
 
 int main(int argc, char **argv)
 {
+    struct login_options options = { 0 };
+    const char *node = NULL;
+    int opt;
+
     if (argc == 2 && strcmp(argv[1], "--selftest") == 0)
         return selftest();
     if (argc == 3 && strcmp(argv[1], "--probe") == 0)
         return probe(argv[2]);
-    if (argc == 2)
-        return session(argv[1]);
-    fprintf(stderr, "usage: %s AREA.NODE\n       %s --probe AREA.NODE\n       %s --selftest\n",
+
+    opterr = 0;
+    while ((opt = getopt(argc, argv, "u:p:a:")) != -1) {
+        switch (opt) {
+        case 'u':
+            options.user = optarg;
+            break;
+        case 'p':
+            options.password = optarg;
+            break;
+        case 'a':
+            options.account = optarg;
+            break;
+        default:
+            fprintf(stderr, "dnlogin: invalid option\n");
+            return 2;
+        }
+    }
+    if (optind + 1 == argc)
+        node = argv[optind];
+    if (node)
+        return session(node, &options);
+    fprintf(stderr,
+            "usage: %s [-u USER] [-p PASSWORD] [-a ACCOUNT] AREA.NODE\n"
+            "       %s --probe AREA.NODE\n"
+            "       %s --selftest\n",
             argv[0], argv[0], argv[0]);
     return 2;
 }
