@@ -12,26 +12,16 @@
 # patent, trademark, and governing-law provisions.
 # ============================================================================
 
-.PHONY: all userspace unit kernel clean
+CC ?= cc
+CPPFLAGS += -I../../include/uapi -I../../include
+CFLAGS ?= -O2 -g
+CFLAGS += -std=c11 -Wall -Wextra -Werror
 
-all: userspace unit
+.PHONY: all clean
+all: dnnice
 
-userspace:
-	$(MAKE) -C userspace/dnctl
-	$(MAKE) -C userspace/dnnml
-	$(MAKE) -C userspace/dnnice
-	$(MAKE) -C userspace/dnmultinet
-
-unit:
-	$(MAKE) -C tests/unit test
-
-kernel:
-	$(MAKE) -C kernel/decnet KDIR="$(KDIR)"
+dnnice: dnnice.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ $<
 
 clean:
-	$(MAKE) -C userspace/dnctl clean
-	$(MAKE) -C userspace/dnnml clean
-	$(MAKE) -C userspace/dnnice clean
-	$(MAKE) -C userspace/dnmultinet clean
-	$(MAKE) -C tests/unit clean
-	@if [ -n "$(KDIR)" ]; then $(MAKE) -C kernel/decnet KDIR="$(KDIR)" clean; fi
+	rm -f dnnice

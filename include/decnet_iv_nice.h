@@ -108,6 +108,96 @@ dniv_nice_build_node_reply(__u8 *buf, size_t capacity, size_t *used,
 }
 
 
+
+struct dniv_nice_node_reply {
+    __u16 address;
+    __u16 active_links;
+    __u8 state;
+    __u8 has_state;
+    __u8 has_active_links;
+    char name[128];
+};
+
+static inline int
+dniv_nice_parse_node_reply(const __u8 *buf, size_t length,
+                           struct dniv_nice_node_reply *reply)
+{
+    size_t off;
+    size_t name_len;
+
+    if (!buf || !reply || length < 7U || buf[0] != DNIV_NICE_RET_SUCCESS)
+        return -1;
+    memset(reply, 0, sizeof(*reply));
+
+    off = 3U;
+    if (off >= length || length - off < (size_t)buf[off] + 1U)
+        return -1;
+    off += (size_t)buf[off] + 1U;
+    if (length - off < 3U)
+        return -1;
+
+    reply->address = (__u16)((__u16)buf[off] |
+                             ((__u16)buf[off + 1U] << 8));
+    off += 2U;
+    if ((buf[off] & 0x80U) == 0U)
+        return -1;
+    name_len = buf[off++] & 0x7fU;
+    if (!name_len || name_len >= sizeof(reply->name) ||
+        length - off < name_len)
+        return -1;
+    memcpy(reply->name, buf + off, name_len);
+    reply->name[name_len] = '\0';
+    off += name_len;
+
+    while (length - off >= 3U) {
+        __u16 param = (__u16)((__u16)buf[off] |
+                              ((__u16)buf[off + 1U] << 8));
+        __u8 type = buf[off + 2U];
+
+        off += 3U;
+        if (param == 0U && type == 0x81U) {
+            if (length - off < 1U)
+                return -1;
+            reply->state = buf[off++];
+            reply->has_state = 1U;
+            continue;
+        }
+        if (param == 600U && type == 0x02U) {
+            if (length - off < 2U)
+                return -1;
+            reply->active_links = (__u16)((__u16)buf[off] |
+                                          ((__u16)buf[off + 1U] << 8));
+            reply->has_active_links = 1U;
+            off += 2U;
+            continue;
+        }
+        if (param > 600U)
+            break;
+        if (type == 0x20U || type == 0x40U) {
+            size_t value_len;
+
+            if (off >= length)
+                return -1;
+            value_len = buf[off];
+            if (length - off < value_len + 1U)
+                return -1;
+            off += value_len + 1U;
+            continue;
+        }
+        if ((type >= 0x01U && type <= 0x1fU) ||
+            (type >= 0x81U && type <= 0x9fU)) {
+            size_t value_len = type & 0x1fU;
+
+            if (!value_len || length - off < value_len)
+                return -1;
+            off += value_len;
+            continue;
+        }
+        break;
+    }
+    return 0;
+}
+
 static inline int
 dniv_nice_build_node_status_reply(__u8 *buf, size_t capacity, size_t *used,
                                   __u16 address, const char *name,
