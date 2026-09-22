@@ -20,6 +20,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <termios.h>
@@ -40,6 +41,8 @@
 #define CTERM_READ_DATA 3U
 #define CTERM_WRITE 7U
 #define CTERM_WRITE_COMPLETE 8U
+#define CTERM_CHECK_INPUT 12U
+#define CTERM_INPUT_COUNT 13U
 
 struct terminal_state {
     struct termios saved;
@@ -357,6 +360,21 @@ static int handle_write(int fd, const unsigned char *body, size_t len)
     return 0;
 }
 
+static int handle_check_input(int fd)
+{
+    unsigned char reply[4] = { CTERM_INPUT_COUNT, 0, 0, 0 };
+    int available = 0;
+    uint16_t count;
+
+    if (ioctl(STDIN_FILENO, FIONREAD, &available) < 0)
+        return -1;
+    if (available < 0)
+        available = 0;
+    count = available > UINT16_MAX ? UINT16_MAX : (uint16_t)available;
+    put_le16(reply + 2, count);
+    return send_common(fd, reply, sizeof(reply));
+}
+
 static int handle_common(int fd, const unsigned char *record, size_t len)
 {
     const unsigned char *body;
@@ -373,6 +391,8 @@ static int handle_common(int fd, const unsigned char *record, size_t len)
         return handle_write(fd, body, inner);
     case CTERM_START_READ:
         return handle_start_read(fd, body, inner);
+    case CTERM_CHECK_INPUT:
+        return handle_check_input(fd);
     default:
         fprintf(stderr, "dnlogin: unsupported CTERM message %u\n", body[0]);
         return -1;

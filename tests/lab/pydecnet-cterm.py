@@ -27,6 +27,9 @@ CTERM_INITIATE = 1
 CTERM_START_READ = 2
 CTERM_READ_DATA = 3
 CTERM_WRITE = 7
+CTERM_WRITE_COMPLETE = 8
+CTERM_CHECK_INPUT = 12
+CTERM_INPUT_COUNT = 13
 
 def foundation_bind() -> bytes:
     msg = bytearray(17)
@@ -41,8 +44,14 @@ def common(body: bytes) -> bytes:
 def cterm_initiate() -> bytes:
     return common(bytes((CTERM_INITIATE, 0, 1, 4, 0)))
 
-def cterm_write(data: bytes) -> bytes:
-    return common(bytes((CTERM_WRITE, 0, 0, 0, 0)) + data)
+def cterm_write(data: bytes, request_complete: bool = False) -> bytes:
+    flags = 0x0400 if request_complete else 0
+    return common(
+        bytes((CTERM_WRITE, flags & 0xff, flags >> 8, 0, 0)) + data
+    )
+
+def cterm_check_input() -> bytes:
+    return common(bytes((CTERM_CHECK_INPUT, 0)))
 
 def cterm_start_read(maximum: int = 80) -> bytes:
     body = bytearray(17)
@@ -75,6 +84,16 @@ def read_data(msg: bytes) -> tuple[int, bytes]:
     body = msg[4:]
     return int.from_bytes(body[6:8], "little"), body[8:]
 
+def common_body(msg: bytes, expected_type: int) -> bytes:
+    if len(msg) < 5 or msg[0] != FOUND_COMMON_DATA:
+        raise RuntimeError(f"bad common-data foundation record: {msg!r}")
+    length = int.from_bytes(msg[2:4], "little")
+    if len(msg) != length + 4 or length < 1 or msg[4] != expected_type:
+        raise RuntimeError(
+            f"bad CTERM type {expected_type} common-data record: {msg!r}"
+        )
+    return msg[4:]
+
 async def handshake(conn) -> None:
     request = await conn.recv()
     if request.type != "connect":
@@ -105,7 +124,22 @@ async def serve(api_socket: str, system: str) -> int:
 
         interactive = await listener.listen()
         await handshake(interactive)
-        interactive.data(cterm_write(b"CTERM-READY\r\n"))
+        interactive.data(cterm_write(b"CTERM-READY\r\n", request_complete=True))
+        reply = await interactive.recv()
+        if reply.type != "data":
+            raise RuntimeError(f"expected WRITE COMPLETE, got {reply.type!r}")
+        body = common_body(bytes(reply), CTERM_WRITE_COMPLETE)
+        if body != bytes((CTERM_WRITE_COMPLETE, 0, 0, 0, 0, 0)):
+            raise RuntimeError(f"bad WRITE COMPLETE body: {body!r}")
+
+        interactive.data(cterm_check_input())
+        reply = await interactive.recv()
+        if reply.type != "data":
+            raise RuntimeError(f"expected INPUT COUNT, got {reply.type!r}")
+        body = common_body(bytes(reply), CTERM_INPUT_COUNT)
+        if len(body) != 4 or int.from_bytes(body[2:4], "little") != 7:
+            raise RuntimeError(f"bad INPUT COUNT body: {body!r}")
+
         interactive.data(cterm_start_read())
         reply = await interactive.recv()
         if reply.type != "data":
@@ -117,7 +151,7 @@ async def serve(api_socket: str, system: str) -> int:
             )
         interactive.data(cterm_write(b"CTERM-DONE\r\n"))
         interactive.disconnect()
-        print("pydecnet-cterm: pass object=42 sessions=2 interactive=1", flush=True)
+        print("pydecnet-cterm: pass object=42 sessions=2 interactive=1 controls=write-complete,input-count", flush=True)
         return 0
     finally:
         listener.close()
