@@ -108,6 +108,7 @@ static long dniv_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
     struct dniv_adjacency adjacency;
     struct dniv_identity identity;
+    struct dniv_link link;
     struct dniv_route route;
     struct dniv_stats stats;
     int err;
@@ -178,6 +179,38 @@ static long dniv_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
             route.hops = result.hops;
         }
         if (copy_to_user((void __user *)arg, &route, sizeof(route)))
+            return -EFAULT;
+        return 0;
+
+    case DNIV_IOC_GET_LINK:
+        if (copy_from_user(&link, (void __user *)arg, sizeof(link)))
+            return -EFAULT;
+        if (link.uapi_version != DNIV_UAPI_VERSION)
+            return -EPROTO;
+        {
+            __u32 index = link.index;
+            struct dniv_nsp_conn_snapshot snapshot;
+
+            err = dniv_nsp_conn_get_index(index, &snapshot);
+            if (err)
+                return err;
+            memset(&link, 0, sizeof(link));
+            link.uapi_version = DNIV_UAPI_VERSION;
+            link.index = index;
+            link.local_link = snapshot.local_link;
+            link.remote_link = snapshot.remote_link;
+            link.remote_node = snapshot.remote_node;
+            link.segment_size = snapshot.segment_size;
+            link.data_outstanding = snapshot.data_retransmit_count;
+            link.other_outstanding = snapshot.other_retransmit_count;
+            link.rx_queued = snapshot.rx_queued;
+            link.interrupt_credit = snapshot.interrupt_credit;
+            link.disconnect_reason = snapshot.disconnect_reason;
+            link.state = (__u8)snapshot.state;
+            link.data_xon = snapshot.data_xon;
+            link.shutdown_pending = snapshot.shutdown_pending;
+        }
+        if (copy_to_user((void __user *)arg, &link, sizeof(link)))
             return -EFAULT;
         return 0;
 

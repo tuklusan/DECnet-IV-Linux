@@ -84,6 +84,8 @@ int dniv_nsp_conn_set_remote(__u16 local_link, __u16 remote_node,
                              __u16 remote_link);
 int dniv_nsp_conn_snapshot(__u16 local_link,
                            struct dniv_nsp_conn_snapshot *snapshot);
+int dniv_nsp_conn_get_index(__u32 index,
+                            struct dniv_nsp_conn_snapshot *snapshot);
 int dniv_nsp_ci_snapshot(__u16 local_link,
                          struct dniv_nsp_ci_snapshot *snapshot,
                          __u8 *payload, __u16 capacity);

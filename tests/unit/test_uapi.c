@@ -20,6 +20,7 @@ _Static_assert(sizeof(struct dniv_identity) == 16, "dniv_identity UAPI size chan
 _Static_assert(sizeof(struct dniv_stats) == 64, "dniv_stats UAPI size changed");
 _Static_assert(sizeof(struct dniv_adjacency) == 32, "dniv_adjacency UAPI size changed");
 _Static_assert(sizeof(struct dniv_route) == 20, "dniv_route UAPI size changed");
+_Static_assert(sizeof(struct dniv_link) == 32, "dniv_link UAPI size changed");
 
 int main(void)
 {
@@ -28,6 +29,8 @@ int main(void)
 
     assert(DNIV_UAPI_VERSION == 2U);
     assert(_IOC_NR(DNIV_IOC_GET_ROUTE) == 0x05U);
+    assert(_IOC_NR(DNIV_IOC_GET_LINK) == 0x06U);
+    assert(DNIV_LINK_STATE_RUN == 5U);
     assert(first == 0x7c46);
     assert(last == 0x7c4f);
     assert(DNIV_ADDR_AREA(first) == 31);

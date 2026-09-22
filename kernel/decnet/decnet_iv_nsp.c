@@ -709,22 +709,13 @@ int dniv_nsp_conn_set_remote(__u16 local_link, __u16 remote_node,
     return 0;
 }
 
-int dniv_nsp_conn_snapshot(__u16 local_link,
-                           struct dniv_nsp_conn_snapshot *snapshot)
+static void
+dniv_nsp_conn_snapshot_locked(const struct dniv_nsp_connection *conn,
+                              struct dniv_nsp_conn_snapshot *snapshot)
 {
-    struct dniv_nsp_connection *conn;
     struct dniv_nsp_retransmit *entry;
-    unsigned long flags;
 
-    if (!snapshot)
-        return -EINVAL;
-
-    spin_lock_irqsave(&dniv_nsp_lock, flags);
-    conn = dniv_nsp_find_locked(local_link);
-    if (!conn) {
-        spin_unlock_irqrestore(&dniv_nsp_lock, flags);
-        return -ENOENT;
-    }
+    memset(snapshot, 0, sizeof(*snapshot));
     snapshot->local_link = conn->local_link;
     snapshot->remote_link = conn->remote_link;
     snapshot->remote_node = conn->remote_node;
@@ -733,8 +724,6 @@ int dniv_nsp_conn_snapshot(__u16 local_link,
     snapshot->other_tx_next = conn->tx_next[DNIV_NSP_CH_OTHER];
     snapshot->other_rx_next = conn->rx_next[DNIV_NSP_CH_OTHER];
     snapshot->retransmit_count = conn->retransmit_count;
-    snapshot->data_retransmit_count = 0U;
-    snapshot->other_retransmit_count = 0U;
     list_for_each_entry(entry, &conn->retransmit, link) {
         if (entry->channel == DNIV_NSP_CH_DATA)
             snapshot->data_retransmit_count++;
@@ -750,8 +739,52 @@ int dniv_nsp_conn_snapshot(__u16 local_link,
     snapshot->connect_deadline = conn->connect_deadline;
     snapshot->inactivity_deadline = conn->inactivity_deadline;
     snapshot->state = conn->state;
+}
+
+int dniv_nsp_conn_snapshot(__u16 local_link,
+                           struct dniv_nsp_conn_snapshot *snapshot)
+{
+    struct dniv_nsp_connection *conn;
+    unsigned long flags;
+
+    if (!snapshot)
+        return -EINVAL;
+
+    spin_lock_irqsave(&dniv_nsp_lock, flags);
+    conn = dniv_nsp_find_locked(local_link);
+    if (!conn) {
+        spin_unlock_irqrestore(&dniv_nsp_lock, flags);
+        return -ENOENT;
+    }
+    dniv_nsp_conn_snapshot_locked(conn, snapshot);
     spin_unlock_irqrestore(&dniv_nsp_lock, flags);
     return 0;
+}
+
+int dniv_nsp_conn_get_index(__u32 index,
+                            struct dniv_nsp_conn_snapshot *snapshot)
+{
+    unsigned long flags;
+    __u32 seen = 0U;
+    unsigned int i;
+
+    if (!snapshot)
+        return -EINVAL;
+
+    spin_lock_irqsave(&dniv_nsp_lock, flags);
+    for (i = 0U; i < DNIV_NSP_MAX_CONNECTIONS; i++) {
+        struct dniv_nsp_connection *conn = &dniv_nsp_connections[i];
+
+        if (!conn->used)
+            continue;
+        if (seen++ != index)
+            continue;
+        dniv_nsp_conn_snapshot_locked(conn, snapshot);
+        spin_unlock_irqrestore(&dniv_nsp_lock, flags);
+        return 0;
+    }
+    spin_unlock_irqrestore(&dniv_nsp_lock, flags);
+    return -ENOENT;
 }
 
 int dniv_nsp_ci_snapshot(__u16 local_link,

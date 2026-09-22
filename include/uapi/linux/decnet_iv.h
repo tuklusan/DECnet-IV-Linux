@@ -34,6 +34,14 @@
 #define DNIV_ADJ_STATE_INIT 1U
 #define DNIV_ADJ_STATE_UP 2U
 
+#define DNIV_LINK_STATE_CLOSED 0U
+#define DNIV_LINK_STATE_CI     1U
+#define DNIV_LINK_STATE_CD     2U
+#define DNIV_LINK_STATE_CR     3U
+#define DNIV_LINK_STATE_CC     4U
+#define DNIV_LINK_STATE_RUN    5U
+#define DNIV_LINK_STATE_DI     6U
+
 struct dniv_identity {
     __u32 uapi_version;
     __u16 address;
@@ -65,6 +73,24 @@ struct dniv_route {
     __u8 hops;
 };
 
+struct dniv_link {
+    __u32 uapi_version;
+    __u32 index;
+    __u16 local_link;
+    __u16 remote_link;
+    __u16 remote_node;
+    __u16 segment_size;
+    __u16 data_outstanding;
+    __u16 other_outstanding;
+    __u16 rx_queued;
+    __u16 interrupt_credit;
+    __u16 disconnect_reason;
+    __u8 state;
+    __u8 data_xon;
+    __u8 shutdown_pending;
+    __u8 reserved0;
+};
+
 struct dniv_adjacency {
     __u32 uapi_version;
     __u32 index;
@@ -87,5 +113,6 @@ struct dniv_adjacency {
 #define DNIV_IOC_RESET_STATS _IO(DNIV_IOC_MAGIC, 0x03)
 #define DNIV_IOC_GET_ADJACENCY _IOWR(DNIV_IOC_MAGIC, 0x04, struct dniv_adjacency)
 #define DNIV_IOC_GET_ROUTE _IOWR(DNIV_IOC_MAGIC, 0x05, struct dniv_route)
+#define DNIV_IOC_GET_LINK _IOWR(DNIV_IOC_MAGIC, 0x06, struct dniv_link)
 
 #endif /* _UAPI_LINUX_DECNET_IV_H */

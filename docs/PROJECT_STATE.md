@@ -694,3 +694,8 @@ Phase 6 starts with a read-only management-state surface suitable for NICE/NML: 
 
 
 The first Phase 6 route-management acceptance attempt on `7135e72aa994d1af44064b70dfff45ecd61e9d05` failed only at kernel compilation in Build Bootstrap `35675753048` on both architectures. The new local variable name `current` collided with the Linux kernel `current` macro (`get_current()`), producing strict-prototype and lvalue errors in `dniv_route_get_index()`. The enumerator variable is renamed to `cursor`; management semantics are unchanged. The failed build is retained as evidence.
+
+
+Exact-SHA fast acceptance for corrected Phase 6 route-management candidate `efa76ee675dd6a9e9c8c514f0710287f93cd3124` is green: Repository Policy `35675873484`, Build Bootstrap `35675894607`, Project State Gate `35675896016`, Python QEMU VM Lab `35675897212` on x86_64 and ARM64, and Independent Ethernet Interoperability `35675898672`. The read-only best-route enumeration and `dnctl routes` management consumer are accepted.
+
+Phase 6 management state now extends to live NSP logical links. A new read-only `DNIV_IOC_GET_LINK` enumerates bounded connection records and reports local/remote logical-link IDs, remote node, protocol state, negotiated segment size, Data/Other-Data outstanding counts, receive queue depth, interrupt credit, XON/shutdown state and terminal reason. Snapshotting is performed under the existing NSP lock, and `dnctl links` is the first scripted local consumer. NSP wire behavior is unchanged. Next: exact-SHA fast acceptance, then build the object-19 Session Control/NICE boundary on these management snapshots.

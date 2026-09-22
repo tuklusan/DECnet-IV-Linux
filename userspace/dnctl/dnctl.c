@@ -34,9 +34,10 @@ static void usage(FILE *stream, const char *prog)
             "  %s stats\n"
             "  %s adjacencies\n"
             "  %s routes\n"
+            "  %s links\n"
             "  %s reset-stats\n"
             "  %s --about\n",
-            prog, prog, prog, prog, prog, prog, prog);
+            prog, prog, prog, prog, prog, prog, prog, prog);
 }
 
 static int show_about(void)
@@ -305,6 +306,52 @@ static int show_routes(void)
     return 0;
 }
 
+static const char *link_state_name(__u8 state)
+{
+    switch (state) {
+    case DNIV_LINK_STATE_CLOSED: return "CLOSED";
+    case DNIV_LINK_STATE_CI: return "CI";
+    case DNIV_LINK_STATE_CD: return "CD";
+    case DNIV_LINK_STATE_CR: return "CR";
+    case DNIV_LINK_STATE_CC: return "CC";
+    case DNIV_LINK_STATE_RUN: return "RUN";
+    case DNIV_LINK_STATE_DI: return "DI";
+    default: return "UNKNOWN";
+    }
+}
+
+static int show_links(void)
+{
+    struct dniv_link link;
+    __u32 index;
+    int fd = open_device(0);
+
+    if (fd < 0)
+        return 1;
+    for (index = 0;; index++) {
+        memset(&link, 0, sizeof(link));
+        link.uapi_version = DNIV_UAPI_VERSION;
+        link.index = index;
+        if (ioctl(fd, DNIV_IOC_GET_LINK, &link) < 0) {
+            if (errno == ENOENT)
+                break;
+            perror("DNIV_IOC_GET_LINK");
+            close(fd);
+            return 1;
+        }
+        printf("link %u remote=%u.%u state=%s remote-link=%u seg=%u "
+               "tx-data=%u tx-other=%u rx=%u int-credit=%u xon=%u "
+               "shutdown=%u reason=%u\n",
+               link.local_link, DNIV_ADDR_AREA(link.remote_node),
+               DNIV_ADDR_NODE(link.remote_node), link_state_name(link.state),
+               link.remote_link, link.segment_size, link.data_outstanding,
+               link.other_outstanding, link.rx_queued, link.interrupt_credit,
+               link.data_xon, link.shutdown_pending, link.disconnect_reason);
+    }
+    close(fd);
+    return 0;
+}
+
 static int reset_stats(void)
 {
     int fd = open_device(1);
@@ -334,6 +381,8 @@ int main(int argc, char **argv)
         return show_adjacencies();
     if (argc == 2 && strcmp(argv[1], "routes") == 0)
         return show_routes();
+    if (argc == 2 && strcmp(argv[1], "links") == 0)
+        return show_links();
     if (argc == 2 && strcmp(argv[1], "reset-stats") == 0)
         return reset_stats();
 
