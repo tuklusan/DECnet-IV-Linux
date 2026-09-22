@@ -88,6 +88,8 @@ test -n "$krel"
 test -d "/lib/modules/$krel/build"
 make -C /usr/src/decnet-iv-linux/userspace/dnctl clean all
 install -m 0755 /usr/src/decnet-iv-linux/userspace/dnctl/dnctl /usr/local/sbin/dnctl
+make -C /usr/src/decnet-iv-linux/userspace/ncp clean all
+install -m 0755 /usr/src/decnet-iv-linux/userspace/ncp/ncp /usr/local/sbin/ncp
 make -C /usr/src/decnet-iv-linux/userspace/dnnml clean all
 install -m 0755 /usr/src/decnet-iv-linux/userspace/dnnml/dnnml /usr/local/sbin/dnnml
 make -C /usr/src/decnet-iv-linux/userspace/dnnice clean all
@@ -185,6 +187,7 @@ sudo ln -sf ../dniv-interop-smoke.service \
 sudo test "$(sudo cat "$mnt/usr/src/decnet-iv-linux/.source-commit")" = "$source_commit"
 sudo test "$(sudo cat "$mnt/etc/dniv-candidate-sha")" = "$source_commit"
 sudo test -s "$mnt/usr/local/sbin/dnctl"
+sudo test -s "$mnt/usr/local/sbin/ncp"
 sudo test -s "$mnt/usr/local/sbin/dnnml"
 sudo test -s "$mnt/usr/local/sbin/dnnice"
 sudo test -s "$mnt/usr/local/sbin/dnmirror"

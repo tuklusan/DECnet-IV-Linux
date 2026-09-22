@@ -279,6 +279,11 @@ if [ "$reference" = pydecnet ]; then
         exit 1
     fi
     echo "DNIV-INTEROP-REMOTE-NICE session=$session scenario=$scenario node=$name peer=$peer_node queries=summary,status,characteristics,counters,specific-node,circuit-status,circuit-counters,multiple-nodes,multiple-circuits,multiple-circuit-counters"
+    if ! /usr/local/sbin/ncp tell "$peer_node" show executor status; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=ncp-remote-show"
+        exit 1
+    fi
+    echo "DNIV-INTEROP-NCP session=$session scenario=$scenario node=$name peer=$peer_node command=show-executor-status"
     /usr/local/sbin/dnnml --once &
     nml_pid=$!
     sleep 2
