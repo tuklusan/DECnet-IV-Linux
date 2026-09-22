@@ -232,10 +232,29 @@ if [ "$reference" = pydecnet ]; then
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=remote-nice-circuit-counters"
         exit 1
     fi
-    multi_nodes=$(/usr/local/sbin/dnnice "$peer_node" nodes adjacent status) || {
+    # The candidate can observe the peer endnode before that peer has
+    # processed our router hello.  Bound the independent peer's reciprocal
+    # adjacency convergence rather than treating the first empty NICE
+    # "adjacent nodes" reply as a protocol failure.
+    multi_nodes=
+    multi_nodes_ok=0
+    i=0
+    while [ "$i" -lt 40 ]; do
+        if multi_nodes=$(/usr/local/sbin/dnnice "$peer_node" nodes adjacent status); then
+            multi_nodes_ok=1
+            if printf '%s\n' "$multi_nodes" | grep -Fq "Node = $area.$node"; then
+                break
+            fi
+        else
+            multi_nodes_ok=0
+        fi
+        i=$((i + 1))
+        sleep 0.25
+    done
+    if [ "$multi_nodes_ok" -ne 1 ]; then
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=remote-nice-multiple-nodes"
         exit 1
-    }
+    fi
     printf '%s\n' "$multi_nodes"
     if ! printf '%s\n' "$multi_nodes" | grep -Fq "Node = $area.$node"; then
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=remote-nice-multiple-node-missing"
