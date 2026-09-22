@@ -746,3 +746,6 @@ Phase 6 now wires READ CIRCUIT status to live kernel adjacency state. The object
 
 
 Exact-SHA fast acceptance for live NICE circuit-status candidate `da0b4864741ce5220a2b7d7743631a479a871957` is green: Repository Policy `35685198705`, Build Bootstrap `35685229625`, Project State Gate `35685231343`, Python QEMU VM Lab `35685233059` on x86_64 and ARM64, and x64 PyDECnet L1 interoperability `35685234915`. The reciprocal object-19 session validated executor characteristics/status plus live `ETH-0` State=On and kernel-adjacency Block Size.
+
+
+Phase 6 executor management now serves standard READ NODE counters on object 19. The response exposes NICE node counter 608 (Total bytes received) and 610 (Total messages received) from the kernel's live DECnet receive accounting, with standard CTR4 encoding and saturation. The pinned PyDECnet reciprocal session now validates characteristics, status, counters and live circuit status on one NML connection. Next: exact-SHA fast acceptance, then add transmit/per-circuit accounting and richer circuit/adjacency NICE information.

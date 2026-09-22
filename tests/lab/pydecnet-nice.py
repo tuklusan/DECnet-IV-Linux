@@ -22,7 +22,7 @@ import sys
 from decnet.connectors import SimpleApiConnector
 
 REQUEST = bytes.fromhex("14 20 00 00 00")
-STATUS_REQUEST = bytes.fromhex("14 10 00 00 00")
+STATUS_REQUEST = bytes.fromhex("14 10 00 00 00")\nCOUNTERS_REQUEST = bytes.fromhex("14 30 00 00 00")
 CIRCUIT_REQUEST = bytes.fromhex("14 13 05") + b"ETH-0"
 VERSION = bytes((4, 0, 0))
 IDENT = b"DECnet-IV-Linux"
@@ -92,6 +92,33 @@ def main() -> int:
         if active_links < 1:
             raise RuntimeError(f"invalid NICE active-links value: {status!r}")
 
+        connection.data(COUNTERS_REQUEST)
+        response = connection.recv()
+        if response.type != "data":
+            raise RuntimeError(
+                f"unexpected NICE counters response type {response.type!r}"
+            )
+        counters = bytes(response)
+        if len(counters) < 23 or counters[:4] != b"\x01\xff\xff\x00":
+            raise RuntimeError(f"bad NICE counters header: {counters!r}")
+        counters_name_len = counters[6] & 0x7f
+        counters_off = 7 + counters_name_len
+        if counters[counters_off:counters_off + 2] != b"\x60\xe2":
+            raise RuntimeError(f"missing NICE total-bytes counter: {counters!r}")
+        total_bytes = int.from_bytes(
+            counters[counters_off + 2:counters_off + 6], "little"
+        )
+        counters_off += 6
+        if counters[counters_off:counters_off + 2] != b"\x62\xe2":
+            raise RuntimeError(
+                f"missing NICE total-messages counter: {counters!r}"
+            )
+        total_messages = int.from_bytes(
+            counters[counters_off + 2:counters_off + 6], "little"
+        )
+        if total_bytes < 1 or total_messages < 1:
+            raise RuntimeError(f"invalid NICE counters: {counters!r}")
+
         connection.data(CIRCUIT_REQUEST)
         response = connection.recv()
         if response.type != "data":
@@ -120,7 +147,7 @@ def main() -> int:
     print(
         f"pydecnet-nice: pass peer={destination} "
         f"executor={address >> 10}.{address & 1023} name={name.decode('ascii')} "
-        f"active_links={active_links} circuit=ETH-0 block_size={block_size}"
+        f"active_links={active_links} total_bytes={total_bytes} "\n        f"total_messages={total_messages} circuit=ETH-0 block_size={block_size}"
     )
     return 0
 

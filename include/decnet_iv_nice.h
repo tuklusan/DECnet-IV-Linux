@@ -188,6 +188,66 @@ dniv_nice_build_circuit_status_reply(__u8 *buf, size_t capacity,
     return 0;
 }
 
+static inline __u32
+dniv_nice_counter32(__u64 value)
+{
+    return value > 0xffffffffULL ? 0xffffffffU : (__u32)value;
+}
+
+static inline int
+dniv_nice_build_node_counters_reply(__u8 *buf, size_t capacity, size_t *used,
+                                    __u16 address, const char *name,
+                                    __u64 total_bytes_received,
+                                    __u64 total_messages_received)
+{
+    size_t name_len;
+    size_t needed;
+    size_t off = 0U;
+    __u32 bytes_value;
+    __u32 messages_value;
+    __u16 pnum;
+
+    if (!buf || !used || !name)
+        return -1;
+    name_len = strlen(name);
+    if (!name_len || name_len > 127U)
+        return -1;
+    needed = 1U + 2U + 1U + 2U + 1U + name_len + 6U + 6U;
+    if (capacity < needed)
+        return -1;
+
+    buf[off++] = (__u8)DNIV_NICE_RET_SUCCESS;
+    buf[off++] = 0xffU;
+    buf[off++] = 0xffU;
+    buf[off++] = 0U;
+    buf[off++] = (__u8)(address & 0xffU);
+    buf[off++] = (__u8)(address >> 8);
+    buf[off++] = (__u8)(0x80U | (__u8)name_len);
+    memcpy(buf + off, name, name_len);
+    off += name_len;
+
+    bytes_value = dniv_nice_counter32(total_bytes_received);
+    pnum = (__u16)(608U | 0xe000U);
+    buf[off++] = (__u8)(pnum & 0xffU);
+    buf[off++] = (__u8)(pnum >> 8);
+    buf[off++] = (__u8)(bytes_value & 0xffU);
+    buf[off++] = (__u8)((bytes_value >> 8) & 0xffU);
+    buf[off++] = (__u8)((bytes_value >> 16) & 0xffU);
+    buf[off++] = (__u8)(bytes_value >> 24);
+
+    messages_value = dniv_nice_counter32(total_messages_received);
+    pnum = (__u16)(610U | 0xe000U);
+    buf[off++] = (__u8)(pnum & 0xffU);
+    buf[off++] = (__u8)(pnum >> 8);
+    buf[off++] = (__u8)(messages_value & 0xffU);
+    buf[off++] = (__u8)((messages_value >> 8) & 0xffU);
+    buf[off++] = (__u8)((messages_value >> 16) & 0xffU);
+    buf[off++] = (__u8)(messages_value >> 24);
+
+    *used = off;
+    return 0;
+}
+
 struct dniv_nice_node_reply {
     __u16 address;
     __u16 active_links;

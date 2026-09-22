@@ -101,6 +101,36 @@ int main(void)
     }
 
     {
+        const __u8 counters_request[] = {
+            0x14U, 0x30U, 0x00U, 0x00U, 0x00U
+        };
+
+        assert(dniv_nice_parse_read_node(counters_request,
+                                         sizeof(counters_request),
+                                         &request) == 0);
+        assert(request.info == DNIV_NICE_INFO_COUNTERS);
+        assert(dniv_nice_build_node_counters_reply(
+                   reply, sizeof(reply), &reply_len,
+                   DNIV_ADDR(31, 70), "DN70",
+                   0x01020304ULL, 0x05060708ULL) == 0);
+        assert(reply_len == 23U);
+        assert(reply[11] == 0x60U && reply[12] == 0xe2U);
+        assert(reply[13] == 0x04U && reply[14] == 0x03U &&
+               reply[15] == 0x02U && reply[16] == 0x01U);
+        assert(reply[17] == 0x62U && reply[18] == 0xe2U);
+        assert(reply[19] == 0x08U && reply[20] == 0x07U &&
+               reply[21] == 0x06U && reply[22] == 0x05U);
+        assert(dniv_nice_build_node_counters_reply(
+                   reply, sizeof(reply), &reply_len,
+                   DNIV_ADDR(31, 70), "DN70",
+                   0x100000000ULL, 0x100000000ULL) == 0);
+        assert(reply[13] == 0xffU && reply[14] == 0xffU &&
+               reply[15] == 0xffU && reply[16] == 0xffU);
+        assert(reply[19] == 0xffU && reply[20] == 0xffU &&
+               reply[21] == 0xffU && reply[22] == 0xffU);
+    }
+
+    {
         const __u8 circuit_request[] = {
             0x14U, 0x13U, 0x05U, 'E', 'T', 'H', '-', '0'
         };

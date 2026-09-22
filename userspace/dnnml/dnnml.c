@@ -90,6 +90,24 @@ fail:
     return -1;
 }
 
+static int read_stats(struct dniv_stats *stats)
+{
+    int fd;
+
+    if (!stats)
+        return -1;
+    fd = open(DNIV_DEVICE, O_RDONLY);
+    if (fd < 0)
+        return -1;
+    memset(stats, 0, sizeof(*stats));
+    if (ioctl(fd, DNIV_IOC_GET_STATS, stats) < 0) {
+        close(fd);
+        return -1;
+    }
+    close(fd);
+    return stats->uapi_version == DNIV_UAPI_VERSION ? 0 : -1;
+}
+
 static int count_active_links(__u16 *active)
 {
     struct dniv_link link;
@@ -261,6 +279,16 @@ static int serve_connection(int fd)
                                            DNIV_NML_IDENT))
                 return -1;
             break;
+        case DNIV_NICE_INFO_COUNTERS: {
+            struct dniv_stats stats;
+
+            if (read_stats(&stats) ||
+                dniv_nice_build_node_counters_reply(
+                    out, sizeof(out), &out_len, identity.address,
+                    identity.name, stats.rx_bytes, stats.rx_frames))
+                return -1;
+            break;
+        }
         default: {
             const signed char error = -1;
 
