@@ -214,7 +214,13 @@ if [ "$reference" = pydecnet ]; then
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=remote-nice-read-node"
         exit 1
     fi
-    echo "DNIV-INTEROP-REMOTE-NICE session=$session scenario=$scenario node=$name peer=$peer_node"
+    for nice_query in status characteristics counters; do
+        if ! /usr/local/sbin/dnnice "$peer_node" "$nice_query"; then
+            echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=remote-nice-$nice_query"
+            exit 1
+        fi
+    done
+    echo "DNIV-INTEROP-REMOTE-NICE session=$session scenario=$scenario node=$name peer=$peer_node queries=summary,status,characteristics,counters"
     /usr/local/sbin/dnnml --once &
     nml_pid=$!
     sleep 2
@@ -243,7 +249,7 @@ if [ "$reference" = pydecnet ]; then
     echo "DNIV-INTEROP-NML-CONCURRENT-PASS session=$session scenario=$scenario node=$name peer=$peer_node"
     /usr/local/sbin/dnnml --once &
     nml_pid=$!
-    sleep 1
+    sleep 2
     if ! kill -0 "$nml_pid" 2>/dev/null; then
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=nml-restart-listener-start"
         exit 1
