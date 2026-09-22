@@ -199,6 +199,37 @@ int main(void)
         }
     }
 
+    {
+        const __u8 remote_request[] = {
+            0x14U, 0x10U, 0x00U, 0x47U, 0x7cU
+        };
+
+        assert(dniv_nice_parse_read_node(remote_request,
+                                         sizeof(remote_request),
+                                         &request) == 0);
+        assert(request.node == DNIV_ADDR(31, 71));
+        assert(request.info == DNIV_NICE_INFO_STATUS);
+        assert(dniv_nice_build_remote_node_status_reply(
+                   reply, sizeof(reply), &reply_len, DNIV_ADDR(31, 71),
+                   4U, 7U, 2U, "ETH-0", DNIV_ADDR(31, 71)) == 0);
+        assert(reply_len == 39U);
+        assert(reply[4] == 0x47U && reply[5] == 0x7cU && reply[6] == 0U);
+        assert(reply[7] == 0U && reply[8] == 0U &&
+               reply[9] == 0x81U && reply[10] == 4U);
+        assert(reply[11] == 0x2aU && reply[12] == 0x03U &&
+               reply[13] == 0x81U && reply[14] == 4U);
+        assert(reply[15] == 0x34U && reply[16] == 0x03U &&
+               reply[17] == 0x02U && reply[18] == 7U && reply[19] == 0U);
+        assert(reply[20] == 0x35U && reply[21] == 0x03U &&
+               reply[22] == 0x01U && reply[23] == 2U);
+        assert(reply[24] == 0x36U && reply[25] == 0x03U &&
+               reply[26] == DNIV_NICE_TYPE_ASCII && reply[27] == 5U);
+        assert(memcmp(reply + 28U, "ETH-0", 5U) == 0);
+        assert(reply[33] == 0x3eU && reply[34] == 0x03U &&
+               reply[35] == 0xc1U && reply[36] == 0x02U &&
+               reply[37] == 0x47U && reply[38] == 0x7cU);
+    }
+
     puts("Phase 6 NICE codec tests passed");
     return 0;
 }

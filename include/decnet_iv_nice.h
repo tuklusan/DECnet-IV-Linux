@@ -295,6 +295,83 @@ dniv_nice_build_circuit_counters_reply(__u8 *buf, size_t capacity,
     return 0;
 }
 
+static inline int
+dniv_nice_build_remote_node_status_reply(__u8 *buf, size_t capacity,
+                                         size_t *used, __u16 address,
+                                         __u8 node_type, __u16 cost,
+                                         __u8 hops, const char *circuit,
+                                         __u16 next_node)
+{
+    size_t circuit_len;
+    size_t needed;
+    size_t off = 0U;
+
+    if (!buf || !used || !circuit ||
+        (node_type != 4U && node_type != 5U))
+        return -1;
+    circuit_len = strlen(circuit);
+    if (!circuit_len || circuit_len > 255U)
+        return -1;
+    needed = 4U + 3U + 4U + 4U + 5U + 4U +
+             4U + circuit_len + 6U;
+    if (capacity < needed)
+        return -1;
+
+    buf[off++] = (__u8)DNIV_NICE_RET_SUCCESS;
+    buf[off++] = 0xffU;
+    buf[off++] = 0xffU;
+    buf[off++] = 0U;
+
+    /* Remote node entity: address followed by an empty optional name. */
+    buf[off++] = (__u8)(address & 0xffU);
+    buf[off++] = (__u8)(address >> 8);
+    buf[off++] = 0U;
+
+    /* State, parameter 0: Reachable. */
+    buf[off++] = 0U;
+    buf[off++] = 0U;
+    buf[off++] = 0x81U;
+    buf[off++] = 4U;
+
+    /* Adjacent type, parameter 810: Routing IV / Non-Routing IV. */
+    buf[off++] = (__u8)(810U & 0xffU);
+    buf[off++] = (__u8)(810U >> 8);
+    buf[off++] = 0x81U;
+    buf[off++] = node_type;
+
+    /* Cost, parameter 820. */
+    buf[off++] = (__u8)(820U & 0xffU);
+    buf[off++] = (__u8)(820U >> 8);
+    buf[off++] = 0x02U;
+    buf[off++] = (__u8)(cost & 0xffU);
+    buf[off++] = (__u8)(cost >> 8);
+
+    /* Hops, parameter 821. */
+    buf[off++] = (__u8)(821U & 0xffU);
+    buf[off++] = (__u8)(821U >> 8);
+    buf[off++] = 0x01U;
+    buf[off++] = hops;
+
+    /* Circuit, parameter 822. */
+    buf[off++] = (__u8)(822U & 0xffU);
+    buf[off++] = (__u8)(822U >> 8);
+    buf[off++] = DNIV_NICE_TYPE_ASCII;
+    buf[off++] = (__u8)circuit_len;
+    memcpy(buf + off, circuit, circuit_len);
+    off += circuit_len;
+
+    /* Next node, parameter 830, CM-1 containing a two-byte node. */
+    buf[off++] = (__u8)(830U & 0xffU);
+    buf[off++] = (__u8)(830U >> 8);
+    buf[off++] = 0xc1U;
+    buf[off++] = 0x02U;
+    buf[off++] = (__u8)(next_node & 0xffU);
+    buf[off++] = (__u8)(next_node >> 8);
+
+    *used = off;
+    return 0;
+}
+
 struct dniv_nice_node_reply {
     __u16 address;
     __u16 active_links;

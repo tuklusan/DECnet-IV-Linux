@@ -215,6 +215,102 @@ static int read_circuit_state(const char *name, int *ifindex,
     return 0;
 }
 
+static int read_node_state(__u16 address, __u8 *node_type,
+                           __u16 *cost, __u8 *hops, char *circuit,
+                           size_t circuit_size, __u16 *next_node)
+{
+    struct dniv_adjacency adjacency;
+    struct dniv_route route;
+    int ifindices[32];
+    size_t circuits = 0U;
+    size_t target_circuit = 0U;
+    int target_ifindex = 0;
+    __u8 target_type = 0U;
+    __u32 index;
+    int fd;
+
+    if (!address || !node_type || !cost || !hops || !circuit ||
+        circuit_size < 6U || !next_node)
+        return -1;
+    fd = open(DNIV_DEVICE, O_RDONLY);
+    if (fd < 0)
+        return -1;
+
+    for (index = 0U;; index++) {
+        size_t i;
+        int known = 0;
+
+        memset(&adjacency, 0, sizeof(adjacency));
+        adjacency.uapi_version = DNIV_UAPI_VERSION;
+        adjacency.index = index;
+        if (ioctl(fd, DNIV_IOC_GET_ADJACENCY, &adjacency) < 0) {
+            if (errno == ENOENT)
+                break;
+            close(fd);
+            return -1;
+        }
+        for (i = 0U; i < circuits; i++) {
+            if (ifindices[i] == adjacency.ifindex) {
+                known = 1;
+                break;
+            }
+        }
+        if (!known) {
+            if (circuits >= sizeof(ifindices) / sizeof(ifindices[0])) {
+                close(fd);
+                return -1;
+            }
+            ifindices[circuits++] = adjacency.ifindex;
+        }
+        if (adjacency.address == address &&
+            adjacency.state == DNIV_ADJ_STATE_UP) {
+            for (i = 0U; i < circuits; i++) {
+                if (ifindices[i] == adjacency.ifindex) {
+                    target_circuit = i;
+                    break;
+                }
+            }
+            target_ifindex = adjacency.ifindex;
+            target_type = adjacency.node_type == DNIV_NODE_TYPE_ENDNODE ?
+                          5U : 4U;
+        }
+    }
+    if (!target_ifindex) {
+        close(fd);
+        return -1;
+    }
+
+    for (index = 0U;; index++) {
+        memset(&route, 0, sizeof(route));
+        route.uapi_version = DNIV_UAPI_VERSION;
+        route.index = index;
+        if (ioctl(fd, DNIV_IOC_GET_ROUTE, &route) < 0) {
+            if (errno == ENOENT)
+                break;
+            close(fd);
+            return -1;
+        }
+        if (route.destination == address &&
+            route.ifindex == target_ifindex) {
+            int written = snprintf(circuit, circuit_size, "ETH-%zu",
+                                   target_circuit);
+
+            if (written < 0 || (size_t)written >= circuit_size) {
+                close(fd);
+                return -1;
+            }
+            *node_type = target_type;
+            *cost = route.cost;
+            *hops = route.hops;
+            *next_node = route.next_hop;
+            close(fd);
+            return 0;
+        }
+    }
+    close(fd);
+    return -1;
+}
+
 static int serve_connection(int fd)
 {
     struct timeval timeout = { .tv_sec = 30, .tv_usec = 0 };
@@ -241,12 +337,38 @@ static int serve_connection(int fd)
             return -1;
 
         if (dniv_nice_parse_read_node(in, (size_t)got, &request) == 0) {
-            if (request.permanent || request.node != 0U ||
-                read_identity(&identity)) {
+            if (request.permanent || read_identity(&identity)) {
                 const signed char error = -1;
 
                 if (send(fd, &error, sizeof(error),
                          MSG_EOR | MSG_NOSIGNAL) != (ssize_t)sizeof(error))
+                    return -1;
+                continue;
+            }
+            if (request.node != 0U) {
+                char circuit[16];
+                __u16 next_node = 0U;
+                __u16 cost = 0U;
+                __u8 node_type = 0U;
+                __u8 hops = 0U;
+
+                if ((request.info != DNIV_NICE_INFO_SUMMARY &&
+                     request.info != DNIV_NICE_INFO_STATUS) ||
+                    read_node_state(request.node, &node_type, &cost, &hops,
+                                    circuit, sizeof(circuit), &next_node) ||
+                    dniv_nice_build_remote_node_status_reply(
+                        out, sizeof(out), &out_len, request.node, node_type,
+                        cost, hops, circuit, next_node)) {
+                    const signed char error = -1;
+
+                    if (send(fd, &error, sizeof(error),
+                             MSG_EOR | MSG_NOSIGNAL) !=
+                        (ssize_t)sizeof(error))
+                        return -1;
+                    continue;
+                }
+                if (send(fd, out, out_len, MSG_EOR | MSG_NOSIGNAL) !=
+                    (ssize_t)out_len)
                     return -1;
                 continue;
             }

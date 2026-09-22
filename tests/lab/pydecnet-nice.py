@@ -166,6 +166,53 @@ def main() -> int:
         if block_size < 576:
             raise RuntimeError(f"invalid NICE circuit block size: {circuit!r}")
 
+        remote_status_request = bytes((
+            0x14, 0x10, 0x00,
+            adjacent_node & 0xff, (adjacent_node >> 8) & 0xff,
+        ))
+        connection.data(remote_status_request)
+        response = connection.recv()
+        if response.type != "data":
+            raise RuntimeError(
+                f"unexpected remote-node response type {response.type!r}"
+            )
+        remote = bytes(response)
+        if len(remote) < 39 or remote[:4] != b"\x01\xff\xff\x00":
+            raise RuntimeError(f"bad remote-node header: {remote!r}")
+        if int.from_bytes(remote[4:6], "little") != adjacent_node:
+            raise RuntimeError(f"wrong remote-node entity: {remote!r}")
+        remote_name_len = remote[6] & 0x7f
+        off = 7 + remote_name_len
+        if remote[off:off + 4] != b"\x00\x00\x81\x04":
+            raise RuntimeError(f"remote node not reachable: {remote!r}")
+        off += 4
+        if remote[off:off + 3] != b"\x2a\x03\x81":
+            raise RuntimeError(f"missing remote node type: {remote!r}")
+        remote_type = remote[off + 3]
+        if remote_type not in (4, 5):
+            raise RuntimeError(f"invalid remote node type: {remote!r}")
+        off += 4
+        if remote[off:off + 3] != b"\x34\x03\x02":
+            raise RuntimeError(f"missing remote route cost: {remote!r}")
+        remote_cost = int.from_bytes(remote[off + 3:off + 5], "little")
+        off += 5
+        if remote[off:off + 3] != b"\x35\x03\x01":
+            raise RuntimeError(f"missing remote route hops: {remote!r}")
+        remote_hops = remote[off + 3]
+        off += 4
+        if remote[off:off + 3] != b"\x36\x03\x40":
+            raise RuntimeError(f"missing remote route circuit: {remote!r}")
+        remote_circuit_len = remote[off + 3]
+        remote_circuit = remote[off + 4:off + 4 + remote_circuit_len]
+        off += 4 + remote_circuit_len
+        if remote_circuit != b"ETH-0":
+            raise RuntimeError(f"wrong remote route circuit: {remote!r}")
+        if remote[off:off + 4] != b"\x3e\x03\xc1\x02":
+            raise RuntimeError(f"missing remote next node: {remote!r}")
+        remote_next = int.from_bytes(remote[off + 4:off + 6], "little")
+        if remote_next != adjacent_node:
+            raise RuntimeError(f"wrong remote next node: {remote!r}")
+
         connection.data(CIRCUIT_COUNTERS_REQUEST)
         response = connection.recv()
         if response.type != "data":
@@ -215,6 +262,8 @@ def main() -> int:
         f"total_tx_messages={total_messages_sent} "
         f"circuit=ETH-0 adjacent={adjacent_node >> 10}."
         f"{adjacent_node & 1023} block_size={block_size} "
+        f"remote_type={remote_type} remote_cost={remote_cost} "
+        f"remote_hops={remote_hops} remote_circuit={remote_circuit.decode('ascii')} "
         f"circuit_rx_bytes={circuit_rx_bytes} "
         f"circuit_tx_bytes={circuit_tx_bytes} "
         f"circuit_rx_blocks={circuit_rx_blocks} "

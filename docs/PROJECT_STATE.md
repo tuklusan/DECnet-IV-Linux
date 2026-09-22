@@ -770,3 +770,6 @@ Phase 6 live READ CIRCUIT status now includes standard NICE parameter 800 Adjace
 
 
 Exact-SHA fast acceptance for live NICE circuit-adjacent status candidate `4952895102e3e121b233e93e31e0f905860ad94f` is green: Repository Policy `35689217606`, Build Bootstrap `35689242761`, Project State Gate `35689244385`, Python QEMU VM Lab `35689245952` on x86_64 and ARM64, and x64 PyDECnet L1 interoperability `35689247610`. The reciprocal object-19 session validated live ETH-0 State=On, standard parameter 800 Adjacent node, Block Size, and the accepted circuit counters. Next: extend READ NODE beyond the executor using live adjacency/route snapshots.
+
+
+Phase 6 READ NODE status now handles a specific live remote node instead of only executor zero. The object-19 server resolves the requested address through the kernel UP-adjacency snapshot and matching route-table entry, then emits standard NICE Reachable state, Routing-IV/Non-Routing-IV type, route Cost/Hops, Circuit and Next-node parameters. The reciprocal pinned-PyDECnet session reuses the live ETH-0 adjacent address, requests that exact node, and validates the route-backed status before continuing circuit counters. Next: exact-SHA fast acceptance, then add multiple-entity known/active/adjacent node reads and management error semantics.
