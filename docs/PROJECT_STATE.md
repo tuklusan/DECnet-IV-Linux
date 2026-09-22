@@ -800,3 +800,6 @@ Exact-SHA fast acceptance for plural NICE circuit-counter candidate `e954ee76c70
 
 
 Phase 6 PP-07 negative coverage now injects malformed NICE requests over an established object-19 session: wrong function, truncated node request, unsupported entity class and inconsistent circuit-name length. Each must return NICE -1 without closing or corrupting the management session, after which a valid executor status read must still succeed with State=On. Product behavior is unchanged; this locks malformed-management rejection and session recovery against the independent peer path. Next: exact-SHA fast acceptance, then daemon/session restart and concurrent-management coverage.
+
+
+Exact-SHA fast acceptance for malformed NICE session-recovery candidate `7d34c5a016b8e79909625d8ee8c165b562e5f962` is green: Repository Policy `35694162276`, Build Bootstrap `35694195705`, Project State Gate `35694197206`, Python QEMU VM Lab `35694198772` on x86_64 and ARM64, and x64 PyDECnet L1 interoperability `35694200328`. Malformed NICE requests returned -1 without terminating the object-19 session, and a subsequent valid executor status read succeeded.
