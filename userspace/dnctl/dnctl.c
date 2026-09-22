@@ -33,9 +33,10 @@ static void usage(FILE *stream, const char *prog)
             "  %s set AREA.NODE NAME\n"
             "  %s stats\n"
             "  %s adjacencies\n"
+            "  %s routes\n"
             "  %s reset-stats\n"
             "  %s --about\n",
-            prog, prog, prog, prog, prog, prog);
+            prog, prog, prog, prog, prog, prog, prog);
 }
 
 static int show_about(void)
@@ -263,6 +264,47 @@ static int show_adjacencies(void)
     return 0;
 }
 
+static int show_routes(void)
+{
+    struct dniv_route route;
+    __u32 index;
+    int fd = open_device(0);
+
+    if (fd < 0)
+        return 1;
+    for (index = 0;; index++) {
+        char ifname[IF_NAMESIZE];
+        const char *display_ifname;
+
+        memset(&route, 0, sizeof(route));
+        route.uapi_version = DNIV_UAPI_VERSION;
+        route.index = index;
+        if (ioctl(fd, DNIV_IOC_GET_ROUTE, &route) < 0) {
+            if (errno == ENOENT)
+                break;
+            perror("DNIV_IOC_GET_ROUTE");
+            close(fd);
+            return 1;
+        }
+        display_ifname = if_indextoname(route.ifindex, ifname);
+        if (!display_ifname)
+            display_ifname = "?";
+        if (route.level == 1U)
+            printf("L1 %u.%u via %u.%u dev %s cost=%u hops=%u\n",
+                   DNIV_ADDR_AREA(route.next_hop), route.destination,
+                   DNIV_ADDR_AREA(route.next_hop),
+                   DNIV_ADDR_NODE(route.next_hop), display_ifname,
+                   route.cost, route.hops);
+        else
+            printf("L2 area %u via %u.%u dev %s cost=%u hops=%u\n",
+                   route.destination, DNIV_ADDR_AREA(route.next_hop),
+                   DNIV_ADDR_NODE(route.next_hop), display_ifname,
+                   route.cost, route.hops);
+    }
+    close(fd);
+    return 0;
+}
+
 static int reset_stats(void)
 {
     int fd = open_device(1);
@@ -290,6 +332,8 @@ int main(int argc, char **argv)
         return show_stats();
     if (argc == 2 && strcmp(argv[1], "adjacencies") == 0)
         return show_adjacencies();
+    if (argc == 2 && strcmp(argv[1], "routes") == 0)
+        return show_routes();
     if (argc == 2 && strcmp(argv[1], "reset-stats") == 0)
         return reset_stats();
 

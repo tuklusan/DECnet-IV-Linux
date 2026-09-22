@@ -54,6 +54,17 @@ struct dniv_stats {
     __u64 adjacency_down;
 };
 
+struct dniv_route {
+    __u32 uapi_version;
+    __u32 index;
+    __s32 ifindex;
+    __u16 destination;
+    __u16 next_hop;
+    __u16 cost;
+    __u8 level;
+    __u8 hops;
+};
+
 struct dniv_adjacency {
     __u32 uapi_version;
     __u32 index;
@@ -75,5 +86,6 @@ struct dniv_adjacency {
 #define DNIV_IOC_GET_STATS _IOR(DNIV_IOC_MAGIC, 0x02, struct dniv_stats)
 #define DNIV_IOC_RESET_STATS _IO(DNIV_IOC_MAGIC, 0x03)
 #define DNIV_IOC_GET_ADJACENCY _IOWR(DNIV_IOC_MAGIC, 0x04, struct dniv_adjacency)
+#define DNIV_IOC_GET_ROUTE _IOWR(DNIV_IOC_MAGIC, 0x05, struct dniv_route)
 
 #endif /* _UAPI_LINUX_DECNET_IV_H */

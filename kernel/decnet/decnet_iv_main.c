@@ -108,6 +108,7 @@ static long dniv_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
     struct dniv_adjacency adjacency;
     struct dniv_identity identity;
+    struct dniv_route route;
     struct dniv_stats stats;
     int err;
 
@@ -152,6 +153,32 @@ static long dniv_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
         if (!capable(CAP_NET_ADMIN))
             return -EPERM;
         dniv_eth_reset_stats();
+        return 0;
+
+    case DNIV_IOC_GET_ROUTE:
+        if (copy_from_user(&route, (void __user *)arg, sizeof(route)))
+            return -EFAULT;
+        if (route.uapi_version != DNIV_UAPI_VERSION)
+            return -EPROTO;
+        {
+            __u32 index = route.index;
+            struct dniv_route_result result;
+
+            err = dniv_route_get_index(index, &result);
+            if (err)
+                return err;
+            memset(&route, 0, sizeof(route));
+            route.uapi_version = DNIV_UAPI_VERSION;
+            route.index = index;
+            route.ifindex = result.ifindex;
+            route.destination = result.destination;
+            route.next_hop = result.next_hop;
+            route.cost = result.cost;
+            route.level = result.level;
+            route.hops = result.hops;
+        }
+        if (copy_to_user((void __user *)arg, &route, sizeof(route)))
+            return -EFAULT;
         return 0;
 
     case DNIV_IOC_GET_ADJACENCY:

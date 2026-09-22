@@ -338,6 +338,58 @@ int dniv_route_lookup(__u8 level, __u16 destination,
     return 0;
 }
 
+int dniv_route_get_index(__u32 index, struct dniv_route_result *result)
+{
+    unsigned long flags;
+    __u32 current = 0U;
+    unsigned int level;
+    unsigned int destination;
+
+    if (!result)
+        return -EINVAL;
+
+    spin_lock_irqsave(&dniv_route_lock, flags);
+    for (level = 1U; level <= 2U; level++) {
+        unsigned int limit = level == 1U ? DNIV_ROUTE_L1_BUCKETS
+                                         : DNIV_ROUTE_L2_BUCKETS;
+        unsigned int first = level == 1U ? 0U : 1U;
+        struct hlist_head *table = level == 1U ? dniv_l1_routes
+                                               : dniv_l2_routes;
+
+        for (destination = first; destination < limit; destination++) {
+            struct dniv_route_candidate *candidate;
+            struct dniv_route_candidate *best = NULL;
+
+            hlist_for_each_entry(candidate, &table[destination], node) {
+                if (candidate->expires &&
+                    time_after_eq(jiffies, candidate->expires))
+                    continue;
+                if (!best ||
+                    dniv_route_candidate_better(
+                        candidate->cost, candidate->next_hop,
+                        candidate->ifindex, best->cost, best->next_hop,
+                        best->ifindex))
+                    best = candidate;
+            }
+            if (!best)
+                continue;
+            if (current++ != index)
+                continue;
+
+            result->destination = (__u16)destination;
+            result->next_hop = best->next_hop;
+            result->cost = best->cost;
+            result->ifindex = best->ifindex;
+            result->level = (__u8)level;
+            result->hops = best->hops;
+            spin_unlock_irqrestore(&dniv_route_lock, flags);
+            return 0;
+        }
+    }
+    spin_unlock_irqrestore(&dniv_route_lock, flags);
+    return -ENOENT;
+}
+
 unsigned int dniv_route_age(unsigned long now)
 {
     unsigned long flags;

@@ -78,6 +78,8 @@ Implement as protocol dependencies become ready: `ncp`; `sethost`/`dnlogin`; DAP
 
 Exit criteria: the useful DECnet/Linux command environment works on the new kernel stack and against independent peers.
 
+Phase 7 also includes a small DECnet-native web server. Prefer a clean, license-compatible port/adaptation of tinyhttpd or a similarly small auditable HTTP daemon, using native DECnet sockets to serve static websites. Pin imported upstream source and preserve its license.
+
 ## Phase 8 - distributed VDE2, MULTINET and HECnet interoperability
 
 Deliver:
