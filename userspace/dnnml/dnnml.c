@@ -122,13 +122,8 @@ static int count_active_links(__u16 *active)
 static int serve_connection(int fd)
 {
     struct timeval timeout = { .tv_sec = 30, .tv_usec = 0 };
-    struct dniv_nice_read_node request;
-    struct dniv_identity identity;
     unsigned char in[256];
     unsigned char out[512];
-    size_t out_len = 0U;
-    __u16 active_links = 0U;
-    ssize_t got;
 
     if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO,
                    &timeout, sizeof(timeout)) < 0 ||
@@ -136,42 +131,59 @@ static int serve_connection(int fd)
                    &timeout, sizeof(timeout)) < 0)
         return -1;
 
-    got = recv(fd, in, sizeof(in), 0);
-    if (got <= 0)
-        return -1;
+    for (;;) {
+        struct dniv_nice_read_node request;
+        struct dniv_identity identity;
+        size_t out_len = 0U;
+        __u16 active_links = 0U;
+        ssize_t got;
 
-    if (dniv_nice_parse_read_node(in, (size_t)got, &request) ||
-        request.permanent || request.node != 0U ||
-        read_identity(&identity)) {
-        const signed char error = -1;
-        return send(fd, &error, sizeof(error), MSG_EOR | MSG_NOSIGNAL) ==
-               (ssize_t)sizeof(error) ? 0 : -1;
-    }
+        got = recv(fd, in, sizeof(in), 0);
+        if (got == 0)
+            return 0;
+        if (got < 0)
+            return -1;
 
-    switch (request.info) {
-    case DNIV_NICE_INFO_SUMMARY:
-    case DNIV_NICE_INFO_STATUS:
-        if (count_active_links(&active_links) ||
-            dniv_nice_build_node_status_reply(out, sizeof(out), &out_len,
-                                              identity.address,
-                                              identity.name, active_links))
+        if (dniv_nice_parse_read_node(in, (size_t)got, &request) ||
+            request.permanent || request.node != 0U ||
+            read_identity(&identity)) {
+            const signed char error = -1;
+
+            if (send(fd, &error, sizeof(error),
+                     MSG_EOR | MSG_NOSIGNAL) != (ssize_t)sizeof(error))
+                return -1;
+            continue;
+        }
+
+        switch (request.info) {
+        case DNIV_NICE_INFO_SUMMARY:
+        case DNIV_NICE_INFO_STATUS:
+            if (count_active_links(&active_links) ||
+                dniv_nice_build_node_status_reply(out, sizeof(out), &out_len,
+                                                  identity.address,
+                                                  identity.name,
+                                                  active_links))
+                return -1;
+            break;
+        case DNIV_NICE_INFO_CHARACTERISTICS:
+            if (dniv_nice_build_node_reply(out, sizeof(out), &out_len,
+                                           identity.address, identity.name,
+                                           DNIV_NML_IDENT))
+                return -1;
+            break;
+        default: {
+            const signed char error = -1;
+
+            if (send(fd, &error, sizeof(error),
+                     MSG_EOR | MSG_NOSIGNAL) != (ssize_t)sizeof(error))
+                return -1;
+            continue;
+        }
+        }
+        if (send(fd, out, out_len, MSG_EOR | MSG_NOSIGNAL) !=
+            (ssize_t)out_len)
             return -1;
-        break;
-    case DNIV_NICE_INFO_CHARACTERISTICS:
-        if (dniv_nice_build_node_reply(out, sizeof(out), &out_len,
-                                       identity.address, identity.name,
-                                       DNIV_NML_IDENT))
-            return -1;
-        break;
-    default: {
-        const signed char error = -1;
-        return send(fd, &error, sizeof(error), MSG_EOR | MSG_NOSIGNAL) ==
-               (ssize_t)sizeof(error) ? 0 : -1;
     }
-    }
-    if (send(fd, out, out_len, MSG_EOR | MSG_NOSIGNAL) != (ssize_t)out_len)
-        return -1;
-    return 0;
 }
 
 int main(int argc, char **argv)
@@ -212,7 +224,7 @@ int main(int argc, char **argv)
             close(listener);
             return 1;
         }
-        puts("dnnml: served READ NODE executor");
+        puts("dnnml: served NICE management session");
         if (once)
             break;
     }

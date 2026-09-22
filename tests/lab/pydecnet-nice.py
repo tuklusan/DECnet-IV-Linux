@@ -22,6 +22,7 @@ import sys
 from decnet.connectors import SimpleApiConnector
 
 REQUEST = bytes.fromhex("14 20 00 00 00")
+STATUS_REQUEST = bytes.fromhex("14 10 00 00 00")
 VERSION = bytes((4, 0, 0))
 IDENT = b"DECnet-IV-Linux"
 
@@ -68,13 +69,35 @@ def main() -> int:
             raise RuntimeError(f"bad NICE identification value: {data!r}")
         if address == 0 or not name:
             raise RuntimeError(f"invalid NICE executor identity: {data!r}")
+
+        connection.data(STATUS_REQUEST)
+        response = connection.recv()
+        if response.type != "data":
+            raise RuntimeError(
+                f"unexpected NICE status response type {response.type!r}"
+            )
+        status = bytes(response)
+        if len(status) < 20 or status[0] != 1 or status[1:4] != b"\xff\xff\x00":
+            raise RuntimeError(f"bad NICE status header: {status!r}")
+        status_name_len = status[6] & 0x7f
+        status_off = 7 + status_name_len
+        if status[status_off:status_off + 4] != b"\x00\x00\x81\x00":
+            raise RuntimeError(f"missing NICE node state: {status!r}")
+        status_off += 4
+        if status[status_off:status_off + 3] != b"\x58\x02\x02":
+            raise RuntimeError(f"missing NICE active-links parameter: {status!r}")
+        active_links = int.from_bytes(status[status_off + 3:status_off + 5],
+                                      "little")
+        if active_links < 1:
+            raise RuntimeError(f"invalid NICE active-links value: {status!r}")
         connection.disconnect()
     finally:
         connector.close()
 
     print(
         f"pydecnet-nice: pass peer={destination} "
-        f"executor={address >> 10}.{address & 1023} name={name.decode('ascii')}"
+        f"executor={address >> 10}.{address & 1023} name={name.decode('ascii')} "
+        f"active_links={active_links}"
     )
     return 0
 
