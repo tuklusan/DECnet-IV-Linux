@@ -145,7 +145,7 @@ def main() -> int:
                 f"unexpected NICE circuit response type {response.type!r}"
             )
         circuit = bytes(response)
-        if len(circuit) < 19 or circuit[:4] != b"\x01\xff\xff\x00":
+        if len(circuit) < 25 or circuit[:4] != b"\x01\xff\xff\x00":
             raise RuntimeError(f"bad NICE circuit header: {circuit!r}")
         name_len = circuit[4]
         if circuit[5:5 + name_len] != b"ETH-0":
@@ -154,6 +154,12 @@ def main() -> int:
         if circuit[off:off + 4] != b"\x00\x00\x81\x00":
             raise RuntimeError(f"missing NICE circuit state: {circuit!r}")
         off += 4
+        if circuit[off:off + 4] != b"\x20\x03\xc1\x02":
+            raise RuntimeError(f"missing NICE adjacent node: {circuit!r}")
+        adjacent_node = int.from_bytes(circuit[off + 4:off + 6], "little")
+        if adjacent_node == 0:
+            raise RuntimeError(f"invalid NICE adjacent node: {circuit!r}")
+        off += 6
         if circuit[off:off + 3] != b"\x2a\x03\x02":
             raise RuntimeError(f"missing NICE circuit block size: {circuit!r}")
         block_size = int.from_bytes(circuit[off + 3:off + 5], "little")
@@ -207,7 +213,8 @@ def main() -> int:
         f"total_tx_bytes={total_bytes_sent} "
         f"total_rx_messages={total_messages} "
         f"total_tx_messages={total_messages_sent} "
-        f"circuit=ETH-0 block_size={block_size} "
+        f"circuit=ETH-0 adjacent={adjacent_node >> 10}."
+        f"{adjacent_node & 1023} block_size={block_size} "
         f"circuit_rx_bytes={circuit_rx_bytes} "
         f"circuit_tx_bytes={circuit_tx_bytes} "
         f"circuit_rx_blocks={circuit_rx_blocks} "

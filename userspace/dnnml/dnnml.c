@@ -142,7 +142,7 @@ static int count_active_links(__u16 *active)
 }
 
 static int read_circuit_state(const char *name, int *ifindex,
-                              __u16 *block_size)
+                              __u16 *block_size, __u16 *adjacent_node)
 {
     struct dniv_adjacency adjacency;
     int ifindices[32];
@@ -152,9 +152,11 @@ static int read_circuit_state(const char *name, int *ifindex,
     size_t circuits = 0U;
     int target_ifindex = 0;
     __u16 target_block = 0U;
+    __u16 target_node = 0U;
     int fd;
 
-    if (!name || !ifindex || !block_size || strncmp(name, "ETH-", 4U) != 0)
+    if (!name || !ifindex || !block_size || !adjacent_node ||
+        strncmp(name, "ETH-", 4U) != 0)
         return -1;
     errno = 0;
     wanted = strtoul(name + 4U, &end, 10);
@@ -199,14 +201,17 @@ static int read_circuit_state(const char *name, int *ifindex,
         }
         if (target_ifindex == adjacency.ifindex &&
             adjacency.state == DNIV_ADJ_STATE_UP &&
-            adjacency.block_size != 0U)
+            adjacency.block_size != 0U && target_node == 0U) {
             target_block = adjacency.block_size;
+            target_node = adjacency.address;
+        }
     }
     close(fd);
-    if (!target_ifindex || !target_block)
+    if (!target_ifindex || !target_block || !target_node)
         return -1;
     *ifindex = target_ifindex;
     *block_size = target_block;
+    *adjacent_node = target_node;
     return 0;
 }
 
@@ -250,17 +255,20 @@ static int serve_connection(int fd)
             struct dniv_traffic_stats traffic;
             int ifindex = 0;
             __u16 block_size = 0U;
+            __u16 adjacent_node = 0U;
             int build_failed = 0;
 
             if (dniv_nice_parse_read_circuit(in, (size_t)got, &circuit) ||
                 circuit.permanent ||
                 (circuit.info != DNIV_NICE_INFO_STATUS &&
                  circuit.info != DNIV_NICE_INFO_COUNTERS) ||
-                read_circuit_state(circuit.name, &ifindex, &block_size)) {
+                read_circuit_state(circuit.name, &ifindex, &block_size,
+                                   &adjacent_node)) {
                 build_failed = 1;
             } else if (circuit.info == DNIV_NICE_INFO_STATUS) {
                 build_failed = dniv_nice_build_circuit_status_reply(
-                    out, sizeof(out), &out_len, circuit.name, block_size);
+                    out, sizeof(out), &out_len, circuit.name,
+                    adjacent_node, block_size);
             } else if (read_traffic_stats(ifindex, &traffic)) {
                 build_failed = 1;
             } else {

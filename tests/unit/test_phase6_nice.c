@@ -155,16 +155,20 @@ int main(void)
         assert(circuit.permanent == 0U);
         assert(strcmp(circuit.name, "ETH-0") == 0);
         assert(dniv_nice_build_circuit_status_reply(
-                   reply, sizeof(reply), &reply_len, "ETH-0", 1498U) == 0);
-        assert(reply_len == 19U);
+                   reply, sizeof(reply), &reply_len, "ETH-0",
+                   DNIV_ADDR(31, 80), 1498U) == 0);
+        assert(reply_len == 25U);
         assert(reply[0] == 1U && reply[1] == 0xffU && reply[2] == 0xffU);
         assert(reply[3] == 0U && reply[4] == 5U);
         assert(memcmp(reply + 5U, "ETH-0", 5U) == 0);
         assert(reply[10] == 0U && reply[11] == 0U &&
                reply[12] == 0x81U && reply[13] == 0U);
-        assert(reply[14] == 0x2aU && reply[15] == 0x03U &&
-               reply[16] == 0x02U && reply[17] == 0xdaU &&
-               reply[18] == 0x05U);
+        assert(reply[14] == 0x20U && reply[15] == 0x03U &&
+               reply[16] == 0xc1U && reply[17] == 0x02U);
+        assert(reply[18] == 0x50U && reply[19] == 0x7cU);
+        assert(reply[20] == 0x2aU && reply[21] == 0x03U &&
+               reply[22] == 0x02U && reply[23] == 0xdaU &&
+               reply[24] == 0x05U);
 
         {
             const __u8 counters_request[] = {

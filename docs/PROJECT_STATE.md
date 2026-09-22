@@ -764,3 +764,6 @@ Phase 6 management accounting now covers both directions and circuit scope. A ne
 
 
 Exact-SHA fast acceptance for bidirectional/per-circuit NICE traffic-counter candidate `35f15e4d5825109dddb9447a48bde025ef00c0de` is green: Repository Policy `35688413870`, Build Bootstrap `35688437430`, Project State Gate `35688439214`, Python QEMU VM Lab `35688440768` on x86_64 and ARM64, and x64 PyDECnet L1 interoperability `35688442294`. The reciprocal object-19 session validated node counters 608-611 and live ETH-0 circuit counters 1000/1001/1010/1011 with nonzero receive/transmit values. Next: enrich live circuit status with adjacent-node information and continue NICE node/adjacency management coverage.
+
+
+Phase 6 live READ CIRCUIT status now includes standard NICE parameter 800 Adjacent node from the same UP kernel adjacency that supplies the circuit block size. The codec emits the pinned-reference CM-1 node-address form, and the reciprocal PyDECnet object-19 proof requires a nonzero live adjacent address before accepting the block-size parameter. Next: exact-SHA fast acceptance, then extend READ NODE beyond the executor using live adjacency/route snapshots.

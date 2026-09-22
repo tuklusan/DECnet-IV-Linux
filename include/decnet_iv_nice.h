@@ -148,6 +148,7 @@ dniv_nice_parse_read_circuit(const __u8 *buf, size_t length,
 static inline int
 dniv_nice_build_circuit_status_reply(__u8 *buf, size_t capacity,
                                      size_t *used, const char *name,
+                                     __u16 adjacent_node,
                                      __u16 block_size)
 {
     size_t name_len;
@@ -159,7 +160,7 @@ dniv_nice_build_circuit_status_reply(__u8 *buf, size_t capacity,
     name_len = strlen(name);
     if (!name_len || name_len > 127U)
         return -1;
-    needed = 4U + 1U + name_len + 4U + 5U;
+    needed = 4U + 1U + name_len + 4U + 6U + 5U;
     if (capacity < needed)
         return -1;
 
@@ -176,6 +177,14 @@ dniv_nice_build_circuit_status_reply(__u8 *buf, size_t capacity,
     buf[off++] = 0U;
     buf[off++] = 0x81U;
     buf[off++] = 0U;
+
+    /* Adjacent node, parameter 800, CM-1 containing a two-byte node. */
+    buf[off++] = (__u8)(800U & 0xffU);
+    buf[off++] = (__u8)(800U >> 8);
+    buf[off++] = 0xc1U;
+    buf[off++] = 0x02U;
+    buf[off++] = (__u8)(adjacent_node & 0xffU);
+    buf[off++] = (__u8)(adjacent_node >> 8);
 
     /* Block size, parameter 810, unsigned two-byte value. */
     buf[off++] = (__u8)(810U & 0xffU);
