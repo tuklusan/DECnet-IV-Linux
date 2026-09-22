@@ -31,6 +31,7 @@ int main(void)
     assert(request.node == 0U);
     assert(request.info == DNIV_NICE_INFO_CHARACTERISTICS);
     assert(request.permanent == 0U);
+    assert(request.entity_code == 0);
 
     {
         __u8 bad[sizeof(request_bytes)];
@@ -44,6 +45,25 @@ int main(void)
         assert(dniv_nice_parse_read_node(request_bytes,
                                          sizeof(request_bytes) - 1U,
                                          &request) != 0);
+        {
+            const __u8 known[] = { 0x14U, 0x10U, 0xffU };
+            const __u8 active[] = { 0x14U, 0x10U, 0xfeU };
+            const __u8 adjacent[] = { 0x14U, 0x10U, 0xfcU };
+            const __u8 loop[] = { 0x14U, 0x10U, 0xfdU };
+
+            assert(dniv_nice_parse_read_node(known, sizeof(known),
+                                             &request) == 0);
+            assert(request.entity_code == -1 && request.node == 0U);
+            assert(dniv_nice_parse_read_node(active, sizeof(active),
+                                             &request) == 0);
+            assert(request.entity_code == -2);
+            assert(dniv_nice_parse_read_node(adjacent, sizeof(adjacent),
+                                             &request) == 0);
+            assert(request.entity_code == -4);
+            assert(dniv_nice_parse_read_node(loop, sizeof(loop),
+                                             &request) == 0);
+            assert(request.entity_code == -3);
+        }
     }
 
     assert(dniv_nice_build_node_reply(reply, sizeof(reply), &reply_len,

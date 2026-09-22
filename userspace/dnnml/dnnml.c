@@ -315,6 +315,172 @@ static int read_node_state(__u16 address, __u8 *node_type,
     return -1;
 }
 
+struct dniv_nml_node_status {
+    __u16 address;
+    __u16 cost;
+    __u16 next_node;
+    __u8 node_type;
+    __u8 hops;
+    char circuit[16];
+};
+
+static int node_status_find(struct dniv_nml_node_status *nodes, size_t count,
+                            __u16 address)
+{
+    size_t i;
+
+    for (i = 0U; i < count; i++) {
+        if (nodes[i].address == address)
+            return (int)i;
+    }
+    return -1;
+}
+
+static int collect_node_status(__s8 entity_code,
+                               struct dniv_nml_node_status *nodes,
+                               size_t capacity, size_t *count)
+{
+    __u16 addresses[256];
+    size_t address_count = 0U;
+    __u32 index;
+    int fd;
+
+    if (!nodes || !count || !capacity ||
+        (entity_code != -1 && entity_code != -2 && entity_code != -4))
+        return -1;
+
+    fd = open(DNIV_DEVICE, O_RDONLY);
+    if (fd < 0)
+        return -1;
+
+    if (entity_code == -4) {
+        for (index = 0U;; index++) {
+            struct dniv_adjacency adjacency;
+            size_t i;
+            int duplicate = 0;
+
+            memset(&adjacency, 0, sizeof(adjacency));
+            adjacency.uapi_version = DNIV_UAPI_VERSION;
+            adjacency.index = index;
+            if (ioctl(fd, DNIV_IOC_GET_ADJACENCY, &adjacency) < 0) {
+                if (errno == ENOENT)
+                    break;
+                close(fd);
+                return -1;
+            }
+            if (adjacency.state != DNIV_ADJ_STATE_UP)
+                continue;
+            for (i = 0U; i < address_count; i++) {
+                if (addresses[i] == adjacency.address) {
+                    duplicate = 1;
+                    break;
+                }
+            }
+            if (!duplicate && address_count <
+                sizeof(addresses) / sizeof(addresses[0]))
+                addresses[address_count++] = adjacency.address;
+        }
+    } else {
+        for (index = 0U;; index++) {
+            struct dniv_route route;
+            __u16 address;
+            size_t i;
+            int duplicate = 0;
+
+            memset(&route, 0, sizeof(route));
+            route.uapi_version = DNIV_UAPI_VERSION;
+            route.index = index;
+            if (ioctl(fd, DNIV_IOC_GET_ROUTE, &route) < 0) {
+                if (errno == ENOENT)
+                    break;
+                close(fd);
+                return -1;
+            }
+            if (route.level != 1U || route.destination == 0U)
+                continue;
+            address = DNIV_ADDR(DNIV_ADDR_AREA(route.next_hop),
+                                route.destination);
+            for (i = 0U; i < address_count; i++) {
+                if (addresses[i] == address) {
+                    duplicate = 1;
+                    break;
+                }
+            }
+            if (!duplicate && address_count <
+                sizeof(addresses) / sizeof(addresses[0]))
+                addresses[address_count++] = address;
+        }
+    }
+    close(fd);
+
+    *count = 0U;
+    for (index = 0U; index < address_count; index++) {
+        struct dniv_nml_node_status status;
+
+        memset(&status, 0, sizeof(status));
+        status.address = addresses[index];
+        if (read_node_state(status.address, &status.node_type,
+                            &status.cost, &status.hops,
+                            status.circuit, sizeof(status.circuit),
+                            &status.next_node))
+            continue;
+        if (node_status_find(nodes, *count, status.address) >= 0)
+            continue;
+        if (*count >= capacity)
+            return -1;
+        nodes[(*count)++] = status;
+    }
+
+    for (index = 1U; index < *count; index++) {
+        struct dniv_nml_node_status value = nodes[index];
+        size_t pos = index;
+
+        while (pos > 0U && nodes[pos - 1U].address > value.address) {
+            nodes[pos] = nodes[pos - 1U];
+            pos--;
+        }
+        nodes[pos] = value;
+    }
+    return 0;
+}
+
+static int send_nice_code(int fd, signed char code)
+{
+    return send(fd, &code, sizeof(code), MSG_EOR | MSG_NOSIGNAL) ==
+           (ssize_t)sizeof(code) ? 0 : -1;
+}
+
+static int serve_multiple_nodes(int fd, __s8 entity_code, __u8 info,
+                                unsigned char *out, size_t out_capacity)
+{
+    struct dniv_nml_node_status nodes[256];
+    size_t count = 0U;
+    size_t i;
+
+    if (info != DNIV_NICE_INFO_SUMMARY &&
+        info != DNIV_NICE_INFO_STATUS)
+        return send_nice_code(fd, -1);
+    if (collect_node_status(entity_code, nodes,
+                            sizeof(nodes) / sizeof(nodes[0]), &count))
+        return send_nice_code(fd, -1);
+    if (send_nice_code(fd, 2))
+        return -1;
+
+    for (i = 0U; i < count; i++) {
+        size_t out_len = 0U;
+
+        if (dniv_nice_build_remote_node_status_reply(
+                out, out_capacity, &out_len, nodes[i].address,
+                nodes[i].node_type, nodes[i].cost, nodes[i].hops,
+                nodes[i].circuit, nodes[i].next_node))
+            return -1;
+        if (send(fd, out, out_len, MSG_EOR | MSG_NOSIGNAL) !=
+            (ssize_t)out_len)
+            return -1;
+    }
+    return send_nice_code(fd, -128);
+}
+
 static int serve_connection(int fd)
 {
     struct timeval timeout = { .tv_sec = 30, .tv_usec = 0 };
@@ -342,11 +508,21 @@ static int serve_connection(int fd)
 
         if (dniv_nice_parse_read_node(in, (size_t)got, &request) == 0) {
             if (request.permanent || read_identity(&identity)) {
-                const signed char error = -1;
-
-                if (send(fd, &error, sizeof(error),
-                         MSG_EOR | MSG_NOSIGNAL) != (ssize_t)sizeof(error))
+                if (send_nice_code(fd, -1))
                     return -1;
+                continue;
+            }
+            if (request.entity_code < 0) {
+                if (request.entity_code != -1 &&
+                    request.entity_code != -2 &&
+                    request.entity_code != -4) {
+                    if (send_nice_code(fd, -1))
+                        return -1;
+                } else if (serve_multiple_nodes(
+                               fd, request.entity_code, request.info,
+                               out, sizeof(out))) {
+                    return -1;
+                }
                 continue;
             }
             if (request.node != 0U) {
@@ -363,11 +539,7 @@ static int serve_connection(int fd)
                     dniv_nice_build_remote_node_status_reply(
                         out, sizeof(out), &out_len, request.node, node_type,
                         cost, hops, circuit, next_node)) {
-                    const signed char error = -1;
-
-                    if (send(fd, &error, sizeof(error),
-                             MSG_EOR | MSG_NOSIGNAL) !=
-                        (ssize_t)sizeof(error))
+                    if (send_nice_code(fd, -8))
                         return -1;
                     continue;
                 }

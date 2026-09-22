@@ -213,6 +213,60 @@ def main() -> int:
         if remote_next != adjacent_node:
             raise RuntimeError(f"wrong remote next node: {remote!r}")
 
+        for selector_code, selector_name in (
+                (0xff, "known"), (0xfe, "active"), (0xfc, "adjacent")):
+            connection.data(bytes((0x14, 0x10, selector_code)))
+            response = connection.recv()
+            if response.type != "data" or bytes(response) != b"\x02":
+                raise RuntimeError(
+                    f"missing {selector_name} multi-item header: "
+                    f"{getattr(response, 'type', None)!r} "
+                    f"{bytes(response)!r}"
+                )
+            seen = set()
+            while True:
+                response = connection.recv()
+                if response.type != "data":
+                    raise RuntimeError(
+                        f"unexpected {selector_name} response type "
+                        f"{response.type!r}"
+                    )
+                item = bytes(response)
+                if item == b"\x80":
+                    break
+                if len(item) < 7 or item[0] != 1 or item[1:4] != b"\xff\xff\x00":
+                    raise RuntimeError(
+                        f"bad {selector_name} node item: {item!r}"
+                    )
+                seen.add(int.from_bytes(item[4:6], "little"))
+            if adjacent_node not in seen:
+                raise RuntimeError(
+                    f"{selector_name} read omitted live adjacent node "
+                    f"{adjacent_node}: {sorted(seen)}"
+                )
+
+        unknown = ((address & 0xfc00) | 1023)
+        if unknown == address or unknown == adjacent_node:
+            unknown = ((address & 0xfc00) | 1022)
+        connection.data(bytes((
+            0x14, 0x10, 0x00, unknown & 0xff, (unknown >> 8) & 0xff,
+        )))
+        response = connection.recv()
+        if response.type != "data" or bytes(response) != b"\xf8":
+            raise RuntimeError(
+                f"unknown node did not return NICE -8: {bytes(response)!r}"
+            )
+
+        connection.data(bytes((
+            0x14, 0x90, 0x00,
+            adjacent_node & 0xff, (adjacent_node >> 8) & 0xff,
+        )))
+        response = connection.recv()
+        if response.type != "data" or bytes(response) != b"\xff":
+            raise RuntimeError(
+                f"permanent read did not return NICE -1: {bytes(response)!r}"
+            )
+
         connection.data(CIRCUIT_COUNTERS_REQUEST)
         response = connection.recv()
         if response.type != "data":
@@ -264,6 +318,7 @@ def main() -> int:
         f"{adjacent_node & 1023} block_size={block_size} "
         f"remote_type={remote_type} remote_cost={remote_cost} "
         f"remote_hops={remote_hops} remote_circuit={remote_circuit.decode('ascii')} "
+        f"multi_node_reads=known,active,adjacent "
         f"circuit_rx_bytes={circuit_rx_bytes} "
         f"circuit_tx_bytes={circuit_tx_bytes} "
         f"circuit_rx_blocks={circuit_rx_blocks} "

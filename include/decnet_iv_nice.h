@@ -35,6 +35,7 @@ struct dniv_nice_read_node {
     __u16 node;
     __u8 info;
     __u8 permanent;
+    __s8 entity_code;
 };
 
 static inline int
@@ -43,7 +44,9 @@ dniv_nice_parse_read_node(const __u8 *buf, size_t length,
 {
     __u8 selector;
 
-    if (!buf || !request || length != 5U)
+    __s8 entity_code;
+
+    if (!buf || !request || length < 3U)
         return -1;
     if (buf[0] != DNIV_NICE_FUNC_READ_INFO)
         return -1;
@@ -52,13 +55,23 @@ dniv_nice_parse_read_node(const __u8 *buf, size_t length,
     if ((selector & 0x08U) != 0U ||
         (selector & 0x07U) != DNIV_NICE_ENTITY_NODE)
         return -1;
-    if (buf[2] != 0U)
-        return -1;
 
+    entity_code = (__s8)buf[2];
+    memset(request, 0, sizeof(*request));
     request->info = (__u8)((selector >> 4) & 0x07U);
     request->permanent = (__u8)((selector >> 7) & 0x01U);
-    request->node = (__u16)((__u16)buf[3] | ((__u16)buf[4] << 8));
-    return 0;
+    request->entity_code = entity_code;
+
+    if (entity_code == 0) {
+        if (length != 5U)
+            return -1;
+        request->node = (__u16)((__u16)buf[3] |
+                                ((__u16)buf[4] << 8));
+        return 0;
+    }
+    if (entity_code >= -5 && entity_code <= -1)
+        return length == 3U ? 0 : -1;
+    return -1;
 }
 
 static inline int
