@@ -500,7 +500,10 @@ static int receive_multiple(int fd, enum dnnice_query_entity entity,
             return -1;
         }
         if (!saw_header) {
-            if (got == 1 && response[0] == 2U) {
+            if (response[0] == 2U &&
+                (got == 1 ||
+                 (got >= 4 &&
+                  (size_t)got == 4U + (size_t)response[3]))) {
                 saw_header = 1U;
                 continue;
             }
