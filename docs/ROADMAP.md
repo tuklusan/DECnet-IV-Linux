@@ -64,6 +64,8 @@ Deliver NSP connection state, flow control, sequencing, retransmission, timers a
 
 Exit criteria: reliable bidirectional logical links pass stress, reconnect and loss tests against an independent peer.
 
+Status: complete on exact protocol candidate `2d54dbf252120b42a5c2a60fa202371382af5dc9`; full promotion acceptance passed x86_64/ARM64 E1-E4 plus the full Route20/PyDECnet interoperability matrix.
+
 ## Phase 6 - Session Control and network management
 
 Deliver Session Control object dispatch plus the NICE/NML state and operations needed for useful local and remote management.

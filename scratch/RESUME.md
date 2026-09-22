@@ -18,7 +18,7 @@
 
 Annotated tag `PHASE-4-COMPLETE` is verified on closure commit `571333bfd7aaa8b2fcc88715c1d61442af151f3c`; the temporary tag workflow has been removed.
 
-Phase 4 is complete on exact protocol candidate `6c185b6d01f8a57ee9f0ea6a6c37d7112ddb77d2`; Phase 5 is active on `main`. The latest accepted Phase 5 candidate is `80f31de7ebf970e648878c7cac51746da3ac0715`. Phase 3 remains frozen at tag `PHASE-3-COMPLETE` on commit `ae1bcb82a1539ccadda0661664205e360bd760b7`.
+Phase 4 is complete on exact protocol candidate `6c185b6d01f8a57ee9f0ea6a6c37d7112ddb77d2`. Phase 5 is complete on exact protocol candidate `2d54dbf252120b42a5c2a60fa202371382af5dc9`; Phase 6 is active on `main`. Phase 3 remains frozen at tag `PHASE-3-COMPLETE` on commit `ae1bcb82a1539ccadda0661664205e360bd760b7`.
 
 The final Phase 3 acceptance set was green: Repository Policy `35343324826`, Build Bootstrap `35343357536`, Project State Gate `35343359444`, External Reference Baselines `35343361139`, Python QEMU VM Lab `35343362922`, and Independent Ethernet Interoperability run `35343364812`. The interoperability matrix passed all eight amd64/ARM64 Route20/PyDECnet routing/endnode role jobs.
 
@@ -621,3 +621,6 @@ Exact-SHA fast socket acceptance for receiver-stall fairness candidate `ed5a1eca
 
 
 Exact-SHA fast socket acceptance for syscall-negative candidate `9c3b402bc4de7f2023a03c0592bbd32aa2233df8` is green: Repository Policy `35666650101`, Build Bootstrap `35666687690`, Project State Gate `35666689839`, Python QEMU VM Lab `35666691798` on x86_64 and ARM64, and x64 PyDECnet L1 interoperability `35666693616`. The deterministic invalid-call corpus returned the declared errno values without damaging subsequent socket lifecycle/churn behavior.
+
+
+Phase 5 full promotion acceptance is green on exact candidate `2d54dbf252120b42a5c2a60fa202371382af5dc9`: Repository Policy `35668700953`, Build Bootstrap `35668731691`, Project State Gate `35668733943`, External Reference Baselines `35668736098`, E1 `35668737804`, E2 `35668739614`, E3 `35668741529`, E4 `35668743712`, and full Independent Ethernet Interoperability `35668745743`. E1-E4 passed on x86_64 and ARM64; the 14-job Route20/PyDECnet interoperability matrix passed. Phase 5 exit criteria are satisfied: reliable bidirectional logical links, reconnect/recovery, deterministic loss/retransmission, flow control, sequence wrap, socket lifecycle/concurrency, bounded resource pressure, malformed-input negatives, signal interruption, receiver-stall fairness and full socket ABI interoperability are accepted. Phase 6 is next: Session Control and NICE/NML network management.

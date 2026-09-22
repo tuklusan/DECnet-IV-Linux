@@ -73,7 +73,7 @@ Implementation order:
 
 | Field | Current value |
 | --- | --- |
-| Protocol phase | Phase 5 |
+| Protocol phase | Phase 6 |
 | Working ref | `main` only |
 | Remote branches | only `refs/heads/main` |
 | Phase 3 tag | `PHASE-3-COMPLETE` |
@@ -81,7 +81,7 @@ Implementation order:
 | Phase 4 accepted protocol candidate | `6c185b6d01f8a57ee9f0ea6a6c37d7112ddb77d2` |
 | Phase 4 closure commit | `571333bfd7aaa8b2fcc88715c1d61442af151f3c` |
 | Phase 4 tag | `PHASE-4-COMPLETE` |
-| Latest accepted Phase 5 candidate | `80f31de7ebf970e648878c7cac51746da3ac0715` |
+| Phase 5 accepted protocol candidate | `2d54dbf252120b42a5c2a60fa202371382af5dc9` |
 | Route20 pin | `a9ef7c0b7f875f0dd2e8abaf11213798a8e4474c` |
 | PyDECnet live pin | `295938c76c956a70957f4cf96b05685f555b2a18` |
 | VM lifecycle | direct QEMU/QMP |
@@ -105,7 +105,11 @@ Phase 4 is closed on exact protocol candidate `6c185b6d01f8a57ee9f0ea6a6c37d7112
 
 ### Phase 5
 
-Active. Implement NSP transport and the DECnet socket ABI without reopening Phase 4 unless concrete regression evidence requires it.
+Complete on exact protocol candidate `2d54dbf252120b42a5c2a60fa202371382af5dc9`. Full promotion acceptance is green across policy/build/state/reference gates, E1-E4 on x86_64 and ARM64, and the full Route20/PyDECnet interoperability matrix.
+
+### Phase 6
+
+Active. Implement Session Control object dispatch plus NICE/NML state and operations without reopening Phase 5 unless concrete regression evidence requires it.
 
 Initial NSP foundation is implemented and repository-policy headers are canonical: deterministic Phase IV NSP packet codecs for ACK Data/Other/Connect, data segments, interrupt, Link Service, CI/RCI, CC, DI and DC; optional ACK/NAK/XACK/XNAK decoding; 12-bit sequence arithmetic; malformed-input rejection; and baseline response/connect/inactivity timer constants.
 
@@ -679,3 +683,6 @@ Exact-SHA fast socket acceptance for receiver-stall fairness candidate `ed5a1eca
 
 
 Exact-SHA fast socket acceptance for syscall-negative candidate `9c3b402bc4de7f2023a03c0592bbd32aa2233df8` is green: Repository Policy `35666650101`, Build Bootstrap `35666687690`, Project State Gate `35666689839`, Python QEMU VM Lab `35666691798` on x86_64 and ARM64, and x64 PyDECnet L1 interoperability `35666693616`. The deterministic invalid-call corpus returned the declared errno values without damaging subsequent socket lifecycle/churn behavior.
+
+
+Phase 5 full promotion acceptance is green on exact candidate `2d54dbf252120b42a5c2a60fa202371382af5dc9`: Repository Policy `35668700953`, Build Bootstrap `35668731691`, Project State Gate `35668733943`, External Reference Baselines `35668736098`, E1 `35668737804`, E2 `35668739614`, E3 `35668741529`, E4 `35668743712`, and full Independent Ethernet Interoperability `35668745743`. E1-E4 passed on x86_64 and ARM64; the 14-job Route20/PyDECnet interoperability matrix passed. Phase 5 exit criteria are satisfied: reliable bidirectional logical links, reconnect/recovery, deterministic loss/retransmission, flow control, sequence wrap, socket lifecycle/concurrency, bounded resource pressure, malformed-input negatives, signal interruption, receiver-stall fairness and full socket ABI interoperability are accepted. Phase 6 is next: Session Control and NICE/NML network management.
