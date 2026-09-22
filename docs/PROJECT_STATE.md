@@ -737,3 +737,6 @@ Phase 6 NICE codec coverage now includes standard READ CIRCUIT status framing. T
 
 
 The first NICE circuit-codec acceptance attempt failed only the ARM64 E1 VM job `106605185228` in run `35683454049`. Both guests completed the required expiry/restart/recovery sequence; DN70 emitted PASS and DN71 reached RECOVERED at guest uptime 360.98 seconds, but the controller's 360-second ARM64 E1 bound expired roughly one second before DN71 could emit its final PASS marker. x86_64 E1, policy/build/state, and x64 PyDECnet interoperability were green. The ARM64 E1 controller bound is raised narrowly from 360 to 375 seconds, preserving the bounded fast profile while covering the observed TCG tail. Product and NICE protocol behavior are unchanged; the failed run remains recorded. Next: rerun exact-SHA fast socket acceptance.
+
+
+Exact-SHA fast acceptance for NICE circuit-codec candidate `cf19a74a95ba75849f26141c4d63e28df6e64cb5` is green after the narrowly bounded ARM64 E1 correction: Repository Policy `35684075406`, Build Bootstrap `35684098766`, Project State Gate `35684100061`, Python QEMU VM Lab `35684101313` on x86_64 and ARM64, and x64 PyDECnet L1 interoperability `35684102599`. The standard READ CIRCUIT request parser and CircuitReply State/Block Size encoding are accepted; the 375-second ARM64 E1 bound also completed green.
