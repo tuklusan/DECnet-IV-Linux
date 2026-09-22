@@ -306,8 +306,12 @@ static int print_remote_node(const unsigned char *buf, size_t length)
     uint16_t next_node = 0U;
     unsigned int state = 0U;
     unsigned int node_type = 0U;
+    unsigned int active_links = 0U;
+    unsigned int delay = 0U;
     unsigned int hops = 0U;
     unsigned int have_state = 0U;
+    unsigned int have_active_links = 0U;
+    unsigned int have_delay = 0U;
     unsigned int have_type = 0U;
     unsigned int have_cost = 0U;
     unsigned int have_hops = 0U;
@@ -334,6 +338,16 @@ static int print_remote_node(const unsigned char *buf, size_t length)
         if (param == 0U && value[0] == 0x81U && encoded_len >= 2U) {
             state = value[1];
             have_state = 1U;
+        } else if (param == 600U && value[0] == 0x02U &&
+                   encoded_len == 3U) {
+            active_links = (unsigned int)value[1] |
+                           ((unsigned int)value[2] << 8);
+            have_active_links = 1U;
+        } else if (param == 601U && value[0] == 0x02U &&
+                   encoded_len == 3U) {
+            delay = (unsigned int)value[1] |
+                    ((unsigned int)value[2] << 8);
+            have_delay = 1U;
         } else if (param == 810U && value[0] == 0x81U &&
                    encoded_len >= 2U) {
             node_type = value[1];
@@ -363,8 +377,8 @@ static int print_remote_node(const unsigned char *buf, size_t length)
         off += encoded_len;
     }
     if (off != length ||
-        (!have_state && !have_type && !have_cost && !have_hops &&
-         !have_circuit && !have_next))
+        (!have_state && !have_active_links && !have_delay && !have_type &&
+         !have_cost && !have_hops && !have_circuit && !have_next))
         return -1;
 
     printf("Node = %u.%u", address >> 10, address & 1023U);
@@ -372,6 +386,10 @@ static int print_remote_node(const unsigned char *buf, size_t length)
         printf(" (%s)", name);
     if (have_state)
         printf(" state=%u", state);
+    if (have_active_links)
+        printf(" links=%u", active_links);
+    if (have_delay)
+        printf(" delay=%u", delay);
     if (have_type)
         printf(" type=%u", node_type);
     if (have_cost)
