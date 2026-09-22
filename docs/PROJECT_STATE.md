@@ -73,7 +73,7 @@ Implementation order:
 
 | Field | Current value |
 | --- | --- |
-| Protocol phase | Phase 6 |
+| Protocol phase | Phase 7 |
 | Working ref | `main` only |
 | Remote branches | only `refs/heads/main` |
 | Phase 3 tag | `PHASE-3-COMPLETE` |
@@ -109,7 +109,11 @@ Complete on exact protocol candidate `2d54dbf252120b42a5c2a60fa202371382af5dc9`.
 
 ### Phase 6
 
-Active. Implement Session Control object dispatch plus NICE/NML state and operations without reopening Phase 5 unless concrete regression evidence requires it.
+Complete on exact protocol candidate `c11045a70e7deb59870fff5f8bc22213e0df2bc0`. Session Control object-number/name dispatch, access data, generic task listeners, standard MIRROR object 25, native NML/object 19, local/remote scripted and interactive NICE management, specific and plural node/circuit reads, counters and independent PyDECnet/Route20 interoperability are accepted on x86_64 and ARM64.
+
+### Phase 7
+
+Active. Implement the useful DECnet/Linux userspace environment in ROADMAP order without reopening Phase 6 unless concrete regression evidence requires it.
 
 Initial NSP foundation is implemented and repository-policy headers are canonical: deterministic Phase IV NSP packet codecs for ACK Data/Other/Connect, data segments, interrupt, Link Service, CI/RCI, CC, DI and DC; optional ACK/NAK/XACK/XNAK decoding; 12-bit sequence arithmetic; malformed-input rejection; and baseline response/connect/inactivity timer constants.
 
@@ -882,3 +886,6 @@ The reproduced ARM64 router-to-PyDECnet-endnode reverse-NML reason-39 failure is
 
 
 Full Phase 6 promotion run `35764358719` on `53582b86110f64ae152da6c702af86faa47b685a` confirmed the corrected PyDECnet cached-send behavior on ARM64 router-to-endnode reverse NML, but the x86_64 router-to-endnode role exposed a separate test-ordering race before Session Control coverage. The candidate had already formed its endnode adjacency and successfully completed specific executor/node/circuit NICE reads against PyDECnet, while the peer's first plural `adjacent nodes` query still returned an empty legal result because the faster x86_64 candidate reached management probing before the PyDECnet endnode had processed the candidate router hello. The same role is green on ARM64, and PyDECnet's endnode circuit records an adjacency only after receiving that router hello. The interoperability harness now bounds reciprocal peer-adjacency convergence for up to 10 seconds before requiring the candidate node in the plural adjacent-node result; malformed/query failures remain errors. Candidate protocol behavior is unchanged. Next: exact-SHA fast acceptance, then repeat full Phase 6 promotion.
+
+
+Phase 6 promotion is complete on exact protocol candidate `c11045a70e7deb59870fff5f8bc22213e0df2bc0`. Full acceptance triggered by issue #334 is green: Repository Policy `35767265536`, Build Bootstrap `35767310354`, Project State Gate `35767313766`, External Reference Baselines `35767317083`, Python QEMU VM Lab runs `35767320599`, `35767324333`, `35767327216`, and `35767330590` on x86_64/ARM64, plus Independent Ethernet Interoperability `35767334168` with all 14 Route20/PyDECnet jobs green, including both router-to-PyDECnet-endnode roles. Phase 6 exit criteria are satisfied. Phase 7 is now active; start with the standard DECnet/Linux command environment and preserve exact-SHA acceptance discipline.

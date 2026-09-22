@@ -27,4 +27,4 @@ This is the stable resume entry point for DECnet-IV-Linux.
 
 Repository files are authoritative. Do not reconstruct current state from chat history or stale workflow runs.
 
-Infrastructure detour is complete. Resume Phase 5 from the final `Next action` entries in `docs/PROJECT_STATE.md` and `scratch/RESUME.md`. The socket-lifecycle checkpoint is consolidated-green; current work is NSP loss/retransmission/timer behavior.
+Phase 6 is complete. Resume Phase 7 from the final `Next action` entries in `docs/PROJECT_STATE.md` and `scratch/RESUME.md`; repository state remains authoritative.

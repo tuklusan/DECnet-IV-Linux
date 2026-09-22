@@ -72,6 +72,8 @@ Deliver Session Control object dispatch plus the NICE/NML state and operations n
 
 Exit criteria: scripted and interactive management queries work locally and against independent DECnet peers.
 
+Status: complete on exact protocol candidate `c11045a70e7deb59870fff5f8bc22213e0df2bc0`; full promotion acceptance passed x86_64/ARM64 VM coverage and all 14 Route20/PyDECnet interoperability jobs.
+
 ## Phase 7 - useful DECnet/Linux userspace
 
 Implement as protocol dependencies become ready: `ncp`; `sethost`/`dnlogin`; DAP/FAL/RMS copy/type/directory tools; PHONE; mail; task/object access; daemons; libraries; diagnostics and administration tools. Application-level experiments such as a DECnet-native `dnlynx` client may be added after the standard Session/object and management interfaces they depend on are stable; they are not substitutes for the standard tool set.
