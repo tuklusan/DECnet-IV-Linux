@@ -711,3 +711,6 @@ Exact-SHA fast acceptance for live NICE circuit-adjacent status candidate `49528
 
 
 Phase 6 READ NODE status now handles a specific live remote node instead of only executor zero. The object-19 server resolves the requested address through the kernel UP-adjacency snapshot and matching route-table entry, then emits standard NICE Reachable state, Routing-IV/Non-Routing-IV type, route Cost/Hops, Circuit and Next-node parameters. The reciprocal pinned-PyDECnet session reuses the live ETH-0 adjacent address, requests that exact node, and validates the route-backed status before continuing circuit counters. Next: exact-SHA fast acceptance, then add multiple-entity known/active/adjacent node reads and management error semantics.
+
+
+The first live remote READ NODE acceptance attempt failed only x64 PyDECnet interoperability run `35690144066`. The server returned NICE error -1 because the test exposed a representation mismatch in the userspace route lookup: L1 route UAPI entries carry the 10-bit node number in `destination`, with area supplied by `next_hop`, while the new NML code compared `destination` to the full 16-bit area.node address. The lookup now matches L1 node plus area correctly (and retains L2 area matching). Build/policy/state were green; product routing itself was not implicated. The failed run remains recorded.

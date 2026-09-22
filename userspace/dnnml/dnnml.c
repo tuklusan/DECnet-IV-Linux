@@ -290,8 +290,12 @@ static int read_node_state(__u16 address, __u8 *node_type,
             close(fd);
             return -1;
         }
-        if (route.destination == address &&
-            route.ifindex == target_ifindex) {
+        if (route.ifindex == target_ifindex &&
+            ((route.level == 1U &&
+              route.destination == DNIV_ADDR_NODE(address) &&
+              DNIV_ADDR_AREA(route.next_hop) == DNIV_ADDR_AREA(address)) ||
+             (route.level == 2U &&
+              route.destination == DNIV_ADDR_AREA(address)))) {
             int written = snprintf(circuit, circuit_size, "ETH-%zu",
                                    target_circuit);
 
