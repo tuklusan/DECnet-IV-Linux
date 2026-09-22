@@ -729,3 +729,6 @@ Phase 6 NICE circuit management now supports multiple-entity READ CIRCUIT status
 
 
 Exact-SHA fast acceptance for plural NICE circuit-status candidate `07ff9eb6fe5a76ffd8b2868e38a552e8c2329029` is green: Repository Policy `35692546939`, Build Bootstrap `35692568618`, Project State Gate `35692570088`, Python QEMU VM Lab `35692570940` on x86_64 and ARM64, and x64 PyDECnet L1 interoperability `35692572150`. Known and Active multi-entity READ CIRCUIT status both included live ETH-0 using standard multiple-items framing while existing management coverage remained green.
+
+
+Phase 6 plural circuit coverage now includes READ CIRCUIT counters for Known (-1) and Active (-2), exercising the already-implemented multiple-item counter path against pinned PyDECnet. Each returned live circuit must carry the standard 1000/1001/1010/1011 receive/transmit byte/block counters and ETH-0 must appear with nonzero traffic. Product behavior is unchanged. Next: exact-SHA fast acceptance, then continue Session Control/NICE management operations and negative handling.

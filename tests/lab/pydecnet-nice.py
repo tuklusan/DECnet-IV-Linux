@@ -300,6 +300,57 @@ def main() -> int:
                     f"{sorted(seen_circuits)!r}"
                 )
 
+        for selector_code, selector_name in (
+                (0xff, "known-circuit-counters"),
+                (0xfe, "active-circuit-counters")):
+            connection.data(bytes((0x14, 0x33, selector_code)))
+            response = connection.recv()
+            if response.type != "data" or bytes(response) != b"\x02":
+                raise RuntimeError(
+                    f"missing {selector_name} multi-item header: "
+                    f"{bytes(response)!r}"
+                )
+            seen_counter_circuits = set()
+            while True:
+                response = connection.recv()
+                if response.type != "data":
+                    raise RuntimeError(
+                        f"unexpected {selector_name} response "
+                        f"{response.type!r}"
+                    )
+                item = bytes(response)
+                if item == b"\x80":
+                    break
+                if len(item) < 34 or item[:4] != b"\x01\xff\xff\x00":
+                    raise RuntimeError(
+                        f"bad {selector_name} item: {item!r}"
+                    )
+                item_name_len = item[4]
+                item_name = item[5:5 + item_name_len]
+                off2 = 5 + item_name_len
+                vals = []
+                for encoded in (b"\xe8\xe3", b"\xe9\xe3",
+                                b"\xf2\xe3", b"\xf3\xe3"):
+                    if item[off2:off2 + 2] != encoded:
+                        raise RuntimeError(
+                            f"missing {selector_name} counter "
+                            f"{encoded!r}: {item!r}"
+                        )
+                    vals.append(int.from_bytes(
+                        item[off2 + 2:off2 + 6], "little"
+                    ))
+                    off2 += 6
+                if min(vals) < 1:
+                    raise RuntimeError(
+                        f"invalid {selector_name} counters: {item!r}"
+                    )
+                seen_counter_circuits.add(item_name)
+            if b"ETH-0" not in seen_counter_circuits:
+                raise RuntimeError(
+                    f"{selector_name} omitted live ETH-0: "
+                    f"{sorted(seen_counter_circuits)!r}"
+                )
+
         connection.data(CIRCUIT_COUNTERS_REQUEST)
         response = connection.recv()
         if response.type != "data":
@@ -353,6 +404,7 @@ def main() -> int:
         f"remote_hops={remote_hops} remote_circuit={remote_circuit.decode('ascii')} "
         f"multi_node_reads=known,active,adjacent "
         f"multi_circuit_reads=known,active "
+        f"multi_circuit_counters=known,active "
         f"circuit_rx_bytes={circuit_rx_bytes} "
         f"circuit_tx_bytes={circuit_tx_bytes} "
         f"circuit_rx_blocks={circuit_rx_blocks} "
