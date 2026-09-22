@@ -19,6 +19,7 @@ all: userspace unit
 userspace:
 	$(MAKE) -C userspace/dnctl
 	$(MAKE) -C userspace/ncp
+	$(MAKE) -C userspace/dnlogin
 	$(MAKE) -C userspace/dnnml
 	$(MAKE) -C userspace/dnnice
 	$(MAKE) -C userspace/dnmirror
@@ -34,6 +35,7 @@ kernel:
 clean:
 	$(MAKE) -C userspace/dnctl clean
 	$(MAKE) -C userspace/ncp clean
+	$(MAKE) -C userspace/dnlogin clean
 	$(MAKE) -C userspace/dnnml clean
 	$(MAKE) -C userspace/dnnice clean
 	$(MAKE) -C userspace/dnmirror clean
