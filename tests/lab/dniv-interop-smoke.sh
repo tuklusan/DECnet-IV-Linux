@@ -351,6 +351,19 @@ if [ "$reference" = pydecnet ]; then
         exit 1
     fi
     echo "DNIV-INTEROP-MIRROR-ACCESS-REJECT-PASS session=$session scenario=$scenario node=$name peer=$peer_node"
+    /usr/local/sbin/dnobject --name DNIVTASK --once &
+    task_pid=$!
+    sleep 1
+    if ! kill -0 "$task_pid" 2>/dev/null; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=task-listener-start"
+        exit 1
+    fi
+    echo "DNIV-INTEROP-TASK-READY session=$session scenario=$scenario node=$name peer=$peer_node"
+    if ! wait "$task_pid"; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=task-session"
+        exit 1
+    fi
+    echo "DNIV-INTEROP-TASK-PASS session=$session scenario=$scenario node=$name peer=$peer_node"
     if ! /usr/local/sbin/dnmrr "$peer_node"; then
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=nsp-mirror"
         exit 1
