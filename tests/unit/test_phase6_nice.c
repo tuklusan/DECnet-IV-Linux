@@ -66,6 +66,29 @@ int main(void)
     assert(dniv_nice_build_node_reply(reply, 8U, &reply_len,
                                       DNIV_ADDR(31, 70), "DN70",
                                       "DECnet-IV-Linux") != 0);
+
+    {
+        const __u8 summary_request[] = { 0x14, 0x00, 0x00, 0x00, 0x00 };
+        const __u8 status_request[] = { 0x14, 0x10, 0x00, 0x00, 0x00 };
+
+        assert(dniv_nice_parse_read_node(summary_request,
+                                         sizeof(summary_request),
+                                         &request) == 0);
+        assert(request.info == DNIV_NICE_INFO_SUMMARY);
+        assert(dniv_nice_parse_read_node(status_request,
+                                         sizeof(status_request),
+                                         &request) == 0);
+        assert(request.info == DNIV_NICE_INFO_STATUS);
+        assert(dniv_nice_build_node_status_reply(
+                   reply, sizeof(reply), &reply_len,
+                   DNIV_ADDR(31, 70), "DN70", 7U) == 0);
+        assert(reply_len == 20U);
+        assert(reply[11] == 0U && reply[12] == 0U);
+        assert(reply[13] == 0x81U && reply[14] == 0U);
+        assert(reply[15] == 0x58U && reply[16] == 0x02U);
+        assert(reply[17] == 0x02U && reply[18] == 7U && reply[19] == 0U);
+    }
+
     puts("Phase 6 NICE codec tests passed");
     return 0;
 }

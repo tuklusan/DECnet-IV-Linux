@@ -89,6 +89,36 @@ fail:
     return -1;
 }
 
+static int count_active_links(__u16 *active)
+{
+    struct dniv_link link;
+    __u32 index;
+    __u16 count = 0U;
+    int fd;
+
+    if (!active)
+        return -1;
+    fd = open(DNIV_DEVICE, O_RDONLY);
+    if (fd < 0)
+        return -1;
+    for (index = 0U;; index++) {
+        memset(&link, 0, sizeof(link));
+        link.uapi_version = DNIV_UAPI_VERSION;
+        link.index = index;
+        if (ioctl(fd, DNIV_IOC_GET_LINK, &link) < 0) {
+            if (errno == ENOENT)
+                break;
+            close(fd);
+            return -1;
+        }
+        if (link.state != DNIV_LINK_STATE_CLOSED && count != UINT16_MAX)
+            count++;
+    }
+    close(fd);
+    *active = count;
+    return 0;
+}
+
 static int serve_connection(int fd)
 {
     struct timeval timeout = { .tv_sec = 30, .tv_usec = 0 };
@@ -97,6 +127,7 @@ static int serve_connection(int fd)
     unsigned char in[256];
     unsigned char out[512];
     size_t out_len = 0U;
+    __u16 active_links = 0U;
     ssize_t got;
 
     if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO,
@@ -117,10 +148,27 @@ static int serve_connection(int fd)
                (ssize_t)sizeof(error) ? 0 : -1;
     }
 
-    if (dniv_nice_build_node_reply(out, sizeof(out), &out_len,
-                                   identity.address, identity.name,
-                                   DNIV_NML_IDENT))
-        return -1;
+    switch (request.info) {
+    case DNIV_NICE_INFO_SUMMARY:
+    case DNIV_NICE_INFO_STATUS:
+        if (count_active_links(&active_links) ||
+            dniv_nice_build_node_status_reply(out, sizeof(out), &out_len,
+                                              identity.address,
+                                              identity.name, active_links))
+            return -1;
+        break;
+    case DNIV_NICE_INFO_CHARACTERISTICS:
+        if (dniv_nice_build_node_reply(out, sizeof(out), &out_len,
+                                       identity.address, identity.name,
+                                       DNIV_NML_IDENT))
+            return -1;
+        break;
+    default: {
+        const signed char error = -1;
+        return send(fd, &error, sizeof(error), MSG_EOR | MSG_NOSIGNAL) ==
+               (ssize_t)sizeof(error) ? 0 : -1;
+    }
+    }
     if (send(fd, out, out_len, MSG_EOR | MSG_NOSIGNAL) != (ssize_t)out_len)
         return -1;
     return 0;

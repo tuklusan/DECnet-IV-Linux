@@ -107,4 +107,51 @@ dniv_nice_build_node_reply(__u8 *buf, size_t capacity, size_t *used,
     return 0;
 }
 
+
+static inline int
+dniv_nice_build_node_status_reply(__u8 *buf, size_t capacity, size_t *used,
+                                  __u16 address, const char *name,
+                                  __u16 active_links)
+{
+    size_t name_len;
+    size_t needed;
+    size_t off = 0U;
+
+    if (!buf || !used || !name)
+        return -1;
+    name_len = strlen(name);
+    if (!name_len || name_len > 127U)
+        return -1;
+
+    needed = 1U + 2U + 1U + 2U + 1U + name_len + 4U + 5U;
+    if (capacity < needed)
+        return -1;
+
+    buf[off++] = (__u8)DNIV_NICE_RET_SUCCESS;
+    buf[off++] = 0xffU;
+    buf[off++] = 0xffU;
+    buf[off++] = 0U;
+    buf[off++] = (__u8)(address & 0xffU);
+    buf[off++] = (__u8)(address >> 8);
+    buf[off++] = (__u8)(0x80U | (__u8)name_len);
+    memcpy(buf + off, name, name_len);
+    off += name_len;
+
+    /* Node state, parameter 0, coded one-byte value: On. */
+    buf[off++] = 0U;
+    buf[off++] = 0U;
+    buf[off++] = 0x81U;
+    buf[off++] = 0U;
+
+    /* Active links, parameter 600, unsigned two-byte value. */
+    buf[off++] = (__u8)(600U & 0xffU);
+    buf[off++] = (__u8)(600U >> 8);
+    buf[off++] = 0x02U;
+    buf[off++] = (__u8)(active_links & 0xffU);
+    buf[off++] = (__u8)(active_links >> 8);
+
+    *used = off;
+    return 0;
+}
+
 #endif

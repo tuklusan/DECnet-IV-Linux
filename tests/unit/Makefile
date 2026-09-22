@@ -18,7 +18,7 @@ CFLAGS ?= -O2 -g
 CFLAGS += -std=c11 -Wall -Wextra -Werror
 
 .PHONY: all test clean
-all: test_uapi test_dn_uapi test_phase3 test_endnode_bounds test_phase4_routing test_phase4_route_metric test_phase4_data test_phase5_nsp test_phase6_nice test_phase6_nice
+all: test_uapi test_dn_uapi test_phase3 test_endnode_bounds test_phase4_routing test_phase4_route_metric test_phase4_data test_phase5_nsp test_phase6_nice
 
 test_uapi: test_uapi.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ $<
@@ -59,4 +59,4 @@ test: all
 	./test_phase6_nice
 
 clean:
-	rm -f test_uapi test_dn_uapi test_phase3 test_endnode_bounds test_phase4_routing test_phase4_route_metric test_phase4_data test_phase5_nsp
+	rm -f test_uapi test_dn_uapi test_phase3 test_endnode_bounds test_phase4_routing test_phase4_route_metric test_phase4_data test_phase5_nsp test_phase6_nice
