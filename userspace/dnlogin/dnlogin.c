@@ -69,6 +69,8 @@ struct input_state {
 };
 
 static struct input_state input_state;
+static unsigned char normal_echo = 1U;
+static uint16_t input_count_state = 1U;
 
 static uint16_t get_le16(const unsigned char *p)
 {
@@ -297,6 +299,8 @@ static int send_input_state(int fd)
 {
     unsigned char body[2] = { CTERM_INPUT_STATE, input_state.len ? 1U : 0U };
 
+    if (!input_count_state)
+        return 0;
     return send_common(fd, body, sizeof(body));
 }
 
@@ -588,8 +592,9 @@ static int append_characteristic(unsigned char *out, size_t cap,
         width = 1U;
         break;
     case 0x0205U:
-        value = 1U;
-        if (isatty(STDIN_FILENO) && !tcgetattr(STDIN_FILENO, &tio))
+        value = normal_echo;
+        if (isatty(STDIN_FILENO) && !tcgetattr(STDIN_FILENO, &tio) &&
+            normal_echo)
             value = (tio.c_lflag & ECHO) ? 1U : 0U;
         width = 1U;
         break;
@@ -599,7 +604,7 @@ static int append_characteristic(unsigned char *out, size_t cap,
         width = 1U;
         break;
     case 0x0208U:
-        value = 1U;
+        value = input_count_state;
         width = 2U;
         break;
     default:
@@ -637,6 +642,35 @@ static int handle_read_characteristics(int fd, const unsigned char *body,
     return send_common(fd, reply, used);
 }
 
+static int handle_characteristics(const unsigned char *body, size_t len)
+{
+    size_t off = 2U;
+
+    if (len < 2U)
+        return -1;
+    while (off + 1U < len) {
+        uint16_t selector = get_le16(body + off);
+
+        off += 2U;
+        switch (selector) {
+        case 0x0205U:
+            if (off >= len)
+                return -1;
+            normal_echo = body[off++] ? 1U : 0U;
+            break;
+        case 0x0208U:
+            if (off + 1U >= len)
+                return -1;
+            input_count_state = get_le16(body + off);
+            off += 2U;
+            break;
+        default:
+            return -1;
+        }
+    }
+    return off == len ? 0 : -1;
+}
+
 static int handle_common(int fd, const unsigned char *record, size_t len)
 {
     const unsigned char *body;
@@ -661,6 +695,8 @@ static int handle_common(int fd, const unsigned char *record, size_t len)
         return handle_check_input(fd);
     case CTERM_READ_CHARACTERISTICS:
         return handle_read_characteristics(fd, body, inner);
+    case CTERM_CHARACTERISTICS:
+        return handle_characteristics(body, inner);
     default:
         fprintf(stderr, "dnlogin: unsupported CTERM message %u\n", body[0]);
         return -1;

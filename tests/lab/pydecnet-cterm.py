@@ -65,6 +65,12 @@ def cterm_write(data: bytes, request_complete: bool = False) -> bytes:
 def cterm_check_input() -> bytes:
     return common(bytes((CTERM_CHECK_INPUT, 0)))
 
+def cterm_set_characteristics(normal_echo: int, input_count_state: int) -> bytes:
+    body = bytearray((CTERM_CHARACTERISTICS, 0))
+    body += bytes((0x05, 0x02, normal_echo & 1))
+    body += bytes((0x08, 0x02)) + input_count_state.to_bytes(2, "little")
+    return common(bytes(body))
+
 def cterm_read_characteristics() -> bytes:
     selectors = (
         0x0001, 0x0002, 0x0003, 0x0004, 0x0005,
@@ -217,6 +223,17 @@ async def serve(api_socket: str, system: str) -> int:
         if rest != expected_tail:
             raise RuntimeError(f"bad remaining CHARACTERISTICS body: {rest!r}")
 
+        interactive.data(cterm_set_characteristics(0, 1))
+        interactive.data(cterm_read_characteristics())
+        reply = await interactive.recv()
+        if reply.type != "data":
+            raise RuntimeError(f"expected CHARACTERISTICS after set, got {reply.type!r}")
+        body = common_body(bytes(reply), CTERM_CHARACTERISTICS)
+        if bytes((0x05, 0x02, 0)) not in body:
+            raise RuntimeError(f"normal-echo characteristic did not update: {body!r}")
+        if bytes((0x08, 0x02, 1, 0)) not in body:
+            raise RuntimeError(f"input-count-state characteristic did not persist: {body!r}")
+
         interactive.data(cterm_start_read())
         reply = await interactive.recv()
         if reply.type != "data":
@@ -237,7 +254,7 @@ async def serve(api_socket: str, system: str) -> int:
 
         interactive.data(cterm_write(b"CTERM-DONE\r\n"))
         interactive.disconnect()
-        print("pydecnet-cterm: pass object=42 sessions=2 interactive=1 controls=oob,input-state,write-complete,input-count,characteristics,clear-input,unread", flush=True)
+        print("pydecnet-cterm: pass object=42 sessions=2 interactive=1 controls=oob,input-state,write-complete,input-count,characteristics-set-read,clear-input,unread", flush=True)
         return 0
     finally:
         listener.close()
