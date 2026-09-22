@@ -61,7 +61,7 @@ jobs:
             slot: arm64
             arch: arm64
             qemu: qemu-system-arm
-            lab_timeout: 360
+            lab_timeout: 375
     runs-on: ${{ matrix.runner }}
     concurrency:
       group: dniv-vm-${{ github.run_id }}-${{ matrix.slot }}-${{ inputs.lab_mode }}
