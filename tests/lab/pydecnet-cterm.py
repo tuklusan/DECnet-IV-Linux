@@ -26,6 +26,7 @@ FOUND_COMMON_DATA = 9
 CTERM_INITIATE = 1
 CTERM_START_READ = 2
 CTERM_READ_DATA = 3
+CTERM_OOB = 4
 CTERM_UNREAD = 5
 CTERM_CLEAR_INPUT = 6
 CTERM_WRITE = 7
@@ -34,6 +35,7 @@ CTERM_CHECK_INPUT = 12
 CTERM_INPUT_COUNT = 13
 CTERM_READ_CHARACTERISTICS = 10
 CTERM_CHARACTERISTICS = 11
+CTERM_INPUT_STATE = 14
 
 def foundation_bind() -> bytes:
     msg = bytearray(17)
@@ -145,6 +147,26 @@ async def serve(api_socket: str, system: str) -> int:
 
         interactive = await listener.listen()
         await handshake(interactive)
+
+        seen_oob = False
+        seen_input_state = False
+        while not (seen_oob and seen_input_state):
+            reply = await interactive.recv()
+            if reply.type != "data":
+                raise RuntimeError(f"expected asynchronous CTERM input event, got {reply.type!r}")
+            raw = bytes(reply)
+            body = common_body(raw, raw[4])
+            if body[0] == CTERM_OOB:
+                if body != bytes((CTERM_OOB, 0, 3)):
+                    raise RuntimeError(f"bad OOB body: {body!r}")
+                seen_oob = True
+            elif body[0] == CTERM_INPUT_STATE:
+                if body != bytes((CTERM_INPUT_STATE, 1)):
+                    raise RuntimeError(f"bad INPUT STATE body: {body!r}")
+                seen_input_state = True
+            else:
+                raise RuntimeError(f"unexpected asynchronous CTERM body: {body!r}")
+
         interactive.data(cterm_write(b"CTERM-READY\r\n", request_complete=True))
         reply = await interactive.recv()
         if reply.type != "data":
@@ -215,7 +237,7 @@ async def serve(api_socket: str, system: str) -> int:
 
         interactive.data(cterm_write(b"CTERM-DONE\r\n"))
         interactive.disconnect()
-        print("pydecnet-cterm: pass object=42 sessions=2 interactive=1 controls=write-complete,input-count,characteristics,clear-input,unread", flush=True)
+        print("pydecnet-cterm: pass object=42 sessions=2 interactive=1 controls=oob,input-state,write-complete,input-count,characteristics,clear-input,unread", flush=True)
         return 0
     finally:
         listener.close()

@@ -16,6 +16,7 @@
 #define _POSIX_C_SOURCE 200809L
 #include <errno.h>
 #include <linux/dn.h>
+#include <poll.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -39,6 +40,7 @@
 #define CTERM_INITIATE 1U
 #define CTERM_START_READ 2U
 #define CTERM_READ_DATA 3U
+#define CTERM_OOB 4U
 #define CTERM_UNREAD 5U
 #define CTERM_CLEAR_INPUT 6U
 #define CTERM_WRITE 7U
@@ -47,6 +49,7 @@
 #define CTERM_CHARACTERISTICS 11U
 #define CTERM_CHECK_INPUT 12U
 #define CTERM_INPUT_COUNT 13U
+#define CTERM_INPUT_STATE 14U
 
 struct terminal_state {
     struct termios saved;
@@ -58,6 +61,14 @@ struct login_options {
     const char *password;
     const char *account;
 };
+
+struct input_state {
+    unsigned char data[1024];
+    size_t len;
+    int eof;
+};
+
+static struct input_state input_state;
 
 static uint16_t get_le16(const unsigned char *p)
 {
@@ -282,6 +293,54 @@ static int is_terminator(unsigned char c)
     return c == '\r' || c == '\n' || c == 0x03U || c == 0x1bU || c == 0x1aU;
 }
 
+static int send_input_state(int fd)
+{
+    unsigned char body[2] = { CTERM_INPUT_STATE, input_state.len ? 1U : 0U };
+
+    return send_common(fd, body, sizeof(body));
+}
+
+static int send_oob(int fd, unsigned char ch)
+{
+    unsigned char body[3] = { CTERM_OOB, 0U, ch };
+
+    return send_common(fd, body, sizeof(body));
+}
+
+static int fill_readahead(int fd)
+{
+    unsigned char buf[128];
+    ssize_t got;
+    size_t i;
+    int was_empty = input_state.len == 0U;
+
+    got = read(STDIN_FILENO, buf, sizeof(buf));
+    if (got == 0) {
+        input_state.eof = 1;
+        return 0;
+    }
+    if (got < 0) {
+        if (errno == EINTR)
+            return 0;
+        return -1;
+    }
+    for (i = 0; i < (size_t)got; i++) {
+        unsigned char ch = buf[i];
+
+        if (ch == 0x03U || ch == 0x0fU || ch == 0x19U) {
+            if (send_oob(fd, ch))
+                return -1;
+            continue;
+        }
+        if (input_state.len >= sizeof(input_state.data))
+            return -1;
+        input_state.data[input_state.len++] = ch;
+    }
+    if (was_empty && input_state.len)
+        return send_input_state(fd);
+    return 0;
+}
+
 static int read_terminal(unsigned char *out, size_t cap, size_t requested,
                          int echo, uint16_t *term_pos, size_t *out_len)
 {
@@ -292,7 +351,23 @@ static int read_terminal(unsigned char *out, size_t cap, size_t requested,
 
     if (!limit)
         return -1;
-    while (used < limit) {
+    while (used < limit && input_state.len) {
+        ch = input_state.data[0];
+        memmove(input_state.data, input_state.data + 1U, input_state.len - 1U);
+        input_state.len--;
+        out[used++] = ch;
+        if (echo && isatty(STDIN_FILENO)) {
+            if (ch == '\r') {
+                if (write(STDOUT_FILENO, "\r\n", 2) != 2)
+                    return -1;
+            } else if (write(STDOUT_FILENO, &ch, 1) != 1) {
+                return -1;
+            }
+        }
+        if (is_terminator(ch))
+            break;
+    }
+    while (used < limit && (!used || !is_terminator(out[used - 1U]))) {
         got = read(STDIN_FILENO, &ch, 1);
         if (got == 0)
             break;
@@ -356,6 +431,7 @@ static int handle_unread(int fd)
 
 static int handle_clear_input(void)
 {
+    input_state.len = 0U;
     unsigned char discard[128];
     int available = 0;
 
@@ -404,13 +480,15 @@ static int handle_check_input(int fd)
 {
     unsigned char reply[4] = { CTERM_INPUT_COUNT, 0, 0, 0 };
     int available = 0;
+    uint32_t total;
     uint16_t count;
 
     if (ioctl(STDIN_FILENO, FIONREAD, &available) < 0)
         return -1;
     if (available < 0)
         available = 0;
-    count = available > UINT16_MAX ? UINT16_MAX : (uint16_t)available;
+    total = (uint32_t)available + (uint32_t)input_state.len;
+    count = total > UINT16_MAX ? UINT16_MAX : (uint16_t)total;
     put_le16(reply + 2, count);
     return send_common(fd, reply, sizeof(reply));
 }
@@ -663,7 +741,36 @@ static int session(const char *node_text, const struct login_options *options)
         perror("dnlogin: terminal mode");
         goto out;
     }
+    memset(&input_state, 0, sizeof(input_state));
     for (;;) {
+        struct pollfd pfd[2];
+        int nfds = 1;
+        int ready;
+
+        pfd[0].fd = fd;
+        pfd[0].events = POLLIN;
+        pfd[0].revents = 0;
+        if (!input_state.eof) {
+            pfd[1].fd = STDIN_FILENO;
+            pfd[1].events = POLLIN;
+            pfd[1].revents = 0;
+            nfds = 2;
+        }
+        ready = poll(pfd, nfds, -1);
+        if (ready < 0) {
+            if (errno == EINTR)
+                continue;
+            perror("dnlogin: poll");
+            break;
+        }
+        if (nfds == 2 && (pfd[1].revents & (POLLIN | POLLHUP))) {
+            if (fill_readahead(fd)) {
+                fprintf(stderr, "dnlogin: input handling failed\n");
+                break;
+            }
+        }
+        if (!(pfd[0].revents & (POLLIN | POLLHUP)))
+            continue;
         got = recv(fd, buf, sizeof(buf), 0);
         if (got == 0) {
             rc = 0;
