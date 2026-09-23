@@ -92,12 +92,17 @@ static int serve(int fd, const char *root)
         if (strchr(recipient, '\r') || strchr(recipient, '\n') ||
             strchr(recipient, '\0') != recipient + got)
             return -1;
-        if (recipients[0] &&
-            strncat(recipients, ",", sizeof(recipients) - strlen(recipients) - 1U) == NULL)
-            return -1;
-        if (strlen(recipients) + strlen(recipient) + 1U > sizeof(recipients))
-            return -1;
-        strcat(recipients, recipient);
+        {
+            size_t used = strlen(recipients);
+            size_t add = strlen(recipient);
+            size_t need = used + (used ? 1U : 0U) + add + 1U;
+
+            if (need > sizeof(recipients))
+                return -1;
+            if (used)
+                recipients[used++] = ',';
+            memcpy(recipients + used, recipient, add + 1U);
+        }
         if (send_ack(fd))
             return -1;
     }

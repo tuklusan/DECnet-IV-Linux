@@ -90,13 +90,34 @@ static int recv_ack(int fd)
         ack[2] == 0U && ack[3] == 0U ? 0 : -1;
 }
 
+static int send_recipients(int fd, const char *users)
+{
+    char list[256];
+    char *part;
+    char *save = NULL;
+    const unsigned char zero = 0U;
+
+    if (strlen(users) >= sizeof(list))
+        return -1;
+    strcpy(list, users);
+    part = strtok_r(list, ",", &save);
+    if (!part)
+        return -1;
+    while (part) {
+        if (!*part || send_record(fd, part, strlen(part)) || recv_ack(fd))
+            return -1;
+        part = strtok_r(NULL, ",", &save);
+    }
+    return send_record(fd, &zero, 1U);
+}
+
 static int selftest(void)
 {
     uint16_t addr;
     const char *user;
 
-    if (parse_target("1.23::ALICE", &addr, &user) ||
-        addr != 1047U || strcmp(user, "ALICE") ||
+    if (parse_target("1.23::ALICE,BOB", &addr, &user) ||
+        addr != 1047U || strcmp(user, "ALICE,BOB") ||
         !parse_target("1.0::ALICE", &addr, &user))
         return 1;
     puts("dnmail selftest passed");
@@ -132,7 +153,7 @@ int main(int argc, char **argv)
     }
     if (arg + 2 != argc) {
         fprintf(stderr,
-                "usage: %s [-f FROM] [-s SUBJECT] AREA.NODE::USER MESSAGE\n",
+                "usage: %s [-f FROM] [-s SUBJECT] AREA.NODE::USER[,USER...] MESSAGE\n",
                 argv[0]);
         return 2;
     }
@@ -150,9 +171,7 @@ int main(int argc, char **argv)
         return 1;
     }
     if (send_record(fd, from, strlen(from)) ||
-        send_record(fd, user, strlen(user)) ||
-        recv_ack(fd) ||
-        send_record(fd, &zero, 1U) ||
+        send_recipients(fd, user) ||
         send_record(fd, target, strlen(target)) ||
         send_record(fd, subject, strlen(subject)) ||
         send_record(fd, message, strlen(message)) ||
