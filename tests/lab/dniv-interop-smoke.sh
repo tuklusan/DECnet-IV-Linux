@@ -332,7 +332,7 @@ if [ "$reference" = pydecnet ]; then
         printf '%s\n' "$dap_output"
         exit 1
     fi
-    dap_local="/tmp/dniv-dap-phase7.$"
+    dap_local="/tmp/dniv-dap-phase7.$$"
     rm -f "$dap_local"
     if ! /usr/local/bin/dncopy -u DAPUSER -p DAPPASS -a DAPACCT --get-to "$peer_node" PHASE7.TXT "$dap_local"; then
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=dap-get-to"
@@ -341,6 +341,9 @@ if [ "$reference" = pydecnet ]; then
     if [ "$(cat "$dap_local")" != "DAP-PHASE7" ]; then
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=dap-get-to-content"
         rm -f "$dap_local"
+        exit 1
+    fi
+    rm -f "$dap_local"
     dap_put="/tmp/dniv-dap-put.$$"
     printf 'DAP-PUT-PHASE7\n' >"$dap_put"
     if ! /usr/local/bin/dncopy --put "$dap_put" "$peer_node" UPLOAD.TXT; then
@@ -349,9 +352,6 @@ if [ "$reference" = pydecnet ]; then
         exit 1
     fi
     rm -f "$dap_put"
-        exit 1
-    fi
-    rm -f "$dap_local"
     if ! cterm_output=$(printf '\003phase7\r' | /usr/local/sbin/dnlogin -u CTERMUSER -p CTERMPASS -a CTERMACCT "$peer_node" 2>&1); then
         printf '%s\n' "$cterm_output"
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=cterm-interactive"
