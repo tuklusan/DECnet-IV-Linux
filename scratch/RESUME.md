@@ -949,3 +949,6 @@ Fast acceptance of transfer-mode candidate `6ce1e137c337af98f77dbdfe91dbd3ec7d17
 
 
 The first 60-second PyDECnet application-proof rerun on `99d5d59cca67d88fb688aa5546563b98045a93cb` still failed in run `35870362895`, job `107212544983`, at the same harness boundary: `pydecnet-cterm.py` printed READY, serviced the expanded DAP sequence, and was terminated exactly 60 seconds later just as the candidate advanced to interactive CTERM, producing a later connection timeout. Routing/NICE and DAP CONFIG remained healthy. The bounded application-proof allowance is raised to 90 seconds; no candidate protocol behavior changes. Next: exact-SHA fast acceptance.
+
+
+The 90-second rerun on `9e10a51c64990761ae4ce4f052ecbf6d6d20ea75` again expired exactly at the host application-proof boundary in PyDECnet L1 run `35871034412`, job `107214878945`. The candidate had completed all fourteen DAP client sessions and was advancing to interactive CTERM; the guest progressed only about thirteen seconds during the ninety wall-clock seconds, so this is hosted TCG slowdown rather than a protocol stall. The application proof remains bounded but is raised to 180 seconds, still well below the existing 420-second x64 interoperability bound. Product behavior is unchanged. Next: exact-SHA fast acceptance.
