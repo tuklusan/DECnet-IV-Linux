@@ -78,9 +78,46 @@ def main() -> int:
         if reply.type != "data" or bytes(reply) != bytes((7, 0, 2)):
             raise RuntimeError(f"bad FAL close reply: {bytes(reply)!r}")
         connection.disconnect()
+
+        connection, response = connector.connect(
+            system=system,
+            dest=destination,
+            remuser=17,
+            localuser="PYFAL",
+        )
+        if connection is None or response.type != "accept":
+            raise RuntimeError(
+                f"FAL create rejected: {getattr(response, 'reason', 'unknown')}"
+            )
+        connection.data(CONFIG)
+        reply = connection.recv()
+        if reply.type != "data" or bytes(reply) != CONFIG:
+            raise RuntimeError(f"bad FAL create CONFIG: {bytes(reply)!r}")
+
+        name = b"UPLOAD.BIN"
+        connection.data(bytes((2, 0, 0)))
+        connection.data(bytes((3, 0, 2, 0, len(name))) + name)
+        reply = connection.recv()
+        if reply.type != "data" or bytes(reply) != bytes((2, 0, 4, 1)):
+            raise RuntimeError(f"bad FAL create attributes: {bytes(reply)!r}")
+        reply = connection.recv()
+        if reply.type != "data" or bytes(reply) != bytes((6, 0)):
+            raise RuntimeError(f"bad FAL create ACK: {bytes(reply)!r}")
+        connection.data(bytes((4, 0, 2)))
+        reply = connection.recv()
+        if reply.type != "data" or bytes(reply) != bytes((6, 0)):
+            raise RuntimeError(f"bad FAL create connect ACK: {bytes(reply)!r}")
+        connection.data(bytes((4, 0, 4)))
+        connection.data(bytes((8, 0, 0)) + b"PUT-A")
+        connection.data(bytes((8, 0, 0)) + bytes((0, 1, 2, 3)))
+        connection.data(bytes((7, 0, 1)))
+        reply = connection.recv()
+        if reply.type != "data" or bytes(reply) != bytes((7, 0, 2)):
+            raise RuntimeError(f"bad FAL create close reply: {bytes(reply)!r}")
+        connection.disconnect()
     finally:
         connector.close()
-    print(f"pydecnet-fal: pass peer={destination} object=17 get=SERVER.TXT")
+    print(f"pydecnet-fal: pass peer={destination} object=17 get=SERVER.TXT put=UPLOAD.BIN")
     return 0
 
 if __name__ == "__main__":

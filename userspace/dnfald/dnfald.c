@@ -33,6 +33,13 @@
 #define DAP_STATUS 9U
 #define DAP_STATUS_EOF 0x4027U
 #define DAP_RFM_FIX 1U
+#define DAP_ACCESS_OPEN 1U
+#define DAP_ACCESS_CREATE 2U
+#define DAP_CONTROL_GET 1U
+#define DAP_CONTROL_CONNECT 2U
+#define DAP_CONTROL_PUT 4U
+#define DAP_ACCOMP_CLOSE 1U
+#define DAP_ACCOMP_RESPONSE 2U
 #define DNFAL_BACKLOG 8
 
 static size_t make_config(unsigned char *buf, size_t cap)
@@ -105,25 +112,35 @@ static int safe_filespec(const unsigned char *text, size_t len,
     return 0;
 }
 
-static int serve_get(int fd, const char *root)
+static int make_path(const char *root, const unsigned char *request,
+                     size_t len, unsigned char function,
+                     char *path, size_t path_cap)
+{
+    char filespec[256];
+    size_t n;
+
+    if (len < 5U || request[0] != DAP_ACCESS || request[2] != function)
+        return -1;
+    n = request[4];
+    if (len != n + 5U ||
+        safe_filespec(request + 5U, n, filespec, sizeof(filespec)))
+        return -1;
+    if (snprintf(path, path_cap, "%s/%s", root, filespec) >= (int)path_cap)
+        return -1;
+    return 0;
+}
+
+static int serve_get(int fd, const char *root,
+                     const unsigned char *access, size_t access_len)
 {
     unsigned char request[2048];
     unsigned char reply[2048];
-    char filespec[256];
     char path[1024];
     FILE *in = NULL;
     ssize_t got;
-    size_t n;
 
-    got = recv(fd, request, sizeof(request), 0);
-    if (got < 5 || request[0] != DAP_ACCESS || request[2] != 1U)
-        return -1;
-    n = request[4];
-    if ((size_t)got != n + 5U ||
-        safe_filespec(request + 5U, n, filespec, sizeof(filespec)))
-        return -1;
-    if (snprintf(path, sizeof(path), "%s/%s", root, filespec) >=
-        (int)sizeof(path))
+    if (make_path(root, access, access_len, DAP_ACCESS_OPEN,
+                  path, sizeof(path)))
         return -1;
     in = fopen(path, "rb");
     if (!in)
@@ -141,7 +158,7 @@ static int serve_get(int fd, const char *root)
     }
 
     got = recv(fd, request, sizeof(request), 0);
-    if (got != 3 || request[0] != DAP_CONTROL || request[2] != 2U)
+    if (got != 3 || request[0] != DAP_CONTROL || request[2] != DAP_CONTROL_CONNECT)
         goto fail;
     {
         const unsigned char ack[] = { DAP_ACK, 0U };
@@ -150,7 +167,7 @@ static int serve_get(int fd, const char *root)
     }
 
     got = recv(fd, request, sizeof(request), 0);
-    if (got != 3 || request[0] != DAP_CONTROL || request[2] != 1U)
+    if (got != 3 || request[0] != DAP_CONTROL || request[2] != DAP_CONTROL_GET)
         goto fail;
 
     for (;;) {
@@ -182,16 +199,99 @@ static int serve_get(int fd, const char *root)
             return -1;
     }
     got = recv(fd, request, sizeof(request), 0);
-    if (got != 3 || request[0] != DAP_ACCESS_COMPLETE || request[2] != 1U)
+    if (got != 3 || request[0] != DAP_ACCESS_COMPLETE || request[2] != DAP_ACCOMP_CLOSE)
         return -1;
     {
-        const unsigned char complete[] = { DAP_ACCESS_COMPLETE, 0U, 2U };
+        const unsigned char complete[] = {
+            DAP_ACCESS_COMPLETE, 0U, DAP_ACCOMP_RESPONSE
+        };
         return send_record(fd, complete, sizeof(complete));
     }
 
 fail:
     if (in)
         fclose(in);
+    return -1;
+}
+
+static int serve_create(int fd, const char *root,
+                        const unsigned char *access, size_t access_len)
+{
+    unsigned char request[2048];
+    char path[1024];
+    FILE *out = NULL;
+    ssize_t got;
+
+    if (make_path(root, access, access_len, DAP_ACCESS_CREATE,
+                  path, sizeof(path)))
+        return -1;
+    out = fopen(path, "wb");
+    if (!out)
+        return -1;
+
+    {
+        const unsigned char attributes[] = {
+            DAP_ATTRIBUTES, 0U, 0x04U, DAP_RFM_FIX
+        };
+        const unsigned char ack[] = { DAP_ACK, 0U };
+
+        if (send_record(fd, attributes, sizeof(attributes)) ||
+            send_record(fd, ack, sizeof(ack)))
+            goto fail;
+    }
+
+    got = recv(fd, request, sizeof(request), 0);
+    if (got != 3 || request[0] != DAP_CONTROL ||
+        request[2] != DAP_CONTROL_CONNECT)
+        goto fail;
+    {
+        const unsigned char ack[] = { DAP_ACK, 0U };
+        if (send_record(fd, ack, sizeof(ack)))
+            goto fail;
+    }
+
+    got = recv(fd, request, sizeof(request), 0);
+    if (got != 3 || request[0] != DAP_CONTROL ||
+        request[2] != DAP_CONTROL_PUT)
+        goto fail;
+
+    for (;;) {
+        size_t off;
+
+        got = recv(fd, request, sizeof(request), 0);
+        if (got < 2)
+            goto fail;
+        if (request[0] == DAP_DATA) {
+            if (got < 3)
+                goto fail;
+            off = 3U + request[2];
+            if (off > (size_t)got)
+                goto fail;
+            if ((size_t)got > off &&
+                fwrite(request + off, 1, (size_t)got - off, out) !=
+                    (size_t)got - off)
+                goto fail;
+            continue;
+        }
+        if (request[0] == DAP_ACCESS_COMPLETE &&
+            got == 3 && request[2] == DAP_ACCOMP_CLOSE)
+            break;
+        goto fail;
+    }
+    if (fclose(out))
+        return -1;
+    out = NULL;
+    {
+        const unsigned char complete[] = {
+            DAP_ACCESS_COMPLETE, 0U, DAP_ACCOMP_RESPONSE
+        };
+        return send_record(fd, complete, sizeof(complete));
+    }
+
+fail:
+    if (out)
+        fclose(out);
+    unlink(path);
     return -1;
 }
 
@@ -214,7 +314,22 @@ static int serve_session(int fd, const char *root)
         return -1;
     if (!root)
         return 0;
-    return serve_get(fd, root);
+
+    got = recv(fd, request, sizeof(request), 0);
+    if (got < 0)
+        return -1;
+    if (got >= 3 && request[0] == DAP_ATTRIBUTES) {
+        got = recv(fd, request, sizeof(request), 0);
+        if (got < 0)
+            return -1;
+    }
+    if (got < 5 || request[0] != DAP_ACCESS)
+        return -1;
+    if (request[2] == DAP_ACCESS_OPEN)
+        return serve_get(fd, root, request, (size_t)got);
+    if (request[2] == DAP_ACCESS_CREATE)
+        return serve_create(fd, root, request, (size_t)got);
+    return -1;
 }
 
 static int selftest(void)
@@ -241,7 +356,8 @@ static int selftest(void)
 int main(int argc, char **argv)
 {
     const char *root = NULL;
-    int once = 0;
+    int sessions = 0;
+    int served = 0;
     int listener;
     int i;
 
@@ -249,11 +365,23 @@ int main(int argc, char **argv)
         return selftest();
     for (i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--once")) {
-            once = 1;
+            sessions = 1;
+        } else if (!strcmp(argv[i], "--sessions") && i + 1 < argc) {
+            char *end = NULL;
+            long value;
+
+            errno = 0;
+            value = strtol(argv[++i], &end, 10);
+            if (errno || end == argv[i] || *end || value < 1 || value > 32) {
+                fprintf(stderr, "dnfald: invalid session count\n");
+                return 2;
+            }
+            sessions = (int)value;
         } else if (!strcmp(argv[i], "--root") && i + 1 < argc) {
             root = argv[++i];
         } else {
-            fprintf(stderr, "usage: %s [--once] [--root DIR] | --selftest\n",
+            fprintf(stderr,
+                    "usage: %s [--once|--sessions N] [--root DIR] | --selftest\n",
                     argv[0]);
             return 2;
         }
@@ -285,7 +413,8 @@ int main(int argc, char **argv)
             close(listener);
             return 1;
         }
-        if (once)
+        served++;
+        if (sessions && served >= sessions)
             break;
     }
     close(listener);
