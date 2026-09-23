@@ -157,6 +157,7 @@ def main() -> int:
         if reply.type != "data" or bytes(reply) != bytes((7, 0, 2)):
             raise RuntimeError(f"bad FAL erase response: {bytes(reply)!r}")
         connection.disconnect()
+    finally:
         connector.close()
     print(f"pydecnet-fal: pass peer={destination} object=17 get,put,dir,erase")
     return 0
