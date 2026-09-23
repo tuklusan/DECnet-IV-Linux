@@ -46,6 +46,7 @@
 #define DNFAL_XATTR_RAT "user.decnet.rat"
 #define DAP_ACCESS_OPEN 1U
 #define DAP_ACCESS_CREATE 2U
+#define DAP_ACCESS_RENAME 3U
 #define DAP_ACCESS_ERASE 4U
 #define DAP_ACCESS_DIRECTORY 6U
 #define DAP_CONTROL_GET 1U
@@ -398,6 +399,39 @@ fail:
     return -1;
 }
 
+static int serve_rename(int fd, const char *root,
+                        const unsigned char *access, size_t access_len)
+{
+    unsigned char request[512];
+    char oldpath[1024];
+    char newname[256];
+    char newpath[1024];
+    size_t n;
+    ssize_t got;
+
+    if (make_path(root, access, access_len, DAP_ACCESS_RENAME,
+                  oldpath, sizeof(oldpath)))
+        return -1;
+    got = recv(fd, request, sizeof(request), 0);
+    if (got < 4 || request[0] != 15U || request[2] != 1U)
+        return -1;
+    n = request[3];
+    if ((size_t)got != n + 4U ||
+        safe_filespec(request + 4U, n, newname, sizeof(newname)))
+        return -1;
+    if (snprintf(newpath, sizeof(newpath), "%s/%s", root, newname) >=
+        (int)sizeof(newpath))
+        return -1;
+    if (rename(oldpath, newpath))
+        return -1;
+    {
+        const unsigned char complete[] = {
+            DAP_ACCESS_COMPLETE, 0U, DAP_ACCOMP_RESPONSE
+        };
+        return send_record(fd, complete, sizeof(complete));
+    }
+}
+
 static int safe_pattern(const unsigned char *text, size_t len,
                         char *out, size_t cap)
 {
@@ -532,6 +566,8 @@ static int serve_session(int fd, const char *root)
     if (request[2] == DAP_ACCESS_CREATE)
         return serve_create(fd, root, request, (size_t)got,
                             requested_rfm, requested_rat);
+    if (request[2] == DAP_ACCESS_RENAME)
+        return serve_rename(fd, root, request, (size_t)got);
     if (request[2] == DAP_ACCESS_DIRECTORY)
         return serve_directory(fd, root, request, (size_t)got);
     if (request[2] == DAP_ACCESS_ERASE)

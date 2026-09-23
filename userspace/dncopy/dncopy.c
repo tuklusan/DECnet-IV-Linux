@@ -808,6 +808,55 @@ fail_closed:
     return -1;
 }
 
+static int rename_file(const char *node_text, const char *oldspec,
+                       const char *newspec,
+                       const struct access_options *options)
+{
+    unsigned char msg[512], reply[512];
+    size_t oldn = strlen(oldspec);
+    size_t newn = strlen(newspec);
+    int fd;
+    ssize_t got;
+
+    if (!oldn || oldn > 128U || !newn || newn > 128U) {
+        fprintf(stderr, "dnrename: invalid remote file specification\n");
+        return -1;
+    }
+    fd = open_fal(node_text, options);
+    if (fd < 0)
+        return -1;
+    if (exchange_config(fd))
+        goto fail;
+
+    msg[0] = DAP_ACCESS;
+    msg[1] = 0U;
+    msg[2] = 3U; /* RENAME */
+    msg[3] = 0U; /* ACCOPT */
+    msg[4] = (unsigned char)oldn;
+    memcpy(msg + 5, oldspec, oldn);
+    if (send_record(fd, msg, oldn + 5U))
+        goto fail;
+
+    msg[0] = DAP_NAME;
+    msg[1] = 0U;
+    msg[2] = 1U; /* FILESPEC */
+    msg[3] = (unsigned char)newn;
+    memcpy(msg + 4, newspec, newn);
+    if (send_record(fd, msg, newn + 4U))
+        goto fail;
+
+    got = recv(fd, reply, sizeof(reply), 0);
+    if (got < 3 || reply[0] != DAP_ACCESS_COMPLETE || reply[2] != 2U)
+        goto fail;
+    close(fd);
+    return 0;
+
+fail:
+    fprintf(stderr, "dnrename: DAP rename failed\n");
+    close(fd);
+    return -1;
+}
+
 static int delete_file(const char *node_text, const char *filespec,
                        const struct access_options *options)
 {
@@ -1272,6 +1321,12 @@ int main(int argc, char **argv)
             return submit_file(argv[arg], argv[arg + 1], &options) ? 1 : 0;
         goto usage;
     }
+    if (!strcmp(prog, "dnrename")) {
+        if (arg + 3 == argc)
+            return rename_file(argv[arg], argv[arg + 1], argv[arg + 2],
+                               &options) ? 1 : 0;
+        goto usage;
+    }
     if (!strcmp(prog, "dndel")) {
         if (arg + 1 == argc && strstr(argv[arg], "::")) {
             if (parse_transparent_spec(argv[arg], &remote, &options) ||
@@ -1339,6 +1394,8 @@ usage:
         fprintf(stderr, "usage: dnprint [-u USER] [-p PASSWORD] [-a ACCOUNT] AREA.NODE FILE | AREA.NODE::FILE\n");
     } else if (!strcmp(prog, "dnsubmit")) {
         fprintf(stderr, "usage: dnsubmit [-u USER] [-p PASSWORD] [-a ACCOUNT] AREA.NODE FILE | AREA.NODE::FILE\n");
+    } else if (!strcmp(prog, "dnrename")) {
+        fprintf(stderr, "usage: dnrename [-u USER] [-p PASSWORD] [-a ACCOUNT] AREA.NODE OLD NEW\n");
     } else if (!strcmp(prog, "dndel")) {
         fprintf(stderr, "usage: dndel [-u USER] [-p PASSWORD] [-a ACCOUNT] [-m record|block] AREA.NODE FILE | 'AREA.NODE[\"USER PASS ACCOUNT\"]::FILE'\n");
     } else {

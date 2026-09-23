@@ -160,6 +160,24 @@ def main() -> int:
             system=system, dest=destination, remuser=17, localuser="PYFAL"
         )
         if connection is None or response.type != "accept":
+            raise RuntimeError("FAL rename connect rejected")
+        connection.data(CONFIG)
+        reply = connection.recv()
+        if reply.type != "data" or bytes(reply) != CONFIG:
+            raise RuntimeError(f"bad FAL rename CONFIG: {bytes(reply)!r}")
+        oldname = b"UPLOAD.BIN"
+        newname = b"RENAMED.BIN"
+        connection.data(bytes((3, 0, 3, 0, len(oldname))) + oldname)
+        connection.data(bytes((15, 0, 1, len(newname))) + newname)
+        reply = connection.recv()
+        if reply.type != "data" or bytes(reply) != bytes((7, 0, 2)):
+            raise RuntimeError(f"bad FAL rename response: {bytes(reply)!r}")
+        connection.disconnect()
+
+        connection, response = connector.connect(
+            system=system, dest=destination, remuser=17, localuser="PYFAL"
+        )
+        if connection is None or response.type != "accept":
             raise RuntimeError("FAL directory connect rejected")
         connection.data(CONFIG)
         reply = connection.recv()
@@ -178,7 +196,7 @@ def main() -> int:
             if len(raw) < 4 or raw[0] != 15 or raw[2] != 1 or len(raw) != 4 + raw[3]:
                 raise RuntimeError(f"bad FAL directory record: {raw!r}")
             names.add(raw[4:].decode("ascii"))
-        if names != {"SERVER.TXT", "UPLOAD.BIN"}:
+        if names != {"SERVER.TXT", "RENAMED.BIN"}:
             raise RuntimeError(f"bad FAL directory names: {sorted(names)!r}")
         connection.disconnect()
 
@@ -191,7 +209,7 @@ def main() -> int:
         reply = connection.recv()
         if reply.type != "data" or bytes(reply) != CONFIG:
             raise RuntimeError(f"bad FAL erase CONFIG: {bytes(reply)!r}")
-        name = b"UPLOAD.BIN"
+        name = b"RENAMED.BIN"
         connection.data(bytes((3, 0, 4, 0, len(name))) + name)
         reply = connection.recv()
         if reply.type != "data" or bytes(reply) != bytes((7, 0, 2)):
@@ -199,7 +217,7 @@ def main() -> int:
         connection.disconnect()
     finally:
         connector.close()
-    print(f"pydecnet-fal: pass peer={destination} object=17 get,put,metadata,dir,erase")
+    print(f"pydecnet-fal: pass peer={destination} object=17 get,put,metadata,rename,dir,erase")
     return 0
 
 if __name__ == "__main__":

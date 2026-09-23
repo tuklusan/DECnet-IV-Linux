@@ -98,6 +98,7 @@ install -m 0755 /usr/src/decnet-iv-linux/userspace/dncopy/dncopy /usr/local/bin/
 ln -sf dncopy /usr/local/bin/dntype
 ln -sf dncopy /usr/local/bin/dndir
 ln -sf dncopy /usr/local/bin/dndel
+ln -sf dncopy /usr/local/bin/dnrename
 ln -sf dncopy /usr/local/bin/dnsubmit
 ln -sf dncopy /usr/local/bin/dnprint
 make -C /usr/src/decnet-iv-linux/userspace/dntask clean all
