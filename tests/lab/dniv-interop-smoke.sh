@@ -418,7 +418,10 @@ if [ "$reference" = pydecnet ]; then
     if ! /usr/local/bin/dncopy "$dap_copy_local" "$peer_node::COPYUP.TXT"; then
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=dncopy-transparent-put"
         rm -f "$dap_copy_local"
-    dap_block="/tmp/dniv-dap-block.$$"
+        exit 1
+    fi
+    rm -f "$dap_copy_local"
+    dap_block="/tmp/dniv-dap-block.$"
     rm -f "$dap_block"
     if ! /usr/local/bin/dncopy -m block "$peer_node::BLOCK.BIN" "$dap_block"; then
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=dncopy-block-get"
@@ -436,9 +439,6 @@ if [ "$reference" = pydecnet ]; then
         exit 1
     fi
     rm -f "$dap_block"
-        exit 1
-    fi
-    rm -f "$dap_copy_local"
     if ! cterm_output=$(printf '\003phase7\r' | /usr/local/sbin/dnlogin -u CTERMUSER -p CTERMPASS -a CTERMACCT "$peer_node" 2>&1); then
         printf '%s\n' "$cterm_output"
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=cterm-interactive"

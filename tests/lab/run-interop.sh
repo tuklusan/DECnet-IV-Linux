@@ -319,7 +319,7 @@ if [[ "$reference" == pydecnet ]]; then
         tail -160 "$ref1_log" >&2 || true
         exit 1
     fi
-    if ! timeout "${timeout_seconds}s" env PYTHONPATH="$host_pydecnet/pydecnet" python3 \
+    if ! timeout 60s env PYTHONPATH="$host_pydecnet/pydecnet" python3 \
         "$script_dir/pydecnet-cterm.py" "$host_pydecnet_api" "$ref_name"; then
         tail -240 "$candidate_log" >&2 || true
         tail -180 "$ref1_log" >&2 || true
