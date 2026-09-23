@@ -868,6 +868,7 @@ int main(int argc, char **argv)
     const char *mode;
     const char *prog;
     struct remote_spec remote;
+    int text_mode = 1;
     int arg = 1;
 
     prog = strrchr(argv[0], '/');
@@ -888,6 +889,18 @@ int main(int argc, char **argv)
             arg += 2;
             continue;
         }
+        if (!strcmp(argv[arg], "-m") && arg + 1 < argc) {
+            const char *value = argv[arg + 1];
+
+            if (!strcmp(value, "record"))
+                text_mode = 1;
+            else if (!strcmp(value, "block"))
+                text_mode = 0;
+            else
+                goto usage;
+            arg += 2;
+            continue;
+        }
         goto usage;
     }
     if (!strcmp(prog, "dntype")) {
@@ -895,11 +908,11 @@ int main(int argc, char **argv)
             if (parse_transparent_spec(argv[arg], &remote, &options) ||
                 !remote.file[0])
                 goto usage;
-            return retrieve_file(remote.node, remote.file, NULL, 1,
+            return retrieve_file(remote.node, remote.file, NULL, text_mode,
                                  &options) ? 1 : 0;
         }
         if (arg + 2 == argc)
-            return retrieve_file(argv[arg], argv[arg + 1], NULL, 1,
+            return retrieve_file(argv[arg], argv[arg + 1], NULL, text_mode,
                                  &options) ? 1 : 0;
         goto usage;
     }
@@ -939,13 +952,13 @@ int main(int argc, char **argv)
             if (parse_transparent_spec(argv[arg], &remote, &options) ||
                 !remote.file[0])
                 goto usage;
-            return retrieve_file(remote.node, remote.file, argv[arg + 1], 1,
-                                 &options) ? 1 : 0;
+            return retrieve_file(remote.node, remote.file, argv[arg + 1],
+                                 text_mode, &options) ? 1 : 0;
         }
         if (parse_transparent_spec(argv[arg + 1], &remote, &options) ||
             !remote.file[0])
             goto usage;
-        return store_file(argv[arg], remote.node, remote.file, 1,
+        return store_file(argv[arg], remote.node, remote.file, text_mode,
                           &options) ? 1 : 0;
     }
     if (arg >= argc)
@@ -974,14 +987,14 @@ int main(int argc, char **argv)
         return delete_file(argv[arg], argv[arg + 1], &options) ? 1 : 0;
 usage:
     if (!strcmp(prog, "dntype")) {
-        fprintf(stderr, "usage: dntype [-u USER] [-p PASSWORD] [-a ACCOUNT] AREA.NODE FILE | 'AREA.NODE[\"USER PASS ACCOUNT\"]::FILE'\n");
+        fprintf(stderr, "usage: dntype [-u USER] [-p PASSWORD] [-a ACCOUNT] [-m record|block] AREA.NODE FILE | 'AREA.NODE[\"USER PASS ACCOUNT\"]::FILE'\n");
     } else if (!strcmp(prog, "dndir")) {
-        fprintf(stderr, "usage: dndir [-u USER] [-p PASSWORD] [-a ACCOUNT] AREA.NODE [SPEC] | 'AREA.NODE[\"USER PASS ACCOUNT\"]::[SPEC]'\n");
+        fprintf(stderr, "usage: dndir [-u USER] [-p PASSWORD] [-a ACCOUNT] [-m record|block] AREA.NODE [SPEC] | 'AREA.NODE[\"USER PASS ACCOUNT\"]::[SPEC]'\n");
     } else if (!strcmp(prog, "dndel")) {
-        fprintf(stderr, "usage: dndel [-u USER] [-p PASSWORD] [-a ACCOUNT] AREA.NODE FILE | 'AREA.NODE[\"USER PASS ACCOUNT\"]::FILE'\n");
+        fprintf(stderr, "usage: dndel [-u USER] [-p PASSWORD] [-a ACCOUNT] [-m record|block] AREA.NODE FILE | 'AREA.NODE[\"USER PASS ACCOUNT\"]::FILE'\n");
     } else {
         fprintf(stderr,
-                "usage: %s [-u USER] [-p PASSWORD] [-a ACCOUNT] "
+                "usage: %s [-u USER] [-p PASSWORD] [-a ACCOUNT] [-m record|block] "
                 "--selftest | --probe AREA.NODE | --get AREA.NODE FILE | "
                 "--get-text AREA.NODE FILE | --get-to AREA.NODE FILE LOCAL | "
                 "--put LOCAL AREA.NODE REMOTE | --put-text LOCAL AREA.NODE REMOTE | "

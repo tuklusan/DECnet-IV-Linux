@@ -550,6 +550,70 @@ async def serve(api_socket: str, system: str) -> int:
         dap.data(bytes((7, 0, 2)))
         dap.disconnect()
 
+        dap = await fal.listen()
+        dap_request = await dap.recv()
+        if dap_request.type != "connect":
+            raise RuntimeError(f"expected FAL block-get connect, got {dap_request.type!r}")
+        await dap.accept()
+        dap_reply = await dap.recv()
+        dap_config = bytes(dap_reply)
+        if dap_reply.type != "data" or len(dap_config) != 12 or dap_config[0] != 1:
+            raise RuntimeError(f"bad block-get DAP CONFIG: {dap_config!r}")
+        dap.data(dap_config)
+        access = await dap.recv()
+        if access.type != "data" or b"BLOCK.BIN" not in bytes(access):
+            raise RuntimeError(f"bad block-get DAP ACCESS: {bytes(access)!r}")
+        dap.data(bytes((2, 0, 0)))
+        dap.data(bytes((6, 0)))
+        control = await dap.recv()
+        if control.type != "data" or bytes(control) != bytes((4, 0, 2)):
+            raise RuntimeError(f"bad block-get DAP CONTROL CONNECT: {bytes(control)!r}")
+        dap.data(bytes((6, 0)))
+        control = await dap.recv()
+        if control.type != "data" or bytes(control) != bytes((4, 0, 1)):
+            raise RuntimeError(f"bad block-get DAP CONTROL GET: {bytes(control)!r}")
+        dap.data(bytes((8, 0, 0, 1, 2, 3)))
+        dap.data(bytes((9, 0, 0x27, 0x40)))
+        accom = await dap.recv()
+        if accom.type != "data" or bytes(accom) != bytes((7, 0, 1)):
+            raise RuntimeError(f"bad block-get DAP ACCOMP command: {bytes(accom)!r}")
+        dap.data(bytes((7, 0, 2)))
+        dap.disconnect()
+
+        dap = await fal.listen()
+        dap_request = await dap.recv()
+        if dap_request.type != "connect":
+            raise RuntimeError(f"expected FAL block-put connect, got {dap_request.type!r}")
+        await dap.accept()
+        dap_reply = await dap.recv()
+        dap_config = bytes(dap_reply)
+        if dap_reply.type != "data" or len(dap_config) != 12 or dap_config[0] != 1:
+            raise RuntimeError(f"bad block-put DAP CONFIG: {dap_config!r}")
+        dap.data(dap_config)
+        attrib = await dap.recv()
+        if attrib.type != "data" or bytes(attrib) != bytes((2, 0, 0)):
+            raise RuntimeError(f"bad block-put DAP ATTRIBUTES: {bytes(attrib)!r}")
+        access = await dap.recv()
+        if access.type != "data" or b"BLOCKUP.BIN" not in bytes(access):
+            raise RuntimeError(f"bad block-put DAP ACCESS: {bytes(access)!r}")
+        dap.data(bytes((2, 0, 0)))
+        dap.data(bytes((6, 0)))
+        control = await dap.recv()
+        if control.type != "data" or bytes(control) != bytes((4, 0, 2)):
+            raise RuntimeError(f"bad block-put DAP CONTROL CONNECT: {bytes(control)!r}")
+        dap.data(bytes((6, 0)))
+        control = await dap.recv()
+        if control.type != "data" or bytes(control) != bytes((4, 0, 4)):
+            raise RuntimeError(f"bad block-put DAP CONTROL PUT: {bytes(control)!r}")
+        data_msg = await dap.recv()
+        if data_msg.type != "data" or bytes(data_msg) != bytes((8, 0, 0, 0, 1, 2, 3)):
+            raise RuntimeError(f"bad block-put DAP DATA: {bytes(data_msg)!r}")
+        accom = await dap.recv()
+        if accom.type != "data" or bytes(accom) != bytes((7, 0, 1)):
+            raise RuntimeError(f"bad block-put DAP ACCOMP command: {bytes(accom)!r}")
+        dap.data(bytes((7, 0, 2)))
+        dap.disconnect()
+
         interactive = await listener.listen()
         await handshake(interactive)
 
