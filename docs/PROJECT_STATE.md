@@ -1030,3 +1030,6 @@ Fast acceptance of architecture-bound app-proof candidate `e50a79166efca677f346e
 
 
 Corrective follow-up: the block-proof placement fix exposed two shell temporary-name literals as a single trailing `$` rather than `$$`. Restore PID-scoped temporary paths for both transparent-copy and block-mode smoke files; proof ordering and product protocol behavior are unchanged. Next: exact-SHA fast acceptance.
+
+
+Fast acceptance of PID-scoped smoke-path candidate `938b2d05866c7db187f989193407056a612b69df` passed Repository Policy `35877811072`, Build Bootstrap `35877882308`, Project State Gate `35877886743`, and the x64 E1 VM job, but PyDECnet L1 interoperability run `35877894504`, job `107238479329`, failed the new block-mode retrieval content check. The independent harness sent only payload bytes `01 02 03` because its DAP DATA test vector omitted the leading `00` byte while the candidate correctly stripped the three-byte DAP header. Align the reference vector with the already-required four-byte block-put payload `00 01 02 03`; product behavior is unchanged. Next: exact-SHA fast acceptance.

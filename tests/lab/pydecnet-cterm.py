@@ -572,7 +572,7 @@ async def serve(api_socket: str, system: str) -> int:
         control = await dap.recv()
         if control.type != "data" or bytes(control) != bytes((4, 0, 1)):
             raise RuntimeError(f"bad block-get DAP CONTROL GET: {bytes(control)!r}")
-        dap.data(bytes((8, 0, 0, 1, 2, 3)))
+        dap.data(bytes((8, 0, 0, 0, 1, 2, 3)))
         dap.data(bytes((9, 0, 0x27, 0x40)))
         accom = await dap.recv()
         if accom.type != "data" or bytes(accom) != bytes((7, 0, 1)):
