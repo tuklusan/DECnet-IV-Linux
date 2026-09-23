@@ -17,13 +17,17 @@ CPPFLAGS ?= -I../../include/uapi
 CFLAGS ?= -O2 -Wall -Wextra -Werror -std=c11
 
 .PHONY: all check clean
-all: dnphoned check
+all: dnphoned phone check
 
 dnphoned: dnphoned.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ $<
 
-check: dnphoned
+phone: phone.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ $<
+
+check: dnphoned phone
 	./dnphoned --selftest
+	./phone --selftest
 
 clean:
-	rm -f dnphoned
+	rm -f dnphoned phone

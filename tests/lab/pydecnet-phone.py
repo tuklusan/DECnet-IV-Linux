@@ -38,10 +38,11 @@ def main() -> int:
         reply = connection.recv()
         if reply.type != "data" or bytes(reply) != b"\x01":
             raise RuntimeError(f"bad PHONE DIAL reply: {bytes(reply)!r}")
+        connection.data(bytes((0x0e,)) + source + b"\0HELLO-FROM-PYDECNET")
         connection.disconnect()
     finally:
         connector.close()
-    print(f"pydecnet-phone: pass peer={destination} object=29")
+    print(f"pydecnet-phone: pass peer={destination} object=29 data=1")
     return 0
 
 if __name__ == "__main__":

@@ -27,6 +27,7 @@
 #define PHONE_REPLYNOUSER 0x06U
 #define PHONE_CONNECT 0x07U
 #define PHONE_DIAL 0x08U
+#define PHONE_DATA 0x0eU
 #define PHONE_DIRECTORY 0x0fU
 #define PHONE_BACKLOG 8
 
@@ -111,7 +112,23 @@ static int serve(int fd, const char *user)
     got = recv(fd, buf, sizeof(buf), 0);
     if (got < 3 || buf[0] != PHONE_DIAL)
         return -1;
-    return send_code(fd, PHONE_REPLYOK);
+    if (send_code(fd, PHONE_REPLYOK))
+        return -1;
+
+    got = recv(fd, buf, sizeof(buf) - 1U, 0);
+    if (got < 3 || buf[0] != PHONE_DATA)
+        return -1;
+    buf[got] = 0;
+    {
+        size_t source_len = bounded_strlen((char *)buf + 1U, (size_t)got - 1U);
+        const char *text;
+
+        if (source_len >= (size_t)got - 1U)
+            return -1;
+        text = (char *)buf + 1U + source_len + 1U;
+        printf("dnphoned: data from=%s text=%s\n", buf + 1U, text);
+    }
+    return 0;
 }
 
 static int selftest(void)
