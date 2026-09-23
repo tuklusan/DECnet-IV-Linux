@@ -1,0 +1,138 @@
+# ============================================================================
+# Copyright (c) 2026 Supratim Sanyal of SANYALnet Labs.
+# Proprietary rights reserved except as expressly licensed herein.
+#
+# DECnet-IV-Linux
+# This file is governed by the SANYALnet Labs Non-Commercial License in the
+# root LICENSE file. Non-Commercial use is permitted; Commercial Use and use
+# for AI/ML model training are prohibited unless separately authorized.
+#
+# Attribution is required: "Based on original work by Supratim Sanyal of
+# SANYALnet Labs." See LICENSE for full terms, warranty disclaimer, termination,
+# patent, trademark, and governing-law provisions.
+# ============================================================================
+
+name: Build Bootstrap
+
+on:
+  workflow_dispatch:
+    inputs:
+      parent_run_id:
+        description: Parent acceptance workflow run ID; blank for direct dispatch
+        required: false
+        type: string
+      expected_sha:
+        description: Exact parent candidate SHA; blank for direct dispatch
+        required: false
+        type: string
+      resume_run_id:
+        description: Prior build run ID whose scratch artifacts should be restored
+        required: false
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.sha }}
+  queue: max
+  cancel-in-progress: false
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            slot: x64
+          - runner: ubuntu-24.04-arm
+            slot: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    concurrency:
+      group: dniv-runner-${{ matrix.slot }}-${{ github.sha }}
+      queue: max
+      cancel-in-progress: false
+    env:
+      DNIV_SCRATCH_DIR: ${{ github.workspace }}/scratch/runtime/${{ github.run_id }}/${{ github.run_attempt }}/${{ github.job }}-${{ matrix.slot }}
+    steps:
+      - name: Check out exact repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+
+      - name: Restore prior scratch artifacts
+        if: ${{ inputs.resume_run_id != '' }}
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          path: ${{ github.workspace }}/scratch/restored/${{ inputs.resume_run_id }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.resume_run_id }}
+
+      - name: Initialize scratch state and verify integrity checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/scratch_state.py init --dir "$DNIV_SCRATCH_DIR" \
+            --workflow build --job "$GITHUB_JOB" --arch '${{ matrix.slot }}' \
+            --source-sha "$GITHUB_SHA" --parent-run-id '${{ inputs.parent_run_id }}' \
+            --expected-sha '${{ inputs.expected_sha }}' \
+            --resume-run-id '${{ inputs.resume_run_id }}'
+          tools/workflow_guard.sh "$DNIV_SCRATCH_DIR" "$GITHUB_SHA" main
+
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update 2>&1 | tee "$DNIV_SCRATCH_DIR/apt-update.log"
+          sudo apt-get install -y build-essential linux-headers-generic 2>&1 | \
+            tee "$DNIV_SCRATCH_DIR/apt-install.log"
+
+      - name: Build userspace and run unit tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          make all 2>&1 | tee "$DNIV_SCRATCH_DIR/make-all.log"
+
+      - name: Build kernel module
+        shell: bash
+        run: |
+          set -euo pipefail
+          KDIR="$(find /usr/src -maxdepth 1 -type d -name 'linux-headers-*-generic' | sort -V | tail -1)"
+          test -n "$KDIR"
+          printf 'KDIR=%s\n' "$KDIR" > "$DNIV_SCRATCH_DIR/kernel-build.env"
+          make kernel KDIR="$KDIR" 2>&1 | tee "$DNIV_SCRATCH_DIR/make-kernel.log"
+
+      - name: Verify exact tree after build
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/integrity_scan.py --rev "$GITHUB_SHA" --pass-id final \
+            --baseline "$DNIV_SCRATCH_DIR/integrity/pass-1.json" \
+            --output "$DNIV_SCRATCH_DIR/integrity/final.json"
+          python3 tools/scratch_state.py verify --dir "$DNIV_SCRATCH_DIR"
+
+      - name: Record workflow result
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f "$DNIV_SCRATCH_DIR/state.json" ]]; then
+            python3 tools/scratch_state.py mark --dir "$DNIV_SCRATCH_DIR" \
+              --status '${{ job.status }}' --note 'build workflow completed'
+          fi
+
+      - name: Preserve scratch state
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: scratch-build-${{ matrix.slot }}-${{ github.run_id }}
+          path: ${{ env.DNIV_SCRATCH_DIR }}/
+          if-no-files-found: warn
+          retention-days: 30
+          compression-level: 6
+          overwrite: true

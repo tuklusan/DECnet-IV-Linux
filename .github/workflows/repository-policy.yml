@@ -1,0 +1,350 @@
+# ============================================================================
+# Copyright (c) 2026 Supratim Sanyal of SANYALnet Labs.
+# Proprietary rights reserved except as expressly licensed herein.
+#
+# DECnet-IV-Linux
+# This file is governed by the SANYALnet Labs Non-Commercial License in the
+# root LICENSE file. Non-Commercial use is permitted; Commercial Use and use
+# for AI/ML model training are prohibited unless separately authorized.
+#
+# Attribution is required: "Based on original work by Supratim Sanyal of
+# SANYALnet Labs." See LICENSE for full terms, warranty disclaimer, termination,
+# patent, trademark, and governing-law provisions.
+# ============================================================================
+
+name: Repository Policy
+
+# Ordinary source pushes do not consume a hosted runner. Local hooks guard
+# commits and pushes; this workflow handles explicit metadata review, automatic
+# non-main branch cleanup, and the owner acceptance/maintenance dispatchers.
+on:
+  create:
+  issues:
+    types: [opened, edited, transferred]
+  issue_comment:
+    types: [created, edited]
+  pull_request:
+    types: [opened, edited, reopened]
+  pull_request_review:
+    types: [submitted, edited]
+  pull_request_review_comment:
+    types: [created, edited]
+  discussion:
+    types: [created, edited]
+  discussion_comment:
+    types: [created, edited]
+  workflow_dispatch:
+  schedule:
+    - cron: '17 5 * * *'
+
+# Repository-control runs are isolated by exact candidate SHA. They must not
+# share the scarce protocol-lab runner slots or an obsolete candidate can block
+# policy/dispatch for a newer exact-head candidate.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.sha }}
+  queue: max
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  repository-policy:
+    if: >-
+      !((github.event_name == 'issues' &&
+      github.event.action == 'opened' &&
+      github.event.sender.login == github.repository_owner &&
+      github.event.issue.title == 'DNIV branch cleanup') ||
+      (github.event_name == 'create' &&
+      github.event.ref_type == 'branch' &&
+      github.event.ref != 'main'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DNIV_SCRATCH_DIR: ${{ github.workspace }}/scratch/runtime/${{ github.run_id }}/${{ github.run_attempt }}/${{ github.job }}
+    steps:
+      - name: Check out exact event repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+
+      - name: Initialize scratch state and verify event-tree integrity
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/scratch_state.py init --dir "$DNIV_SCRATCH_DIR" \
+            --workflow repository-policy --job "$GITHUB_JOB" --source-sha "$GITHUB_SHA"
+          tools/workflow_guard.sh "$DNIV_SCRATCH_DIR" "$GITHUB_SHA" event
+
+      - name: Run LICENSE-MONKEY
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/license_monkey.py --tree "$GITHUB_SHA" 2>&1 | \
+            tee "$DNIV_SCRATCH_DIR/license-monkey.log"
+
+      - name: Enforce repository policy
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 tools/repo_policy.py 2>&1 | tee "$DNIV_SCRATCH_DIR/repository-policy.log"
+
+      - name: Guard E4 convergence sampling
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/e4_convergence_regression.py
+
+      - name: Verify exact event tree after policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/integrity_scan.py --rev "$GITHUB_SHA" --pass-id final \
+            --baseline "$DNIV_SCRATCH_DIR/integrity/pass-1.json" \
+            --output "$DNIV_SCRATCH_DIR/integrity/final.json"
+          python3 tools/scratch_state.py verify --dir "$DNIV_SCRATCH_DIR"
+
+      - name: Record policy result
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f "$DNIV_SCRATCH_DIR/state.json" ]]; then
+            python3 tools/scratch_state.py mark --dir "$DNIV_SCRATCH_DIR" \
+              --status '${{ job.status }}' --note 'repository-policy job completed'
+          fi
+
+      - name: Preserve policy scratch state
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: scratch-repository-policy-${{ github.run_id }}
+          path: ${{ env.DNIV_SCRATCH_DIR }}/
+          if-no-files-found: warn
+          retention-days: 30
+          compression-level: 6
+          overwrite: true
+
+  cleanup-branches:
+    if: >-
+      (github.event_name == 'issues' &&
+      github.event.action == 'opened' &&
+      github.event.sender.login == github.repository_owner &&
+      github.event.issue.title == 'DNIV branch cleanup') ||
+      (github.event_name == 'create' &&
+      github.event.ref_type == 'branch' &&
+      github.event.ref != 'main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: write
+    env:
+      DNIV_SCRATCH_DIR: ${{ github.workspace }}/scratch/runtime/${{ github.run_id }}/${{ github.run_attempt }}/${{ github.job }}
+    steps:
+      - name: Check out current main maintenance candidate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Initialize maintenance state
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate=$(git rev-parse --verify 'HEAD^{commit}')
+          remote=$(git ls-remote origin refs/heads/main | awk 'NR == 1 {print $1}')
+          test -n "$remote"
+          test "$candidate" = "$remote"
+          mkdir -p "$DNIV_SCRATCH_DIR"
+          printf 'CANDIDATE_SHA=%s\n' "$candidate" > "$DNIV_SCRATCH_DIR/maintenance.env"
+          python3 tools/scratch_state.py init --dir "$DNIV_SCRATCH_DIR" \
+            --workflow repository-policy --job "$GITHUB_JOB" --source-sha "$candidate"
+
+      - name: Delete every non-main branch ref
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          candidate=$(git rev-parse --verify 'HEAD^{commit}')
+          head=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
+          test "$head" = "$candidate"
+          mapfile -t refs < <(
+            gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/heads" --paginate --jq '.[].ref'
+          )
+          saw_main=0
+          : > "$DNIV_SCRATCH_DIR/deleted-branches.txt"
+          for ref in "${refs[@]}"; do
+            if [[ "$ref" == refs/heads/main ]]; then
+              saw_main=1
+              continue
+            fi
+            printf '%s\n' "$ref" >> "$DNIV_SCRATCH_DIR/deleted-branches.txt"
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/${ref#refs/}"
+          done
+          test "$saw_main" -eq 1
+          mapfile -t remaining < <(
+            gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/heads" --paginate --jq '.[].ref'
+          )
+          test "${#remaining[@]}" -eq 1
+          test "${remaining[0]}" = refs/heads/main
+          printf '%s\n' "${remaining[@]}" > "$DNIV_SCRATCH_DIR/remaining-branches.txt"
+
+      - name: Verify branch invariant and exact tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate=$(git rev-parse --verify 'HEAD^{commit}')
+          tools/workflow_guard.sh "$DNIV_SCRATCH_DIR" "$candidate" maintenance
+          python3 tools/integrity_scan.py --rev "$candidate" --pass-id final \
+            --baseline "$DNIV_SCRATCH_DIR/integrity/pass-1.json" \
+            --output "$DNIV_SCRATCH_DIR/integrity/final.json"
+          python3 tools/scratch_state.py verify --dir "$DNIV_SCRATCH_DIR"
+
+      - name: Record cleanup result
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f "$DNIV_SCRATCH_DIR/state.json" ]]; then
+            python3 tools/scratch_state.py mark --dir "$DNIV_SCRATCH_DIR" \
+              --status '${{ job.status }}' --note 'branch cleanup completed'
+          fi
+
+      - name: Preserve cleanup scratch state
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: scratch-branch-cleanup-${{ github.run_id }}
+          path: ${{ env.DNIV_SCRATCH_DIR }}/
+          if-no-files-found: warn
+          retention-days: 30
+          compression-level: 6
+          overwrite: true
+
+  dispatch-acceptance:
+    if: >-
+      github.event_name == 'schedule' ||
+      (github.event_name == 'issues' &&
+      github.event.action == 'opened' &&
+      github.event.sender.login == github.repository_owner &&
+      github.event.issue.title == 'DNIV acceptance gates')
+    needs: repository-policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: write
+      contents: read
+    env:
+      DNIV_SCRATCH_DIR: ${{ github.workspace }}/scratch/runtime/${{ github.run_id }}/${{ github.run_attempt }}/${{ github.job }}
+    steps:
+      - name: Check out exact main candidate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+
+      - name: Initialize dispatcher state and verify main integrity checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/scratch_state.py init --dir "$DNIV_SCRATCH_DIR" \
+            --workflow repository-policy --job "$GITHUB_JOB" --source-sha "$GITHUB_SHA"
+          tools/workflow_guard.sh "$DNIV_SCRATCH_DIR" "$GITHUB_SHA" main
+
+      - name: Dispatch exact-head acceptance workflows
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          head=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
+          test "$head" = "$GITHUB_SHA"
+
+          profile=fast
+          scope=all
+          if [[ "$GITHUB_EVENT_NAME" == schedule ]]; then
+            profile=full
+          else
+            body=$(jq -r '.issue.body // ""' "$GITHUB_EVENT_PATH")
+            requested_profile=$(printf '%s\n' "$body" | sed -n 's/^PROFILE=//p' | tail -1)
+            requested_scope=$(printf '%s\n' "$body" | sed -n 's/^SCOPE=//p' | tail -1)
+            [[ -z "$requested_profile" ]] || profile=$requested_profile
+            [[ -z "$requested_scope" ]] || scope=$requested_scope
+          fi
+          case "$profile" in fast|consolidated|full) ;; *) echo "bad acceptance profile: $profile" >&2; exit 2 ;; esac
+          case "$scope" in all|socket|routing) ;; *) echo "bad acceptance scope: $scope" >&2; exit 2 ;; esac
+
+          {
+            printf 'PARENT_RUN_ID=%s\n' "$GITHUB_RUN_ID"
+            printf 'PARENT_RUN_ATTEMPT=%s\n' "$GITHUB_RUN_ATTEMPT"
+            printf 'SOURCE_SHA=%s\n' "$GITHUB_SHA"
+            printf 'PROFILE=%s\n' "$profile"
+            printf 'SCOPE=%s\n' "$scope"
+            printf 'BUILD=build.yml\n'
+            printf 'PROJECT_STATE=project-state.yml\n'
+            printf 'INTEROP=interop.yml\n'
+          } > "$DNIV_SCRATCH_DIR/dispatch.env"
+
+          gh workflow run build.yml --repo "$GITHUB_REPOSITORY" --ref main \
+            -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
+          gh workflow run project-state.yml --repo "$GITHUB_REPOSITORY" --ref main \
+            -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
+
+          if [[ "$profile" != fast ]]; then
+            printf 'REFERENCES=reference-baselines.yml\n' >> "$DNIV_SCRATCH_DIR/dispatch.env"
+            gh workflow run reference-baselines.yml --repo "$GITHUB_REPOSITORY" --ref main \
+              -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
+          fi
+
+          printf 'VM_LAB_E1=vm-lab.yml:e1\n' >> "$DNIV_SCRATCH_DIR/dispatch.env"
+          gh workflow run vm-lab.yml --repo "$GITHUB_REPOSITORY" --ref main \
+            -f lab_mode=e1 -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
+
+          if [[ "$profile" == consolidated ]]; then
+            printf 'VM_LAB_E4=vm-lab.yml:e4\n' >> "$DNIV_SCRATCH_DIR/dispatch.env"
+            gh workflow run vm-lab.yml --repo "$GITHUB_REPOSITORY" --ref main \
+              -f lab_mode=e4 -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
+          elif [[ "$profile" == full ]]; then
+            for mode in e2 e3 e4; do
+              printf 'VM_LAB_%s=vm-lab.yml:%s\n' "${mode^^}" "$mode" >> "$DNIV_SCRATCH_DIR/dispatch.env"
+              gh workflow run vm-lab.yml --repo "$GITHUB_REPOSITORY" --ref main \
+                -f lab_mode="$mode" -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
+            done
+          fi
+
+          gh workflow run interop.yml --repo "$GITHUB_REPOSITORY" --ref main \
+            -f profile="$profile" -f scope="$scope" \
+            -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
+
+      - name: Verify dispatcher exact tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/integrity_scan.py --rev "$GITHUB_SHA" --pass-id final \
+            --baseline "$DNIV_SCRATCH_DIR/integrity/pass-1.json" \
+            --output "$DNIV_SCRATCH_DIR/integrity/final.json"
+          python3 tools/scratch_state.py verify --dir "$DNIV_SCRATCH_DIR"
+
+      - name: Record dispatcher result
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f "$DNIV_SCRATCH_DIR/state.json" ]]; then
+            python3 tools/scratch_state.py mark --dir "$DNIV_SCRATCH_DIR" \
+              --status '${{ job.status }}' --note 'acceptance dispatcher completed'
+          fi
+
+      - name: Preserve dispatcher scratch state
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: scratch-acceptance-dispatch-${{ github.run_id }}
+          path: ${{ env.DNIV_SCRATCH_DIR }}/
+          if-no-files-found: warn
+          retention-days: 30
+          compression-level: 6
+          overwrite: true

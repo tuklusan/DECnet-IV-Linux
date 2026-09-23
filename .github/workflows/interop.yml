@@ -1,0 +1,321 @@
+# ============================================================================
+# Copyright (c) 2026 Supratim Sanyal of SANYALnet Labs.
+# Proprietary rights reserved except as expressly licensed herein.
+#
+# DECnet-IV-Linux
+# This file is governed by the SANYALnet Labs Non-Commercial License in the
+# root LICENSE file. Non-Commercial use is permitted; Commercial Use and use
+# for AI/ML model training are prohibited unless separately authorized.
+#
+# Attribution is required: "Based on original work by Supratim Sanyal of
+# SANYALnet Labs." See LICENSE for full terms, warranty disclaimer, termination,
+# patent, trademark, and governing-law provisions.
+# ============================================================================
+
+name: Independent Ethernet Interoperability
+
+on:
+  workflow_dispatch:
+    inputs:
+      parent_run_id:
+        description: Parent acceptance workflow run ID; blank for direct dispatch
+        required: false
+        type: string
+      expected_sha:
+        description: Exact parent candidate SHA; blank for direct dispatch
+        required: false
+        type: string
+      profile:
+        description: Acceptance depth
+        required: true
+        default: full
+        type: choice
+        options:
+          - fast
+          - consolidated
+          - full
+      scope:
+        description: Change scope used by the fast profile
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - socket
+          - routing
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.sha }}
+  queue: max
+  cancel-in-progress: false
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  live-interop:
+    strategy:
+      fail-fast: false
+      max-parallel: 14
+      matrix:
+        include: ${{ fromJSON(
+          inputs.profile == 'full' && '[{"runner":"ubuntu-24.04","slot":"x64","arch":"amd64","qemu":"qemu-system-x86","suite":"r20-l1","reference":"route20","scenarios":"l1"},{"runner":"ubuntu-24.04-arm","slot":"arm64","arch":"arm64","qemu":"qemu-system-arm","suite":"r20-l1","reference":"route20","scenarios":"l1"},{"runner":"ubuntu-24.04","slot":"x64","arch":"amd64","qemu":"qemu-system-x86","suite":"r20-l2","reference":"route20","scenarios":"l2"},{"runner":"ubuntu-24.04-arm","slot":"arm64","arch":"arm64","qemu":"qemu-system-arm","suite":"r20-l2","reference":"route20","scenarios":"l2"},{"runner":"ubuntu-24.04","slot":"x64","arch":"amd64","qemu":"qemu-system-x86","suite":"r20-endnode","reference":"route20","scenarios":"endnode"},{"runner":"ubuntu-24.04-arm","slot":"arm64","arch":"arm64","qemu":"qemu-system-arm","suite":"r20-endnode","reference":"route20","scenarios":"endnode"},{"runner":"ubuntu-24.04","slot":"x64","arch":"amd64","qemu":"qemu-system-x86","suite":"py-l1","reference":"pydecnet","scenarios":"l1"},{"runner":"ubuntu-24.04-arm","slot":"arm64","arch":"arm64","qemu":"qemu-system-arm","suite":"py-l1","reference":"pydecnet","scenarios":"l1"},{"runner":"ubuntu-24.04","slot":"x64","arch":"amd64","qemu":"qemu-system-x86","suite":"py-l2","reference":"pydecnet","scenarios":"l2"},{"runner":"ubuntu-24.04-arm","slot":"arm64","arch":"arm64","qemu":"qemu-system-arm","suite":"py-l2","reference":"pydecnet","scenarios":"l2"},{"runner":"ubuntu-24.04","slot":"x64","arch":"amd64","qemu":"qemu-system-x86","suite":"py-endnode","reference":"pydecnet","scenarios":"endnode"},{"runner":"ubuntu-24.04-arm","slot":"arm64","arch":"arm64","qemu":"qemu-system-arm","suite":"py-endnode","reference":"pydecnet","scenarios":"endnode"},{"runner":"ubuntu-24.04","slot":"x64","arch":"amd64","qemu":"qemu-system-x86","suite":"py-router-endnode","reference":"pydecnet","scenarios":"router-endnode"},{"runner":"ubuntu-24.04-arm","slot":"arm64","arch":"arm64","qemu":"qemu-system-arm","suite":"py-router-endnode","reference":"pydecnet","scenarios":"router-endnode"}]' ||
+          inputs.profile == 'consolidated' && '[{"runner":"ubuntu-24.04","slot":"x64","arch":"amd64","qemu":"qemu-system-x86","suite":"r20-l1","reference":"route20","scenarios":"l1"},{"runner":"ubuntu-24.04-arm","slot":"arm64","arch":"arm64","qemu":"qemu-system-arm","suite":"r20-l1","reference":"route20","scenarios":"l1"},{"runner":"ubuntu-24.04","slot":"x64","arch":"amd64","qemu":"qemu-system-x86","suite":"py-l1","reference":"pydecnet","scenarios":"l1"},{"runner":"ubuntu-24.04-arm","slot":"arm64","arch":"arm64","qemu":"qemu-system-arm","suite":"py-l1","reference":"pydecnet","scenarios":"l1"},{"runner":"ubuntu-24.04","slot":"x64","arch":"amd64","qemu":"qemu-system-x86","suite":"py-endnode","reference":"pydecnet","scenarios":"endnode"},{"runner":"ubuntu-24.04-arm","slot":"arm64","arch":"arm64","qemu":"qemu-system-arm","suite":"py-endnode","reference":"pydecnet","scenarios":"endnode"}]' ||
+          inputs.scope == 'socket' && '[{"runner":"ubuntu-24.04","slot":"x64","arch":"amd64","qemu":"qemu-system-x86","suite":"py-l1","reference":"pydecnet","scenarios":"l1"}]' ||
+          '[{"runner":"ubuntu-24.04","slot":"x64","arch":"amd64","qemu":"qemu-system-x86","suite":"r20-l1","reference":"route20","scenarios":"l1"},{"runner":"ubuntu-24.04","slot":"x64","arch":"amd64","qemu":"qemu-system-x86","suite":"py-l1","reference":"pydecnet","scenarios":"l1"}]'
+          ) }}
+    runs-on: ${{ matrix.runner }}
+    concurrency:
+      group: dniv-interop-${{ github.run_id }}-${{ matrix.slot }}-${{ matrix.suite }}
+      queue: max
+      cancel-in-progress: false
+    timeout-minutes: 75
+    env:
+      DNIV_SCRATCH_DIR: ${{ github.workspace }}/scratch/runtime/${{ github.run_id }}/${{ github.run_attempt }}/${{ github.job }}-${{ matrix.arch }}-${{ matrix.suite }}
+      DNIV_OUTER_BASE_DIR: ${{ github.workspace }}/scratch/outer/${{ matrix.arch }}
+    steps:
+      - name: Check out exact repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+
+      - name: Initialize scratch state and verify integrity checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/scratch_state.py init --dir "$DNIV_SCRATCH_DIR" \
+            --workflow interop --job "$GITHUB_JOB" --arch '${{ matrix.arch }}' \
+            --mode '${{ matrix.suite }}' --source-sha "$GITHUB_SHA" \
+            --parent-run-id '${{ inputs.parent_run_id }}' \
+            --expected-sha '${{ inputs.expected_sha }}'
+          tools/workflow_guard.sh "$DNIV_SCRATCH_DIR" "$GITHUB_SHA" main
+          echo "DNIV_INTEROP_ARTIFACTS=$DNIV_SCRATCH_DIR/interop" >> "$GITHUB_ENV"
+
+      - name: Install host tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update 2>&1 | tee "$DNIV_SCRATCH_DIR/apt-update.log"
+          sudo apt-get install -y ${{ matrix.qemu }} qemu-utils e2fsprogs tcpdump curl build-essential libpcap-dev 2>&1 | \
+            tee "$DNIV_SCRATCH_DIR/apt-install.log"
+
+      - name: Compute stable architecture foundation identity
+        id: foundation-id
+        shell: bash
+        run: |
+          set -euo pipefail
+          fingerprint=$(cat image/ubuntu-base/images.env image/ubuntu-base/build-foundation.sh | \
+            sha256sum | cut -c1-16)
+          session="outer-v2-${{ matrix.arch }}-$fingerprint"
+          echo "DNIV_FOUNDATION_FINGERPRINT=$fingerprint" >> "$GITHUB_ENV"
+          echo "DNIV_OUTER_SESSION_ID=$session" >> "$GITHUB_ENV"
+          echo "session_id=$session" >> "$GITHUB_OUTPUT"
+
+      - name: Restore immutable outer architecture foundation
+        id: outer-base
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ${{ env.DNIV_OUTER_BASE_DIR }}
+          key: ${{ steps.foundation-id.outputs.session_id }}
+
+      - name: Download pinned Ubuntu Base rootfs on foundation miss
+        if: ${{ steps.outer-base.outputs.cache-hit != 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          . image/ubuntu-base/images.env
+          if [[ '${{ matrix.arch }}' == amd64 ]]; then
+            file=$UBUNTU_BASE_AMD64
+            sha=$UBUNTU_BASE_AMD64_SHA256
+          else
+            file=$UBUNTU_BASE_ARM64
+            sha=$UBUNTU_BASE_ARM64_SHA256
+          fi
+          curl -fL "$UBUNTU_BASE_URL/$file" -o "$RUNNER_TEMP/$file"
+          echo "$sha  $RUNNER_TEMP/$file" | sha256sum -c -
+          echo "UBUNTU_BASE_TARBALL=$RUNNER_TEMP/$file" >> "$GITHUB_ENV"
+
+      - name: Build immutable outer architecture foundation on cache miss
+        if: ${{ steps.outer-base.outputs.cache-hit != 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo -v
+          rm -rf "$DNIV_OUTER_BASE_DIR"
+          mkdir -p "$DNIV_OUTER_BASE_DIR/boot"
+          image/ubuntu-base/build-foundation.sh '${{ matrix.arch }}' "$UBUNTU_BASE_TARBALL" \
+            "$DNIV_OUTER_BASE_DIR/base.qcow2" "$DNIV_OUTER_BASE_DIR/boot" 2>&1 | \
+            tee "$DNIV_SCRATCH_DIR/build-foundation.log"
+          . image/ubuntu-base/images.env
+          cat > "$DNIV_OUTER_BASE_DIR/session.env" <<EOF_SESSION
+          FORMAT=2
+          SESSION_ID=$DNIV_OUTER_SESSION_ID
+          ARCH=${{ matrix.arch }}
+          FOUNDATION_FINGERPRINT=$DNIV_FOUNDATION_FINGERPRINT
+          UBUNTU_BASE_RELEASE=$UBUNTU_BASE_RELEASE
+          UBUNTU_APT_SNAPSHOT=$UBUNTU_APT_SNAPSHOT
+          EOF_SESSION
+          (
+            cd "$DNIV_OUTER_BASE_DIR"
+            sha256sum base.qcow2 boot/vmlinuz boot/initrd.img session.env > SHA256SUMS
+            sha256sum -c SHA256SUMS
+          )
+          qemu-img check -q -f qcow2 "$DNIV_OUTER_BASE_DIR/base.qcow2"
+
+      - name: Save immutable outer architecture foundation
+        if: ${{ steps.outer-base.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ${{ env.DNIV_OUTER_BASE_DIR }}
+          key: ${{ steps.foundation-id.outputs.session_id }}
+
+      - name: Verify source-independent architecture foundation
+        shell: bash
+        run: |
+          set -euo pipefail
+          . image/ubuntu-base/images.env
+          test -f "$DNIV_OUTER_BASE_DIR/session.env"
+          test -f "$DNIV_OUTER_BASE_DIR/SHA256SUMS"
+          grep -Fx 'FORMAT=2' "$DNIV_OUTER_BASE_DIR/session.env"
+          grep -Fx "SESSION_ID=$DNIV_OUTER_SESSION_ID" "$DNIV_OUTER_BASE_DIR/session.env"
+          grep -Fx 'ARCH=${{ matrix.arch }}' "$DNIV_OUTER_BASE_DIR/session.env"
+          grep -Fx "FOUNDATION_FINGERPRINT=$DNIV_FOUNDATION_FINGERPRINT" "$DNIV_OUTER_BASE_DIR/session.env"
+          grep -Fx "UBUNTU_BASE_RELEASE=$UBUNTU_BASE_RELEASE" "$DNIV_OUTER_BASE_DIR/session.env"
+          grep -Fx "UBUNTU_APT_SNAPSHOT=$UBUNTU_APT_SNAPSHOT" "$DNIV_OUTER_BASE_DIR/session.env"
+          ! grep -q '^SOURCE_SHA=' "$DNIV_OUTER_BASE_DIR/session.env"
+          (
+            cd "$DNIV_OUTER_BASE_DIR"
+            sha256sum -c SHA256SUMS
+          )
+          qemu-img check -q -f qcow2 "$DNIV_OUTER_BASE_DIR/base.qcow2"
+          cp "$DNIV_OUTER_BASE_DIR/session.env" "$DNIV_SCRATCH_DIR/outer-session.env"
+          printf 'CACHE_HIT=%s\n' '${{ steps.outer-base.outputs.cache-hit }}' >> \
+            "$DNIV_SCRATCH_DIR/outer-session.env"
+          echo "DNIV_OUTER_BASE=$DNIV_OUTER_BASE_DIR/base.qcow2" >> "$GITHUB_ENV"
+          echo "DNIV_KERNEL=$DNIV_OUTER_BASE_DIR/boot/vmlinuz" >> "$GITHUB_ENV"
+          echo "DNIV_INITRD=$DNIV_OUTER_BASE_DIR/boot/initrd.img" >> "$GITHUB_ENV"
+
+      - name: Prepare disposable exact-candidate and reference images
+        shell: bash
+        run: |
+          set -euo pipefail
+          tests/lab/prepare-candidate-image.sh \
+            "$DNIV_OUTER_BASE" "$RUNNER_TEMP/candidate-${{ matrix.arch }}.qcow2" 2>&1 | \
+            tee "$DNIV_SCRATCH_DIR/prepare-candidate.log"
+          tests/lab/prepare-reference-image.sh \
+            "$DNIV_OUTER_BASE" "$RUNNER_TEMP/reference-${{ matrix.arch }}.qcow2" 2>&1 | \
+            tee "$DNIV_SCRATCH_DIR/prepare-reference.log"
+          echo "DNIV_CANDIDATE_IMAGE=$RUNNER_TEMP/candidate-${{ matrix.arch }}.qcow2" >> "$GITHUB_ENV"
+          echo "DNIV_REFERENCE_IMAGE=$RUNNER_TEMP/reference-${{ matrix.arch }}.qcow2" >> "$GITHUB_ENV"
+
+      - name: Build exact pinned independent peer
+        shell: bash
+        run: |
+          set -euo pipefail
+          . tests/reference/refs.env
+          reference='${{ matrix.reference }}'
+          case "$reference" in
+            route20)
+              work="$RUNNER_TEMP/route20"
+              git init "$work"
+              git -C "$work" remote add origin https://github.com/tuklusan/Route20.git
+              git -C "$work" fetch --depth=1 origin "$ROUTE20_REF"
+              git -C "$work" checkout --detach FETCH_HEAD
+              test "$(git -C "$work" rev-parse HEAD)" = "$ROUTE20_REF"
+              make -C "$work/Route20" 2>&1 | tee "$DNIV_SCRATCH_DIR/route20-build.log"
+              bundle="$RUNNER_TEMP/bundle-route20"
+              mkdir -p "$bundle"
+              cp "$work/Route20/route20" "$bundle/route20"
+              printf 'REFERENCE=route20\nREFERENCE_SHA=%s\n' "$ROUTE20_REF" > "$bundle/manifest.env"
+              (cd "$bundle" && sha256sum route20 > SHA256SUMS)
+              printf 'ROUTE20_REF=%s\n' "$ROUTE20_REF" > "$DNIV_SCRATCH_DIR/references.env"
+              ;;
+            pydecnet)
+              work="$RUNNER_TEMP/pydecnet"
+              git init "$work"
+              git -C "$work" remote add origin https://github.com/tuklusan/pydecnet.git
+              git -C "$work" fetch --depth=1 origin "$PYDECNET_REF"
+              git -C "$work" checkout --detach FETCH_HEAD
+              test "$(git -C "$work" rev-parse HEAD)" = "$PYDECNET_REF"
+              bundle="$RUNNER_TEMP/bundle-pydecnet"
+              mkdir -p "$bundle"
+              git -C "$work" archive --format=tar --output="$bundle/pydecnet.tar" HEAD pydecnet
+              printf 'REFERENCE=pydecnet\nREFERENCE_SHA=%s\n' "$PYDECNET_REF" > "$bundle/manifest.env"
+              (cd "$bundle" && sha256sum pydecnet.tar > SHA256SUMS)
+              printf 'PYDECNET_REF=%s\n' "$PYDECNET_REF" > "$DNIV_SCRATCH_DIR/references.env"
+              ;;
+            *)
+              echo "unknown reference: $reference" >&2
+              exit 2
+              ;;
+          esac
+
+      - name: Run bounded live interoperability suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          reference='${{ matrix.reference }}'
+          scenarios='${{ matrix.scenarios }}'
+          bundle="$RUNNER_TEMP/bundle-$reference"
+          timer_proof=0
+          peer_segsize=0
+          flow_proof=0
+          if [[ '${{ inputs.scope }}' == socket &&
+                '${{ matrix.suite }}' == py-l1 &&
+                '${{ matrix.arch }}' == amd64 ]]; then
+            peer_segsize=128
+            flow_proof=1
+          fi
+          if [[ '${{ inputs.profile }}' != fast &&
+                '${{ matrix.suite }}' == py-l1 &&
+                '${{ matrix.arch }}' == amd64 ]]; then
+            timer_proof=1
+          fi
+          for scenario in $scenarios; do
+            session="run-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${{ matrix.arch }}-${reference}-${scenario}"
+            printf '%s %s %s\n' "$reference" "$scenario" "$session" >> \
+              "$DNIV_SCRATCH_DIR/sessions.tsv"
+            DNIV_INTEROP_SESSION_ID="$session" \
+              DNIV_INTEROP_TIMER_PROOF="$timer_proof" \
+              DNIV_INTEROP_PEER_SEGMENT_SIZE="$peer_segsize" \
+              DNIV_INTEROP_FLOW_PROOF="$flow_proof" \
+              tests/lab/run-interop.sh \
+              "$DNIV_CANDIDATE_IMAGE" "$DNIV_REFERENCE_IMAGE" \
+              "$DNIV_KERNEL" "$DNIV_INITRD" "$reference" "$bundle" "$scenario" 2>&1 | \
+              tee "$DNIV_SCRATCH_DIR/interop-${reference}-${scenario}.log"
+          done
+          python3 tools/scratch_state.py mark --dir "$DNIV_SCRATCH_DIR" \
+            --status interop-suite-green --note 'bounded independent interoperability suite passed'
+
+      - name: Verify exact tree after interoperability gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/integrity_scan.py --rev "$GITHUB_SHA" --pass-id final \
+            --baseline "$DNIV_SCRATCH_DIR/integrity/pass-1.json" \
+            --output "$DNIV_SCRATCH_DIR/integrity/final.json"
+          python3 tools/scratch_state.py verify --dir "$DNIV_SCRATCH_DIR"
+
+      - name: Record workflow result
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f "$DNIV_SCRATCH_DIR/state.json" ]]; then
+            python3 tools/scratch_state.py mark --dir "$DNIV_SCRATCH_DIR" \
+              --status '${{ job.status }}' --note 'interoperability workflow completed'
+          fi
+
+      - name: Preserve compact interoperability evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: scratch-interop-${{ matrix.arch }}-${{ matrix.suite }}-${{ github.run_id }}
+          path: |
+            ${{ env.DNIV_SCRATCH_DIR }}/
+            !${{ env.DNIV_SCRATCH_DIR }}/interop/**/*.qcow2
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 6
+          overwrite: true

@@ -1111,3 +1111,6 @@ Fast acceptance for MAIL-11 v3 candidate `23cad17208a85542aa92f23cc5c75798ac87b7
 
 
 MAIL-11 v3 exposed a native deferred-accept socket ABI contradiction before promotion of `bf6df486ac4dde1318c35204bcad51331f0cc24b`: request-dependent accept data must be set on the accepted child, but `DSO_CONDATA` rejected every socket that already had a local link even though `DSO_CONACCEPT` consumes that child's `conndata_out`. Allow `DSO_CONDATA` only for an `ACC_DEFER` accepted child while its NSP connection remains in CR, retaining `EISCONN` everywhere else. The inbound socket proof now deliberately leaves listener accept data empty and sets `linux-accept` on the deferred child immediately before `DSO_CONACCEPT`, covering the exact MAIL-11 requirement. Next: exact-SHA fast acceptance, then resume local sendmail/SMTP delivery bridging.
+
+
+Repository tree integrity was immediately restored after the preceding low-level Git tree write omitted the base tree. This follow-up rebuilds the exact parent tree and reapplies only the deferred-accept socket/test/document deltas; no additional protocol behavior is changed. Next: exact-SHA fast acceptance, then resume local sendmail/SMTP delivery bridging.
