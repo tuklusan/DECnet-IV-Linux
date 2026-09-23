@@ -429,7 +429,7 @@ static int retrieve_file(const char *node_text, const char *filespec,
         fprintf(stderr, "dncopy: invalid remote file specification\n");
         return -1;
     }
-    if (local_path) {
+    if (local_path && strcmp(local_path, "-")) {
         out = fopen(local_path, "wb");
         if (!out) {
             perror("dncopy: open local output");
@@ -438,7 +438,7 @@ static int retrieve_file(const char *node_text, const char *filespec,
     }
     fd = open_fal(node_text, options);
     if (fd < 0) {
-        if (local_path)
+        if (local_path && strcmp(local_path, "-"))
             fclose(out);
         return -1;
     }
@@ -523,14 +523,14 @@ static int retrieve_file(const char *node_text, const char *filespec,
     if (fflush(out))
         goto fail;
     close(fd);
-    if (local_path && fclose(out))
+    if (local_path && strcmp(local_path, "-") && fclose(out))
         return -1;
     return 0;
 
 fail:
     fprintf(stderr, "dncopy: DAP retrieval failed\n");
     close(fd);
-    if (local_path)
+    if (local_path && strcmp(local_path, "-"))
         fclose(out);
     return -1;
 }
@@ -551,10 +551,14 @@ static int store_file(const char *local_path, const char *node_text,
         fprintf(stderr, "dncopy: invalid remote file specification\n");
         return -1;
     }
-    in = fopen(local_path, "rb");
-    if (!in) {
-        perror("dncopy: open local input");
-        return -1;
+    if (!strcmp(local_path, "-")) {
+        in = stdin;
+    } else {
+        in = fopen(local_path, "rb");
+        if (!in) {
+            perror("dncopy: open local input");
+            return -1;
+        }
     }
     fd = open_fal(node_text, options);
     if (fd < 0)
@@ -652,7 +656,7 @@ static int store_file(const char *local_path, const char *node_text,
             }
         }
     }
-    if (fclose(in))
+    if (in != stdin && fclose(in))
         goto fail_closed;
     in = NULL;
 
@@ -668,7 +672,7 @@ static int store_file(const char *local_path, const char *node_text,
     return 0;
 
 fail:
-    if (in)
+    if (in && in != stdin)
         fclose(in);
 fail_closed:
     fprintf(stderr, "dncopy: DAP store failed\n");
@@ -924,6 +928,26 @@ int main(int argc, char **argv)
             return delete_file(argv[arg], argv[arg + 1], &options) ? 1 : 0;
         goto usage;
     }
+    if (arg + 2 == argc &&
+        (strstr(argv[arg], "::") || strstr(argv[arg + 1], "::"))) {
+        int src_remote = strstr(argv[arg], "::") != NULL;
+        int dst_remote = strstr(argv[arg + 1], "::") != NULL;
+
+        if (src_remote == dst_remote)
+            goto usage;
+        if (src_remote) {
+            if (parse_transparent_spec(argv[arg], &remote, &options) ||
+                !remote.file[0])
+                goto usage;
+            return retrieve_file(remote.node, remote.file, argv[arg + 1], 1,
+                                 &options) ? 1 : 0;
+        }
+        if (parse_transparent_spec(argv[arg + 1], &remote, &options) ||
+            !remote.file[0])
+            goto usage;
+        return store_file(argv[arg], remote.node, remote.file, 1,
+                          &options) ? 1 : 0;
+    }
     if (arg >= argc)
         goto usage;
     mode = argv[arg++];
@@ -961,7 +985,8 @@ usage:
                 "--selftest | --probe AREA.NODE | --get AREA.NODE FILE | "
                 "--get-text AREA.NODE FILE | --get-to AREA.NODE FILE LOCAL | "
                 "--put LOCAL AREA.NODE REMOTE | --put-text LOCAL AREA.NODE REMOTE | "
-                "--dir AREA.NODE SPEC | --delete AREA.NODE FILE\n", argv[0]);
+                "--dir AREA.NODE SPEC | --delete AREA.NODE FILE | "
+                "SOURCE DEST (one transparent AREA.NODE::FILE)\n", argv[0]);
     }
     return 2;
 }

@@ -403,6 +403,24 @@ if [ "$reference" = pydecnet ]; then
         printf '%s\n' "$dap_dndir_output"
         exit 1
     fi
+    dap_copy_local="/tmp/dniv-dap-copy.$"
+    rm -f "$dap_copy_local"
+    if ! /usr/local/bin/dncopy "$peer_node::PHASE7.TXT" "$dap_copy_local"; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=dncopy-transparent-get"
+        exit 1
+    fi
+    if [ "$(cat "$dap_copy_local")" != "DAP-PHASE7" ]; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=dncopy-transparent-get-content"
+        rm -f "$dap_copy_local"
+        exit 1
+    fi
+    printf 'COPY-A\nCOPY-B\n' >"$dap_copy_local"
+    if ! /usr/local/bin/dncopy "$dap_copy_local" "$peer_node::COPYUP.TXT"; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=dncopy-transparent-put"
+        rm -f "$dap_copy_local"
+        exit 1
+    fi
+    rm -f "$dap_copy_local"
     if ! cterm_output=$(printf '\003phase7\r' | /usr/local/sbin/dnlogin -u CTERMUSER -p CTERMPASS -a CTERMACCT "$peer_node" 2>&1); then
         printf '%s\n' "$cterm_output"
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=cterm-interactive"
