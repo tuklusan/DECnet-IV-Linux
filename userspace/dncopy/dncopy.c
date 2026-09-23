@@ -314,6 +314,100 @@ fail:
     return -1;
 }
 
+
+static int store_file(const char *local_path, const char *node_text,
+                      const char *filespec,
+                      const struct access_options *options)
+{
+    unsigned char msg[2048], reply[512], data[1536];
+    FILE *in;
+    size_t n = strlen(filespec);
+    size_t data_len;
+    int fd;
+    int got;
+
+    if (!n || n > 128U) {
+        fprintf(stderr, "dncopy: invalid remote file specification\n");
+        return -1;
+    }
+    in = fopen(local_path, "rb");
+    if (!in) {
+        perror("dncopy: open local input");
+        return -1;
+    }
+    data_len = fread(data, 1, sizeof(data), in);
+    if (ferror(in) || !feof(in)) {
+        fprintf(stderr, "dncopy: local input exceeds %zu-byte Phase 7 store bound\n",
+                sizeof(data));
+        fclose(in);
+        return -1;
+    }
+    fclose(in);
+
+    fd = open_fal(node_text, options);
+    if (fd < 0)
+        return -1;
+    if (exchange_config(fd))
+        goto fail;
+
+    msg[0] = DAP_ATTRIBUTES;
+    msg[1] = 0U;
+    msg[2] = 0U;
+    if (send_record(fd, msg, 3U))
+        goto fail;
+
+    msg[0] = DAP_ACCESS;
+    msg[1] = 0U;
+    msg[2] = 2U; /* CREATE */
+    msg[3] = 0U; /* ACCOPT */
+    msg[4] = (unsigned char)n;
+    memcpy(msg + 5, filespec, n);
+    if (send_record(fd, msg, n + 5U))
+        goto fail;
+
+    got = recv_message(fd, reply, sizeof(reply), DAP_ATTRIBUTES);
+    if (got < 3 || reply[2] != 0U)
+        goto fail;
+    if (recv_message(fd, reply, sizeof(reply), DAP_ACK) != 2)
+        goto fail;
+
+    msg[0] = DAP_CONTROL;
+    msg[1] = 0U;
+    msg[2] = 2U; /* CONNECT */
+    if (send_record(fd, msg, 3U) ||
+        recv_message(fd, reply, sizeof(reply), DAP_ACK) != 2)
+        goto fail;
+
+    msg[0] = DAP_CONTROL;
+    msg[1] = 0U;
+    msg[2] = 4U; /* PUT */
+    if (send_record(fd, msg, 3U))
+        goto fail;
+
+    msg[0] = DAP_DATA;
+    msg[1] = 0U;
+    msg[2] = 0U; /* empty record number */
+    memcpy(msg + 3, data, data_len);
+    if (send_record(fd, msg, data_len + 3U))
+        goto fail;
+
+    msg[0] = DAP_ACCESS_COMPLETE;
+    msg[1] = 0U;
+    msg[2] = 1U; /* CLOSE */
+    if (send_record(fd, msg, 3U))
+        goto fail;
+    got = recv_message(fd, reply, sizeof(reply), DAP_ACCESS_COMPLETE);
+    if (got < 3 || reply[2] != 2U)
+        goto fail;
+    close(fd);
+    return 0;
+
+fail:
+    fprintf(stderr, "dncopy: DAP store failed\n");
+    close(fd);
+    return -1;
+}
+
 static int selftest(void)
 {
     unsigned char config[32];
@@ -368,10 +462,14 @@ int main(int argc, char **argv)
     if (!strcmp(mode, "--get-to") && arg + 3 == argc)
         return retrieve_file(argv[arg], argv[arg + 1], argv[arg + 2],
                              &options) ? 1 : 0;
+    if (!strcmp(mode, "--put") && arg + 3 == argc)
+        return store_file(argv[arg], argv[arg + 1], argv[arg + 2],
+                          &options) ? 1 : 0;
 usage:
     fprintf(stderr,
             "usage: %s [-u USER] [-p PASSWORD] [-a ACCOUNT] "
             "--selftest | --probe AREA.NODE | --get AREA.NODE FILE | "
-            "--get-to AREA.NODE FILE LOCAL\n", argv[0]);
+            "--get-to AREA.NODE FILE LOCAL | "
+            "--put LOCAL AREA.NODE REMOTE\n", argv[0]);
     return 2;
 }

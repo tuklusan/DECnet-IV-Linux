@@ -341,6 +341,14 @@ if [ "$reference" = pydecnet ]; then
     if [ "$(cat "$dap_local")" != "DAP-PHASE7" ]; then
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=dap-get-to-content"
         rm -f "$dap_local"
+    dap_put="/tmp/dniv-dap-put.$$"
+    printf 'DAP-PUT-PHASE7\n' >"$dap_put"
+    if ! /usr/local/bin/dncopy --put "$dap_put" "$peer_node" UPLOAD.TXT; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=dap-put"
+        rm -f "$dap_put"
+        exit 1
+    fi
+    rm -f "$dap_put"
         exit 1
     fi
     rm -f "$dap_local"

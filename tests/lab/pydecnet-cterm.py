@@ -244,6 +244,51 @@ async def serve(api_socket: str, system: str) -> int:
         dap.data(bytes((7, 0, 2)))
         dap.disconnect()
 
+        dap = await fal.listen()
+        dap_request = await dap.recv()
+        if dap_request.type != "connect":
+            raise RuntimeError(f"expected FAL put connect, got {dap_request.type!r}")
+        await dap.accept()
+        dap_reply = await dap.recv()
+        dap_config = bytes(dap_reply)
+        if dap_reply.type != "data" or len(dap_config) != 12 or dap_config[0] != 1:
+            raise RuntimeError(f"bad put DAP CONFIG: {dap_config!r}")
+        dap.data(dap_config)
+
+        attrib = await dap.recv()
+        if attrib.type != "data" or bytes(attrib) != bytes((2, 0, 0)):
+            raise RuntimeError(f"bad put DAP ATTRIBUTES: {bytes(attrib)!r}")
+        access = await dap.recv()
+        expected_name = b"UPLOAD.TXT"
+        access_bytes = bytes(access)
+        if (
+            access.type != "data"
+            or len(access_bytes) != 5 + len(expected_name)
+            or access_bytes[:5] != bytes((3, 0, 2, 0, len(expected_name)))
+            or access_bytes[5:] != expected_name
+        ):
+            raise RuntimeError(f"bad put DAP ACCESS: {access_bytes!r}")
+        dap.data(bytes((2, 0, 0)))
+        dap.data(bytes((6, 0)))
+
+        control = await dap.recv()
+        if control.type != "data" or bytes(control) != bytes((4, 0, 2)):
+            raise RuntimeError(f"bad put DAP CONTROL CONNECT: {bytes(control)!r}")
+        dap.data(bytes((6, 0)))
+
+        control = await dap.recv()
+        if control.type != "data" or bytes(control) != bytes((4, 0, 4)):
+            raise RuntimeError(f"bad put DAP CONTROL PUT: {bytes(control)!r}")
+        data_msg = await dap.recv()
+        if data_msg.type != "data" or bytes(data_msg) != bytes((8, 0, 0)) + b"DAP-PUT-PHASE7\n":
+            raise RuntimeError(f"bad put DAP DATA: {bytes(data_msg)!r}")
+
+        accom = await dap.recv()
+        if accom.type != "data" or bytes(accom) != bytes((7, 0, 1)):
+            raise RuntimeError(f"bad put DAP ACCOMP command: {bytes(accom)!r}")
+        dap.data(bytes((7, 0, 2)))
+        dap.disconnect()
+
         interactive = await listener.listen()
         await handshake(interactive)
 
