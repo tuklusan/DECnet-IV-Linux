@@ -625,6 +625,19 @@ if [ "$reference" = pydecnet ]; then
     fi
     rm -rf "$http_root"
     echo "DNIV-INTEROP-HTTP-PASS session=$session scenario=$scenario node=$name peer=$peer_node"
+    /usr/local/sbin/dnphoned --once --user TEST &
+    phone_pid=$!
+    sleep 1
+    if ! kill -0 "$phone_pid" 2>/dev/null; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=phone-listener-start"
+        exit 1
+    fi
+    echo "DNIV-INTEROP-PHONE-READY session=$session scenario=$scenario node=$name peer=$peer_node"
+    if ! wait "$phone_pid"; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=phone-session"
+        exit 1
+    fi
+    echo "DNIV-INTEROP-PHONE-PASS session=$session scenario=$scenario node=$name peer=$peer_node"
     if ! /usr/local/sbin/dnmrr "$peer_node"; then
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=nsp-mirror"
         exit 1
