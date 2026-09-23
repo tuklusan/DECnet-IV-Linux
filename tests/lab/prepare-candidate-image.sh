@@ -102,6 +102,8 @@ ln -sf dncopy /usr/local/bin/dnsubmit
 ln -sf dncopy /usr/local/bin/dnprint
 make -C /usr/src/decnet-iv-linux/userspace/dntask clean all
 install -m 0755 /usr/src/decnet-iv-linux/userspace/dntask/dntask /usr/local/bin/dntask
+make -C /usr/src/decnet-iv-linux/userspace/dnfald clean all
+install -m 0755 /usr/src/decnet-iv-linux/userspace/dnfald/dnfald /usr/local/sbin/dnfald
 make -C /usr/src/decnet-iv-linux/userspace/dnnml clean all
 install -m 0755 /usr/src/decnet-iv-linux/userspace/dnnml/dnnml /usr/local/sbin/dnnml
 make -C /usr/src/decnet-iv-linux/userspace/dnnice clean all

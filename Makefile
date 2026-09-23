@@ -22,6 +22,7 @@ userspace:
 	$(MAKE) -C userspace/dnlogin
 	$(MAKE) -C userspace/dncopy
 	$(MAKE) -C userspace/dntask
+	$(MAKE) -C userspace/dnfald
 	$(MAKE) -C userspace/dnnml
 	$(MAKE) -C userspace/dnnice
 	$(MAKE) -C userspace/dnmirror
@@ -40,6 +41,7 @@ clean:
 	$(MAKE) -C userspace/dnlogin clean
 	$(MAKE) -C userspace/dncopy clean
 	$(MAKE) -C userspace/dntask clean
+	$(MAKE) -C userspace/dnfald clean
 	$(MAKE) -C userspace/dnnml clean
 	$(MAKE) -C userspace/dnnice clean
 	$(MAKE) -C userspace/dnmirror clean
