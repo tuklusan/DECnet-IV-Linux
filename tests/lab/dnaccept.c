@@ -96,8 +96,9 @@ static int make_listener(int named)
     memset(&acceptdata, 0, sizeof(acceptdata));
     acceptdata.opt_optl = dniv_cpu_to_le16(sizeof(ACCEPT_DATA) - 1U);
     memcpy(acceptdata.opt_data, ACCEPT_DATA, sizeof(ACCEPT_DATA) - 1U);
-    if (setsockopt(fd, DNPROTO_NSP, DSO_CONDATA,
-                   &acceptdata, sizeof(acceptdata)) ||
+    if ((!named &&
+         setsockopt(fd, DNPROTO_NSP, DSO_CONDATA,
+                    &acceptdata, sizeof(acceptdata))) ||
         setsockopt(fd, DNPROTO_NSP, DSO_ACCEPTMODE,
                    &acceptmode, sizeof(acceptmode)))
         goto fail;
@@ -160,11 +161,17 @@ static int serve_one(int listener, uint16_t expected_node,
     if (fd < 0)
         return -1;
     if (deferred) {
+        struct optdata_dn acceptdata;
         unsigned char mode = 0xffU;
         socklen_t modelen = sizeof(mode);
 
+        memset(&acceptdata, 0, sizeof(acceptdata));
+        acceptdata.opt_optl = dniv_cpu_to_le16(sizeof(ACCEPT_DATA) - 1U);
+        memcpy(acceptdata.opt_data, ACCEPT_DATA, sizeof(ACCEPT_DATA) - 1U);
         if (getsockopt(fd, DNPROTO_NSP, DSO_ACCEPTMODE, &mode, &modelen) ||
             modelen != sizeof(mode) || mode != ACC_DEFER ||
+            setsockopt(fd, DNPROTO_NSP, DSO_CONDATA,
+                       &acceptdata, sizeof(acceptdata)) ||
             setsockopt(fd, DNPROTO_NSP, DSO_CONACCEPT, NULL, 0))
             goto fail;
     }

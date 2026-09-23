@@ -1455,19 +1455,25 @@ static int dniv_sock_setsockopt(struct socket *sock, int level, int optname,
 
     memset(&value, 0, sizeof(value));
     switch (optname) {
-    case DSO_CONDATA:
+    case DSO_CONDATA: {
+        struct dniv_nsp_conn_snapshot snapshot;
+
         if (optlen != sizeof(value.opt) ||
             copy_from_sockptr(&value.opt, optval, optlen))
             return -EINVAL;
         if (le16_to_cpu(value.opt.opt_optl) > DN_MAXOPTL)
             return -EINVAL;
         lock_sock(sock->sk);
-        if (dsk->local_link)
+        if (dsk->local_link &&
+            (dsk->accept_mode != ACC_DEFER ||
+             dniv_nsp_conn_snapshot(dsk->local_link, &snapshot) ||
+             snapshot.state != DNIV_NSP_ST_CR))
             ret = -EISCONN;
-        else
+        if (!ret)
             dsk->conndata_out = value.opt;
         release_sock(sock->sk);
         return ret;
+    }
 
     case DSO_DISDATA:
         if (optlen != sizeof(value.opt) ||

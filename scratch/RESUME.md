@@ -1042,3 +1042,6 @@ Exact-SHA fast acceptance for `cf7a1573d368545c7604ed243a307c682117d3e4` is gree
 
 
 Fast acceptance for MAIL-11 v3 candidate `23cad17208a85542aa92f23cc5c75798ac87b7e7` stopped in Build Bootstrap `35923545809` on the same compile-only defect on both architectures: `dnmaild.c` added `uint16_t` endian helpers without including `<stdint.h>`. Add the missing standard header only; protocol behavior is unchanged. VM/interoperability jobs for the rejected candidate may continue independently, but promotion is blocked by the build failure. Next: exact-SHA fast acceptance.
+
+
+MAIL-11 v3 exposed a native deferred-accept socket ABI contradiction before promotion of `bf6df486ac4dde1318c35204bcad51331f0cc24b`: request-dependent accept data must be set on the accepted child, but `DSO_CONDATA` rejected every socket that already had a local link even though `DSO_CONACCEPT` consumes that child's `conndata_out`. Allow `DSO_CONDATA` only for an `ACC_DEFER` accepted child while its NSP connection remains in CR, retaining `EISCONN` everywhere else. The inbound socket proof now deliberately leaves listener accept data empty and sets `linux-accept` on the deferred child immediately before `DSO_CONACCEPT`, covering the exact MAIL-11 requirement. Next: exact-SHA fast acceptance, then resume local sendmail/SMTP delivery bridging.
