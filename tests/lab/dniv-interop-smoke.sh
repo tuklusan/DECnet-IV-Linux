@@ -385,6 +385,24 @@ if [ "$reference" = pydecnet ]; then
         printf '%s\n' "$dap_dir_output"
         exit 1
     fi
+    if ! dap_type_output=$(/usr/local/bin/dntype "$peer_node" PHASE7.TXT); then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=dntype"
+        exit 1
+    fi
+    if [ "$dap_type_output" != "DAP-PHASE7" ]; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=dntype-content"
+        printf '%s\n' "$dap_type_output"
+        exit 1
+    fi
+    if ! dap_dndir_output=$(/usr/local/bin/dndir "$peer_node" '*.TXT'); then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=dndir"
+        exit 1
+    fi
+    if [ "$dap_dndir_output" != "$(printf 'PHASE7.TXT\nTEXTUP.TXT')" ]; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=dndir-content"
+        printf '%s\n' "$dap_dndir_output"
+        exit 1
+    fi
     if ! cterm_output=$(printf '\003phase7\r' | /usr/local/sbin/dnlogin -u CTERMUSER -p CTERMPASS -a CTERMACCT "$peer_node" 2>&1); then
         printf '%s\n' "$cterm_output"
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=cterm-interactive"

@@ -758,7 +758,11 @@ int main(int argc, char **argv)
 {
     struct access_options options = { 0 };
     const char *mode;
+    const char *prog;
     int arg = 1;
+
+    prog = strrchr(argv[0], '/');
+    prog = prog ? prog + 1 : argv[0];
 
     while (arg < argc && argv[arg][0] == '-' && argv[arg][1] &&
            argv[arg][1] != '-') {
@@ -775,6 +779,19 @@ int main(int argc, char **argv)
             arg += 2;
             continue;
         }
+        goto usage;
+    }
+    if (!strcmp(prog, "dntype")) {
+        if (arg + 2 == argc)
+            return retrieve_file(argv[arg], argv[arg + 1], NULL, 1,
+                                 &options) ? 1 : 0;
+        goto usage;
+    }
+    if (!strcmp(prog, "dndir")) {
+        if (arg + 1 == argc)
+            return list_directory(argv[arg], "*.*;*", &options) ? 1 : 0;
+        if (arg + 2 == argc)
+            return list_directory(argv[arg], argv[arg + 1], &options) ? 1 : 0;
         goto usage;
     }
     if (arg >= argc)
@@ -802,11 +819,17 @@ int main(int argc, char **argv)
     if (!strcmp(mode, "--delete") && arg + 2 == argc)
         return delete_file(argv[arg], argv[arg + 1], &options) ? 1 : 0;
 usage:
-    fprintf(stderr,
-            "usage: %s [-u USER] [-p PASSWORD] [-a ACCOUNT] "
-            "--selftest | --probe AREA.NODE | --get AREA.NODE FILE | "
-            "--get-text AREA.NODE FILE | --get-to AREA.NODE FILE LOCAL | "
-            "--put LOCAL AREA.NODE REMOTE | --put-text LOCAL AREA.NODE REMOTE | "
-            "--dir AREA.NODE SPEC | --delete AREA.NODE FILE\n", argv[0]);
+    if (!strcmp(prog, "dntype")) {
+        fprintf(stderr, "usage: dntype [-u USER] [-p PASSWORD] [-a ACCOUNT] AREA.NODE FILE\n");
+    } else if (!strcmp(prog, "dndir")) {
+        fprintf(stderr, "usage: dndir [-u USER] [-p PASSWORD] [-a ACCOUNT] AREA.NODE [SPEC]\n");
+    } else {
+        fprintf(stderr,
+                "usage: %s [-u USER] [-p PASSWORD] [-a ACCOUNT] "
+                "--selftest | --probe AREA.NODE | --get AREA.NODE FILE | "
+                "--get-text AREA.NODE FILE | --get-to AREA.NODE FILE LOCAL | "
+                "--put LOCAL AREA.NODE REMOTE | --put-text LOCAL AREA.NODE REMOTE | "
+                "--dir AREA.NODE SPEC | --delete AREA.NODE FILE\n", argv[0]);
+    }
     return 2;
 }

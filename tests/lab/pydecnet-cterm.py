@@ -425,6 +425,61 @@ async def serve(api_socket: str, system: str) -> int:
         dap.data(bytes((7, 0, 2)))
         dap.disconnect()
 
+        dap = await fal.listen()
+        dap_request = await dap.recv()
+        if dap_request.type != "connect":
+            raise RuntimeError(f"expected FAL dntype connect, got {dap_request.type!r}")
+        await dap.accept()
+        dap_reply = await dap.recv()
+        dap_config = bytes(dap_reply)
+        if dap_reply.type != "data" or len(dap_config) != 12 or dap_config[0] != 1:
+            raise RuntimeError(f"bad dntype DAP CONFIG: {dap_config!r}")
+        dap.data(dap_config)
+        access = await dap.recv()
+        if access.type != "data" or b"PHASE7.TXT" not in bytes(access):
+            raise RuntimeError(f"bad dntype DAP ACCESS: {bytes(access)!r}")
+        dap.data(bytes((2, 0, 4, 4)))
+        dap.data(bytes((6, 0)))
+        control = await dap.recv()
+        if control.type != "data" or bytes(control) != bytes((4, 0, 2)):
+            raise RuntimeError(f"bad dntype DAP CONTROL CONNECT: {bytes(control)!r}")
+        dap.data(bytes((6, 0)))
+        control = await dap.recv()
+        if control.type != "data" or bytes(control) != bytes((4, 0, 1)):
+            raise RuntimeError(f"bad dntype DAP CONTROL GET: {bytes(control)!r}")
+        dap.data(bytes((8, 0, 0)) + b"DAP-PHASE7\r\n")
+        dap.data(bytes((9, 0, 0x27, 0x40)))
+        accom = await dap.recv()
+        if accom.type != "data" or bytes(accom) != bytes((7, 0, 1)):
+            raise RuntimeError(f"bad dntype DAP ACCOMP command: {bytes(accom)!r}")
+        dap.data(bytes((7, 0, 2)))
+        dap.disconnect()
+
+        dap = await fal.listen()
+        dap_request = await dap.recv()
+        if dap_request.type != "connect":
+            raise RuntimeError(f"expected FAL dndir connect, got {dap_request.type!r}")
+        await dap.accept()
+        dap_reply = await dap.recv()
+        dap_config = bytes(dap_reply)
+        if dap_reply.type != "data" or len(dap_config) != 12 or dap_config[0] != 1:
+            raise RuntimeError(f"bad dndir DAP CONFIG: {dap_config!r}")
+        dap.data(dap_config)
+        access = await dap.recv()
+        access_bytes = bytes(access)
+        expected_spec = b"*.TXT"
+        if (
+            access.type != "data"
+            or len(access_bytes) != 5 + len(expected_spec)
+            or access_bytes[:5] != bytes((3, 0, 6, 0, len(expected_spec)))
+            or access_bytes[5:] != expected_spec
+        ):
+            raise RuntimeError(f"bad dndir DAP ACCESS: {access_bytes!r}")
+        for name in (b"PHASE7.TXT", b"TEXTUP.TXT"):
+            dap.data(bytes((15, 0, 2, len(name))) + name)
+        dap.data(bytes((7, 0, 2)))
+        dap.disconnect()
+
         interactive = await listener.listen()
         await handshake(interactive)
 
