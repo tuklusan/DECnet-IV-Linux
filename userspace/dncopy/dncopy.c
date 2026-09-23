@@ -320,7 +320,7 @@ static int store_file(const char *local_path, const char *node_text,
                       const char *filespec,
                       const struct access_options *options)
 {
-    unsigned char msg[2048], reply[512], data[1536];
+    unsigned char msg[2048], reply[512], data[1024];
     FILE *in;
     size_t n = strlen(filespec);
     size_t data_len;
@@ -336,15 +336,6 @@ static int store_file(const char *local_path, const char *node_text,
         perror("dncopy: open local input");
         return -1;
     }
-    data_len = fread(data, 1, sizeof(data), in);
-    if (ferror(in) || !feof(in)) {
-        fprintf(stderr, "dncopy: local input exceeds %zu-byte Phase 7 store bound\n",
-                sizeof(data));
-        fclose(in);
-        return -1;
-    }
-    fclose(in);
-
     fd = open_fal(node_text, options);
     if (fd < 0)
         return -1;
@@ -385,12 +376,25 @@ static int store_file(const char *local_path, const char *node_text,
     if (send_record(fd, msg, 3U))
         goto fail;
 
-    msg[0] = DAP_DATA;
-    msg[1] = 0U;
-    msg[2] = 0U; /* empty record number */
-    memcpy(msg + 3, data, data_len);
-    if (send_record(fd, msg, data_len + 3U))
-        goto fail;
+    for (;;) {
+        data_len = fread(data, 1, sizeof(data), in);
+        if (data_len) {
+            msg[0] = DAP_DATA;
+            msg[1] = 0U;
+            msg[2] = 0U; /* empty record number */
+            memcpy(msg + 3, data, data_len);
+            if (send_record(fd, msg, data_len + 3U))
+                goto fail;
+        }
+        if (data_len < sizeof(data)) {
+            if (ferror(in))
+                goto fail;
+            break;
+        }
+    }
+    if (fclose(in))
+        goto fail_closed;
+    in = NULL;
 
     msg[0] = DAP_ACCESS_COMPLETE;
     msg[1] = 0U;
@@ -404,6 +408,9 @@ static int store_file(const char *local_path, const char *node_text,
     return 0;
 
 fail:
+    if (in)
+        fclose(in);
+fail_closed:
     fprintf(stderr, "dncopy: DAP store failed\n");
     close(fd);
     return -1;

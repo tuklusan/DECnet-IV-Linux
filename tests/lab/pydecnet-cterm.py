@@ -279,9 +279,22 @@ async def serve(api_socket: str, system: str) -> int:
         control = await dap.recv()
         if control.type != "data" or bytes(control) != bytes((4, 0, 4)):
             raise RuntimeError(f"bad put DAP CONTROL PUT: {bytes(control)!r}")
-        data_msg = await dap.recv()
-        if data_msg.type != "data" or bytes(data_msg) != bytes((8, 0, 0)) + b"DAP-PUT-PHASE7\n":
-            raise RuntimeError(f"bad put DAP DATA: {bytes(data_msg)!r}")
+        total_put = 0
+        put_records = 0
+        while total_put < 3072:
+            data_msg = await dap.recv()
+            raw_data = bytes(data_msg)
+            if data_msg.type != "data" or len(raw_data) < 3 or raw_data[:3] != bytes((8, 0, 0)):
+                raise RuntimeError(f"bad put DAP DATA: {raw_data!r}")
+            payload = raw_data[3:]
+            if not payload or any(payload):
+                raise RuntimeError(f"bad put DAP payload: len={len(payload)}")
+            total_put += len(payload)
+            put_records += 1
+        if total_put != 3072 or put_records < 2:
+            raise RuntimeError(
+                f"bad streamed put totals: bytes={total_put} records={put_records}"
+            )
 
         accom = await dap.recv()
         if accom.type != "data" or bytes(accom) != bytes((7, 0, 1)):
