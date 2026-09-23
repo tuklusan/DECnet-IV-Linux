@@ -946,3 +946,6 @@ Exact-SHA fast acceptance for classic two-operand `dncopy` candidate `3a4f57bedb
 
 
 Fast acceptance of transfer-mode candidate `6ce1e137c337af98f77dbdfe91dbd3ec7d178621` exposed a harness-only timeout in PyDECnet L1 interoperability run `35869695563`, job `107210236236`: the expanded FAL proof remained active when the fixed 30-second host `pydecnet-cterm.py` bound expired, after which the candidate's later interactive CTERM connection timed out because the API driver had been killed. The candidate had already completed routing/NICE and DAP CONFIG successfully; no protocol fault is indicated. The bounded host application-proof allowance is raised to 60 seconds to cover the added DAP record/block sessions. Product behavior is unchanged. Next: exact-SHA fast acceptance.
+
+
+The first 60-second PyDECnet application-proof rerun on `99d5d59cca67d88fb688aa5546563b98045a93cb` still failed in run `35870362895`, job `107212544983`, at the same harness boundary: `pydecnet-cterm.py` printed READY, serviced the expanded DAP sequence, and was terminated exactly 60 seconds later just as the candidate advanced to interactive CTERM, producing a later connection timeout. Routing/NICE and DAP CONFIG remained healthy. The bounded application-proof allowance is raised to 90 seconds; no candidate protocol behavior changes. Next: exact-SHA fast acceptance.
