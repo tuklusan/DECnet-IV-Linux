@@ -452,6 +452,75 @@ static size_t make_store_attributes(unsigned char *buf, size_t cap,
     return 7U;
 }
 
+static int apply_transfer_option(const char *name, const char *value,
+                                 int *text_mode, unsigned char *store_rfm,
+                                 unsigned char *store_rat,
+                                 int *metadata_override)
+{
+    if (!strcmp(name, "-m")) {
+        if (!strcmp(value, "record"))
+            *text_mode = 1;
+        else if (!strcmp(value, "block"))
+            *text_mode = 0;
+        else
+            return -1;
+        return 0;
+    }
+    if (!strcmp(name, "-r")) {
+        if (parse_store_rfm(value, store_rfm))
+            return -1;
+        *metadata_override = 1;
+        return 0;
+    }
+    if (!strcmp(name, "-c")) {
+        if (parse_store_rat(value, store_rat))
+            return -1;
+        *metadata_override = 1;
+        return 0;
+    }
+    return -1;
+}
+
+static int apply_transfer_env(const char *env, int *text_mode,
+                              unsigned char *store_rfm,
+                              unsigned char *store_rat,
+                              int *metadata_override)
+{
+    char buf[512];
+    char *save = NULL;
+    char *tok;
+
+    if (!env || !*env)
+        return 0;
+    if (strlen(env) >= sizeof(buf))
+        return -1;
+    strcpy(buf, env);
+    tok = strtok_r(buf, " \t", &save);
+    while (tok) {
+        char name[3] = { 0 };
+        const char *value;
+
+        if (strlen(tok) < 2U || tok[0] != '-' ||
+            (tok[1] != 'm' && tok[1] != 'r' && tok[1] != 'c'))
+            return -1;
+        name[0] = '-';
+        name[1] = tok[1];
+        if (tok[2]) {
+            value = tok + 2;
+        } else {
+            tok = strtok_r(NULL, " \t", &save);
+            if (!tok)
+                return -1;
+            value = tok;
+        }
+        if (apply_transfer_option(name, value, text_mode, store_rfm,
+                                  store_rat, metadata_override))
+            return -1;
+        tok = strtok_r(NULL, " \t", &save);
+    }
+    return 0;
+}
+
 static int write_text_payload(FILE *out, const unsigned char *data, size_t len,
                               unsigned char rfm)
 {
@@ -906,6 +975,20 @@ static int selftest(void)
             !parse_rfm(attr_bad_menu, sizeof(attr_bad_menu), &rfm))
             return 1;
     }
+    {
+        int env_text_mode = 1;
+        int env_metadata = 0;
+        unsigned char env_rfm = DAP_RFM_VAR;
+        unsigned char env_rat = DAP_RAT_CR;
+
+        if (apply_transfer_env("-mblock -rvfc -c none", &env_text_mode,
+                               &env_rfm, &env_rat, &env_metadata) ||
+            env_text_mode != 0 || env_rfm != DAP_RFM_VFC ||
+            env_rat != DAP_RAT_NONE || env_metadata != 1 ||
+            !apply_transfer_env("-mbogus", &env_text_mode, &env_rfm,
+                                &env_rat, &env_metadata))
+            return 1;
+    }
     if (parse_store_rfm("vfc", &parsed_rfm) || parsed_rfm != DAP_RFM_VFC ||
         parse_store_rfm("stmlf", &parsed_rfm) || parsed_rfm != DAP_RFM_STMLF ||
         !parse_store_rfm("bogus", &parsed_rfm) ||
@@ -954,9 +1037,17 @@ int main(int argc, char **argv)
     int metadata_override = 0;
     int text_mode = 1;
     int arg = 1;
+    const char *env_options;
 
     prog = strrchr(argv[0], '/');
     prog = prog ? prog + 1 : argv[0];
+
+    env_options = getenv("DNCOPY_OPTIONS");
+    if (apply_transfer_env(env_options, &text_mode, &store_rfm, &store_rat,
+                           &metadata_override)) {
+        fprintf(stderr, "dncopy: invalid DNCOPY_OPTIONS\n");
+        return 2;
+    }
 
     while (arg < argc && argv[arg][0] == '-' && argv[arg][1] &&
            argv[arg][1] != '-') {
@@ -973,30 +1064,24 @@ int main(int argc, char **argv)
             arg += 2;
             continue;
         }
-        if (!strcmp(argv[arg], "-m") && arg + 1 < argc) {
-            const char *value = argv[arg + 1];
+        if ((!strcmp(argv[arg], "-m") || !strcmp(argv[arg], "-r") ||
+             !strcmp(argv[arg], "-c")) && arg + 1 < argc) {
+            if (apply_transfer_option(argv[arg], argv[arg + 1], &text_mode,
+                                      &store_rfm, &store_rat,
+                                      &metadata_override))
+                goto usage;
+            arg += 2;
+            continue;
+        }
+        if ((argv[arg][1] == 'm' || argv[arg][1] == 'r' ||
+             argv[arg][1] == 'c') && argv[arg][2]) {
+            char name[3] = { '-', argv[arg][1], '\0' };
 
-            if (!strcmp(value, "record"))
-                text_mode = 1;
-            else if (!strcmp(value, "block"))
-                text_mode = 0;
-            else
+            if (apply_transfer_option(name, argv[arg] + 2, &text_mode,
+                                      &store_rfm, &store_rat,
+                                      &metadata_override))
                 goto usage;
-            arg += 2;
-            continue;
-        }
-        if (!strcmp(argv[arg], "-r") && arg + 1 < argc) {
-            if (parse_store_rfm(argv[arg + 1], &store_rfm))
-                goto usage;
-            metadata_override = 1;
-            arg += 2;
-            continue;
-        }
-        if (!strcmp(argv[arg], "-c") && arg + 1 < argc) {
-            if (parse_store_rat(argv[arg + 1], &store_rat))
-                goto usage;
-            metadata_override = 1;
-            arg += 2;
+            arg++;
             continue;
         }
         goto usage;
@@ -1101,7 +1186,9 @@ usage:
                 "--get-text AREA.NODE FILE | --get-to AREA.NODE FILE LOCAL | "
                 "--put LOCAL AREA.NODE REMOTE | --put-text LOCAL AREA.NODE REMOTE | "
                 "--dir AREA.NODE SPEC | --delete AREA.NODE FILE | "
-                "SOURCE DEST (one transparent AREA.NODE::FILE)\n", argv[0]);
+                "SOURCE DEST (one transparent AREA.NODE::FILE)\n"
+                "DNCOPY_OPTIONS may set default -m/-r/-c transfer options.\n",
+                argv[0]);
     }
     return 2;
 }
