@@ -311,6 +311,18 @@ if [ "$reference" = pydecnet ]; then
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=sethost-foundation"
         exit 1
     fi
+    dap_ok=0
+    for attempt in 1 2 3 4 5; do
+        if /usr/local/bin/dncopy --probe "$peer_node"; then
+            dap_ok=1
+            break
+        fi
+        sleep 0.1
+    done
+    if [ "$dap_ok" -ne 1 ]; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=dap-config"
+        exit 1
+    fi
     if ! cterm_output=$(printf '\003phase7\r' | /usr/local/sbin/dnlogin -u CTERMUSER -p CTERMPASS -a CTERMACCT "$peer_node" 2>&1); then
         printf '%s\n' "$cterm_output"
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=cterm-interactive"

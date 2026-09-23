@@ -145,6 +145,7 @@ async def serve(api_socket: str, system: str) -> int:
     connector = AsyncApiConnector(api_socket)
     await connector.start()
     listener = await connector.bind(42, "CTERM", system=system)
+    fal = await connector.bind(17, "FAL", system=system)
     try:
         print("pydecnet-cterm: ready", flush=True)
         probe = await listener.listen()
@@ -154,6 +155,16 @@ async def serve(api_socket: str, system: str) -> int:
         sethost_probe = await listener.listen()
         await handshake(sethost_probe)
         sethost_probe.disconnect()
+
+        dap = await fal.listen()
+        dap_reply = await dap.recv()
+        if dap_reply.type != "data":
+            raise RuntimeError(f"expected DAP CONFIG, got {dap_reply.type!r}")
+        dap_config = bytes(dap_reply)
+        if len(dap_config) != 12 or dap_config[0] != 1 or dap_config[6:8] != bytes((4, 1)):
+            raise RuntimeError(f"bad DAP CONFIG: {dap_config!r}")
+        dap.data(dap_config)
+        dap.disconnect()
 
         interactive = await listener.listen()
         await handshake(interactive)
@@ -261,6 +272,7 @@ async def serve(api_socket: str, system: str) -> int:
         print("pydecnet-cterm: pass object=42 sessions=3 interactive=1 controls=oob,input-state,write-complete,input-count,characteristics-set-read,clear-input,unread", flush=True)
         return 0
     finally:
+        fal.close()
         listener.close()
         await connector.close()
 
