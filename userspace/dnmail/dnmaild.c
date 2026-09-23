@@ -69,20 +69,39 @@ static int serve(int fd, const char *root)
 {
     struct timeval timeout = { .tv_sec = 30, .tv_usec = 0 };
     unsigned char body[4096];
-    char sender[256], recipient[256], full_user[256], subject[256], path[1024];
+    char sender[256], recipient[256], recipients[1024];
+    char full_user[256], subject[256], path[1024];
     FILE *out = NULL;
     ssize_t got;
 
     if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) ||
         setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)))
         return -1;
-    if (recv_field(fd, sender, sizeof(sender), 0) < 0 ||
-        recv_field(fd, recipient, sizeof(recipient), 0) < 0 ||
-        send_ack(fd))
+    if (recv_field(fd, sender, sizeof(sender), 0) < 0)
         return -1;
-
-    got = recv(fd, body, sizeof(body), 0);
-    if (got != 1 || body[0] != 0U)
+    recipients[0] = '\0';
+    for (;;) {
+        got = recv(fd, recipient, sizeof(recipient) - 1U, 0);
+        if (got < 0)
+            return -1;
+        if (got == 1 && recipient[0] == '\0')
+            break;
+        if (got <= 0 || (size_t)got >= sizeof(recipient))
+            return -1;
+        recipient[got] = '\0';
+        if (strchr(recipient, '\r') || strchr(recipient, '\n') ||
+            strchr(recipient, '\0') != recipient + got)
+            return -1;
+        if (recipients[0] &&
+            strncat(recipients, ",", sizeof(recipients) - strlen(recipients) - 1U) == NULL)
+            return -1;
+        if (strlen(recipients) + strlen(recipient) + 1U > sizeof(recipients))
+            return -1;
+        strcat(recipients, recipient);
+        if (send_ack(fd))
+            return -1;
+    }
+    if (!recipients[0])
         return -1;
     if (recv_field(fd, full_user, sizeof(full_user), 1) < 0 ||
         recv_field(fd, subject, sizeof(subject), 1) < 0)
@@ -94,7 +113,7 @@ static int serve(int fd, const char *root)
     if (!out)
         return -1;
     if (fprintf(out, "From: %s\nTo: %s\nX-VMSmail: %s\nSubject: %s\n\n",
-                sender, recipient, full_user, subject) < 0)
+                sender, recipients, full_user, subject) < 0)
         goto fail;
 
     for (;;) {

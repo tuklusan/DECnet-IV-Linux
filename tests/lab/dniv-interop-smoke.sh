@@ -656,7 +656,7 @@ if [ "$reference" = pydecnet ]; then
         exit 1
     fi
     if ! grep -Fq 'From: PYDECNET' "$mail_root/mailbox.log" ||
-       ! grep -Fq 'To: TEST' "$mail_root/mailbox.log" ||
+       ! grep -Fq 'To: TEST,SECOND' "$mail_root/mailbox.log" ||
        ! grep -Fq 'Subject: MAIL-11-PROOF' "$mail_root/mailbox.log" ||
        ! grep -Fq 'BODY-ONE' "$mail_root/mailbox.log" ||
        ! grep -Fq 'BODY-TWO' "$mail_root/mailbox.log"; then

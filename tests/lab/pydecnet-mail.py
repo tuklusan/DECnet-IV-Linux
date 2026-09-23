@@ -35,6 +35,10 @@ def main() -> int:
         reply = connection.recv()
         if reply.type != "data" or bytes(reply) != ACK:
             raise RuntimeError(f"bad MAIL recipient ACK: {bytes(reply)!r}")
+        connection.data(b"SECOND")
+        reply = connection.recv()
+        if reply.type != "data" or bytes(reply) != ACK:
+            raise RuntimeError(f"bad second MAIL recipient ACK: {bytes(reply)!r}")
         connection.data(b"\0")
         connection.data(b"PYNODE::TEST")
         connection.data(b"MAIL-11-PROOF")
@@ -47,7 +51,7 @@ def main() -> int:
         connection.disconnect()
     finally:
         connector.close()
-    print(f"pydecnet-mail: pass peer={destination} object=27")
+    print(f"pydecnet-mail: pass peer={destination} object=27 recipients=2")
     return 0
 
 if __name__ == "__main__":
