@@ -31,6 +31,13 @@
 
 #define DAP_FAL_OBJECT 17U
 #define DAP_CONFIG 1U
+#define DAP_ATTRIBUTES 2U
+#define DAP_ACCESS 3U
+#define DAP_CONTROL 4U
+#define DAP_ACK 6U
+#define DAP_ACCESS_COMPLETE 7U
+#define DAP_DATA 8U
+#define DAP_STATUS 9U
 
 static int parse_node(const char *s, uint16_t *addr)
 {
@@ -75,13 +82,10 @@ static int validate_config(const unsigned char *buf, size_t len)
     return 0;
 }
 
-static int connect_fal(const char *node_text)
+static int open_fal(const char *node_text)
 {
     struct sockaddr_dn peer;
-    unsigned char config[32], reply[256];
     uint16_t addr;
-    size_t config_len;
-    ssize_t got;
     int fd;
 
     if (parse_node(node_text, &addr)) {
@@ -106,15 +110,34 @@ static int connect_fal(const char *node_text)
         close(fd);
         return -1;
     }
-    config_len = make_config(config, sizeof(config));
-    if (!config_len || send(fd, config, config_len, MSG_EOR | MSG_NOSIGNAL) != (ssize_t)config_len) {
-        perror("dncopy: send CONFIG");
-        close(fd);
+    return fd;
+}
+
+static int send_record(int fd, const unsigned char *buf, size_t len)
+{
+    return send(fd, buf, len, MSG_EOR | MSG_NOSIGNAL) == (ssize_t)len ? 0 : -1;
+}
+
+static int exchange_config(int fd)
+{
+    unsigned char config[32], reply[256];
+    size_t config_len = make_config(config, sizeof(config));
+    ssize_t got;
+
+    if (!config_len || send_record(fd, config, config_len))
         return -1;
-    }
     got = recv(fd, reply, sizeof(reply), 0);
-    if (got <= 0 || validate_config(reply, (size_t)got)) {
-        fprintf(stderr, "dncopy: invalid DAP CONFIG reply\n");
+    return got > 0 && !validate_config(reply, (size_t)got) ? 0 : -1;
+}
+
+static int connect_fal(const char *node_text)
+{
+    int fd = open_fal(node_text);
+
+    if (fd < 0)
+        return -1;
+    if (exchange_config(fd)) {
+        fprintf(stderr, "dncopy: invalid DAP CONFIG exchange\n");
         close(fd);
         return -1;
     }
@@ -122,6 +145,101 @@ static int connect_fal(const char *node_text)
            node_text, DAP_FAL_OBJECT);
     close(fd);
     return 0;
+}
+
+static int recv_message(int fd, unsigned char *buf, size_t cap, unsigned char type)
+{
+    ssize_t got = recv(fd, buf, cap, 0);
+
+    if (got < 2 || buf[0] != type)
+        return -1;
+    return (int)got;
+}
+
+static int retrieve_file(const char *node_text, const char *filespec)
+{
+    unsigned char msg[512], reply[2048];
+    size_t n = strlen(filespec);
+    int got;
+    int fd;
+
+    if (!n || n > 128U) {
+        fprintf(stderr, "dncopy: invalid remote file specification\n");
+        return -1;
+    }
+    fd = open_fal(node_text);
+    if (fd < 0)
+        return -1;
+    if (exchange_config(fd))
+        goto fail;
+
+    msg[0] = DAP_ACCESS;
+    msg[1] = 0U;
+    msg[2] = 1U; /* OPEN */
+    msg[3] = 0U; /* ACCOPT */
+    msg[4] = (unsigned char)n;
+    memcpy(msg + 5, filespec, n);
+    if (send_record(fd, msg, n + 5U))
+        goto fail;
+
+    got = recv_message(fd, reply, sizeof(reply), DAP_ATTRIBUTES);
+    if (got < 3 || reply[2] != 0U)
+        goto fail;
+    if (recv_message(fd, reply, sizeof(reply), DAP_ACK) != 2)
+        goto fail;
+
+    msg[0] = DAP_CONTROL;
+    msg[1] = 0U;
+    msg[2] = 2U; /* CONNECT data stream */
+    if (send_record(fd, msg, 3U) ||
+        recv_message(fd, reply, sizeof(reply), DAP_ACK) != 2)
+        goto fail;
+
+    msg[0] = DAP_CONTROL;
+    msg[1] = 0U;
+    msg[2] = 1U; /* GET, sequential file mode selected by peer defaults */
+    if (send_record(fd, msg, 3U))
+        goto fail;
+
+    for (;;) {
+        got = recv(fd, reply, sizeof(reply), 0);
+        if (got < 2)
+            goto fail;
+        if (reply[0] == DAP_DATA) {
+            unsigned int recnum_len;
+            size_t off;
+
+            if (got < 3)
+                goto fail;
+            recnum_len = reply[2];
+            off = 3U + recnum_len;
+            if (off > (size_t)got)
+                goto fail;
+            if (fwrite(reply + off, 1, (size_t)got - off, stdout) !=
+                (size_t)got - off)
+                goto fail;
+            continue;
+        }
+        if (reply[0] == DAP_STATUS)
+            break;
+        goto fail;
+    }
+
+    msg[0] = DAP_ACCESS_COMPLETE;
+    msg[1] = 0U;
+    msg[2] = 1U; /* COMMAND */
+    if (send_record(fd, msg, 3U))
+        goto fail;
+    got = recv_message(fd, reply, sizeof(reply), DAP_ACCESS_COMPLETE);
+    if (got < 3 || reply[2] != 2U)
+        goto fail;
+    close(fd);
+    return 0;
+
+fail:
+    fprintf(stderr, "dncopy: DAP retrieval failed\n");
+    close(fd);
+    return -1;
 }
 
 static int selftest(void)
@@ -147,6 +265,8 @@ int main(int argc, char **argv)
         return selftest();
     if (argc == 3 && !strcmp(argv[1], "--probe"))
         return connect_fal(argv[2]) ? 1 : 0;
-    fprintf(stderr, "usage: %s --selftest | --probe AREA.NODE\n", argv[0]);
+    if (argc == 4 && !strcmp(argv[1], "--get"))
+        return retrieve_file(argv[2], argv[3]) ? 1 : 0;
+    fprintf(stderr, "usage: %s --selftest | --probe AREA.NODE | --get AREA.NODE FILE\n", argv[0]);
     return 2;
 }

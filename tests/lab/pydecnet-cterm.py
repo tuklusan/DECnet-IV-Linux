@@ -170,6 +170,50 @@ async def serve(api_socket: str, system: str) -> int:
         dap.data(dap_config)
         dap.disconnect()
 
+        dap = await fal.listen()
+        dap_request = await dap.recv()
+        if dap_request.type != "connect":
+            raise RuntimeError(f"expected FAL retrieval connect, got {dap_request.type!r}")
+        await dap.accept()
+        dap_reply = await dap.recv()
+        if dap_reply.type != "data":
+            raise RuntimeError(f"expected retrieval DAP CONFIG, got {dap_reply.type!r}")
+        dap_config = bytes(dap_reply)
+        if len(dap_config) != 12 or dap_config[0] != 1:
+            raise RuntimeError(f"bad retrieval DAP CONFIG: {dap_config!r}")
+        dap.data(dap_config)
+
+        access = await dap.recv()
+        if access.type != "data":
+            raise RuntimeError(f"expected DAP ACCESS, got {access.type!r}")
+        access_body = bytes(access)
+        expected_name = b"PHASE7.TXT"
+        if (
+            len(access_body) != 5 + len(expected_name)
+            or access_body[:5] != bytes((3, 0, 1, 0, len(expected_name)))
+            or access_body[5:] != expected_name
+        ):
+            raise RuntimeError(f"bad DAP ACCESS: {access_body!r}")
+        dap.data(bytes((2, 0, 0)))
+        dap.data(bytes((6, 0)))
+
+        control = await dap.recv()
+        if control.type != "data" or bytes(control) != bytes((4, 0, 2)):
+            raise RuntimeError(f"bad DAP CONTROL CONNECT: {bytes(control)!r}")
+        dap.data(bytes((6, 0)))
+
+        control = await dap.recv()
+        if control.type != "data" or bytes(control) != bytes((4, 0, 1)):
+            raise RuntimeError(f"bad DAP CONTROL GET: {bytes(control)!r}")
+        dap.data(bytes((8, 0, 0)) + b"DAP-PHASE7\n")
+        dap.data(bytes((9, 0, 0x27, 0x40)))
+
+        accom = await dap.recv()
+        if accom.type != "data" or bytes(accom) != bytes((7, 0, 1)):
+            raise RuntimeError(f"bad DAP ACCOMP command: {bytes(accom)!r}")
+        dap.data(bytes((7, 0, 2)))
+        dap.disconnect()
+
         interactive = await listener.listen()
         await handshake(interactive)
 
