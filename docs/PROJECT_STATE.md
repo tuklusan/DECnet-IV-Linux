@@ -1033,3 +1033,6 @@ Corrective follow-up: the block-proof placement fix exposed two shell temporary-
 
 
 Fast acceptance of PID-scoped smoke-path candidate `938b2d05866c7db187f989193407056a612b69df` passed Repository Policy `35877811072`, Build Bootstrap `35877882308`, Project State Gate `35877886743`, and the x64 E1 VM job, but PyDECnet L1 interoperability run `35877894504`, job `107238479329`, failed the new block-mode retrieval content check. The independent harness sent only payload bytes `01 02 03` because its DAP DATA test vector omitted the leading `00` byte while the candidate correctly stripped the three-byte DAP header. Align the reference vector with the already-required four-byte block-put payload `00 01 02 03`; product behavior is unchanged. Next: exact-SHA fast acceptance.
+
+
+Exact-SHA fast acceptance for `775ba89d6600c87907ba6e3f595053b4cc257710` is green: Repository Policy `35878749694`, Build Bootstrap `35878802427`, Project State Gate `35878806829`, Python QEMU VM Lab `35878810843` (x86_64 and aarch64), and Independent Ethernet Interoperability `35878814565` (Route20 and PyDECnet L1). Follow-up inspection found the intended `$$` PID suffix correction in the smoke script had remained a single literal `$`; correct both temporary paths now. No protocol behavior changes. Next: exact-SHA fast acceptance, then continue Phase 7 DAP metadata controls.
