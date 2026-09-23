@@ -48,6 +48,15 @@ static int make_listener(void)
     return fd;
 }
 
+static size_t bounded_strlen(const char *text, size_t cap)
+{
+    size_t n = 0U;
+
+    while (n < cap && text[n])
+        n++;
+    return n;
+}
+
 static int user_match(const char *target, const char *user)
 {
     const char *sep = strstr(target, "::");
@@ -84,7 +93,7 @@ static int serve(int fd, const char *user)
         return -1;
     buf[got] = 0;
     {
-        size_t first = strnlen((char *)buf + 1, (size_t)got - 1U);
+        size_t first = bounded_strlen((char *)buf + 1, (size_t)got - 1U);
         const char *target;
 
         if (first >= (size_t)got - 1U)
