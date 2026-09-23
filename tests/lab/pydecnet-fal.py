@@ -43,10 +43,44 @@ def main() -> int:
             raise RuntimeError(
                 f"bad FAL CONFIG reply type={reply.type!r} data={bytes(reply)!r}"
             )
+
+        name = b"SERVER.TXT"
+        connection.data(bytes((3, 0, 1, 0, len(name))) + name)
+        reply = connection.recv()
+        if reply.type != "data" or bytes(reply) != bytes((2, 0, 4, 1)):
+            raise RuntimeError(f"bad FAL attributes: {bytes(reply)!r}")
+        reply = connection.recv()
+        if reply.type != "data" or bytes(reply) != bytes((6, 0)):
+            raise RuntimeError(f"bad FAL open ACK: {bytes(reply)!r}")
+        connection.data(bytes((4, 0, 2)))
+        reply = connection.recv()
+        if reply.type != "data" or bytes(reply) != bytes((6, 0)):
+            raise RuntimeError(f"bad FAL connect ACK: {bytes(reply)!r}")
+        connection.data(bytes((4, 0, 1)))
+        payload = bytearray()
+        while True:
+            reply = connection.recv()
+            raw = bytes(reply)
+            if reply.type != "data":
+                raise RuntimeError(f"bad FAL transfer message type={reply.type!r}")
+            if raw[:1] == bytes((8,)):
+                if len(raw) < 3 or raw[1:3] != bytes((0, 0)):
+                    raise RuntimeError(f"bad FAL DATA: {raw!r}")
+                payload += raw[3:]
+                continue
+            if raw == bytes((9, 0, 0x27, 0x40)):
+                break
+            raise RuntimeError(f"unexpected FAL transfer message: {raw!r}")
+        if bytes(payload) != b"SERVER-FAL\n":
+            raise RuntimeError(f"bad FAL payload: {bytes(payload)!r}")
+        connection.data(bytes((7, 0, 1)))
+        reply = connection.recv()
+        if reply.type != "data" or bytes(reply) != bytes((7, 0, 2)):
+            raise RuntimeError(f"bad FAL close reply: {bytes(reply)!r}")
         connection.disconnect()
     finally:
         connector.close()
-    print(f"pydecnet-fal: pass peer={destination} object=17")
+    print(f"pydecnet-fal: pass peer={destination} object=17 get=SERVER.TXT")
     return 0
 
 if __name__ == "__main__":

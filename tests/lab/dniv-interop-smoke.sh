@@ -582,7 +582,11 @@ if [ "$reference" = pydecnet ]; then
         exit 1
     fi
     echo "DNIV-INTEROP-TASK-PASS session=$session scenario=$scenario node=$name peer=$peer_node"
-    /usr/local/sbin/dnfald --once &
+    fal_root="/tmp/dniv-fal-root.$"
+    rm -rf "$fal_root"
+    mkdir -p "$fal_root"
+    printf 'SERVER-FAL\n' >"$fal_root/SERVER.TXT"
+    /usr/local/sbin/dnfald --root "$fal_root" --once &
     fal_pid=$!
     sleep 1
     if ! kill -0 "$fal_pid" 2>/dev/null; then
@@ -594,7 +598,8 @@ if [ "$reference" = pydecnet ]; then
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=fal-config-session"
         exit 1
     fi
-    echo "DNIV-INTEROP-FAL-PASS session=$session scenario=$scenario node=$name peer=$peer_node"
+    rm -rf "$fal_root"
+    echo "DNIV-INTEROP-FAL-PASS session=$session scenario=$scenario node=$name peer=$peer_node operation=get"
     if ! /usr/local/sbin/dnmrr "$peer_node"; then
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=nsp-mirror"
         exit 1

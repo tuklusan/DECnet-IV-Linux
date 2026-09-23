@@ -15,6 +15,7 @@
 #include <errno.h>
 #include <linux/dn.h>
 #include <stdio.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -23,6 +24,15 @@
 
 #define DAP_FAL_OBJECT 17U
 #define DAP_CONFIG 1U
+#define DAP_ATTRIBUTES 2U
+#define DAP_ACCESS 3U
+#define DAP_CONTROL 4U
+#define DAP_ACK 6U
+#define DAP_ACCESS_COMPLETE 7U
+#define DAP_DATA 8U
+#define DAP_STATUS 9U
+#define DAP_STATUS_EOF 0x4027U
+#define DAP_RFM_FIX 1U
 #define DNFAL_BACKLOG 8
 
 static size_t make_config(unsigned char *buf, size_t cap)
@@ -68,7 +78,124 @@ static int make_listener(void)
     return fd;
 }
 
-static int serve_config(int fd)
+static int send_record(int fd, const unsigned char *buf, size_t len)
+{
+    return send(fd, buf, len, MSG_EOR | MSG_NOSIGNAL) == (ssize_t)len ? 0 : -1;
+}
+
+static int safe_filespec(const unsigned char *text, size_t len,
+                         char *out, size_t cap)
+{
+    size_t i;
+
+    if (!len || len >= cap)
+        return -1;
+    for (i = 0; i < len; i++) {
+        unsigned char c = text[i];
+
+        if (c == '/' || c == '\\' || c == ':' || c == '[' || c == ']' ||
+            c == ';' || c == '*' || c == '?' || c < 0x20U)
+            return -1;
+    }
+    if ((len == 1U && text[0] == '.') ||
+        (len == 2U && text[0] == '.' && text[1] == '.'))
+        return -1;
+    memcpy(out, text, len);
+    out[len] = '\0';
+    return 0;
+}
+
+static int serve_get(int fd, const char *root)
+{
+    unsigned char request[2048];
+    unsigned char reply[2048];
+    char filespec[256];
+    char path[1024];
+    FILE *in = NULL;
+    ssize_t got;
+    size_t n;
+
+    got = recv(fd, request, sizeof(request), 0);
+    if (got < 5 || request[0] != DAP_ACCESS || request[2] != 1U)
+        return -1;
+    n = request[4];
+    if ((size_t)got != n + 5U ||
+        safe_filespec(request + 5U, n, filespec, sizeof(filespec)))
+        return -1;
+    if (snprintf(path, sizeof(path), "%s/%s", root, filespec) >=
+        (int)sizeof(path))
+        return -1;
+    in = fopen(path, "rb");
+    if (!in)
+        return -1;
+
+    {
+        const unsigned char attributes[] = {
+            DAP_ATTRIBUTES, 0U, 0x04U, DAP_RFM_FIX
+        };
+        const unsigned char ack[] = { DAP_ACK, 0U };
+
+        if (send_record(fd, attributes, sizeof(attributes)) ||
+            send_record(fd, ack, sizeof(ack)))
+            goto fail;
+    }
+
+    got = recv(fd, request, sizeof(request), 0);
+    if (got != 3 || request[0] != DAP_CONTROL || request[2] != 2U)
+        goto fail;
+    {
+        const unsigned char ack[] = { DAP_ACK, 0U };
+        if (send_record(fd, ack, sizeof(ack)))
+            goto fail;
+    }
+
+    got = recv(fd, request, sizeof(request), 0);
+    if (got != 3 || request[0] != DAP_CONTROL || request[2] != 1U)
+        goto fail;
+
+    for (;;) {
+        size_t count = fread(reply + 3U, 1, sizeof(reply) - 3U, in);
+
+        if (count) {
+            reply[0] = DAP_DATA;
+            reply[1] = 0U;
+            reply[2] = 0U;
+            if (send_record(fd, reply, count + 3U))
+                goto fail;
+        }
+        if (count < sizeof(reply) - 3U) {
+            if (ferror(in))
+                goto fail;
+            break;
+        }
+    }
+    fclose(in);
+    in = NULL;
+
+    {
+        const unsigned char eof[] = {
+            DAP_STATUS, 0U,
+            (unsigned char)(DAP_STATUS_EOF & 0xffU),
+            (unsigned char)(DAP_STATUS_EOF >> 8)
+        };
+        if (send_record(fd, eof, sizeof(eof)))
+            return -1;
+    }
+    got = recv(fd, request, sizeof(request), 0);
+    if (got != 3 || request[0] != DAP_ACCESS_COMPLETE || request[2] != 1U)
+        return -1;
+    {
+        const unsigned char complete[] = { DAP_ACCESS_COMPLETE, 0U, 2U };
+        return send_record(fd, complete, sizeof(complete));
+    }
+
+fail:
+    if (in)
+        fclose(in);
+    return -1;
+}
+
+static int serve_session(int fd, const char *root)
 {
     struct timeval timeout = { .tv_sec = 30, .tv_usec = 0 };
     unsigned char request[256];
@@ -83,15 +210,17 @@ static int serve_config(int fd)
     if (got < 0 || validate_config(request, (size_t)got))
         return -1;
     reply_len = make_config(reply, sizeof(reply));
-    if (!reply_len ||
-        send(fd, reply, reply_len, MSG_EOR | MSG_NOSIGNAL) != (ssize_t)reply_len)
+    if (!reply_len || send_record(fd, reply, reply_len))
         return -1;
-    return 0;
+    if (!root)
+        return 0;
+    return serve_get(fd, root);
 }
 
 static int selftest(void)
 {
     unsigned char config[16];
+    char name[32];
 
     if (make_config(config, sizeof(config)) != 12U ||
         validate_config(config, 12U) ||
@@ -99,7 +228,11 @@ static int selftest(void)
         config[6] != 4U || config[7] != 1U)
         return 1;
     config[0] = 2U;
-    if (!validate_config(config, 12U))
+    if (!validate_config(config, 12U) ||
+        safe_filespec((const unsigned char *)"SERVER.TXT", 10U,
+                      name, sizeof(name)) || strcmp(name, "SERVER.TXT") ||
+        !safe_filespec((const unsigned char *)"../BAD", 6U,
+                       name, sizeof(name)))
         return 1;
     puts("dnfald selftest passed");
     return 0;
@@ -107,16 +240,23 @@ static int selftest(void)
 
 int main(int argc, char **argv)
 {
+    const char *root = NULL;
     int once = 0;
     int listener;
+    int i;
 
     if (argc == 2 && !strcmp(argv[1], "--selftest"))
         return selftest();
-    if (argc == 2 && !strcmp(argv[1], "--once"))
-        once = 1;
-    else if (argc != 1) {
-        fprintf(stderr, "usage: %s [--once|--selftest]\n", argv[0]);
-        return 2;
+    for (i = 1; i < argc; i++) {
+        if (!strcmp(argv[i], "--once")) {
+            once = 1;
+        } else if (!strcmp(argv[i], "--root") && i + 1 < argc) {
+            root = argv[++i];
+        } else {
+            fprintf(stderr, "usage: %s [--once] [--root DIR] | --selftest\n",
+                    argv[0]);
+            return 2;
+        }
     }
 
     setvbuf(stdout, NULL, _IONBF, 0);
@@ -138,7 +278,7 @@ int main(int argc, char **argv)
             close(listener);
             return 1;
         }
-        rc = serve_config(fd);
+        rc = serve_session(fd, root);
         close(fd);
         if (rc) {
             perror("dnfald: session");
