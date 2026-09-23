@@ -38,6 +38,30 @@
 #define DAP_ACCESS_COMPLETE 7U
 #define DAP_DATA 8U
 #define DAP_STATUS 9U
+#define DAP_STATUS_EOF 0x4027U
+
+struct access_options {
+    const char *user;
+    const char *password;
+    const char *account;
+};
+
+static int set_access_field(unsigned char *dst, size_t cap, __u8 *len,
+                            const char *text)
+{
+    size_t n;
+
+    if (!text) {
+        *len = 0U;
+        return 0;
+    }
+    n = strlen(text);
+    if (n > cap)
+        return -1;
+    memcpy(dst, text, n);
+    *len = (__u8)n;
+    return 0;
+}
 
 static int parse_node(const char *s, uint16_t *addr)
 {
@@ -82,9 +106,10 @@ static int validate_config(const unsigned char *buf, size_t len)
     return 0;
 }
 
-static int open_fal(const char *node_text)
+static int open_fal(const char *node_text, const struct access_options *options)
 {
     struct sockaddr_dn peer;
+    struct accessdata_dn access;
     uint16_t addr;
     int fd;
 
@@ -96,6 +121,24 @@ static int open_fal(const char *node_text)
     if (fd < 0) {
         perror("dncopy: socket");
         return -1;
+    }
+    if (options && (options->user || options->password || options->account)) {
+        memset(&access, 0, sizeof(access));
+        if (set_access_field(access.acc_user, sizeof(access.acc_user),
+                             &access.acc_userl, options->user) ||
+            set_access_field(access.acc_pass, sizeof(access.acc_pass),
+                             &access.acc_passl, options->password) ||
+            set_access_field(access.acc_acc, sizeof(access.acc_acc),
+                             &access.acc_accl, options->account)) {
+            fprintf(stderr, "dncopy: access field exceeds %u bytes\n", DN_MAXACCL);
+            close(fd);
+            return -1;
+        }
+        if (setsockopt(fd, DNPROTO_NSP, SO_CONACCESS, &access, sizeof(access))) {
+            perror("dncopy: access data");
+            close(fd);
+            return -1;
+        }
     }
     memset(&peer, 0, sizeof(peer));
     peer.sdn_family = AF_DECnet;
@@ -130,9 +173,9 @@ static int exchange_config(int fd)
     return got > 0 && !validate_config(reply, (size_t)got) ? 0 : -1;
 }
 
-static int connect_fal(const char *node_text)
+static int connect_fal(const char *node_text, const struct access_options *options)
 {
-    int fd = open_fal(node_text);
+    int fd = open_fal(node_text, options);
 
     if (fd < 0)
         return -1;
@@ -156,20 +199,33 @@ static int recv_message(int fd, unsigned char *buf, size_t cap, unsigned char ty
     return (int)got;
 }
 
-static int retrieve_file(const char *node_text, const char *filespec)
+static int retrieve_file(const char *node_text, const char *filespec,
+                         const char *local_path,
+                         const struct access_options *options)
 {
     unsigned char msg[512], reply[2048];
     size_t n = strlen(filespec);
     int got;
     int fd;
+    FILE *out = stdout;
 
     if (!n || n > 128U) {
         fprintf(stderr, "dncopy: invalid remote file specification\n");
         return -1;
     }
-    fd = open_fal(node_text);
-    if (fd < 0)
+    if (local_path) {
+        out = fopen(local_path, "wb");
+        if (!out) {
+            perror("dncopy: open local output");
+            return -1;
+        }
+    }
+    fd = open_fal(node_text, options);
+    if (fd < 0) {
+        if (local_path)
+            fclose(out);
         return -1;
+    }
     if (exchange_config(fd))
         goto fail;
 
@@ -215,13 +271,23 @@ static int retrieve_file(const char *node_text, const char *filespec)
             off = 3U + recnum_len;
             if (off > (size_t)got)
                 goto fail;
-            if (fwrite(reply + off, 1, (size_t)got - off, stdout) !=
+            if (fwrite(reply + off, 1, (size_t)got - off, out) !=
                 (size_t)got - off)
                 goto fail;
             continue;
         }
-        if (reply[0] == DAP_STATUS)
+        if (reply[0] == DAP_STATUS) {
+            uint16_t status;
+
+            if (got < 4)
+                goto fail;
+            status = (uint16_t)reply[2] | ((uint16_t)reply[3] << 8);
+            if (status != DAP_STATUS_EOF) {
+                fprintf(stderr, "dncopy: DAP status 0x%04x\n", status);
+                goto fail;
+            }
             break;
+        }
         goto fail;
     }
 
@@ -233,12 +299,18 @@ static int retrieve_file(const char *node_text, const char *filespec)
     got = recv_message(fd, reply, sizeof(reply), DAP_ACCESS_COMPLETE);
     if (got < 3 || reply[2] != 2U)
         goto fail;
+    if (fflush(out))
+        goto fail;
     close(fd);
+    if (local_path && fclose(out))
+        return -1;
     return 0;
 
 fail:
     fprintf(stderr, "dncopy: DAP retrieval failed\n");
     close(fd);
+    if (local_path)
+        fclose(out);
     return -1;
 }
 
@@ -255,18 +327,50 @@ static int selftest(void)
         config[0] != DAP_CONFIG || config[2] != 0 || config[3] != 4 ||
         config[6] != 4 || config[7] != 1 || validate_config(config, 12U))
         return 1;
+    if (DAP_STATUS_EOF != 0x4027U)
+        return 1;
     puts("dncopy DAP selftest passed");
     return 0;
 }
 
 int main(int argc, char **argv)
 {
-    if (argc == 2 && !strcmp(argv[1], "--selftest"))
+    struct access_options options = { 0 };
+    const char *mode;
+    int opt;
+
+    opterr = 0;
+    while ((opt = getopt(argc, argv, "u:p:a:")) != -1) {
+        switch (opt) {
+        case 'u':
+            options.user = optarg;
+            break;
+        case 'p':
+            options.password = optarg;
+            break;
+        case 'a':
+            options.account = optarg;
+            break;
+        default:
+            goto usage;
+        }
+    }
+    if (optind >= argc)
+        goto usage;
+    mode = argv[optind++];
+    if (!strcmp(mode, "--selftest") && optind == argc)
         return selftest();
-    if (argc == 3 && !strcmp(argv[1], "--probe"))
-        return connect_fal(argv[2]) ? 1 : 0;
-    if (argc == 4 && !strcmp(argv[1], "--get"))
-        return retrieve_file(argv[2], argv[3]) ? 1 : 0;
-    fprintf(stderr, "usage: %s --selftest | --probe AREA.NODE | --get AREA.NODE FILE\n", argv[0]);
+    if (!strcmp(mode, "--probe") && optind + 1 == argc)
+        return connect_fal(argv[optind], &options) ? 1 : 0;
+    if (!strcmp(mode, "--get") && optind + 2 == argc)
+        return retrieve_file(argv[optind], argv[optind + 1], NULL, &options) ? 1 : 0;
+    if (!strcmp(mode, "--get-to") && optind + 3 == argc)
+        return retrieve_file(argv[optind], argv[optind + 1], argv[optind + 2],
+                             &options) ? 1 : 0;
+usage:
+    fprintf(stderr,
+            "usage: %s [-u USER] [-p PASSWORD] [-a ACCOUNT] "
+            "--selftest | --probe AREA.NODE | --get AREA.NODE FILE | "
+            "--get-to AREA.NODE FILE LOCAL\n", argv[0]);
     return 2;
 }
