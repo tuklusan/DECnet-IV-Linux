@@ -38,6 +38,7 @@
 #define DAP_ACCESS_COMPLETE 7U
 #define DAP_DATA 8U
 #define DAP_STATUS 9U
+#define DAP_NAME 15U
 #define DAP_STATUS_EOF 0x4027U
 
 struct access_options {
@@ -408,6 +409,84 @@ fail:
     return -1;
 }
 
+static int list_directory(const char *node_text, const char *filespec,
+                          const struct access_options *options)
+{
+    unsigned char msg[512], reply[2048];
+    size_t n = strlen(filespec);
+    int fd;
+
+    if (n > 128U) {
+        fprintf(stderr, "dncopy: invalid remote directory specification\n");
+        return -1;
+    }
+    fd = open_fal(node_text, options);
+    if (fd < 0)
+        return -1;
+    if (exchange_config(fd))
+        goto fail;
+
+    msg[0] = DAP_ACCESS;
+    msg[1] = 0U;
+    msg[2] = 6U; /* DIRECTORY LIST */
+    msg[3] = 0U; /* ACCOPT */
+    msg[4] = (unsigned char)n;
+    memcpy(msg + 5, filespec, n);
+    if (send_record(fd, msg, n + 5U))
+        goto fail;
+
+    for (;;) {
+        ssize_t got = recv(fd, reply, sizeof(reply), 0);
+
+        if (got < 2)
+            goto fail;
+        if (reply[0] == DAP_ACCESS_COMPLETE) {
+            if (got < 3 || reply[2] != 2U)
+                goto fail;
+            break;
+        }
+        if (reply[0] == DAP_NAME) {
+            unsigned int name_type;
+            unsigned int name_len;
+
+            if (got < 4)
+                goto fail;
+            name_type = reply[2] & 0x7fU;
+            name_len = reply[3];
+            if ((size_t)got != 4U + name_len)
+                goto fail;
+            if (name_type == 1U || name_type == 2U) {
+                if (fwrite(reply + 4U, 1, name_len, stdout) != name_len ||
+                    fputc('\n', stdout) == EOF)
+                    goto fail;
+            }
+            continue;
+        }
+        if (reply[0] == DAP_ATTRIBUTES || reply[0] == 13U ||
+            reply[0] == 14U)
+            continue;
+        if (reply[0] == DAP_STATUS) {
+            uint16_t status;
+
+            if (got < 4)
+                goto fail;
+            status = (uint16_t)reply[2] | ((uint16_t)reply[3] << 8);
+            fprintf(stderr, "dncopy: DAP directory status 0x%04x\n", status);
+            goto fail;
+        }
+        goto fail;
+    }
+    if (fflush(stdout))
+        goto fail;
+    close(fd);
+    return 0;
+
+fail:
+    fprintf(stderr, "dncopy: DAP directory listing failed\n");
+    close(fd);
+    return -1;
+}
+
 static int selftest(void)
 {
     unsigned char config[32];
@@ -465,11 +544,13 @@ int main(int argc, char **argv)
     if (!strcmp(mode, "--put") && arg + 3 == argc)
         return store_file(argv[arg], argv[arg + 1], argv[arg + 2],
                           &options) ? 1 : 0;
+    if (!strcmp(mode, "--dir") && arg + 2 == argc)
+        return list_directory(argv[arg], argv[arg + 1], &options) ? 1 : 0;
 usage:
     fprintf(stderr,
             "usage: %s [-u USER] [-p PASSWORD] [-a ACCOUNT] "
             "--selftest | --probe AREA.NODE | --get AREA.NODE FILE | "
             "--get-to AREA.NODE FILE LOCAL | "
-            "--put LOCAL AREA.NODE REMOTE\n", argv[0]);
+            "--put LOCAL AREA.NODE REMOTE | --dir AREA.NODE SPEC\n", argv[0]);
     return 2;
 }
