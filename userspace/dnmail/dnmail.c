@@ -92,21 +92,22 @@ static int recv_ack(int fd)
 
 static int send_recipients(int fd, const char *users)
 {
-    char list[256];
-    char *part;
-    char *save = NULL;
     const unsigned char zero = 0U;
+    const char *part = users;
 
-    if (strlen(users) >= sizeof(list))
+    if (!*users || strlen(users) >= 256U)
         return -1;
-    strcpy(list, users);
-    part = strtok_r(list, ",", &save);
-    if (!part)
-        return -1;
-    while (part) {
-        if (!*part || send_record(fd, part, strlen(part)) || recv_ack(fd))
+    for (;;) {
+        const char *comma = strchr(part, ',');
+        size_t len = comma ? (size_t)(comma - part) : strlen(part);
+
+        if (!len || send_record(fd, part, len) || recv_ack(fd))
             return -1;
-        part = strtok_r(NULL, ",", &save);
+        if (!comma)
+            break;
+        part = comma + 1;
+        if (!*part)
+            return -1;
     }
     return send_record(fd, &zero, 1U);
 }
