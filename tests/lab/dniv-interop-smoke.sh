@@ -605,6 +605,26 @@ if [ "$reference" = pydecnet ]; then
     fi
     rm -rf "$fal_root"
     echo "DNIV-INTEROP-FAL-PASS session=$session scenario=$scenario node=$name peer=$peer_node operations=get,put,dir,erase"
+    http_root="/tmp/dniv-http-root.$"
+    rm -rf "$http_root"
+    mkdir -p "$http_root"
+    printf 'DECNET-WEB-PASS\n' >"$http_root/index.html"
+    /usr/local/sbin/dnhttpd --once --root "$http_root" &
+    http_pid=$!
+    sleep 1
+    if ! kill -0 "$http_pid" 2>/dev/null; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=http-listener-start"
+        rm -rf "$http_root"
+        exit 1
+    fi
+    echo "DNIV-INTEROP-HTTP-READY session=$session scenario=$scenario node=$name peer=$peer_node"
+    if ! wait "$http_pid"; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=http-session"
+        rm -rf "$http_root"
+        exit 1
+    fi
+    rm -rf "$http_root"
+    echo "DNIV-INTEROP-HTTP-PASS session=$session scenario=$scenario node=$name peer=$peer_node"
     if ! /usr/local/sbin/dnmrr "$peer_node"; then
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=nsp-mirror"
         exit 1

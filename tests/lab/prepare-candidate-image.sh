@@ -113,6 +113,8 @@ make -C /usr/src/decnet-iv-linux/userspace/dnmirror clean all
 install -m 0755 /usr/src/decnet-iv-linux/userspace/dnmirror/dnmirror /usr/local/sbin/dnmirror
 make -C /usr/src/decnet-iv-linux/userspace/dnobject clean all
 install -m 0755 /usr/src/decnet-iv-linux/userspace/dnobject/dnobject /usr/local/sbin/dnobject
+make -C /usr/src/decnet-iv-linux/userspace/dnhttpd clean all
+install -m 0755 /usr/src/decnet-iv-linux/userspace/dnhttpd/dnhttpd /usr/local/sbin/dnhttpd
 cc -O2 -std=c11 -Wall -Wextra -Werror \
     -o /usr/local/sbin/dnraw /usr/src/decnet-iv-linux/tests/lab/dnraw.c
 cc -I/usr/src/decnet-iv-linux/include/uapi -O2 -std=c11 -Wall -Wextra -Werror \
