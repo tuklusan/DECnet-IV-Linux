@@ -344,7 +344,16 @@ if [ "$reference" = pydecnet ]; then
         exit 1
     fi
     rm -f "$dap_local"
-    dap_put="/tmp/dniv-dap-put.$"
+    if ! dap_text_output=$(/usr/local/bin/dncopy --get-text "$peer_node" TEXT.TXT); then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=dap-get-text"
+        exit 1
+    fi
+    if [ "$dap_text_output" != "$(printf 'LINE1\nLINE2')" ]; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=dap-get-text-content"
+        printf '%s\n' "$dap_text_output"
+        exit 1
+    fi
+    dap_put="/tmp/dniv-dap-put.$$"
     if ! dd if=/dev/zero of="$dap_put" bs=1024 count=3 status=none; then
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=dap-put-fixture"
         exit 1

@@ -40,6 +40,9 @@
 #define DAP_STATUS 9U
 #define DAP_NAME 15U
 #define DAP_STATUS_EOF 0x4027U
+#define DAP_RFM_VAR 2U
+#define DAP_RFM_STM 4U
+#define DAP_RFM_SCR 6U
 
 struct access_options {
     const char *user;
@@ -200,14 +203,56 @@ static int recv_message(int fd, unsigned char *buf, size_t cap, unsigned char ty
     return (int)got;
 }
 
+static int parse_rfm(const unsigned char *buf, size_t len,
+                     unsigned char *rfm)
+{
+    *rfm = 0U;
+    if (len < 3U || buf[0] != DAP_ATTRIBUTES)
+        return -1;
+    if (buf[2] == 0U)
+        return len == 3U ? 0 : -1;
+    if (buf[2] == 4U && len == 4U) {
+        *rfm = buf[3];
+        return 0;
+    }
+    return -1;
+}
+
+static int write_text_payload(FILE *out, const unsigned char *data, size_t len,
+                              unsigned char rfm)
+{
+    size_t i;
+
+    if (rfm == DAP_RFM_VAR) {
+        if (len && fwrite(data, 1, len, out) != len)
+            return -1;
+        return fputc('\n', out) == EOF ? -1 : 0;
+    }
+    if (rfm == DAP_RFM_STM || rfm == DAP_RFM_SCR) {
+        for (i = 0; i < len; i++) {
+            if (data[i] == '\r') {
+                if (i + 1U < len && data[i + 1U] == '\n')
+                    i++;
+                if (fputc('\n', out) == EOF)
+                    return -1;
+            } else if (fputc(data[i], out) == EOF) {
+                return -1;
+            }
+        }
+        return 0;
+    }
+    return len && fwrite(data, 1, len, out) != len ? -1 : 0;
+}
+
 static int retrieve_file(const char *node_text, const char *filespec,
-                         const char *local_path,
+                         const char *local_path, int text_mode,
                          const struct access_options *options)
 {
     unsigned char msg[512], reply[2048];
     size_t n = strlen(filespec);
     int got;
     int fd;
+    unsigned char rfm = 0U;
     FILE *out = stdout;
 
     if (!n || n > 128U) {
@@ -240,7 +285,7 @@ static int retrieve_file(const char *node_text, const char *filespec,
         goto fail;
 
     got = recv_message(fd, reply, sizeof(reply), DAP_ATTRIBUTES);
-    if (got < 3 || reply[2] != 0U)
+    if (got < 3 || parse_rfm(reply, (size_t)got, &rfm))
         goto fail;
     if (recv_message(fd, reply, sizeof(reply), DAP_ACK) != 2)
         goto fail;
@@ -272,9 +317,13 @@ static int retrieve_file(const char *node_text, const char *filespec,
             off = 3U + recnum_len;
             if (off > (size_t)got)
                 goto fail;
-            if (fwrite(reply + off, 1, (size_t)got - off, out) !=
-                (size_t)got - off)
+            if (text_mode) {
+                if (write_text_payload(out, reply + off, (size_t)got - off, rfm))
+                    goto fail;
+            } else if (fwrite(reply + off, 1, (size_t)got - off, out) !=
+                       (size_t)got - off) {
                 goto fail;
+            }
             continue;
         }
         if (reply[0] == DAP_STATUS) {
@@ -544,9 +593,11 @@ int main(int argc, char **argv)
     if (!strcmp(mode, "--probe") && arg + 1 == argc)
         return connect_fal(argv[arg], &options) ? 1 : 0;
     if (!strcmp(mode, "--get") && arg + 2 == argc)
-        return retrieve_file(argv[arg], argv[arg + 1], NULL, &options) ? 1 : 0;
+        return retrieve_file(argv[arg], argv[arg + 1], NULL, 0, &options) ? 1 : 0;
+    if (!strcmp(mode, "--get-text") && arg + 2 == argc)
+        return retrieve_file(argv[arg], argv[arg + 1], NULL, 1, &options) ? 1 : 0;
     if (!strcmp(mode, "--get-to") && arg + 3 == argc)
-        return retrieve_file(argv[arg], argv[arg + 1], argv[arg + 2],
+        return retrieve_file(argv[arg], argv[arg + 1], argv[arg + 2], 0,
                              &options) ? 1 : 0;
     if (!strcmp(mode, "--put") && arg + 3 == argc)
         return store_file(argv[arg], argv[arg + 1], argv[arg + 2],
@@ -557,7 +608,7 @@ usage:
     fprintf(stderr,
             "usage: %s [-u USER] [-p PASSWORD] [-a ACCOUNT] "
             "--selftest | --probe AREA.NODE | --get AREA.NODE FILE | "
-            "--get-to AREA.NODE FILE LOCAL | "
+            "--get-text AREA.NODE FILE | --get-to AREA.NODE FILE LOCAL | "
             "--put LOCAL AREA.NODE REMOTE | --dir AREA.NODE SPEC\n", argv[0]);
     return 2;
 }
