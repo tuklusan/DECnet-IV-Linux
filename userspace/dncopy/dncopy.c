@@ -794,6 +794,11 @@ int main(int argc, char **argv)
             return list_directory(argv[arg], argv[arg + 1], &options) ? 1 : 0;
         goto usage;
     }
+    if (!strcmp(prog, "dndel")) {
+        if (arg + 2 == argc)
+            return delete_file(argv[arg], argv[arg + 1], &options) ? 1 : 0;
+        goto usage;
+    }
     if (arg >= argc)
         goto usage;
     mode = argv[arg++];
@@ -823,6 +828,8 @@ usage:
         fprintf(stderr, "usage: dntype [-u USER] [-p PASSWORD] [-a ACCOUNT] AREA.NODE FILE\n");
     } else if (!strcmp(prog, "dndir")) {
         fprintf(stderr, "usage: dndir [-u USER] [-p PASSWORD] [-a ACCOUNT] AREA.NODE [SPEC]\n");
+    } else if (!strcmp(prog, "dndel")) {
+        fprintf(stderr, "usage: dndel [-u USER] [-p PASSWORD] [-a ACCOUNT] AREA.NODE FILE\n");
     } else {
         fprintf(stderr,
                 "usage: %s [-u USER] [-p PASSWORD] [-a ACCOUNT] "

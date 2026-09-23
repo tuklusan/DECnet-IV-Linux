@@ -372,7 +372,7 @@ if [ "$reference" = pydecnet ]; then
         exit 1
     fi
     rm -f "$dap_put_text"
-    if ! /usr/local/bin/dncopy --delete "$peer_node" UPLOAD.TXT; then
+    if ! /usr/local/bin/dndel "$peer_node" UPLOAD.TXT; then
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=dap-delete"
         exit 1
     fi
