@@ -337,35 +337,36 @@ int main(int argc, char **argv)
 {
     struct access_options options = { 0 };
     const char *mode;
-    int opt;
+    int arg = 1;
 
-    opterr = 0;
-    while ((opt = getopt(argc, argv, "u:p:a:")) != -1) {
-        switch (opt) {
-        case 'u':
-            options.user = optarg;
-            break;
-        case 'p':
-            options.password = optarg;
-            break;
-        case 'a':
-            options.account = optarg;
-            break;
-        default:
-            goto usage;
+    while (arg < argc && argv[arg][0] == '-' && argv[arg][1] &&
+           argv[arg][1] != '-') {
+        if ((!strcmp(argv[arg], "-u") || !strcmp(argv[arg], "-p") ||
+             !strcmp(argv[arg], "-a")) && arg + 1 < argc) {
+            const char *value = argv[arg + 1];
+
+            if (!strcmp(argv[arg], "-u"))
+                options.user = value;
+            else if (!strcmp(argv[arg], "-p"))
+                options.password = value;
+            else
+                options.account = value;
+            arg += 2;
+            continue;
         }
-    }
-    if (optind >= argc)
         goto usage;
-    mode = argv[optind++];
-    if (!strcmp(mode, "--selftest") && optind == argc)
+    }
+    if (arg >= argc)
+        goto usage;
+    mode = argv[arg++];
+    if (!strcmp(mode, "--selftest") && arg == argc)
         return selftest();
-    if (!strcmp(mode, "--probe") && optind + 1 == argc)
-        return connect_fal(argv[optind], &options) ? 1 : 0;
-    if (!strcmp(mode, "--get") && optind + 2 == argc)
-        return retrieve_file(argv[optind], argv[optind + 1], NULL, &options) ? 1 : 0;
-    if (!strcmp(mode, "--get-to") && optind + 3 == argc)
-        return retrieve_file(argv[optind], argv[optind + 1], argv[optind + 2],
+    if (!strcmp(mode, "--probe") && arg + 1 == argc)
+        return connect_fal(argv[arg], &options) ? 1 : 0;
+    if (!strcmp(mode, "--get") && arg + 2 == argc)
+        return retrieve_file(argv[arg], argv[arg + 1], NULL, &options) ? 1 : 0;
+    if (!strcmp(mode, "--get-to") && arg + 3 == argc)
+        return retrieve_file(argv[arg], argv[arg + 1], argv[arg + 2],
                              &options) ? 1 : 0;
 usage:
     fprintf(stderr,
