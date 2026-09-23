@@ -664,6 +664,32 @@ async def serve(api_socket: str, system: str) -> int:
         task_conn.data(b"TASK-B")
         task_conn.disconnect()
 
+        dap = await fal.listen()
+        dap_request = await dap.recv()
+        if dap_request.type != "connect":
+            raise RuntimeError(f"expected FAL submit connect, got {dap_request.type!r}")
+        await dap.accept()
+        dap_reply = await dap.recv()
+        dap_config = bytes(dap_reply)
+        if dap_reply.type != "data" or len(dap_config) != 12 or dap_config[0] != 1:
+            raise RuntimeError(f"bad submit DAP CONFIG: {dap_config!r}")
+        dap.data(dap_config)
+        attrib = await dap.recv()
+        if attrib.type != "data" or bytes(attrib) != bytes((2, 0, 0)):
+            raise RuntimeError(f"bad submit DAP ATTRIBUTES: {bytes(attrib)!r}")
+        access = await dap.recv()
+        access_bytes = bytes(access)
+        expected_name = b"JOB.COM"
+        if (
+            access.type != "data"
+            or len(access_bytes) != 5 + len(expected_name)
+            or access_bytes[:5] != bytes((3, 0, 8, 0, len(expected_name)))
+            or access_bytes[5:] != expected_name
+        ):
+            raise RuntimeError(f"bad submit DAP ACCESS: {access_bytes!r}")
+        dap.data(bytes((7, 0, 2)))
+        dap.disconnect()
+
         interactive = await listener.listen()
         await handshake(interactive)
 

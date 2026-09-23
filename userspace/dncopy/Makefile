@@ -17,16 +17,16 @@ CPPFLAGS ?= -I../../include/uapi
 CFLAGS ?= -O2 -Wall -Wextra -Werror
 
 .PHONY: all check clean
-all: dncopy dntype dndir dndel check
+all: dncopy dntype dndir dndel dnsubmit check
 
 dncopy: dncopy.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ $<
 
-dntype dndir dndel: dncopy
+dntype dndir dndel dnsubmit: dncopy
 	ln -sf dncopy $@
 
-check: dncopy dntype dndir dndel
+check: dncopy dntype dndir dndel dnsubmit
 	./dncopy --selftest
 
 clean:
-	rm -f dncopy dntype dndir dndel
+	rm -f dncopy dntype dndir dndel dnsubmit
