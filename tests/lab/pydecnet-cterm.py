@@ -157,6 +157,10 @@ async def serve(api_socket: str, system: str) -> int:
         sethost_probe.disconnect()
 
         dap = await fal.listen()
+        dap_request = await dap.recv()
+        if dap_request.type != "connect":
+            raise RuntimeError(f"expected FAL connect, got {dap_request.type!r}")
+        await dap.accept()
         dap_reply = await dap.recv()
         if dap_reply.type != "data":
             raise RuntimeError(f"expected DAP CONFIG, got {dap_reply.type!r}")

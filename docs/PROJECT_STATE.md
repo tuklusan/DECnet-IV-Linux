@@ -946,3 +946,6 @@ Exact-SHA fast acceptance for native `sethost` frontend candidate `bbf0770414455
 
 
 Repository Policy run `35801436510` rejected initial DAP/FAL candidate `d556b0216a38bfe70b5852a4501a26547d1c32f7` before acceptance dispatch because the two new `userspace/dncopy` files did not carry the repository's exact canonical license header. This follow-up adds the canonical headers and aligns the DECnet UAPI include with the existing native userspace tools; DAP behavior is unchanged. Next: exact-SHA fast acceptance, then DAP ACCESS/ATTRIBUTES/CONTROL retrieval sequencing.
+
+
+Fast acceptance for DAP/FAL header-corrected candidate `78841f57c3be51278d88ca09a01345b5c8e3d9c7` passed Repository Policy `35801571366`, Build Bootstrap `35801608048`, and Project State Gate `35801610396`; x64 PyDECnet interoperability job `106993007326` in run `35801614613` then exposed a harness sequencing defect before DAP protocol validation. The object-17 PyDECnet API listener first delivers the Session Control connect event and requires explicit acceptance; the harness incorrectly expected the first event to be DAP CONFIG, crashed, and subsequent candidate retries received connection refused. This follow-up accepts the FAL connection before reading CONFIG. Candidate DAP behavior is unchanged. Next: exact-SHA fast acceptance, then DAP ACCESS/ATTRIBUTES/CONTROL retrieval sequencing.
