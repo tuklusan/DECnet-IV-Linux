@@ -446,6 +446,16 @@ if [ "$reference" = pydecnet ]; then
         exit 1
     fi
     rm -f "$dap_block"
+    if ! task_output=$(/usr/local/bin/dntask "$peer_node::TASKTEST"); then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=dntask"
+        exit 1
+    fi
+    if [ "$task_output" != "$(printf 'TASK-A\nTASK-B')" ]; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=dntask-content"
+        printf '%s\n' "$task_output"
+        exit 1
+    fi
+    echo "DNIV-INTEROP-DNTASK-PASS session=$session scenario=$scenario node=$name peer=$peer_node object=TASKTEST"
     if ! cterm_output=$(printf '\003phase7\r' | /usr/local/sbin/dnlogin -u CTERMUSER -p CTERMPASS -a CTERMACCT "$peer_node" 2>&1); then
         printf '%s\n' "$cterm_output"
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=cterm-interactive"

@@ -146,6 +146,7 @@ async def serve(api_socket: str, system: str) -> int:
     await connector.start()
     listener = await connector.bind(42, "CTERM", system=system)
     fal = await connector.bind(17, "FAL", system=system)
+    task = await connector.bind(0, "TASKTEST", system=system)
     try:
         print("pydecnet-cterm: ready", flush=True)
         probe = await listener.listen()
@@ -654,6 +655,15 @@ async def serve(api_socket: str, system: str) -> int:
         dap.data(bytes((7, 0, 2)))
         dap.disconnect()
 
+        task_conn = await task.listen()
+        task_request = await task_conn.recv()
+        if task_request.type != "connect":
+            raise RuntimeError(f"expected TASKTEST connect, got {task_request.type!r}")
+        await task_conn.accept()
+        task_conn.data(b"TASK-A")
+        task_conn.data(b"TASK-B")
+        task_conn.disconnect()
+
         interactive = await listener.listen()
         await handshake(interactive)
 
@@ -760,6 +770,7 @@ async def serve(api_socket: str, system: str) -> int:
         print("pydecnet-cterm: pass object=42 sessions=3 interactive=1 controls=oob,input-state,write-complete,input-count,characteristics-set-read,clear-input,unread", flush=True)
         return 0
     finally:
+        task.close()
         fal.close()
         listener.close()
         await connector.close()
