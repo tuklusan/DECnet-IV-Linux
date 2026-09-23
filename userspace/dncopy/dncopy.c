@@ -40,6 +40,7 @@
 #define DAP_STATUS 9U
 #define DAP_NAME 15U
 #define DAP_STATUS_EOF 0x4027U
+#define DAP_RFM_FIX 1U
 #define DAP_RFM_VAR 2U
 #define DAP_RFM_STM 4U
 #define DAP_RFM_SCR 6U
@@ -250,19 +251,54 @@ static void report_status(const char *where, const unsigned char *buf, size_t le
             where, mac, dap_status_class_name(mac), mic, raw);
 }
 
+static int decode_ex(const unsigned char *buf, size_t len, size_t *pos,
+                     unsigned int max_bytes, uint64_t *value)
+{
+    uint64_t result = 0U;
+    unsigned int i;
+
+    for (i = 0U; i < max_bytes; i++) {
+        unsigned char byte;
+
+        if (*pos >= len)
+            return -1;
+        byte = buf[(*pos)++];
+        result |= (uint64_t)(byte & 0x7fU) << (7U * i);
+        if (!(byte & 0x80U)) {
+            *value = result;
+            return 0;
+        }
+    }
+    return -1;
+}
+
 static int parse_rfm(const unsigned char *buf, size_t len,
                      unsigned char *rfm)
 {
-    *rfm = 0U;
-    if (len < 3U || buf[0] != DAP_ATTRIBUTES)
+    uint64_t menu;
+    uint64_t ignored;
+    size_t pos = 2U;
+
+    *rfm = DAP_RFM_FIX;
+    if (len < 3U || buf[0] != DAP_ATTRIBUTES ||
+        decode_ex(buf, len, &pos, 6U, &menu))
         return -1;
-    if (buf[2] == 0U)
-        return len == 3U ? 0 : -1;
-    if (buf[2] == 4U && len == 4U) {
-        *rfm = buf[3];
-        return 0;
+    if (!menu)
+        return pos == len ? 0 : -1;
+    if ((menu & 0x01U) &&
+        decode_ex(buf, len, &pos, 2U, &ignored))
+        return -1;
+    if (menu & 0x02U) {
+        if (pos >= len)
+            return -1;
+        pos++; /* ORG */
     }
-    return -1;
+    if (menu & 0x04U) {
+        if (pos >= len)
+            return -1;
+        *rfm = buf[pos];
+    }
+    return 0;
 }
 
 static int write_text_payload(FILE *out, const unsigned char *data, size_t len,
@@ -630,6 +666,14 @@ static int selftest(void)
 {
     unsigned char config[32];
     const unsigned char eof_status[] = { DAP_STATUS, 0U, 0x27U, 0x40U };
+    const unsigned char attr_rfm[] = { DAP_ATTRIBUTES, 0U, 0x04U, DAP_RFM_VAR };
+    const unsigned char attr_rich[] = {
+        DAP_ATTRIBUTES, 0U, 0x87U, 0x01U, 0x01U, 0x00U, DAP_RFM_STM, 0x20U
+    };
+    const unsigned char attr_default[] = { DAP_ATTRIBUTES, 0U, 0x00U };
+    const unsigned char attr_bad_menu[] = {
+        DAP_ATTRIBUTES, 0U, 0x80U, 0x80U, 0x80U, 0x80U, 0x80U, 0x80U
+    };
     uint16_t addr;
     uint16_t status;
     unsigned int mac;
@@ -649,6 +693,18 @@ static int selftest(void)
         strcmp(dap_status_class_name(4U), "open error") ||
         strcmp(dap_status_class_name(15U), "unknown"))
         return 1;
+    {
+        unsigned char rfm;
+
+        if (parse_rfm(attr_rfm, sizeof(attr_rfm), &rfm) ||
+            rfm != DAP_RFM_VAR ||
+            parse_rfm(attr_rich, sizeof(attr_rich), &rfm) ||
+            rfm != DAP_RFM_STM ||
+            parse_rfm(attr_default, sizeof(attr_default), &rfm) ||
+            rfm != DAP_RFM_FIX ||
+            !parse_rfm(attr_bad_menu, sizeof(attr_bad_menu), &rfm))
+            return 1;
+    }
     puts("dncopy DAP selftest passed");
     return 0;
 }
