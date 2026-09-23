@@ -12,7 +12,9 @@
 // patent, trademark, and governing-law provisions.
 // ============================================================================
 
+#include <dirent.h>
 #include <errno.h>
+#include <fnmatch.h>
 #include <linux/dn.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -35,6 +37,8 @@
 #define DAP_RFM_FIX 1U
 #define DAP_ACCESS_OPEN 1U
 #define DAP_ACCESS_CREATE 2U
+#define DAP_ACCESS_ERASE 4U
+#define DAP_ACCESS_DIRECTORY 6U
 #define DAP_CONTROL_GET 1U
 #define DAP_CONTROL_CONNECT 2U
 #define DAP_CONTROL_PUT 4U
@@ -295,6 +299,100 @@ fail:
     return -1;
 }
 
+static int safe_pattern(const unsigned char *text, size_t len,
+                        char *out, size_t cap)
+{
+    size_t i;
+
+    if (len >= cap)
+        return -1;
+    if (!len) {
+        strcpy(out, "*");
+        return 0;
+    }
+    for (i = 0; i < len; i++) {
+        unsigned char c = text[i];
+
+        if (c == '/' || c == '\\' || c == ':' || c == '[' || c == ']' ||
+            c == ';' || c == '?' || c < 0x20U)
+            return -1;
+    }
+    if (memmem(text, len, "..", 2U))
+        return -1;
+    memcpy(out, text, len);
+    out[len] = '\0';
+    if (!strcmp(out, "*.*"))
+        strcpy(out, "*");
+    return 0;
+}
+
+static int serve_directory(int fd, const char *root,
+                           const unsigned char *access, size_t access_len)
+{
+    unsigned char msg[512];
+    char pattern[256];
+    DIR *dir;
+    struct dirent *ent;
+    size_t n;
+
+    if (access_len < 5U || access[0] != DAP_ACCESS ||
+        access[2] != DAP_ACCESS_DIRECTORY)
+        return -1;
+    n = access[4];
+    if (access_len != n + 5U ||
+        safe_pattern(access + 5U, n, pattern, sizeof(pattern)))
+        return -1;
+    dir = opendir(root);
+    if (!dir)
+        return -1;
+    while ((ent = readdir(dir)) != NULL) {
+        size_t len;
+
+        if (!strcmp(ent->d_name, ".") || !strcmp(ent->d_name, "..") ||
+            ent->d_name[0] == '.' || fnmatch(pattern, ent->d_name, 0))
+            continue;
+        len = strlen(ent->d_name);
+        if (len > 127U || len + 4U > sizeof(msg)) {
+            closedir(dir);
+            return -1;
+        }
+        msg[0] = 15U;
+        msg[1] = 0U;
+        msg[2] = 1U;
+        msg[3] = (unsigned char)len;
+        memcpy(msg + 4U, ent->d_name, len);
+        if (send_record(fd, msg, len + 4U)) {
+            closedir(dir);
+            return -1;
+        }
+    }
+    closedir(dir);
+    {
+        const unsigned char complete[] = {
+            DAP_ACCESS_COMPLETE, 0U, DAP_ACCOMP_RESPONSE
+        };
+        return send_record(fd, complete, sizeof(complete));
+    }
+}
+
+static int serve_erase(int fd, const char *root,
+                       const unsigned char *access, size_t access_len)
+{
+    char path[1024];
+
+    if (make_path(root, access, access_len, DAP_ACCESS_ERASE,
+                  path, sizeof(path)))
+        return -1;
+    if (unlink(path))
+        return -1;
+    {
+        const unsigned char complete[] = {
+            DAP_ACCESS_COMPLETE, 0U, DAP_ACCOMP_RESPONSE
+        };
+        return send_record(fd, complete, sizeof(complete));
+    }
+}
+
 static int serve_session(int fd, const char *root)
 {
     struct timeval timeout = { .tv_sec = 30, .tv_usec = 0 };
@@ -329,6 +427,10 @@ static int serve_session(int fd, const char *root)
         return serve_get(fd, root, request, (size_t)got);
     if (request[2] == DAP_ACCESS_CREATE)
         return serve_create(fd, root, request, (size_t)got);
+    if (request[2] == DAP_ACCESS_DIRECTORY)
+        return serve_directory(fd, root, request, (size_t)got);
+    if (request[2] == DAP_ACCESS_ERASE)
+        return serve_erase(fd, root, request, (size_t)got);
     return -1;
 }
 
@@ -336,6 +438,7 @@ static int selftest(void)
 {
     unsigned char config[16];
     char name[32];
+    char pattern[32];
 
     if (make_config(config, sizeof(config)) != 12U ||
         validate_config(config, 12U) ||
@@ -347,7 +450,12 @@ static int selftest(void)
         safe_filespec((const unsigned char *)"SERVER.TXT", 10U,
                       name, sizeof(name)) || strcmp(name, "SERVER.TXT") ||
         !safe_filespec((const unsigned char *)"../BAD", 6U,
-                       name, sizeof(name)))
+                       name, sizeof(name)) ||
+        safe_pattern((const unsigned char *)"*.TXT", 5U,
+                     pattern, sizeof(pattern)) ||
+        strcmp(pattern, "*.TXT") ||
+        !safe_pattern((const unsigned char *)"../*", 4U,
+                      pattern, sizeof(pattern)))
         return 1;
     puts("dnfald selftest passed");
     return 0;

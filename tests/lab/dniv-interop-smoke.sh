@@ -586,7 +586,7 @@ if [ "$reference" = pydecnet ]; then
     rm -rf "$fal_root"
     mkdir -p "$fal_root"
     printf 'SERVER-FAL\n' >"$fal_root/SERVER.TXT"
-    /usr/local/sbin/dnfald --root "$fal_root" --sessions 2 &
+    /usr/local/sbin/dnfald --root "$fal_root" --sessions 4 &
     fal_pid=$!
     sleep 1
     if ! kill -0 "$fal_pid" 2>/dev/null; then
@@ -598,13 +598,13 @@ if [ "$reference" = pydecnet ]; then
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=fal-config-session"
         exit 1
     fi
-    if [ "$(od -An -tx1 -v "$fal_root/UPLOAD.BIN" | tr -d ' \n')" != "5055542d4100010203" ]; then
-        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=fal-put-content"
+    if [ -e "$fal_root/UPLOAD.BIN" ]; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=fal-erase-content"
         rm -rf "$fal_root"
         exit 1
     fi
     rm -rf "$fal_root"
-    echo "DNIV-INTEROP-FAL-PASS session=$session scenario=$scenario node=$name peer=$peer_node operations=get,put"
+    echo "DNIV-INTEROP-FAL-PASS session=$session scenario=$scenario node=$name peer=$peer_node operations=get,put,dir,erase"
     if ! /usr/local/sbin/dnmrr "$peer_node"; then
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=nsp-mirror"
         exit 1
