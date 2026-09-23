@@ -421,7 +421,14 @@ if [ "$reference" = pydecnet ]; then
         exit 1
     fi
     rm -f "$dap_copy_local"
-    dap_block="/tmp/dniv-dap-block.$$"
+    printf 'META-A\nMETA-B\n' >"$dap_copy_local"
+    if ! /usr/local/bin/dncopy -r vfc -c prn "$dap_copy_local" "$peer_node::METADATA.TXT"; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=dncopy-metadata-put"
+        rm -f "$dap_copy_local"
+        exit 1
+    fi
+    rm -f "$dap_copy_local"
+    dap_block="/tmp/dniv-dap-block.$"
     rm -f "$dap_block"
     if ! /usr/local/bin/dncopy -m block "$peer_node::BLOCK.BIN" "$dap_block"; then
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=dncopy-block-get"

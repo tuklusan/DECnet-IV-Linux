@@ -42,8 +42,15 @@
 #define DAP_STATUS_EOF 0x4027U
 #define DAP_RFM_FIX 1U
 #define DAP_RFM_VAR 2U
+#define DAP_RFM_VFC 3U
 #define DAP_RFM_STM 4U
+#define DAP_RFM_STMLF 5U
 #define DAP_RFM_SCR 6U
+
+#define DAP_RAT_NONE 0U
+#define DAP_RAT_FTN 0x01U
+#define DAP_RAT_CR 0x02U
+#define DAP_RAT_PRN 0x04U
 
 struct access_options {
     const char *user;
@@ -388,6 +395,63 @@ static int parse_rfm(const unsigned char *buf, size_t len,
     return 0;
 }
 
+static int parse_store_rfm(const char *text, unsigned char *rfm)
+{
+    if (!strcmp(text, "fix"))
+        *rfm = DAP_RFM_FIX;
+    else if (!strcmp(text, "var"))
+        *rfm = DAP_RFM_VAR;
+    else if (!strcmp(text, "vfc"))
+        *rfm = DAP_RFM_VFC;
+    else if (!strcmp(text, "stm"))
+        *rfm = DAP_RFM_STM;
+    else if (!strcmp(text, "stmlf"))
+        *rfm = DAP_RFM_STMLF;
+    else if (!strcmp(text, "stmcr"))
+        *rfm = DAP_RFM_SCR;
+    else
+        return -1;
+    return 0;
+}
+
+static int parse_store_rat(const char *text, unsigned char *rat)
+{
+    if (!strcmp(text, "none"))
+        *rat = DAP_RAT_NONE;
+    else if (!strcmp(text, "ftn"))
+        *rat = DAP_RAT_FTN;
+    else if (!strcmp(text, "cr"))
+        *rat = DAP_RAT_CR;
+    else if (!strcmp(text, "prn"))
+        *rat = DAP_RAT_PRN;
+    else
+        return -1;
+    return 0;
+}
+
+static size_t make_store_attributes(unsigned char *buf, size_t cap,
+                                    int include_metadata,
+                                    unsigned char rfm, unsigned char rat)
+{
+    if (cap < 3U)
+        return 0U;
+    buf[0] = DAP_ATTRIBUTES;
+    buf[1] = 0U;
+    if (!include_metadata) {
+        buf[2] = 0U;
+        return 3U;
+    }
+    if (cap < 7U || rfm < DAP_RFM_FIX || rfm > DAP_RFM_SCR ||
+        rat > (DAP_RAT_FTN | DAP_RAT_CR | DAP_RAT_PRN))
+        return 0U;
+    buf[2] = 0x0fU; /* DATATYPE, ORG, RFM, RAT */
+    buf[3] = 0x01U; /* ASCII */
+    buf[4] = 0U;    /* sequential organization */
+    buf[5] = rfm;
+    buf[6] = rat;
+    return 7U;
+}
+
 static int write_text_payload(FILE *out, const unsigned char *data, size_t len,
                               unsigned char rfm)
 {
@@ -538,6 +602,8 @@ fail:
 
 static int store_file(const char *local_path, const char *node_text,
                       const char *filespec, int text_mode,
+                      unsigned char store_rfm, unsigned char store_rat,
+                      int metadata_override,
                       const struct access_options *options)
 {
     unsigned char msg[2048], reply[512], data[1024];
@@ -566,19 +632,12 @@ static int store_file(const char *local_path, const char *node_text,
     if (exchange_config(fd))
         goto fail;
 
-    msg[0] = DAP_ATTRIBUTES;
-    msg[1] = 0U;
-    if (text_mode) {
-        msg[2] = 0x0fU; /* DATATYPE, ORG, RFM, RAT */
-        msg[3] = 0x01U; /* ASCII */
-        msg[4] = 0U;    /* sequential organization */
-        msg[5] = DAP_RFM_VAR;
-        msg[6] = 0x02U; /* implied carriage return */
-        if (send_record(fd, msg, 7U))
-            goto fail;
-    } else {
-        msg[2] = 0U;
-        if (send_record(fd, msg, 3U))
+    {
+        size_t attr_len = make_store_attributes(msg, sizeof(msg),
+                                                text_mode || metadata_override,
+                                                store_rfm, store_rat);
+
+        if (!attr_len || send_record(fd, msg, attr_len))
             goto fail;
     }
 
@@ -810,6 +869,10 @@ static int selftest(void)
     const unsigned char attr_bad_menu[] = {
         DAP_ATTRIBUTES, 0U, 0x80U, 0x80U, 0x80U, 0x80U, 0x80U, 0x80U
     };
+    unsigned char attr[16];
+    unsigned char parsed_rfm;
+    unsigned char parsed_rat;
+    size_t attr_len;
     uint16_t addr;
     uint16_t status;
     unsigned int mac;
@@ -843,6 +906,24 @@ static int selftest(void)
             !parse_rfm(attr_bad_menu, sizeof(attr_bad_menu), &rfm))
             return 1;
     }
+    if (parse_store_rfm("vfc", &parsed_rfm) || parsed_rfm != DAP_RFM_VFC ||
+        parse_store_rfm("stmlf", &parsed_rfm) || parsed_rfm != DAP_RFM_STMLF ||
+        !parse_store_rfm("bogus", &parsed_rfm) ||
+        parse_store_rat("none", &parsed_rat) || parsed_rat != DAP_RAT_NONE ||
+        parse_store_rat("prn", &parsed_rat) || parsed_rat != DAP_RAT_PRN ||
+        !parse_store_rat("bogus", &parsed_rat))
+        return 1;
+    attr_len = make_store_attributes(attr, sizeof(attr), 1,
+                                     DAP_RFM_VFC, DAP_RAT_PRN);
+    if (attr_len != 7U || memcmp(attr,
+            (const unsigned char[]){ DAP_ATTRIBUTES, 0U, 0x0fU, 0x01U,
+                                     0U, DAP_RFM_VFC, DAP_RAT_PRN }, 7U))
+        return 1;
+    attr_len = make_store_attributes(attr, sizeof(attr), 0,
+                                     DAP_RFM_VAR, DAP_RAT_CR);
+    if (attr_len != 3U || memcmp(attr,
+            (const unsigned char[]){ DAP_ATTRIBUTES, 0U, 0U }, 3U))
+        return 1;
     if (parse_transparent_spec(
             "31.70\"USER PASS ACCT\"::[DIR]FILE.TXT", &remote,
             &parsed_options) ||
@@ -868,6 +949,9 @@ int main(int argc, char **argv)
     const char *mode;
     const char *prog;
     struct remote_spec remote;
+    unsigned char store_rfm = DAP_RFM_VAR;
+    unsigned char store_rat = DAP_RAT_CR;
+    int metadata_override = 0;
     int text_mode = 1;
     int arg = 1;
 
@@ -898,6 +982,20 @@ int main(int argc, char **argv)
                 text_mode = 0;
             else
                 goto usage;
+            arg += 2;
+            continue;
+        }
+        if (!strcmp(argv[arg], "-r") && arg + 1 < argc) {
+            if (parse_store_rfm(argv[arg + 1], &store_rfm))
+                goto usage;
+            metadata_override = 1;
+            arg += 2;
+            continue;
+        }
+        if (!strcmp(argv[arg], "-c") && arg + 1 < argc) {
+            if (parse_store_rat(argv[arg + 1], &store_rat))
+                goto usage;
+            metadata_override = 1;
             arg += 2;
             continue;
         }
@@ -959,6 +1057,7 @@ int main(int argc, char **argv)
             !remote.file[0])
             goto usage;
         return store_file(argv[arg], remote.node, remote.file, text_mode,
+                          store_rfm, store_rat, metadata_override,
                           &options) ? 1 : 0;
     }
     if (arg >= argc)
@@ -977,9 +1076,11 @@ int main(int argc, char **argv)
                              &options) ? 1 : 0;
     if (!strcmp(mode, "--put") && arg + 3 == argc)
         return store_file(argv[arg], argv[arg + 1], argv[arg + 2], 0,
+                          store_rfm, store_rat, metadata_override,
                           &options) ? 1 : 0;
     if (!strcmp(mode, "--put-text") && arg + 3 == argc)
         return store_file(argv[arg], argv[arg + 1], argv[arg + 2], 1,
+                          store_rfm, store_rat, metadata_override,
                           &options) ? 1 : 0;
     if (!strcmp(mode, "--dir") && arg + 2 == argc)
         return list_directory(argv[arg], argv[arg + 1], &options) ? 1 : 0;
@@ -995,6 +1096,7 @@ usage:
     } else {
         fprintf(stderr,
                 "usage: %s [-u USER] [-p PASSWORD] [-a ACCOUNT] [-m record|block] "
+                "[-r fix|var|vfc|stm|stmlf|stmcr] [-c none|ftn|cr|prn] "
                 "--selftest | --probe AREA.NODE | --get AREA.NODE FILE | "
                 "--get-text AREA.NODE FILE | --get-to AREA.NODE FILE LOCAL | "
                 "--put LOCAL AREA.NODE REMOTE | --put-text LOCAL AREA.NODE REMOTE | "
