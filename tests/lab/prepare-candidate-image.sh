@@ -118,6 +118,9 @@ install -m 0755 /usr/src/decnet-iv-linux/userspace/dnhttpd/dnhttpd /usr/local/sb
 make -C /usr/src/decnet-iv-linux/userspace/dnphone clean all
 install -m 0755 /usr/src/decnet-iv-linux/userspace/dnphone/dnphoned /usr/local/sbin/dnphoned
 install -m 0755 /usr/src/decnet-iv-linux/userspace/dnphone/phone /usr/local/bin/phone
+make -C /usr/src/decnet-iv-linux/userspace/dnmail clean all
+install -m 0755 /usr/src/decnet-iv-linux/userspace/dnmail/dnmail /usr/local/bin/dnmail
+install -m 0755 /usr/src/decnet-iv-linux/userspace/dnmail/dnmaild /usr/local/sbin/dnmaild
 cc -O2 -std=c11 -Wall -Wextra -Werror \
     -o /usr/local/sbin/dnraw /usr/src/decnet-iv-linux/tests/lab/dnraw.c
 cc -I/usr/src/decnet-iv-linux/include/uapi -O2 -std=c11 -Wall -Wextra -Werror \

@@ -638,6 +638,34 @@ if [ "$reference" = pydecnet ]; then
         exit 1
     fi
     echo "DNIV-INTEROP-PHONE-PASS session=$session scenario=$scenario node=$name peer=$peer_node"
+    mail_root="/tmp/dniv-mail-root.$"
+    rm -rf "$mail_root"
+    mkdir -p "$mail_root"
+    /usr/local/sbin/dnmaild --once --root "$mail_root" &
+    mail_pid=$!
+    sleep 1
+    if ! kill -0 "$mail_pid" 2>/dev/null; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=mail-listener-start"
+        rm -rf "$mail_root"
+        exit 1
+    fi
+    echo "DNIV-INTEROP-MAIL-READY session=$session scenario=$scenario node=$name peer=$peer_node"
+    if ! wait "$mail_pid"; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=mail-session"
+        rm -rf "$mail_root"
+        exit 1
+    fi
+    if ! grep -Fq 'From: PYDECNET' "$mail_root/mailbox.log" ||
+       ! grep -Fq 'To: TEST' "$mail_root/mailbox.log" ||
+       ! grep -Fq 'Subject: MAIL-11-PROOF' "$mail_root/mailbox.log" ||
+       ! grep -Fq 'BODY-ONE' "$mail_root/mailbox.log" ||
+       ! grep -Fq 'BODY-TWO' "$mail_root/mailbox.log"; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=mail-spool-content"
+        rm -rf "$mail_root"
+        exit 1
+    fi
+    rm -rf "$mail_root"
+    echo "DNIV-INTEROP-MAIL-PASS session=$session scenario=$scenario node=$name peer=$peer_node"
     if ! /usr/local/sbin/dnmrr "$peer_node"; then
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=nsp-mirror"
         exit 1
