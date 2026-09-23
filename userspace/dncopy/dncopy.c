@@ -328,8 +328,6 @@ static void report_status(const char *where, const unsigned char *buf, size_t le
     uint16_t raw;
     unsigned int mac;
     unsigned int mic;
-    struct remote_spec remote;
-    struct access_options parsed_options = { 0 };
 
     if (decode_status(buf, len, &raw, &mac, &mic)) {
         fprintf(stderr, "dncopy: malformed DAP %s STATUS\n", where);
@@ -812,6 +810,8 @@ static int selftest(void)
     uint16_t status;
     unsigned int mac;
     unsigned int mic;
+    struct remote_spec remote;
+    struct access_options parsed_options = { 0 };
 
     if (parse_node("31.70", &addr) || addr != (uint16_t)((31U << 10) | 70U))
         return 1;
