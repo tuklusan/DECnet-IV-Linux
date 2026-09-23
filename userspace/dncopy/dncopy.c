@@ -417,8 +417,14 @@ static int store_file(const char *local_path, const char *node_text,
         goto fail;
 
     got = recv_message(fd, reply, sizeof(reply), DAP_ATTRIBUTES);
-    if (got < 3 || reply[2] != 0U)
+    if (got < 3) {
         goto fail;
+    } else {
+        unsigned char remote_rfm;
+
+        if (parse_rfm(reply, (size_t)got, &remote_rfm))
+            goto fail;
+    }
     if (recv_message(fd, reply, sizeof(reply), DAP_ACK) != 2)
         goto fail;
 
