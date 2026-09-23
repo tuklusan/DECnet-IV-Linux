@@ -51,6 +51,14 @@ struct access_options {
     const char *account;
 };
 
+struct remote_spec {
+    char node[16];
+    char file[256];
+    char user[64];
+    char password[64];
+    char account[64];
+};
+
 static int set_access_field(unsigned char *dst, size_t cap, __u8 *len,
                             const char *text)
 {
@@ -81,6 +89,85 @@ static int parse_node(const char *s, uint16_t *addr)
         return -1;
     *addr = (uint16_t)((area << 10) | node);
     return 0;
+}
+
+static int copy_span(char *dst, size_t cap, const char *start,
+                     const char *end)
+{
+    size_t n;
+
+    if (end < start)
+        return -1;
+    n = (size_t)(end - start);
+    if (!n || n >= cap)
+        return -1;
+    memcpy(dst, start, n);
+    dst[n] = '\0';
+    return 0;
+}
+
+static int parse_transparent_spec(const char *text, struct remote_spec *spec,
+                                  struct access_options *options)
+{
+    const char *sep = strstr(text, "::");
+    const char *quote;
+    uint16_t addr;
+
+    memset(spec, 0, sizeof(*spec));
+    if (!sep || strstr(sep + 2, "::"))
+        return -1;
+    quote = memchr(text, '"', (size_t)(sep - text));
+    if (quote) {
+        const char *close = memchr(quote + 1, '"', (size_t)(sep - quote - 1));
+        char creds[192];
+        char *save = NULL;
+        char *part;
+        unsigned int field = 0U;
+        size_t n;
+
+        if (!close || close != sep - 1 ||
+            copy_span(spec->node, sizeof(spec->node), text, quote))
+            return -1;
+        n = (size_t)(close - quote - 1);
+        if (n >= sizeof(creds))
+            return -1;
+        memcpy(creds, quote + 1, n);
+        creds[n] = '\0';
+        for (part = strtok_r(creds, " ", &save); part;
+             part = strtok_r(NULL, " ", &save)) {
+            char *dst;
+            size_t cap;
+
+            if (field == 0U) {
+                dst = spec->user;
+                cap = sizeof(spec->user);
+            } else if (field == 1U) {
+                dst = spec->password;
+                cap = sizeof(spec->password);
+            } else if (field == 2U) {
+                dst = spec->account;
+                cap = sizeof(spec->account);
+            } else {
+                return -1;
+            }
+            if (strlen(part) >= cap)
+                return -1;
+            strcpy(dst, part);
+            field++;
+        }
+        if (!options->user && spec->user[0])
+            options->user = spec->user;
+        if (!options->password && spec->password[0])
+            options->password = spec->password;
+        if (!options->account && spec->account[0])
+            options->account = spec->account;
+    } else if (copy_span(spec->node, sizeof(spec->node), text, sep)) {
+        return -1;
+    }
+    if (strlen(sep + 2) >= sizeof(spec->file))
+        return -1;
+    strcpy(spec->file, sep + 2);
+    return parse_node(spec->node, &addr);
 }
 
 static size_t make_config(unsigned char *buf, size_t cap)
@@ -241,6 +328,8 @@ static void report_status(const char *where, const unsigned char *buf, size_t le
     uint16_t raw;
     unsigned int mac;
     unsigned int mic;
+    struct remote_spec remote;
+    struct access_options parsed_options = { 0 };
 
     if (decode_status(buf, len, &raw, &mac, &mic)) {
         fprintf(stderr, "dncopy: malformed DAP %s STATUS\n", where);
@@ -750,6 +839,21 @@ static int selftest(void)
             !parse_rfm(attr_bad_menu, sizeof(attr_bad_menu), &rfm))
             return 1;
     }
+    if (parse_transparent_spec(
+            "31.70\"USER PASS ACCT\"::[DIR]FILE.TXT", &remote,
+            &parsed_options) ||
+        strcmp(remote.node, "31.70") ||
+        strcmp(remote.file, "[DIR]FILE.TXT") ||
+        !parsed_options.user || strcmp(parsed_options.user, "USER") ||
+        !parsed_options.password || strcmp(parsed_options.password, "PASS") ||
+        !parsed_options.account || strcmp(parsed_options.account, "ACCT"))
+        return 1;
+    parsed_options.user = parsed_options.password = parsed_options.account = NULL;
+    if (parse_transparent_spec("31.70::", &remote, &parsed_options) ||
+        strcmp(remote.node, "31.70") || remote.file[0] ||
+        !parse_transparent_spec("31.70\"TOO MANY FIELDS HERE\"::X",
+                                &remote, &parsed_options))
+        return 1;
     puts("dncopy DAP selftest passed");
     return 0;
 }
@@ -759,6 +863,7 @@ int main(int argc, char **argv)
     struct access_options options = { 0 };
     const char *mode;
     const char *prog;
+    struct remote_spec remote;
     int arg = 1;
 
     prog = strrchr(argv[0], '/');
@@ -782,12 +887,26 @@ int main(int argc, char **argv)
         goto usage;
     }
     if (!strcmp(prog, "dntype")) {
+        if (arg + 1 == argc && strstr(argv[arg], "::")) {
+            if (parse_transparent_spec(argv[arg], &remote, &options) ||
+                !remote.file[0])
+                goto usage;
+            return retrieve_file(remote.node, remote.file, NULL, 1,
+                                 &options) ? 1 : 0;
+        }
         if (arg + 2 == argc)
             return retrieve_file(argv[arg], argv[arg + 1], NULL, 1,
                                  &options) ? 1 : 0;
         goto usage;
     }
     if (!strcmp(prog, "dndir")) {
+        if (arg + 1 == argc && strstr(argv[arg], "::")) {
+            if (parse_transparent_spec(argv[arg], &remote, &options))
+                goto usage;
+            return list_directory(remote.node,
+                                  remote.file[0] ? remote.file : "*.*;*",
+                                  &options) ? 1 : 0;
+        }
         if (arg + 1 == argc)
             return list_directory(argv[arg], "*.*;*", &options) ? 1 : 0;
         if (arg + 2 == argc)
@@ -795,6 +914,12 @@ int main(int argc, char **argv)
         goto usage;
     }
     if (!strcmp(prog, "dndel")) {
+        if (arg + 1 == argc && strstr(argv[arg], "::")) {
+            if (parse_transparent_spec(argv[arg], &remote, &options) ||
+                !remote.file[0])
+                goto usage;
+            return delete_file(remote.node, remote.file, &options) ? 1 : 0;
+        }
         if (arg + 2 == argc)
             return delete_file(argv[arg], argv[arg + 1], &options) ? 1 : 0;
         goto usage;
@@ -825,11 +950,11 @@ int main(int argc, char **argv)
         return delete_file(argv[arg], argv[arg + 1], &options) ? 1 : 0;
 usage:
     if (!strcmp(prog, "dntype")) {
-        fprintf(stderr, "usage: dntype [-u USER] [-p PASSWORD] [-a ACCOUNT] AREA.NODE FILE\n");
+        fprintf(stderr, "usage: dntype [-u USER] [-p PASSWORD] [-a ACCOUNT] AREA.NODE FILE | 'AREA.NODE[\"USER PASS ACCOUNT\"]::FILE'\n");
     } else if (!strcmp(prog, "dndir")) {
-        fprintf(stderr, "usage: dndir [-u USER] [-p PASSWORD] [-a ACCOUNT] AREA.NODE [SPEC]\n");
+        fprintf(stderr, "usage: dndir [-u USER] [-p PASSWORD] [-a ACCOUNT] AREA.NODE [SPEC] | 'AREA.NODE[\"USER PASS ACCOUNT\"]::[SPEC]'\n");
     } else if (!strcmp(prog, "dndel")) {
-        fprintf(stderr, "usage: dndel [-u USER] [-p PASSWORD] [-a ACCOUNT] AREA.NODE FILE\n");
+        fprintf(stderr, "usage: dndel [-u USER] [-p PASSWORD] [-a ACCOUNT] AREA.NODE FILE | 'AREA.NODE[\"USER PASS ACCOUNT\"]::FILE'\n");
     } else {
         fprintf(stderr,
                 "usage: %s [-u USER] [-p PASSWORD] [-a ACCOUNT] "

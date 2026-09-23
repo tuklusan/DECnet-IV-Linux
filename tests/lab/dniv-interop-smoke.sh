@@ -372,7 +372,7 @@ if [ "$reference" = pydecnet ]; then
         exit 1
     fi
     rm -f "$dap_put_text"
-    if ! /usr/local/bin/dndel "$peer_node" UPLOAD.TXT; then
+    if ! /usr/local/bin/dndel "$peer_node::UPLOAD.TXT"; then
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=dap-delete"
         exit 1
     fi
@@ -385,7 +385,7 @@ if [ "$reference" = pydecnet ]; then
         printf '%s\n' "$dap_dir_output"
         exit 1
     fi
-    if ! dap_type_output=$(/usr/local/bin/dntype "$peer_node" PHASE7.TXT); then
+    if ! dap_type_output=$(/usr/local/bin/dntype "$peer_node::PHASE7.TXT"); then
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=dntype"
         exit 1
     fi
@@ -394,7 +394,7 @@ if [ "$reference" = pydecnet ]; then
         printf '%s\n' "$dap_type_output"
         exit 1
     fi
-    if ! dap_dndir_output=$(/usr/local/bin/dndir "$peer_node" '*.TXT'); then
+    if ! dap_dndir_output=$(/usr/local/bin/dndir "$peer_node::*.TXT"); then
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=dndir"
         exit 1
     fi
