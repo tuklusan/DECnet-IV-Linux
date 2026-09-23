@@ -203,6 +203,53 @@ static int recv_message(int fd, unsigned char *buf, size_t cap, unsigned char ty
     return (int)got;
 }
 
+static const char *dap_status_class_name(unsigned int mac)
+{
+    switch (mac) {
+    case 0U: return "pending";
+    case 1U: return "success";
+    case 2U: return "unsupported";
+    case 4U: return "open error";
+    case 5U: return "transfer error";
+    case 6U: return "transfer warning";
+    case 7U: return "close error";
+    case 8U: return "message format error";
+    case 9U: return "invalid field";
+    case 10U: return "out of sync";
+    default: return "unknown";
+    }
+}
+
+static int decode_status(const unsigned char *buf, size_t len,
+                         uint16_t *raw, unsigned int *mac,
+                         unsigned int *mic)
+{
+    uint16_t value;
+
+    if (len < 4U || buf[0] != DAP_STATUS)
+        return -1;
+    value = (uint16_t)buf[2] | ((uint16_t)buf[3] << 8);
+    *raw = value;
+    *mic = value & 0x0fffU;
+    *mac = (value >> 12) & 0x0fU;
+    return 0;
+}
+
+static void report_status(const char *where, const unsigned char *buf, size_t len)
+{
+    uint16_t raw;
+    unsigned int mac;
+    unsigned int mic;
+
+    if (decode_status(buf, len, &raw, &mac, &mic)) {
+        fprintf(stderr, "dncopy: malformed DAP %s STATUS\n", where);
+        return;
+    }
+    fprintf(stderr,
+            "dncopy: DAP %s status mac=%u (%s) mic=0x%03x raw=0x%04x\n",
+            where, mac, dap_status_class_name(mac), mic, raw);
+}
+
 static int parse_rfm(const unsigned char *buf, size_t len,
                      unsigned char *rfm)
 {
@@ -328,12 +375,13 @@ static int retrieve_file(const char *node_text, const char *filespec,
         }
         if (reply[0] == DAP_STATUS) {
             uint16_t status;
+            unsigned int mac;
+            unsigned int mic;
 
-            if (got < 4)
+            if (decode_status(reply, (size_t)got, &status, &mac, &mic))
                 goto fail;
-            status = (uint16_t)reply[2] | ((uint16_t)reply[3] << 8);
             if (status != DAP_STATUS_EOF) {
-                fprintf(stderr, "dncopy: DAP status 0x%04x\n", status);
+                report_status("retrieval", reply, (size_t)got);
                 goto fail;
             }
             break;
@@ -562,12 +610,7 @@ static int list_directory(const char *node_text, const char *filespec,
             reply[0] == 14U)
             continue;
         if (reply[0] == DAP_STATUS) {
-            uint16_t status;
-
-            if (got < 4)
-                goto fail;
-            status = (uint16_t)reply[2] | ((uint16_t)reply[3] << 8);
-            fprintf(stderr, "dncopy: DAP directory status 0x%04x\n", status);
+            report_status("directory", reply, (size_t)got);
             goto fail;
         }
         goto fail;
@@ -586,7 +629,11 @@ fail:
 static int selftest(void)
 {
     unsigned char config[32];
+    const unsigned char eof_status[] = { DAP_STATUS, 0U, 0x27U, 0x40U };
     uint16_t addr;
+    uint16_t status;
+    unsigned int mac;
+    unsigned int mic;
 
     if (parse_node("31.70", &addr) || addr != (uint16_t)((31U << 10) | 70U))
         return 1;
@@ -596,7 +643,11 @@ static int selftest(void)
         config[0] != DAP_CONFIG || config[2] != 0 || config[3] != 4 ||
         config[6] != 4 || config[7] != 1 || validate_config(config, 12U))
         return 1;
-    if (DAP_STATUS_EOF != 0x4027U)
+    if (DAP_STATUS_EOF != 0x4027U ||
+        decode_status(eof_status, sizeof(eof_status), &status, &mac, &mic) ||
+        status != DAP_STATUS_EOF || mac != 4U || mic != 0x027U ||
+        strcmp(dap_status_class_name(4U), "open error") ||
+        strcmp(dap_status_class_name(15U), "unknown"))
         return 1;
     puts("dncopy DAP selftest passed");
     return 0;
