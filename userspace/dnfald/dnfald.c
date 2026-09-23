@@ -136,6 +136,15 @@ static int parse_attributes(const unsigned char *buf, size_t len,
 static size_t make_attributes(unsigned char *buf, size_t cap,
                               unsigned char rfm, unsigned char rat)
 {
+    if (rfm == DAP_RFM_FIX && rat == 0U) {
+        if (cap < 4U)
+            return 0U;
+        buf[0] = DAP_ATTRIBUTES;
+        buf[1] = 0U;
+        buf[2] = 0x04U;
+        buf[3] = DAP_RFM_FIX;
+        return 4U;
+    }
     if (cap < 7U)
         return 0U;
     buf[0] = DAP_ATTRIBUTES;
@@ -564,7 +573,10 @@ static int selftest(void)
         make_attributes(attrs, sizeof(attrs), rfm, rat) != 7U ||
         memcmp(attrs, (const unsigned char[]){ DAP_ATTRIBUTES, 0U, 0x0fU,
                                                1U, 0U, DAP_RFM_VFC, 4U },
-               7U))
+               7U) ||
+        make_attributes(attrs, sizeof(attrs), DAP_RFM_FIX, 0U) != 4U ||
+        memcmp(attrs, (const unsigned char[]){ DAP_ATTRIBUTES, 0U,
+                                               0x04U, DAP_RFM_FIX }, 4U))
         return 1;
     puts("dnfald selftest passed");
     return 0;
