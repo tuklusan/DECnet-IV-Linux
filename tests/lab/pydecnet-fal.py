@@ -95,10 +95,10 @@ def main() -> int:
             raise RuntimeError(f"bad FAL create CONFIG: {bytes(reply)!r}")
 
         name = b"UPLOAD.BIN"
-        connection.data(bytes((2, 0, 0)))
+        connection.data(bytes((2, 0, 0x0f, 1, 0, 3, 4)))
         connection.data(bytes((3, 0, 2, 0, len(name))) + name)
         reply = connection.recv()
-        if reply.type != "data" or bytes(reply) != bytes((2, 0, 4, 1)):
+        if reply.type != "data" or bytes(reply) != bytes((2, 0, 0x0f, 1, 0, 3, 4)):
             raise RuntimeError(f"bad FAL create attributes: {bytes(reply)!r}")
         reply = connection.recv()
         if reply.type != "data" or bytes(reply) != bytes((6, 0)):
@@ -114,6 +114,46 @@ def main() -> int:
         reply = connection.recv()
         if reply.type != "data" or bytes(reply) != bytes((7, 0, 2)):
             raise RuntimeError(f"bad FAL create close reply: {bytes(reply)!r}")
+        connection.disconnect()
+
+        connection, response = connector.connect(
+            system=system, dest=destination, remuser=17, localuser="PYFAL"
+        )
+        if connection is None or response.type != "accept":
+            raise RuntimeError("FAL metadata get connect rejected")
+        connection.data(CONFIG)
+        reply = connection.recv()
+        if reply.type != "data" or bytes(reply) != CONFIG:
+            raise RuntimeError(f"bad FAL metadata CONFIG: {bytes(reply)!r}")
+        name = b"UPLOAD.BIN"
+        connection.data(bytes((3, 0, 1, 0, len(name))) + name)
+        reply = connection.recv()
+        if reply.type != "data" or bytes(reply) != bytes((2, 0, 0x0f, 1, 0, 3, 4)):
+            raise RuntimeError(f"bad persisted FAL metadata: {bytes(reply)!r}")
+        reply = connection.recv()
+        if reply.type != "data" or bytes(reply) != bytes((6, 0)):
+            raise RuntimeError(f"bad metadata-open ACK: {bytes(reply)!r}")
+        connection.data(bytes((4, 0, 2)))
+        reply = connection.recv()
+        if reply.type != "data" or bytes(reply) != bytes((6, 0)):
+            raise RuntimeError(f"bad metadata CONNECT ACK: {bytes(reply)!r}")
+        connection.data(bytes((4, 0, 1)))
+        payload = bytearray()
+        while True:
+            reply = connection.recv()
+            raw = bytes(reply)
+            if raw[:1] == bytes((8,)):
+                payload += raw[3:]
+                continue
+            if raw == bytes((9, 0, 0x27, 0x40)):
+                break
+            raise RuntimeError(f"unexpected metadata GET record: {raw!r}")
+        if bytes(payload) != b"PUT-A" + bytes((0, 1, 2, 3)):
+            raise RuntimeError(f"bad metadata GET payload: {bytes(payload)!r}")
+        connection.data(bytes((7, 0, 1)))
+        reply = connection.recv()
+        if reply.type != "data" or bytes(reply) != bytes((7, 0, 2)):
+            raise RuntimeError(f"bad metadata GET close: {bytes(reply)!r}")
         connection.disconnect()
 
         connection, response = connector.connect(
@@ -159,7 +199,7 @@ def main() -> int:
         connection.disconnect()
     finally:
         connector.close()
-    print(f"pydecnet-fal: pass peer={destination} object=17 get,put,dir,erase")
+    print(f"pydecnet-fal: pass peer={destination} object=17 get,put,metadata,dir,erase")
     return 0
 
 if __name__ == "__main__":

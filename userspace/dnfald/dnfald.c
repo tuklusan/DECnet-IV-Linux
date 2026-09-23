@@ -22,6 +22,7 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/time.h>
+#include <sys/xattr.h>
 #include <unistd.h>
 
 #define DAP_FAL_OBJECT 17U
@@ -35,6 +36,14 @@
 #define DAP_STATUS 9U
 #define DAP_STATUS_EOF 0x4027U
 #define DAP_RFM_FIX 1U
+#define DAP_RFM_VAR 2U
+#define DAP_RFM_VFC 3U
+#define DAP_RFM_STM 4U
+#define DAP_RFM_STMLF 5U
+#define DAP_RFM_STMCR 6U
+#define DAP_RAT_MAX 7U
+#define DNFAL_XATTR_RFM "user.decnet.rfm"
+#define DNFAL_XATTR_RAT "user.decnet.rat"
 #define DAP_ACCESS_OPEN 1U
 #define DAP_ACCESS_CREATE 2U
 #define DAP_ACCESS_ERASE 4U
@@ -94,6 +103,78 @@ static int send_record(int fd, const unsigned char *buf, size_t len)
     return send(fd, buf, len, MSG_EOR | MSG_NOSIGNAL) == (ssize_t)len ? 0 : -1;
 }
 
+static int parse_attributes(const unsigned char *buf, size_t len,
+                            unsigned char *rfm, unsigned char *rat)
+{
+    unsigned char menu;
+    size_t pos = 3U;
+
+    *rfm = DAP_RFM_FIX;
+    *rat = 0U;
+    if (len < 3U || buf[0] != DAP_ATTRIBUTES)
+        return -1;
+    menu = buf[2];
+    if (!menu)
+        return len == 3U ? 0 : -1;
+    if (menu & 0x01U) { if (pos >= len) return -1; pos++; }
+    if (menu & 0x02U) { if (pos >= len) return -1; pos++; }
+    if (menu & 0x04U) {
+        if (pos >= len) return -1;
+        *rfm = buf[pos++];
+        if (*rfm < DAP_RFM_FIX || *rfm > DAP_RFM_STMCR)
+            return -1;
+    }
+    if (menu & 0x08U) {
+        if (pos >= len) return -1;
+        *rat = buf[pos++];
+        if (*rat > DAP_RAT_MAX)
+            return -1;
+    }
+    return pos == len ? 0 : -1;
+}
+
+static size_t make_attributes(unsigned char *buf, size_t cap,
+                              unsigned char rfm, unsigned char rat)
+{
+    if (cap < 7U)
+        return 0U;
+    buf[0] = DAP_ATTRIBUTES;
+    buf[1] = 0U;
+    buf[2] = 0x0fU;
+    buf[3] = 1U;
+    buf[4] = 0U;
+    buf[5] = rfm;
+    buf[6] = rat;
+    return 7U;
+}
+
+static int load_metadata(const char *path, unsigned char *rfm,
+                         unsigned char *rat)
+{
+    ssize_t got;
+
+    *rfm = DAP_RFM_FIX;
+    *rat = 0U;
+    got = getxattr(path, DNFAL_XATTR_RFM, rfm, 1U);
+    if (got < 0 && errno != ENODATA && errno != ENOTSUP)
+        return -1;
+    if (got > 0 && got != 1)
+        return -1;
+    got = getxattr(path, DNFAL_XATTR_RAT, rat, 1U);
+    if (got < 0 && errno != ENODATA && errno != ENOTSUP)
+        return -1;
+    if (got > 0 && got != 1)
+        return -1;
+    return 0;
+}
+
+static int save_metadata(const char *path, unsigned char rfm,
+                         unsigned char rat)
+{
+    return setxattr(path, DNFAL_XATTR_RFM, &rfm, 1U, 0) ||
+           setxattr(path, DNFAL_XATTR_RAT, &rat, 1U, 0) ? -1 : 0;
+}
+
 static int safe_filespec(const unsigned char *text, size_t len,
                          char *out, size_t cap)
 {
@@ -141,6 +222,8 @@ static int serve_get(int fd, const char *root,
     unsigned char reply[2048];
     char path[1024];
     FILE *in = NULL;
+    unsigned char rfm;
+    unsigned char rat;
     ssize_t got;
 
     if (make_path(root, access, access_len, DAP_ACCESS_OPEN,
@@ -151,12 +234,14 @@ static int serve_get(int fd, const char *root,
         return -1;
 
     {
-        const unsigned char attributes[] = {
-            DAP_ATTRIBUTES, 0U, 0x04U, DAP_RFM_FIX
-        };
+        unsigned char attributes[16];
         const unsigned char ack[] = { DAP_ACK, 0U };
+        size_t attr_len;
 
-        if (send_record(fd, attributes, sizeof(attributes)) ||
+        if (load_metadata(path, &rfm, &rat))
+            goto fail;
+        attr_len = make_attributes(attributes, sizeof(attributes), rfm, rat);
+        if (!attr_len || send_record(fd, attributes, attr_len) ||
             send_record(fd, ack, sizeof(ack)))
             goto fail;
     }
@@ -219,7 +304,9 @@ fail:
 }
 
 static int serve_create(int fd, const char *root,
-                        const unsigned char *access, size_t access_len)
+                        const unsigned char *access, size_t access_len,
+                        unsigned char requested_rfm,
+                        unsigned char requested_rat)
 {
     unsigned char request[2048];
     char path[1024];
@@ -234,12 +321,15 @@ static int serve_create(int fd, const char *root,
         return -1;
 
     {
-        const unsigned char attributes[] = {
-            DAP_ATTRIBUTES, 0U, 0x04U, DAP_RFM_FIX
-        };
+        unsigned char attributes[16];
         const unsigned char ack[] = { DAP_ACK, 0U };
+        size_t attr_len;
 
-        if (send_record(fd, attributes, sizeof(attributes)) ||
+        if (save_metadata(path, requested_rfm, requested_rat))
+            goto fail;
+        attr_len = make_attributes(attributes, sizeof(attributes),
+                                   requested_rfm, requested_rat);
+        if (!attr_len || send_record(fd, attributes, attr_len) ||
             send_record(fd, ack, sizeof(ack)))
             goto fail;
     }
@@ -398,6 +488,8 @@ static int serve_session(int fd, const char *root)
     struct timeval timeout = { .tv_sec = 30, .tv_usec = 0 };
     unsigned char request[256];
     unsigned char reply[32];
+    unsigned char requested_rfm = DAP_RFM_FIX;
+    unsigned char requested_rat = 0U;
     size_t reply_len;
     ssize_t got;
 
@@ -417,6 +509,9 @@ static int serve_session(int fd, const char *root)
     if (got < 0)
         return -1;
     if (got >= 3 && request[0] == DAP_ATTRIBUTES) {
+        if (parse_attributes(request, (size_t)got,
+                             &requested_rfm, &requested_rat))
+            return -1;
         got = recv(fd, request, sizeof(request), 0);
         if (got < 0)
             return -1;
@@ -426,7 +521,8 @@ static int serve_session(int fd, const char *root)
     if (request[2] == DAP_ACCESS_OPEN)
         return serve_get(fd, root, request, (size_t)got);
     if (request[2] == DAP_ACCESS_CREATE)
-        return serve_create(fd, root, request, (size_t)got);
+        return serve_create(fd, root, request, (size_t)got,
+                            requested_rfm, requested_rat);
     if (request[2] == DAP_ACCESS_DIRECTORY)
         return serve_directory(fd, root, request, (size_t)got);
     if (request[2] == DAP_ACCESS_ERASE)
@@ -439,6 +535,9 @@ static int selftest(void)
     unsigned char config[16];
     char name[32];
     char pattern[32];
+    unsigned char attrs[16];
+    unsigned char rfm;
+    unsigned char rat;
 
     if (make_config(config, sizeof(config)) != 12U ||
         validate_config(config, 12U) ||
@@ -456,6 +555,16 @@ static int selftest(void)
         strcmp(pattern, "*.TXT") ||
         !safe_pattern((const unsigned char *)"../*", 4U,
                       pattern, sizeof(pattern)))
+        return 1;
+    if (parse_attributes(
+            (const unsigned char[]){ DAP_ATTRIBUTES, 0U, 0x0fU,
+                                     1U, 0U, DAP_RFM_VFC, 4U },
+            7U, &rfm, &rat) ||
+        rfm != DAP_RFM_VFC || rat != 4U ||
+        make_attributes(attrs, sizeof(attrs), rfm, rat) != 7U ||
+        memcmp(attrs, (const unsigned char[]){ DAP_ATTRIBUTES, 0U, 0x0fU,
+                                               1U, 0U, DAP_RFM_VFC, 4U },
+               7U))
         return 1;
     puts("dnfald selftest passed");
     return 0;
