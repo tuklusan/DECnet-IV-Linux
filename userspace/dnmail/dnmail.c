@@ -23,6 +23,25 @@
 #include <unistd.h>
 
 #define MAIL_OBJECT 27U
+#define MAIL11_V3_LEN 16U
+
+static __le16 cpu_to_le16_u(uint16_t value)
+{
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+    return (__le16)value;
+#else
+    return (__le16)__builtin_bswap16(value);
+#endif
+}
+
+static uint16_t le16_to_cpu_u(__le16 value)
+{
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+    return (uint16_t)value;
+#else
+    return __builtin_bswap16((uint16_t)value);
+#endif
+}
 
 static int parse_target(const char *text, uint16_t *addr, const char **user)
 {
@@ -51,7 +70,7 @@ static int parse_target(const char *text, uint16_t *addr, const char **user)
     return strlen(*user) < 256U ? 0 : -1;
 }
 
-static int connect_mail(uint16_t addr)
+static int connect_mail(uint16_t addr, int v3)
 {
     struct sockaddr_dn peer;
     struct timeval timeout = { .tv_sec = 30, .tv_usec = 0 };
@@ -59,6 +78,19 @@ static int connect_mail(uint16_t addr)
 
     if (fd < 0)
         return -1;
+    if (v3) {
+        static const unsigned char request[MAIL11_V3_LEN] = {
+            3U, 0U, 0U, 18U, 0U, 0U, 0U, 0U,
+            0U, 0U, 0U, 0U, 2U, 2U, 0U, 0U
+        };
+        struct optdata_dn opt;
+
+        memset(&opt, 0, sizeof(opt));
+        opt.opt_optl = cpu_to_le16_u(MAIL11_V3_LEN);
+        memcpy(opt.opt_data, request, sizeof(request));
+        if (setsockopt(fd, DNPROTO_NSP, DSO_CONDATA, &opt, sizeof(opt)))
+            goto fail;
+    }
     if (setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)) ||
         setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)))
         goto fail;
@@ -70,6 +102,17 @@ static int connect_mail(uint16_t addr)
     peer.sdn_add.a_addr[1] = (unsigned char)(addr >> 8);
     if (connect(fd, (struct sockaddr *)&peer, sizeof(peer)))
         goto fail;
+    if (v3) {
+        struct optdata_dn opt;
+        socklen_t len = sizeof(opt);
+
+        memset(&opt, 0, sizeof(opt));
+        if (getsockopt(fd, DNPROTO_NSP, DSO_CONDATA, &opt, &len) ||
+            len != sizeof(opt) ||
+            le16_to_cpu_u(opt.opt_optl) != MAIL11_V3_LEN ||
+            opt.opt_data[0] != 3U)
+            goto fail;
+    }
     return fd;
 fail:
     close(fd);
@@ -135,11 +178,17 @@ int main(int argc, char **argv)
     uint16_t addr;
     int fd;
     int arg = 1;
+    int v3 = 0;
     const unsigned char zero = 0U;
 
     if (argc == 2 && !strcmp(argv[1], "--selftest"))
         return selftest();
     while (arg + 1 < argc) {
+        if (!strcmp(argv[arg], "-3")) {
+            v3 = 1;
+            arg++;
+            continue;
+        }
         if (!strcmp(argv[arg], "-f")) {
             from = argv[arg + 1];
             arg += 2;
@@ -154,7 +203,7 @@ int main(int argc, char **argv)
     }
     if (arg + 2 != argc) {
         fprintf(stderr,
-                "usage: %s [-f FROM] [-s SUBJECT] AREA.NODE::USER[,USER...] MESSAGE\n",
+                "usage: %s [-3] [-f FROM] [-s SUBJECT] AREA.NODE::USER[,USER...] MESSAGE\n",
                 argv[0]);
         return 2;
     }
@@ -166,7 +215,7 @@ int main(int argc, char **argv)
         return 2;
     }
 
-    fd = connect_mail(addr);
+    fd = connect_mail(addr, v3);
     if (fd < 0) {
         perror("dnmail: connect");
         return 1;

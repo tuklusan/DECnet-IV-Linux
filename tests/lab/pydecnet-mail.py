@@ -18,6 +18,7 @@ import sys
 from decnet.connectors import SimpleApiConnector
 
 ACK = bytes((1, 0, 0, 0))
+MAIL11_V3 = bytes((3, 0, 0, 18, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 0, 0))
 
 def main() -> int:
     if len(sys.argv) != 4:
@@ -26,10 +27,16 @@ def main() -> int:
     connector = SimpleApiConnector(api_socket)
     try:
         connection, response = connector.connect(
-            system=system, dest=destination, remuser=27, localuser="PYMAIL"
+            system=system,
+            dest=destination,
+            remuser=27,
+            localuser="PYMAIL",
+            conndata=MAIL11_V3,
         )
         if connection is None or response.type != "accept":
             raise RuntimeError("MAIL object connect rejected")
+        if len(response) != 16 or response[0] != 3:
+            raise RuntimeError(f"bad MAIL-11 v3 accept data: {bytes(response)!r}")
         connection.data(b"PYDECNET")
         connection.data(b"TEST")
         reply = connection.recv()
@@ -51,7 +58,7 @@ def main() -> int:
         connection.disconnect()
     finally:
         connector.close()
-    print(f"pydecnet-mail: pass peer={destination} object=27 recipients=2")
+    print(f"pydecnet-mail: pass peer={destination} object=27 recipients=2 v3=1")
     return 0
 
 if __name__ == "__main__":

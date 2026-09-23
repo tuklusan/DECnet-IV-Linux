@@ -23,14 +23,38 @@
 
 #define MAIL_OBJECT 27U
 #define MAIL_BACKLOG 8
+#define MAIL11_V3_LEN 16U
+
+static __le16 cpu_to_le16_u(uint16_t value)
+{
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+    return (__le16)value;
+#else
+    return (__le16)__builtin_bswap16(value);
+#endif
+}
+
+static uint16_t le16_to_cpu_u(__le16 value)
+{
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+    return (uint16_t)value;
+#else
+    return __builtin_bswap16((uint16_t)value);
+#endif
+}
 
 static int make_listener(void)
 {
     struct sockaddr_dn local;
+    int mode = ACC_DEFER;
     int fd = socket(AF_DECnet, SOCK_SEQPACKET, DNPROTO_NSP);
 
     if (fd < 0)
         return -1;
+    if (setsockopt(fd, DNPROTO_NSP, DSO_ACCEPTMODE, &mode, sizeof(mode))) {
+        close(fd);
+        return -1;
+    }
     memset(&local, 0, sizeof(local));
     local.sdn_family = AF_DECnet;
     local.sdn_objnum = MAIL_OBJECT;
@@ -40,6 +64,35 @@ static int make_listener(void)
         return -1;
     }
     return fd;
+}
+
+static int accept_mail_session(int fd)
+{
+    static const unsigned char reply[MAIL11_V3_LEN] = {
+        3U, 1U, 0U, 18U, 0U, 0U, 0U, 0U,
+        0xa0U, 0x02U, 0U, 0U, 1U, 0U, 0U, 0U
+    };
+    struct optdata_dn incoming;
+    struct optdata_dn outgoing;
+    socklen_t len = sizeof(incoming);
+    uint16_t n;
+
+    memset(&incoming, 0, sizeof(incoming));
+    if (getsockopt(fd, DNPROTO_NSP, DSO_CONDATA, &incoming, &len) ||
+        len != sizeof(incoming))
+        return -1;
+    n = le16_to_cpu_u(incoming.opt_optl);
+    if (n && (n != MAIL11_V3_LEN || incoming.opt_data[0] != 3U))
+        return -1;
+    if (n) {
+        memset(&outgoing, 0, sizeof(outgoing));
+        outgoing.opt_optl = cpu_to_le16_u(MAIL11_V3_LEN);
+        memcpy(outgoing.opt_data, reply, sizeof(reply));
+        if (setsockopt(fd, DNPROTO_NSP, DSO_CONDATA,
+                       &outgoing, sizeof(outgoing)))
+            return -1;
+    }
+    return setsockopt(fd, DNPROTO_NSP, DSO_CONACCEPT, NULL, 0);
 }
 
 static int recv_field(int fd, char *buf, size_t cap, int allow_empty)
@@ -146,7 +199,7 @@ fail:
 
 static int selftest(void)
 {
-    if (MAIL_OBJECT != 27U)
+    if (MAIL_OBJECT != 27U || MAIL11_V3_LEN != 16U)
         return 1;
     puts("dnmaild selftest passed");
     return 0;
@@ -191,7 +244,9 @@ int main(int argc, char **argv)
             close(listener);
             return 1;
         }
-        rc = serve(fd, root);
+        rc = accept_mail_session(fd);
+        if (!rc)
+            rc = serve(fd, root);
         close(fd);
         if (rc) {
             perror("dnmaild: session");
