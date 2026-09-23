@@ -366,7 +366,7 @@ fail:
 
 
 static int store_file(const char *local_path, const char *node_text,
-                      const char *filespec,
+                      const char *filespec, int text_mode,
                       const struct access_options *options)
 {
     unsigned char msg[2048], reply[512], data[1024];
@@ -393,9 +393,19 @@ static int store_file(const char *local_path, const char *node_text,
 
     msg[0] = DAP_ATTRIBUTES;
     msg[1] = 0U;
-    msg[2] = 0U;
-    if (send_record(fd, msg, 3U))
-        goto fail;
+    if (text_mode) {
+        msg[2] = 0x0fU; /* DATATYPE, ORG, RFM, RAT */
+        msg[3] = 0x01U; /* ASCII */
+        msg[4] = 0U;    /* sequential organization */
+        msg[5] = DAP_RFM_VAR;
+        msg[6] = 0x02U; /* implied carriage return */
+        if (send_record(fd, msg, 7U))
+            goto fail;
+    } else {
+        msg[2] = 0U;
+        if (send_record(fd, msg, 3U))
+            goto fail;
+    }
 
     msg[0] = DAP_ACCESS;
     msg[1] = 0U;
@@ -425,20 +435,44 @@ static int store_file(const char *local_path, const char *node_text,
     if (send_record(fd, msg, 3U))
         goto fail;
 
-    for (;;) {
-        data_len = fread(data, 1, sizeof(data), in);
-        if (data_len) {
+    if (text_mode) {
+        while (fgets((char *)data, sizeof(data), in)) {
+            size_t len = strlen((char *)data);
+
+            if (len && data[len - 1U] == '\n') {
+                len--;
+                if (len && data[len - 1U] == '\r')
+                    len--;
+            } else if (!feof(in)) {
+                fprintf(stderr, "dncopy: text input line exceeds %zu bytes\n",
+                        sizeof(data) - 2U);
+                goto fail;
+            }
             msg[0] = DAP_DATA;
             msg[1] = 0U;
-            msg[2] = 0U; /* empty record number */
-            memcpy(msg + 3, data, data_len);
-            if (send_record(fd, msg, data_len + 3U))
+            msg[2] = 0U;
+            memcpy(msg + 3, data, len);
+            if (send_record(fd, msg, len + 3U))
                 goto fail;
         }
-        if (data_len < sizeof(data)) {
-            if (ferror(in))
-                goto fail;
-            break;
+        if (ferror(in))
+            goto fail;
+    } else {
+        for (;;) {
+            data_len = fread(data, 1, sizeof(data), in);
+            if (data_len) {
+                msg[0] = DAP_DATA;
+                msg[1] = 0U;
+                msg[2] = 0U; /* empty record number */
+                memcpy(msg + 3, data, data_len);
+                if (send_record(fd, msg, data_len + 3U))
+                    goto fail;
+            }
+            if (data_len < sizeof(data)) {
+                if (ferror(in))
+                    goto fail;
+                break;
+            }
         }
     }
     if (fclose(in))
@@ -600,7 +634,10 @@ int main(int argc, char **argv)
         return retrieve_file(argv[arg], argv[arg + 1], argv[arg + 2], 0,
                              &options) ? 1 : 0;
     if (!strcmp(mode, "--put") && arg + 3 == argc)
-        return store_file(argv[arg], argv[arg + 1], argv[arg + 2],
+        return store_file(argv[arg], argv[arg + 1], argv[arg + 2], 0,
+                          &options) ? 1 : 0;
+    if (!strcmp(mode, "--put-text") && arg + 3 == argc)
+        return store_file(argv[arg], argv[arg + 1], argv[arg + 2], 1,
                           &options) ? 1 : 0;
     if (!strcmp(mode, "--dir") && arg + 2 == argc)
         return list_directory(argv[arg], argv[arg + 1], &options) ? 1 : 0;
@@ -609,6 +646,7 @@ usage:
             "usage: %s [-u USER] [-p PASSWORD] [-a ACCOUNT] "
             "--selftest | --probe AREA.NODE | --get AREA.NODE FILE | "
             "--get-text AREA.NODE FILE | --get-to AREA.NODE FILE LOCAL | "
-            "--put LOCAL AREA.NODE REMOTE | --dir AREA.NODE SPEC\n", argv[0]);
+            "--put LOCAL AREA.NODE REMOTE | --put-text LOCAL AREA.NODE REMOTE | "
+            "--dir AREA.NODE SPEC\n", argv[0]);
     return 2;
 }

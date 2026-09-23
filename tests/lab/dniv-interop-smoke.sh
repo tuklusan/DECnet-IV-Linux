@@ -364,11 +364,19 @@ if [ "$reference" = pydecnet ]; then
         exit 1
     fi
     rm -f "$dap_put"
+    dap_put_text="/tmp/dniv-dap-put-text.$"
+    printf 'ALPHA\nBETA\n' >"$dap_put_text"
+    if ! /usr/local/bin/dncopy --put-text "$dap_put_text" "$peer_node" TEXTUP.TXT; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=dap-put-text"
+        rm -f "$dap_put_text"
+        exit 1
+    fi
+    rm -f "$dap_put_text"
     if ! dap_dir_output=$(/usr/local/bin/dncopy --dir "$peer_node" '*.TXT'); then
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=dap-dir"
         exit 1
     fi
-    if [ "$dap_dir_output" != "$(printf 'PHASE7.TXT\nUPLOAD.TXT')" ]; then
+    if [ "$dap_dir_output" != "$(printf 'PHASE7.TXT\nUPLOAD.TXT\nTEXTUP.TXT')" ]; then
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=dap-dir-content"
         printf '%s\n' "$dap_dir_output"
         exit 1
