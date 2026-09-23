@@ -853,6 +853,87 @@ fail:
     return -1;
 }
 
+static int print_file(const char *node_text, const char *filespec,
+                      const struct access_options *options)
+{
+    unsigned char msg[512], reply[512];
+    size_t n = strlen(filespec);
+    int fd;
+
+    if (!n || n > 128U) {
+        fprintf(stderr, "dnprint: invalid remote file specification\n");
+        return -1;
+    }
+    fd = open_fal(node_text, options);
+    if (fd < 0)
+        return -1;
+    if (exchange_config(fd))
+        goto fail;
+
+    msg[0] = DAP_ATTRIBUTES;
+    msg[1] = 0U;
+    msg[2] = 0U;
+    if (send_record(fd, msg, 3U))
+        goto fail;
+
+    msg[0] = DAP_ACCESS;
+    msg[1] = 0U;
+    msg[2] = 1U; /* OPEN */
+    msg[3] = 0U; /* ACCOPT */
+    msg[4] = (unsigned char)n;
+    memcpy(msg + 5, filespec, n);
+    if (send_record(fd, msg, n + 5U))
+        goto fail;
+
+    for (;;) {
+        ssize_t got = recv(fd, reply, sizeof(reply), 0);
+
+        if (got < 2)
+            goto fail;
+        if (reply[0] == DAP_STATUS) {
+            report_status("print-open", reply, (size_t)got);
+            goto fail;
+        }
+        if (reply[0] == DAP_ACK || reply[0] == DAP_ACCESS_COMPLETE)
+            break;
+        if (reply[0] == DAP_ATTRIBUTES || reply[0] == DAP_NAME)
+            continue;
+        goto fail;
+    }
+
+    msg[0] = DAP_ACCESS_COMPLETE;
+    msg[1] = 0U;
+    msg[2] = 1U;    /* CLOSE */
+    msg[3] = 0x80U; /* FOP bit 20, EX continuation */
+    msg[4] = 0x80U;
+    msg[5] = 0x40U; /* FB$SPL */
+    if (send_record(fd, msg, 6U))
+        goto fail;
+
+    for (;;) {
+        ssize_t got = recv(fd, reply, sizeof(reply), 0);
+
+        if (got < 2)
+            goto fail;
+        if (reply[0] == DAP_STATUS) {
+            report_status("print-close", reply, (size_t)got);
+            goto fail;
+        }
+        if (reply[0] == DAP_ACK || reply[0] == DAP_ACCESS_COMPLETE) {
+            close(fd);
+            return 0;
+        }
+        if (reply[0] == DAP_ATTRIBUTES || reply[0] == DAP_NAME)
+            continue;
+        goto fail;
+    }
+
+fail:
+    fprintf(stderr, "dnprint: DAP print request failed\n");
+    close(fd);
+    return -1;
+}
+
 static int submit_file(const char *node_text, const char *filespec,
                        const struct access_options *options)
 {
@@ -1169,6 +1250,17 @@ int main(int argc, char **argv)
             return list_directory(argv[arg], argv[arg + 1], &options) ? 1 : 0;
         goto usage;
     }
+    if (!strcmp(prog, "dnprint")) {
+        if (arg + 1 == argc && strstr(argv[arg], "::")) {
+            if (parse_transparent_spec(argv[arg], &remote, &options) ||
+                !remote.file[0])
+                goto usage;
+            return print_file(remote.node, remote.file, &options) ? 1 : 0;
+        }
+        if (arg + 2 == argc)
+            return print_file(argv[arg], argv[arg + 1], &options) ? 1 : 0;
+        goto usage;
+    }
     if (!strcmp(prog, "dnsubmit")) {
         if (arg + 1 == argc && strstr(argv[arg], "::")) {
             if (parse_transparent_spec(argv[arg], &remote, &options) ||
@@ -1243,6 +1335,8 @@ usage:
         fprintf(stderr, "usage: dntype [-u USER] [-p PASSWORD] [-a ACCOUNT] [-m record|block] AREA.NODE FILE | 'AREA.NODE[\"USER PASS ACCOUNT\"]::FILE'\n");
     } else if (!strcmp(prog, "dndir")) {
         fprintf(stderr, "usage: dndir [-u USER] [-p PASSWORD] [-a ACCOUNT] [-m record|block] AREA.NODE [SPEC] | 'AREA.NODE[\"USER PASS ACCOUNT\"]::[SPEC]'\n");
+    } else if (!strcmp(prog, "dnprint")) {
+        fprintf(stderr, "usage: dnprint [-u USER] [-p PASSWORD] [-a ACCOUNT] AREA.NODE FILE | AREA.NODE::FILE\n");
     } else if (!strcmp(prog, "dnsubmit")) {
         fprintf(stderr, "usage: dnsubmit [-u USER] [-p PASSWORD] [-a ACCOUNT] AREA.NODE FILE | AREA.NODE::FILE\n");
     } else if (!strcmp(prog, "dndel")) {

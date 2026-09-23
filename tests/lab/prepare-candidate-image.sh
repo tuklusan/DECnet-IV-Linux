@@ -99,6 +99,7 @@ ln -sf dncopy /usr/local/bin/dntype
 ln -sf dncopy /usr/local/bin/dndir
 ln -sf dncopy /usr/local/bin/dndel
 ln -sf dncopy /usr/local/bin/dnsubmit
+ln -sf dncopy /usr/local/bin/dnprint
 make -C /usr/src/decnet-iv-linux/userspace/dntask clean all
 install -m 0755 /usr/src/decnet-iv-linux/userspace/dntask/dntask /usr/local/bin/dntask
 make -C /usr/src/decnet-iv-linux/userspace/dnnml clean all
@@ -206,6 +207,7 @@ sudo test -L "$mnt/usr/local/bin/dntype"
 sudo test -L "$mnt/usr/local/bin/dndir"
 sudo test -L "$mnt/usr/local/bin/dndel"
 sudo test -L "$mnt/usr/local/bin/dnsubmit"
+sudo test -L "$mnt/usr/local/bin/dnprint"
 sudo test -s "$mnt/usr/local/bin/dntask"
 sudo test -s "$mnt/usr/local/sbin/dnnml"
 sudo test -s "$mnt/usr/local/sbin/dnnice"
