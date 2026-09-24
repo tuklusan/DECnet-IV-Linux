@@ -31,6 +31,29 @@ test:
 		$(PYTHON) dnmultinet.py --node 31.80 --name MNET80 --type l2router \
 		--vde vde:///tmp/dn31.ctl --mode connect --runtime-peer-env \
 		--validate-only | grep -Fqx 'dnmultinet: configuration valid'
+	$(PYTHON) -m py_compile ../../tests/lab/area31-nice.py
+	bash -n ../../tests/lab/prove-area31.sh
+	MULTINET_REMOTE_HOST=127.0.0.1 MULTINET_REMOTE_PORT=700 \
+		VAX_ADDR=31.99 VAX_USERNAME=TESTUSR VAX_PASSWORD=TESTPASS \
+		DNIV_AREA31_GATEWAY_NODE=31.80 DNIV_AREA31_GATEWAY_NAME=MNET80 \
+		../../tests/lab/prove-area31.sh --preflight-only | \
+		grep -Fqx 'area31-proof: preflight pass'
+	@if out=$(MULTINET_REMOTE_HOST=127.0.0.1 MULTINET_REMOTE_PORT=700 \
+		VAX_ADDR=31.99 VAX_USERNAME=TESTUSR VAX_PASSWORD= \
+		DNIV_AREA31_GATEWAY_NODE=31.80 DNIV_AREA31_GATEWAY_NAME=MNET80 \
+		../../tests/lab/prove-area31.sh --preflight-only 2>&1); then \
+		echo 'area31 preflight unexpectedly accepted missing password' >&2; exit 1; \
+	else \
+		printf '%s\n' "$out" | grep -Fqx 'area31-proof: missing required secret: VAX_PASSWORD'; \
+	fi
+	@if out=$(MULTINET_REMOTE_HOST=127.0.0.1 MULTINET_REMOTE_PORT=700 \
+		$(PYTHON) dnmultinet.py --node 31.80 --name MNET80 --type l2router \
+		--vde vde:///tmp/dn31.ctl --mode connect --runtime-peer-env --dry-run 2>&1); then \
+		echo 'runtime peer dry-run unexpectedly succeeded' >&2; exit 1; \
+	else \
+		printf '%s\n' "$out" | grep -Fqx 'dry-run refuses runtime peer environment'; \
+		! printf '%s\n' "$out" | grep -Fq '127.0.0.1'; \
+	fi
 
 clean:
 	rm -rf __pycache__
