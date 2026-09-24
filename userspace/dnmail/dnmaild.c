@@ -16,6 +16,7 @@
 
 #include <errno.h>
 #include <linux/dn.h>
+#include <netdb.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -209,7 +210,164 @@ static int finish_sendmail(int input_fd, pid_t child)
     return -1;
 }
 
-static int serve(int fd, const char *root, const char *sendmail_path)
+
+static int smtp_read_reply(int fd, int expected)
+{
+    char line[1024];
+    int code = -1;
+
+    for (;;) {
+        size_t used = 0U;
+
+        while (used + 1U < sizeof(line)) {
+            char ch;
+            ssize_t got = read(fd, &ch, 1U);
+
+            if (got < 0) {
+                if (errno == EINTR)
+                    continue;
+                return -1;
+            }
+            if (!got)
+                return -1;
+            line[used++] = ch;
+            if (ch == '\n')
+                break;
+        }
+        if (!used || line[used - 1U] != '\n' || used < 4U)
+            return -1;
+        line[used] = '\0';
+        if (line[0] < '0' || line[0] > '9' ||
+            line[1] < '0' || line[1] > '9' ||
+            line[2] < '0' || line[2] > '9')
+            return -1;
+        code = (line[0] - '0') * 100 + (line[1] - '0') * 10 +
+            (line[2] - '0');
+        if (line[3] != '-')
+            break;
+    }
+    return code == expected ? 0 : -1;
+}
+
+static int smtp_command(int fd, int expected, const char *command)
+{
+    if (write_all(fd, command, strlen(command)))
+        return -1;
+    return smtp_read_reply(fd, expected);
+}
+
+static int smtp_open(const char *host, unsigned int port, const char *from,
+                     const char *recipients, const char *sender,
+                     const char *subject, const char *full_user)
+{
+    struct addrinfo hints;
+    struct addrinfo *result = NULL;
+    struct addrinfo *ai;
+    struct timeval timeout = { .tv_sec = 30, .tv_usec = 0 };
+    char service[16];
+    char command[1400];
+    const char *part;
+    int fd = -1;
+    int rc;
+
+    if (!host || !*host || !from || !*from ||
+        strchr(from, '\r') || strchr(from, '\n') ||
+        strchr(from, '<') || strchr(from, '>'))
+        return -1;
+    if (snprintf(service, sizeof(service), "%u", port) >=
+        (int)sizeof(service))
+        return -1;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    rc = getaddrinfo(host, service, &hints, &result);
+    if (rc)
+        return -1;
+    for (ai = result; ai; ai = ai->ai_next) {
+        fd = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
+        if (fd < 0)
+            continue;
+        (void)setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout,
+                         sizeof(timeout));
+        (void)setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout,
+                         sizeof(timeout));
+        if (!connect(fd, ai->ai_addr, ai->ai_addrlen))
+            break;
+        close(fd);
+        fd = -1;
+    }
+    freeaddrinfo(result);
+    if (fd < 0)
+        return -1;
+    if (smtp_read_reply(fd, 220) ||
+        smtp_command(fd, 250, "HELO decnet-iv-linux\r\n"))
+        goto fail;
+    if (snprintf(command, sizeof(command), "MAIL FROM:<%s>\r\n", from) >=
+        (int)sizeof(command) || smtp_command(fd, 250, command))
+        goto fail;
+
+    part = recipients;
+    for (;;) {
+        const char *comma = strchr(part, ',');
+        size_t len = comma ? (size_t)(comma - part) : strlen(part);
+
+        if (!len || len > 255U)
+            goto fail;
+        if (snprintf(command, sizeof(command), "RCPT TO:<%.*s>\r\n",
+                     (int)len, part) >= (int)sizeof(command) ||
+            smtp_command(fd, 250, command))
+            goto fail;
+        if (!comma)
+            break;
+        part = comma + 1;
+    }
+    if (smtp_command(fd, 354, "DATA\r\n"))
+        goto fail;
+    if (snprintf(command, sizeof(command),
+                 "From: %s\r\nTo: %s\r\nX-VMSmail: %s\r\n"
+                 "Subject: %s\r\n\r\n",
+                 sender, recipients, full_user, subject) >=
+        (int)sizeof(command) ||
+        write_all(fd, command, strlen(command)))
+        goto fail;
+    return fd;
+
+fail:
+    close(fd);
+    return -1;
+}
+
+static int smtp_write_record(int fd, const unsigned char *data, size_t len)
+{
+    size_t i;
+
+    for (i = 0U; i < len; i++) {
+        if (data[i] == '\r' || data[i] == '\n' || data[i] == '\0')
+            return -1;
+    }
+    if (len && data[0] == '.' && write_all(fd, ".", 1U))
+        return -1;
+    if (write_all(fd, data, len) || write_all(fd, "\r\n", 2U))
+        return -1;
+    return 0;
+}
+
+static int smtp_finish(int fd)
+{
+    int rc = 0;
+
+    if (smtp_command(fd, 250, ".\r\n"))
+        rc = -1;
+    else if (smtp_command(fd, 221, "QUIT\r\n"))
+        rc = -1;
+    close(fd);
+    return rc;
+}
+
+
+static int serve(int fd, const char *root, const char *sendmail_path,
+                 const char *smtp_host, unsigned int smtp_port,
+                 const char *smtp_from)
 {
     struct timeval timeout = { .tv_sec = 30, .tv_usec = 0 };
     unsigned char body[4096];
@@ -217,6 +375,7 @@ static int serve(int fd, const char *root, const char *sendmail_path)
     char full_user[256], subject[256], path[1024], header[4096];
     FILE *out = NULL;
     int mail_fd = -1;
+    int smtp_fd = -1;
     pid_t mail_child = -1;
     ssize_t got;
 
@@ -279,6 +438,12 @@ static int serve(int fd, const char *root, const char *sendmail_path)
                 write_all(mail_fd, header, (size_t)header_len))
                 goto fail;
         }
+        if (smtp_host) {
+            smtp_fd = smtp_open(smtp_host, smtp_port, smtp_from, recipients,
+                                sender, subject, full_user);
+            if (smtp_fd < 0)
+                goto fail;
+        }
     }
 
     for (;;) {
@@ -296,6 +461,9 @@ static int serve(int fd, const char *root, const char *sendmail_path)
             (write_all(mail_fd, body, (size_t)got) ||
              write_all(mail_fd, "\n", 1U)))
             goto fail;
+        if (smtp_fd >= 0 &&
+            smtp_write_record(smtp_fd, body, (size_t)got))
+            goto fail;
     }
     if (fputs("--\n", out) == EOF || fclose(out))
         goto fail;
@@ -308,12 +476,21 @@ static int serve(int fd, const char *root, const char *sendmail_path)
         if (finish_rc)
             return -1;
     }
+    if (smtp_fd >= 0) {
+        int finish_rc = smtp_finish(smtp_fd);
+
+        smtp_fd = -1;
+        if (finish_rc)
+            return -1;
+    }
     return send_ack(fd);
 
 fail:
     if (out)
         fclose(out);
     abort_sendmail(mail_fd, mail_child);
+    if (smtp_fd >= 0)
+        close(smtp_fd);
     return -1;
 }
 
@@ -329,6 +506,9 @@ int main(int argc, char **argv)
 {
     const char *root = ".";
     const char *sendmail_path = NULL;
+    const char *smtp_host = NULL;
+    const char *smtp_from = "mail11@localhost";
+    unsigned int smtp_port = 25U;
     int once = 0;
     int listener;
     int i;
@@ -342,14 +522,33 @@ int main(int argc, char **argv)
             root = argv[++i];
         else if (!strcmp(argv[i], "--sendmail") && i + 1 < argc)
             sendmail_path = argv[++i];
+        else if (!strcmp(argv[i], "--smtp") && i + 1 < argc)
+            smtp_host = argv[++i];
+        else if (!strcmp(argv[i], "--smtp-port") && i + 1 < argc) {
+            char *end;
+            unsigned long value;
+
+            errno = 0;
+            value = strtoul(argv[++i], &end, 10);
+            if (errno || !*argv[i] || *end || value == 0U || value > 65535U) {
+                fprintf(stderr, "dnmaild: invalid SMTP port\n");
+                return 2;
+            }
+            smtp_port = (unsigned int)value;
+        } else if (!strcmp(argv[i], "--smtp-from") && i + 1 < argc)
+            smtp_from = argv[++i];
         else {
             fprintf(stderr,
-                    "usage: %s [--once] [--root DIR] [--sendmail PATH] | --selftest\n",
+                    "usage: %s [--once] [--root DIR] [--sendmail PATH | --smtp HOST [--smtp-port PORT] [--smtp-from ADDRESS]] | --selftest\n",
                     argv[0]);
             return 2;
         }
     }
 
+    if (sendmail_path && smtp_host) {
+        fprintf(stderr, "dnmaild: choose either sendmail or SMTP delivery\n");
+        return 2;
+    }
     setvbuf(stdout, NULL, _IONBF, 0);
     listener = make_listener();
     if (listener < 0) {
@@ -370,7 +569,8 @@ int main(int argc, char **argv)
         }
         rc = accept_mail_session(fd);
         if (!rc)
-            rc = serve(fd, root, sendmail_path);
+            rc = serve(fd, root, sendmail_path, smtp_host, smtp_port,
+                       smtp_from);
         close(fd);
         if (rc) {
             perror("dnmaild: session");

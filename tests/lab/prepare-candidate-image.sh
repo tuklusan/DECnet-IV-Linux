@@ -122,6 +122,8 @@ make -C /usr/src/decnet-iv-linux/userspace/dnmail clean all
 install -m 0755 /usr/src/decnet-iv-linux/userspace/dnmail/dnmail /usr/local/bin/dnmail
 install -m 0755 /usr/src/decnet-iv-linux/userspace/dnmail/dnmaild /usr/local/sbin/dnmaild
 cc -O2 -std=c11 -Wall -Wextra -Werror \
+    -o /usr/local/sbin/dnsmtpfake /usr/src/decnet-iv-linux/tests/lab/dnsmtpfake.c
+cc -O2 -std=c11 -Wall -Wextra -Werror \
     -o /usr/local/sbin/dnraw /usr/src/decnet-iv-linux/tests/lab/dnraw.c
 cc -I/usr/src/decnet-iv-linux/include/uapi -O2 -std=c11 -Wall -Wextra -Werror \
     -o /usr/local/sbin/dnmrr /usr/src/decnet-iv-linux/tests/lab/dnmrr.c
