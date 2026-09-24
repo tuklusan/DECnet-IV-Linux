@@ -29,6 +29,9 @@ char *dnet_ntoa(struct dn_naddr *addr);
 char *dnet_htoa(struct dn_naddr *addr);
 int dnet_pton(int family, const char *src, void *addr);
 const char *dnet_ntop(int family, const void *addr, char *dst, size_t len);
+int dnet_conn(char *node, char *object, int type,
+              unsigned char *opt_out, int opt_outl,
+              unsigned char *opt_in, int *opt_inl);
 
 #ifdef __cplusplus
 }

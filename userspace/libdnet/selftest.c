@@ -40,6 +40,22 @@ int main(void)
     if (dnet_pton(AF_INET, "31.71", &addr) != -1 ||
         errno != EAFNOSUPPORT)
         return 1;
+    errno = 0;
+    if (dnet_conn(NULL, "#25", SOCK_SEQPACKET, NULL, 0, NULL, NULL) != -1 ||
+        errno != EINVAL)
+        return 1;
+    errno = 0;
+    if (dnet_conn("31.71", "#25", SOCK_DGRAM, NULL, 0, NULL, NULL) != -1 ||
+        errno != EPROTONOSUPPORT)
+        return 1;
+    errno = 0;
+    if (dnet_conn("31.71/USER/PASS", "#25", SOCK_SEQPACKET,
+                  NULL, 0, NULL, NULL) != -1 || errno != EINVAL)
+        return 1;
+    errno = 0;
+    if (dnet_conn("31.71", "OBJECT-NAME-TOO-LONG", SOCK_SEQPACKET,
+                  NULL, 0, NULL, NULL) != -1 || errno != ENAMETOOLONG)
+        return 1;
     puts("libdnet selftest passed");
     return 0;
 }

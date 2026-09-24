@@ -17,6 +17,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/time.h>
+#include <unistd.h>
 
 #include <netdnet/dnetdb.h>
 
@@ -123,4 +125,215 @@ char *dnet_ntoa(struct dn_naddr *addr)
 char *dnet_htoa(struct dn_naddr *addr)
 {
     return dnet_ntoa(addr);
+}
+
+
+static int copy_access_field(unsigned char *dst, __u8 *dst_len,
+                             const char *src, size_t len)
+{
+    if (len > DN_MAXACCL) {
+        errno = ENAMETOOLONG;
+        return -1;
+    }
+    if (len)
+        memcpy(dst, src, len);
+    *dst_len = (__u8)len;
+    return 0;
+}
+
+static int parse_host(const char *host, char *node, size_t node_cap,
+                      struct accessdata_dn *access)
+{
+    const char *slash;
+    const char *next;
+    size_t len;
+
+    if (!host || !*host || !node || !node_cap || !access) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    slash = strchr(host, '/');
+    len = slash ? (size_t)(slash - host) : strlen(host);
+    if (!len) {
+        errno = EINVAL;
+        return -1;
+    }
+    if (len >= node_cap) {
+        errno = ENAMETOOLONG;
+        return -1;
+    }
+    memcpy(node, host, len);
+    node[len] = '\0';
+
+    if (!slash)
+        return 0;
+
+    host = slash + 1;
+    next = strchr(host, '/');
+    if (!next) {
+        errno = EINVAL;
+        return -1;
+    }
+    if (copy_access_field(access->acc_user, &access->acc_userl,
+                          host, (size_t)(next - host)))
+        return -1;
+
+    host = next + 1;
+    next = strchr(host, '/');
+    if (!next) {
+        errno = EINVAL;
+        return -1;
+    }
+    if (copy_access_field(access->acc_pass, &access->acc_passl,
+                          host, (size_t)(next - host)))
+        return -1;
+
+    host = next + 1;
+    if (copy_access_field(access->acc_acc, &access->acc_accl,
+                          host, strlen(host)))
+        return -1;
+    return 0;
+}
+
+static int set_object(struct sockaddr_dn *peer, const char *object)
+{
+    size_t len;
+
+    if (!peer || !object || !*object) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    if (*object == '#') {
+        const unsigned char *p = (const unsigned char *)object + 1;
+        unsigned long value = 0;
+
+        if (!*p) {
+            errno = EINVAL;
+            return -1;
+        }
+        while (*p) {
+            if (*p < '0' || *p > '9') {
+                errno = EINVAL;
+                return -1;
+            }
+            value = value * 10U + (unsigned long)(*p - '0');
+            if (value > 255U) {
+                errno = EINVAL;
+                return -1;
+            }
+            p++;
+        }
+        peer->sdn_objnum = (__u8)value;
+        return 0;
+    }
+
+    len = strlen(object);
+    if (len > DN_MAXOBJL) {
+        errno = ENAMETOOLONG;
+        return -1;
+    }
+    peer->sdn_objnamel = cpu_to_le16_u((unsigned short)len);
+    memcpy(peer->sdn_objname, object, len);
+    return 0;
+}
+
+int dnet_conn(char *host, char *object, int type,
+              unsigned char *opt_out, int opt_outl,
+              unsigned char *opt_in, int *opt_inl)
+{
+    struct sockaddr_dn peer;
+    struct accessdata_dn access;
+    struct optdata_dn data;
+    struct timeval timeout = { 60, 0 };
+    char node[DN_MAXNODEL + 1U];
+    socklen_t data_len;
+    unsigned int incoming;
+    int fd;
+    int saved_errno;
+
+    if (!host || !object) {
+        errno = EINVAL;
+        return -1;
+    }
+    if (type != SOCK_SEQPACKET && type != SOCK_STREAM) {
+        errno = EPROTONOSUPPORT;
+        return -1;
+    }
+    if (opt_outl < 0 || opt_outl > DN_MAXOPTL ||
+        (opt_outl && !opt_out) || (opt_inl && *opt_inl < 0)) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    memset(&access, 0, sizeof(access));
+    if (parse_host(host, node, sizeof(node), &access))
+        return -1;
+
+    memset(&peer, 0, sizeof(peer));
+    peer.sdn_family = AF_DECnet;
+    if (dnet_pton(AF_DECnet, node, &peer.sdn_add) != 1) {
+        errno = EADDRNOTAVAIL;
+        return -1;
+    }
+    if (set_object(&peer, object))
+        return -1;
+
+    fd = socket(AF_DECnet, type, DNPROTO_NSP);
+    if (fd < 0)
+        return -1;
+
+    if (setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)) ||
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)))
+        goto fail;
+
+    if (access.acc_userl || access.acc_passl || access.acc_accl) {
+        if (setsockopt(fd, DNPROTO_NSP, DSO_CONACCESS,
+                       &access, sizeof(access)))
+            goto fail;
+    }
+
+    if (opt_outl) {
+        memset(&data, 0, sizeof(data));
+        data.opt_optl = cpu_to_le16_u((unsigned short)opt_outl);
+        memcpy(data.opt_data, opt_out, (size_t)opt_outl);
+        if (setsockopt(fd, DNPROTO_NSP, DSO_CONDATA, &data, sizeof(data)))
+            goto fail;
+    }
+
+    if (connect(fd, (struct sockaddr *)&peer, sizeof(peer)))
+        goto fail;
+
+    if (opt_in && opt_inl) {
+        memset(&data, 0, sizeof(data));
+        data_len = sizeof(data);
+        if (getsockopt(fd, DNPROTO_NSP, DSO_CONDATA, &data, &data_len))
+            goto fail;
+        if (data_len != sizeof(data)) {
+            errno = EPROTO;
+            goto fail;
+        }
+        incoming = le16_to_cpu_u(data.opt_optl);
+        if (incoming > DN_MAXOPTL) {
+            errno = EPROTO;
+            goto fail;
+        }
+        if ((unsigned int)*opt_inl < incoming) {
+            errno = EMSGSIZE;
+            goto fail;
+        }
+        if (incoming)
+            memcpy(opt_in, data.opt_data, incoming);
+        *opt_inl = (int)incoming;
+    }
+
+    errno = 0;
+    return fd;
+
+fail:
+    saved_errno = errno;
+    close(fd);
+    errno = saved_errno;
+    return -1;
 }

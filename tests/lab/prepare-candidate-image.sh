@@ -121,6 +121,15 @@ install -m 0755 /usr/src/decnet-iv-linux/userspace/dnphone/phone /usr/local/bin/
 make -C /usr/src/decnet-iv-linux/userspace/dnmail clean all
 install -m 0755 /usr/src/decnet-iv-linux/userspace/dnmail/dnmail /usr/local/bin/dnmail
 install -m 0755 /usr/src/decnet-iv-linux/userspace/dnmail/dnmaild /usr/local/sbin/dnmaild
+make -C /usr/src/decnet-iv-linux/userspace/libdnet clean all
+install -d /usr/local/lib /usr/local/include/netdnet
+install -m 0644 /usr/src/decnet-iv-linux/userspace/libdnet/libdnet.a /usr/local/lib/libdnet.a
+install -m 0644 /usr/src/decnet-iv-linux/userspace/libdnet/include/netdnet/dn.h /usr/local/include/netdnet/dn.h
+install -m 0644 /usr/src/decnet-iv-linux/userspace/libdnet/include/netdnet/dnetdb.h /usr/local/include/netdnet/dnetdb.h
+cc -I/usr/src/decnet-iv-linux/userspace/libdnet/include \
+    -I/usr/src/decnet-iv-linux/include/uapi -O2 -std=c11 -Wall -Wextra -Werror \
+    -o /usr/local/sbin/dnetlib-mirror /usr/src/decnet-iv-linux/tests/lab/dnetlib-mirror.c \
+    /usr/src/decnet-iv-linux/userspace/libdnet/libdnet.a
 cc -O2 -std=c11 -Wall -Wextra -Werror \
     -o /usr/local/sbin/dnsmtpfake /usr/src/decnet-iv-linux/tests/lab/dnsmtpfake.c
 cc -O2 -std=c11 -Wall -Wextra -Werror \
@@ -252,6 +261,10 @@ sudo test -s "$mnt/usr/local/sbin/dnfair"
 sudo test -s "$mnt/usr/local/sbin/dnbacklog"
 sudo test -s "$mnt/usr/local/sbin/dnreset"
 sudo test -s "$mnt/usr/local/sbin/dntermrace"
+sudo test -s "$mnt/usr/local/lib/libdnet.a"
+sudo test -s "$mnt/usr/local/include/netdnet/dn.h"
+sudo test -s "$mnt/usr/local/include/netdnet/dnetdb.h"
+sudo test -s "$mnt/usr/local/sbin/dnetlib-mirror"
 sudo test -s "$mnt/usr/local/sbin/dniv-smoke"
 sudo test -s "$mnt/usr/local/sbin/dniv-interop-smoke"
 

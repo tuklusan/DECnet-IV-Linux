@@ -478,6 +478,11 @@ if [ "$reference" = pydecnet ]; then
         exit 1
     fi
     echo "DNIV-INTEROP-CTERM-PASS session=$session scenario=$scenario node=$name peer=$peer_node mode=interactive"
+    if ! /usr/local/sbin/dnetlib-mirror "$peer_node"; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=libdnet-dnet-conn-mirror"
+        exit 1
+    fi
+    echo "DNIV-INTEROP-LIBDNET-CONN-PASS session=$session scenario=$scenario node=$name peer=$peer_node object=25"
     /usr/local/sbin/dnnml --once &
     nml_pid=$!
     sleep 2
