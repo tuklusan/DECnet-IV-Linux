@@ -129,14 +129,23 @@ fi
 for cmd in "$qemu_bin" qemu-img mke2fs; do
     command -v "$cmd" >/dev/null || { echo "area31-proof: missing native VM dependency" >&2; exit 2; }
 done
-"$qemu_bin" -netdev help 2>&1 | grep -qw vde || {
-    echo "area31-proof: QEMU VDE netdev support is unavailable" >&2
-    exit 2
-}
+qemu_vde=0
+if "$qemu_bin" -netdev help 2>&1 | grep -qw vde; then
+    qemu_vde=1
+else
+    for cmd in ip vde_plug2tap; do
+        command -v "$cmd" >/dev/null || {
+            echo "area31-proof: QEMU lacks VDE and TAP fallback dependency is missing" >&2
+            exit 2
+        }
+    done
+fi
 
 work=$(mktemp -d /tmp/dniv-area31.XXXXXX)
 gateway_pid=
 switch_pid=
+tap_bridge_pid=
+tap_name=
 vm_pid=
 
 cleanup() {
@@ -145,6 +154,12 @@ cleanup() {
     [[ -z "${gateway_pid:-}" ]] || wait "$gateway_pid" 2>/dev/null || true
     [[ -z "${vm_pid:-}" ]] || kill "$vm_pid" 2>/dev/null || true
     [[ -z "${vm_pid:-}" ]] || wait "$vm_pid" 2>/dev/null || true
+    [[ -z "${tap_bridge_pid:-}" ]] || kill "$tap_bridge_pid" 2>/dev/null || true
+    [[ -z "${tap_bridge_pid:-}" ]] || wait "$tap_bridge_pid" 2>/dev/null || true
+    if [[ -n "${tap_name:-}" ]]; then
+        sudo ip link set dev "$tap_name" down 2>/dev/null || true
+        sudo ip tuntap del dev "$tap_name" mode tap 2>/dev/null || true
+    fi
     [[ -z "${switch_pid:-}" ]] || kill "$switch_pid" 2>/dev/null || true
     rm -rf "$work"
 }
@@ -288,6 +303,21 @@ mac=$(printf 'aa:00:04:00:%02x:%02x' "$((node_num & 255))" "$(((31 << 2) | (node
 accel=tcg
 [[ -r /dev/kvm && -w /dev/kvm ]] && accel=kvm
 qemu_args=(-name dniv-area31 -accel "$accel" -smp 1)
+if (( qemu_vde )); then
+    netdev_arg="vde,id=lan,sock=$sock"
+else
+    tap_name=$(printf 'dnivtap%05d' "$((BASHPID % 100000))")
+    sudo ip tuntap add dev "$tap_name" mode tap user "$(id -un)"
+    sudo ip link set dev "$tap_name" up
+    vde_plug2tap -s "$sock" "$tap_name" >/dev/null 2>&1 &
+    tap_bridge_pid=$!
+    sleep 1
+    kill -0 "$tap_bridge_pid" 2>/dev/null || {
+        echo "area31-proof: VDE-to-TAP bridge did not start" >&2
+        exit 1
+    }
+    netdev_arg="tap,id=lan,ifname=$tap_name,script=no,downscript=no"
+fi
 if [[ "$area31_arch" == amd64 ]]; then
     qemu_args+=(-m 512)
     console="console=ttyS0"
@@ -307,7 +337,7 @@ fi
     -append "root=LABEL=dniv-root rootfstype=ext4 rw dniv.area31=1 $console" \
     -drive "file=$candidate,if=virtio,format=qcow2" \
     -drive "file=$control_img,if=virtio,format=raw,readonly=on" \
-    -netdev "vde,id=lan,sock=$sock" \
+    -netdev "$netdev_arg" \
     -device "virtio-net-pci,netdev=lan,mac=$mac" \
     -display none -monitor none -serial "file:$vm_log" -no-reboot &
 vm_pid=$!
