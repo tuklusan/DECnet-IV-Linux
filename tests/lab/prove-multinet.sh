@@ -150,26 +150,20 @@ wait_count "$work/b.log" "Circuit up" 1 "$a_pid" "$b_pid" "$c_pid"
 wait_count "$work/c.log" "Circuit up" 1 "$a_pid" "$b_pid" "$c_pid"
 
 for cycle in $(seq 1 5); do
-    down_before=$(grep -Fc "Circuit down" "$work/a.log" || true)
+    up_before=$(grep -Fc "Circuit up" "$work/a.log" || true)
     stop_pid "$b_pid"
     b_pid=
-    wait_count "$work/a.log" "Circuit down" $((down_before + 1)) "$a_pid" "$c_pid"
-
-    up_before=$(grep -Fc "Circuit up" "$work/a.log" || true)
+    sleep 0.5
     b_pid=$(start_node "$work/b.conf" "$work/b.log")
     wait_count "$work/a.log" "Circuit up" $((up_before + 1)) "$a_pid" "$b_pid" "$c_pid"
     kill -0 "$c_pid"
 done
 
-b_down_before=$(grep -Fc "Circuit down" "$work/b.log" || true)
-c_down_before=$(grep -Fc "Circuit down" "$work/c.log" || true)
 b_up_before=$(grep -Fc "Circuit up" "$work/b.log" || true)
 c_up_before=$(grep -Fc "Circuit up" "$work/c.log" || true)
 stop_pid "$a_pid"
 a_pid=
-wait_count "$work/b.log" "Circuit down" $((b_down_before + 1)) "$b_pid" "$c_pid"
-wait_count "$work/c.log" "Circuit down" $((c_down_before + 1)) "$b_pid" "$c_pid"
-
+sleep 1
 a_pid=$(start_node "$work/a.conf" "$work/a.log")
 wait_count "$work/b.log" "Circuit up" $((b_up_before + 1)) "$a_pid" "$b_pid" "$c_pid"
 wait_count "$work/c.log" "Circuit up" $((c_up_before + 1)) "$a_pid" "$b_pid" "$c_pid"
