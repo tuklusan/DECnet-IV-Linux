@@ -17,7 +17,7 @@ AR ?= ar
 CFLAGS ?= -O2 -Wall -Wextra -Werror -std=c11
 CPPFLAGS += -Iinclude -I../../include/uapi
 LIB = libdnet.a
-OBJ = libdnet.o
+OBJ = libdnet.o dnetdb.o
 
 .PHONY: all clean test
 
@@ -28,6 +28,9 @@ $(LIB): $(OBJ)
 
 libdnet.o: libdnet.c include/netdnet/dnetdb.h include/netdnet/dn.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ libdnet.c
+
+dnetdb.o: dnetdb.c include/netdnet/dnetdb.h include/netdnet/dn.h
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ dnetdb.c
 
 dnetlib-selftest: selftest.c $(LIB)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ selftest.c $(LIB)

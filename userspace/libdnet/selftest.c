@@ -23,7 +23,9 @@ int main(void)
 {
     struct dn_naddr addr;
     char text[DNET_ADDRSTRLEN];
+    char object_name[DN_MAXOBJL + 1U];
     struct dn_naddr *compat;
+    struct nodeent *node;
 
     memset(&addr, 0, sizeof(addr));
     if (dnet_pton(AF_DECnet, "31.71", &addr) != 1 ||
@@ -39,6 +41,22 @@ int main(void)
     errno = 0;
     if (dnet_pton(AF_INET, "31.71", &addr) != -1 ||
         errno != EAFNOSUPPORT)
+        return 1;
+    node = getnodebyname("31.71");
+    if (!node || node->n_addrtype != AF_DECnet || node->n_length != DN_ADDL ||
+        node->n_addr[0] != 71U || node->n_addr[1] != 124U)
+        return 1;
+    if (getobjectbyname("mirror") != 25 ||
+        getobjectbyname("NICE") != 19)
+        return 1;
+    memset(object_name, 0, sizeof(object_name));
+    if (getobjectbynumber(25, object_name, sizeof(object_name)) != 25 ||
+        strcmp(object_name, "MIRROR"))
+        return 1;
+    if (dnet_setobjhinum_handling(DNOBJHINUM_ERROR, 0))
+        return 1;
+    errno = 0;
+    if (dnet_checkobjectnumber(256) != -1 || errno != EINVAL)
         return 1;
     errno = 0;
     if (dnet_conn(NULL, "#25", SOCK_SEQPACKET, NULL, 0, NULL, NULL) != -1 ||

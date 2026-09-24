@@ -274,8 +274,15 @@ int dnet_conn(char *host, char *object, int type,
     memset(&peer, 0, sizeof(peer));
     peer.sdn_family = AF_DECnet;
     if (dnet_pton(AF_DECnet, node, &peer.sdn_add) != 1) {
-        errno = EADDRNOTAVAIL;
-        return -1;
+        struct nodeent *entry = getnodebyname(node);
+
+        if (!entry || entry->n_addrtype != AF_DECnet ||
+            entry->n_length != DN_ADDL || !entry->n_addr) {
+            errno = EADDRNOTAVAIL;
+            return -1;
+        }
+        peer.sdn_nodeaddrl = cpu_to_le16_u(DN_ADDL);
+        memcpy(peer.sdn_nodeaddr, entry->n_addr, DN_ADDL);
     }
     if (set_object(&peer, object))
         return -1;
