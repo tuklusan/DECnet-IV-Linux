@@ -25,8 +25,12 @@ test:
 		grep -Fqx 'logging console --events 4.8,4.10,4.15,4.16'
 	$(PYTHON) dnmultinet.py --node 31.80 --name MNET80 --type l2router \
 		--vde vde:///tmp/dn31.ctl --mode listen --local-port 700 \
-		--dry-run | \
-		grep -Fqx 'logging console --events 4.8,4.10,4.15,4.16'
+		--api-socket /tmp/dniv-api.sock --dry-run | \
+		grep -Fqx 'api /tmp/dniv-api.sock --mode 600'
+	MULTINET_REMOTE_HOST=127.0.0.1 MULTINET_REMOTE_PORT=700 \
+		$(PYTHON) dnmultinet.py --node 31.80 --name MNET80 --type l2router \
+		--vde vde:///tmp/dn31.ctl --mode connect --runtime-peer-env \
+		--validate-only | grep -Fqx 'dnmultinet: configuration valid'
 
 clean:
 	rm -rf __pycache__

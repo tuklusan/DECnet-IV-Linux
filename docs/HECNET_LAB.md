@@ -21,7 +21,7 @@ Area 31 is the project's Internet-connected HECnet lab area. External connectivi
 - Local/rootless VDE2 is independently green at enhanced workflow run `35959075714`: three libvdeplug endpoints completed 512 content-checked stress frames across a full switch restart, an endpoint restart, a nonexistent-endpoint negative, and Route20/PyDECnet adjacency recovery.
 - MULTINET TCP is independently green at enhanced workflow run `35960257018`: the pinned PyDECnet MULTINET module suite passed, an unopened-port negative stayed down, two simultaneous connector circuits came up, one connector survived five kill/restart cycles while the other stayed alive, and both recovered after listener restart.
 - Cross-runner VDE2 has not yet been proven. The documented SSH switch-join design is a plan until two separate hosted machines exchange real frames and DECnet traffic through it.
-- Area-31 and VAX integration have not yet been executed.
+- The repository now contains a manual, secret-backed Area-31 workflow and reusable VAX NICE probe. Remote execution and native Linux-through-gateway proof are not yet recorded.
 
 ## VDE2
 
@@ -41,7 +41,7 @@ MULTINET is the supported point-to-point Internet transport for the lab. The imp
 
 Only TCP connect/listen modes are accepted for normal project use. MULTINET/UDP is excluded from the project transport claim because it lacks the reliability and restart properties required for dependable routing tests.
 
-`userspace/dnmultinet/dnmultinet.py` launches a PyDECnet router with one VDE Ethernet circuit facing local DECnet-IV-Linux VMs and one MULTINET TCP circuit facing a local or remote peer. This gives the native Linux stack an Internet path without adding a non-Ethernet media implementation to the kernel.
+`userspace/dnmultinet/dnmultinet.py` launches a PyDECnet router with one VDE Ethernet circuit facing local DECnet-IV-Linux VMs and one MULTINET TCP circuit facing a local or remote peer. Its Area-31 mode reads the remote host/port from runtime environment variables, keeps the generated configuration in a memory-backed file descriptor, refuses secret-backed dry-run output, and can expose a local API socket for bounded remote probes. This gives the native Linux stack an Internet path without adding a non-Ethernet media implementation to the kernel.
 
 ## Runtime secret contract
 
@@ -59,7 +59,7 @@ The MULTINET remote endpoint is one Area-31 area router. The node identified by 
 
 ## Repository-tracked Area-31 tests
 
-Remote tests belong in the repository rather than in ad-hoc runner commands. The intended progression is:
+Remote tests belong in the repository rather than in ad-hoc runner commands. `.github/workflows/area31-interop.yml` is manual-only and requires an explicitly assigned disposable gateway node/name plus all five runtime secrets before it checks out the repository or opens the remote lab path. `tests/lab/prove-area31.sh` rechecks the contract, starts the rootless VDE/MULTINET gateway and uses `tests/lab/area31-nice.py` to require VAX executor summary/status/counter replies without printing secret values. The intended progression is:
 
 1. start a local VDE DECnet-IV-Linux topology and the MULTINET gateway in TCP client mode;
 2. establish the controlled adjacency to the remote Area-31 router and record routing state/counters;

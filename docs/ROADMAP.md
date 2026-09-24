@@ -96,7 +96,7 @@ Deliver:
 
 Exit criteria: VDE2 and MULTINET pass separate positive, negative, restart and stress proofs; cross-runner VDE2 is demonstrated; then an exact candidate routes successfully between local VDE lab nodes, the MULTINET-facing Area-31 router and the VAX area router without one-off protocol patches or credential leakage.
 
-Status: active. Enhanced local/rootless VDE2 proof `35959075714` and enhanced three-router MULTINET proof `35960257018` are green. Cross-runner VDE2 and Area-31/VAX integration remain outstanding.
+Status: active. Enhanced local/rootless VDE2 proof `35959075714` and enhanced three-router MULTINET proof `35960257018` are green. The repository-tracked secret-safe Area-31 workflow and initial VAX NICE probe are implemented but not yet executed as remote evidence. Native Linux-through-gateway proof and cross-runner VDE2 remain outstanding.
 
 ## Phase 9 - scale, portability, real peers and release images
 

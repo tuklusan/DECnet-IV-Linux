@@ -1,0 +1,107 @@
+# ============================================================================
+# Copyright (c) 2026 Supratim Sanyal of SANYALnet Labs.
+# Proprietary rights reserved except as expressly licensed herein.
+#
+# DECnet-IV-Linux
+# This file is governed by the SANYALnet Labs Non-Commercial License in the
+# root LICENSE file. Non-Commercial use is permitted; Commercial Use and use
+# for AI/ML model training are prohibited unless separately authorized.
+#
+# Attribution is required: "Based on original work by Supratim Sanyal of
+# SANYALnet Labs." See LICENSE for full terms, warranty disclaimer, termination,
+# patent, trademark, and governing-law provisions.
+# ============================================================================
+
+name: Area-31 Interoperability
+
+on:
+  workflow_dispatch:
+    inputs:
+      gateway_node:
+        description: Assigned disposable Area-31 DECnet address
+        required: true
+        type: string
+      gateway_name:
+        description: Assigned disposable DECnet node name
+        required: true
+        default: DNIV31
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dniv-area31-interop
+  queue: max
+  cancel-in-progress: false
+
+jobs:
+  area31:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Verify Area-31 secret prerequisites
+        shell: bash
+        env:
+          MULTINET_REMOTE_HOST: ${{ secrets.MULTINET_REMOTE_HOST }}
+          MULTINET_REMOTE_PORT: ${{ secrets.MULTINET_REMOTE_PORT }}
+          VAX_ADDR: ${{ secrets.VAX_ADDR }}
+          VAX_USERNAME: ${{ secrets.VAX_USERNAME }}
+          VAX_PASSWORD: ${{ secrets.VAX_PASSWORD }}
+        run: |
+          set -euo pipefail
+          required=(MULTINET_REMOTE_HOST MULTINET_REMOTE_PORT VAX_ADDR VAX_USERNAME VAX_PASSWORD)
+          missing=()
+          for name in "${required[@]}"; do
+            value=${!name:-}
+            if [[ -z "$value" ]]; then
+              missing+=("$name")
+            else
+              printf '::add-mask::%s\n' "$value"
+            fi
+          done
+          if (( ${#missing[@]} )); then
+            printf 'missing required Area-31 secret: %s\n' "${missing[@]}" >&2
+            exit 2
+          fi
+
+      - name: Check out exact repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+
+      - name: Verify assigned gateway identity
+        shell: bash
+        env:
+          DNIV_AREA31_GATEWAY_NODE: ${{ inputs.gateway_node }}
+          DNIV_AREA31_GATEWAY_NAME: ${{ inputs.gateway_name }}
+          MULTINET_REMOTE_HOST: ${{ secrets.MULTINET_REMOTE_HOST }}
+          MULTINET_REMOTE_PORT: ${{ secrets.MULTINET_REMOTE_PORT }}
+          VAX_ADDR: ${{ secrets.VAX_ADDR }}
+          VAX_USERNAME: ${{ secrets.VAX_USERNAME }}
+          VAX_PASSWORD: ${{ secrets.VAX_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          tests/lab/prove-area31.sh --preflight-only
+
+      - name: Install Area-31 proof dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y python3-venv libpcap-dev vde2 libvdeplug-dev
+
+      - name: Prove remote MULTINET routing and VAX NICE reachability
+        shell: bash
+        env:
+          DNIV_AREA31_GATEWAY_NODE: ${{ inputs.gateway_node }}
+          DNIV_AREA31_GATEWAY_NAME: ${{ inputs.gateway_name }}
+          MULTINET_REMOTE_HOST: ${{ secrets.MULTINET_REMOTE_HOST }}
+          MULTINET_REMOTE_PORT: ${{ secrets.MULTINET_REMOTE_PORT }}
+          VAX_ADDR: ${{ secrets.VAX_ADDR }}
+          VAX_USERNAME: ${{ secrets.VAX_USERNAME }}
+          VAX_PASSWORD: ${{ secrets.VAX_PASSWORD }}
+        run: |
+          set -euo pipefail
+          tests/lab/prove-area31.sh

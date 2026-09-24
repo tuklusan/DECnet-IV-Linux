@@ -28,6 +28,7 @@ import sys
 
 NODE_RE = re.compile(r"^([0-9]{1,2})\.([0-9]{1,4})$")
 NAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9]{0,5}$")
+HOST_RE = re.compile(r"^[A-Za-z0-9_.:%\\-\\[\\]]+$")
 
 
 def node_address(value):
@@ -57,6 +58,11 @@ def parser():
     p.add_argument("--mode", choices=("connect", "listen"), required=True)
     p.add_argument("--peer-host", help="remote MULTINET peer address/name")
     p.add_argument("--peer-port", type=int, help="remote MULTINET TCP port")
+    p.add_argument(
+        "--runtime-peer-env",
+        action="store_true",
+        help="read MULTINET_REMOTE_HOST/PORT from the environment",
+    )
     p.add_argument("--local-address", default="0.0.0.0")
     p.add_argument("--local-port", type=int, help="local MULTINET TCP listen/source port")
     p.add_argument("--cost", type=int, default=4)
@@ -64,8 +70,36 @@ def parser():
     p.add_argument("--priority", type=int, default=64)
     p.add_argument("--pydecnet-dir", help="directory containing the decnet package")
     p.add_argument("--config-out", help="write generated PyDECnet config here")
+    p.add_argument("--api-socket", help="optional PyDECnet Unix API socket")
     p.add_argument("--dry-run", action="store_true", help="print config and exit")
+    p.add_argument("--validate-only", action="store_true", help="validate configuration and exit")
     return p
+
+
+def load_runtime_peer(args):
+    if not args.runtime_peer_env:
+        return
+    if args.mode != "connect":
+        raise SystemExit("--runtime-peer-env is valid only in connect mode")
+    if args.peer_host or args.peer_port is not None:
+        raise SystemExit("--runtime-peer-env cannot be combined with explicit peer options")
+
+    missing = [
+        name
+        for name in ("MULTINET_REMOTE_HOST", "MULTINET_REMOTE_PORT")
+        if not os.environ.get(name)
+    ]
+    if missing:
+        raise SystemExit("runtime peer environment missing: " + ", ".join(missing))
+
+    host = os.environ["MULTINET_REMOTE_HOST"]
+    port_text = os.environ["MULTINET_REMOTE_PORT"]
+    if not HOST_RE.fullmatch(host):
+        raise SystemExit("MULTINET_REMOTE_HOST has invalid syntax")
+    if not port_text.isdigit():
+        raise SystemExit("MULTINET_REMOTE_PORT must be numeric")
+    args.peer_host = host
+    args.peer_port = int(port_text, 10)
 
 
 def validate(args):
@@ -81,9 +115,17 @@ def validate(args):
     if args.mode == "connect":
         if not args.peer_host or args.peer_port is None:
             raise SystemExit("connect mode requires --peer-host and --peer-port")
+        if not HOST_RE.fullmatch(args.peer_host):
+            raise SystemExit("peer host has invalid syntax")
     else:
         if args.local_port is None:
             raise SystemExit("listen mode requires --local-port")
+    if args.api_socket and (any(ch.isspace() for ch in args.api_socket) or "\n" in args.api_socket):
+        raise SystemExit("api socket path must not contain whitespace")
+    if args.runtime_peer_env and args.dry_run:
+        raise SystemExit("dry-run refuses runtime peer environment")
+    if args.dry_run and args.validate_only:
+        raise SystemExit("--dry-run and --validate-only are mutually exclusive")
 
 
 def build_config(args):
@@ -113,13 +155,20 @@ def build_config(args):
             circuit += f" --remote-address {args.peer_host}"
         if args.peer_port is not None:
             circuit += f" --remote-port {args.peer_port}"
-    lines.extend((circuit, "logging console --events 4.8,4.10,4.15,4.16"))
+    lines.append(circuit)
+    if args.api_socket:
+        lines.append(f"api {args.api_socket} --mode 600")
+    lines.append("logging console --events 4.8,4.10,4.15,4.16")
     return "\n".join(lines) + "\n"
 
 
 def main():
     args = parser().parse_args()
+    load_runtime_peer(args)
     validate(args)
+    if args.validate_only:
+        print("dnmultinet: configuration valid")
+        return 0
     config = build_config(args)
     if args.dry_run:
         sys.stdout.write(config)
