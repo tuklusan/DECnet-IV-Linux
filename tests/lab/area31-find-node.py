@@ -42,36 +42,42 @@ def find_node(api_socket: str, system: str, manager: str, wanted: str) -> str | 
         if connection is None or response.type != "accept":
             raise RuntimeError("NML connect rejected")
         try:
-            req = NiceReadNode()
-            req.permanent = 0
-            req.info = 0
-            req.entity = NodeReqEntity(-1)
-            connection.data(req.encode())
-            seen = set()
-            while True:
-                response = connection.recv()
-                if response.type != "data":
-                    raise RuntimeError("unexpected NML reply")
-                raw = bytes(response)
-                if not raw:
-                    raise RuntimeError("empty NML reply")
-                code = reply_code(raw)
-                if code == 2:
-                    continue
-                if code == -128:
-                    break
-                if code < 0:
-                    raise RuntimeError(f"NICE known-node request failed: {code}")
-                reply = NodeReply(raw)
-                entity = reply.entity
-                name = getattr(entity, "nodename", "").upper()
-                if name == wanted.upper():
-                    address = str(Nodeid(int(entity)))
-                    if address in seen:
-                        raise RuntimeError("duplicate named node")
-                    seen.add(address)
-            if len(seen) == 1:
-                return next(iter(seen))
+            for permanent in (0, 1):
+                req = NiceReadNode()
+                req.permanent = permanent
+                req.info = 0
+                req.entity = NodeReqEntity(-1)
+                connection.data(req.encode())
+                seen = set()
+                while True:
+                    response = connection.recv()
+                    if response.type != "data":
+                        raise RuntimeError("unexpected NML reply")
+                    raw = bytes(response)
+                    if not raw:
+                        raise RuntimeError("empty NML reply")
+                    code = reply_code(raw)
+                    if code == 2:
+                        continue
+                    if code == -128:
+                        break
+                    if code < 0:
+                        if permanent:
+                            raise RuntimeError(
+                                f"NICE permanent known-node request failed: {code}"
+                            )
+                        seen.clear()
+                        break
+                    reply = NodeReply(raw)
+                    entity = reply.entity
+                    name = getattr(entity, "nodename", "").upper()
+                    if name == wanted.upper():
+                        address = str(Nodeid(int(entity)))
+                        if address in seen:
+                            raise RuntimeError("duplicate named node")
+                        seen.add(address)
+                if len(seen) == 1:
+                    return next(iter(seen))
             return None
         finally:
             connection.disconnect()
