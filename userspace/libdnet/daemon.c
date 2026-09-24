@@ -80,7 +80,8 @@ int dnet_daemon(int object, char *named_object, int verbosity, int do_fork)
             _exit(0);
         if (setsid() < 0)
             return -1;
-        (void)chdir("/");
+        if (chdir("/"))
+            return -1;
     }
 
     listener = socket(AF_DECnet, SOCK_SEQPACKET, DNPROTO_NSP);
