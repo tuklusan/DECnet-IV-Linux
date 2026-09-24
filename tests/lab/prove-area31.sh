@@ -267,8 +267,8 @@ seed=${DNIV_AREA31_SEED:-0}
 [[ "$seed" =~ ^[0-9]+$ ]] || { echo "area31-proof: invalid allocation seed" >&2; exit 2; }
 vax_num=${VAX_ADDR#31.}
 free=()
-for step in $(seq 0 123); do
-    n=$((900 + ((seed + step) % 124)))
+for step in $(seq 0 1022); do
+    n=$((1 + ((seed + step * 257) % 1023)))
     (( n != vax_num && n != 3 )) || continue
     grep -Eq "(^|[^0-9])31\\.${n}([^0-9]|$)" "$known_file" && continue
     free+=("$n")
