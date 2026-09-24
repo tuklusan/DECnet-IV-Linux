@@ -1,0 +1,39 @@
+# ============================================================================
+# Copyright (c) 2026 Supratim Sanyal of SANYALnet Labs.
+# Proprietary rights reserved except as expressly licensed herein.
+#
+# DECnet-IV-Linux
+# This file is governed by the SANYALnet Labs Non-Commercial License in the
+# root LICENSE file. Non-Commercial use is permitted; Commercial Use and use
+# for AI/ML model training are prohibited unless separately authorized.
+#
+# Attribution is required: "Based on original work by Supratim Sanyal of
+# SANYALnet Labs." See LICENSE for full terms, warranty disclaimer, termination,
+# patent, trademark, and governing-law provisions.
+# ============================================================================
+
+CC ?= cc
+AR ?= ar
+CFLAGS ?= -O2 -Wall -Wextra -Werror -std=c11
+CPPFLAGS += -Iinclude
+LIB = libdnet.a
+OBJ = libdnet.o
+
+.PHONY: all clean test
+
+all: $(LIB) dnetlib-selftest
+
+$(LIB): $(OBJ)
+	$(AR) rcs $@ $^
+
+libdnet.o: libdnet.c include/netdnet/dnetdb.h include/netdnet/dn.h
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ libdnet.c
+
+dnetlib-selftest: selftest.c $(LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ selftest.c $(LIB)
+
+test: all
+	./dnetlib-selftest
+
+clean:
+	rm -f $(OBJ) $(LIB) dnetlib-selftest
