@@ -263,6 +263,17 @@ wait_gateway_wan || exit 1
 
 known_file="$work/pyrtr-known.txt"
 query_pyrtr_known "$known_file" || exit 1
+occupied_file="$work/pyrtr-occupied.txt"
+if ! "$work/venv/bin/python" "$script_dir/area31-parse-known.py" "$known_file" >"$occupied_file"; then
+    echo "area31-proof: PYRTR NCP known-node output could not be parsed" >&2
+    cat "$known_file" >&2
+    exit 1
+fi
+if ! grep -Fxq '31.3' "$occupied_file"; then
+    echo "area31-proof: PYRTR NCP known-node output lacked a structured PYRTR row" >&2
+    cat "$known_file" >&2
+    exit 1
+fi
 seed=${DNIV_AREA31_SEED:-0}
 [[ "$seed" =~ ^[0-9]+$ ]] || { echo "area31-proof: invalid allocation seed" >&2; exit 2; }
 vax_num=${VAX_ADDR#31.}
@@ -270,11 +281,15 @@ free=()
 for step in $(seq 0 1022); do
     n=$((1 + ((seed + step * 257) % 1023)))
     (( n != vax_num && n != 3 )) || continue
-    grep -Eq "(^|[^0-9])31\\.${n}([^0-9]|$)" "$known_file" && continue
+    grep -Fxq "31.${n}" "$occupied_file" && continue
     free+=("$n")
     (( ${#free[@]} == 2 )) && break
 done
-(( ${#free[@]} == 2 )) || { echo "area31-proof: no two free Area-31 identities found from PYRTR known nodes" >&2; exit 1; }
+if (( ${#free[@]} != 2 )); then
+    echo "area31-proof: no two free Area-31 identities found from PYRTR known nodes" >&2
+    cat "$known_file" >&2
+    exit 1
+fi
 final_gateway="31.${free[0]}"
 final_linux="31.${free[1]}"
 if [[ "$gateway_node" != "$final_gateway" || "$linux_node" != "$final_linux" ]]; then
