@@ -96,7 +96,7 @@ Deliver:
 
 Exit criteria: VDE2 and MULTINET pass separate positive, negative, restart and stress proofs; cross-runner VDE2 is demonstrated; then an exact candidate routes successfully between local VDE lab nodes, the MULTINET-facing Area-31 router and the VAX area router without one-off protocol patches or credential leakage.
 
-Status: active. Enhanced local/rootless VDE2 proof `35959075714` and enhanced three-router MULTINET proof `35960257018` are green. The repository-tracked secret-safe Area-31 workflow and initial VAX NICE probe are implemented but not yet executed as remote evidence. A repository-tracked two-runner VDE2-over-SSH gate is also implemented but awaits execution against a pre-existing SSH rendezvous. Native Linux-through-gateway execution remains outstanding; the repository-tracked workflow now contains the exact-candidate VM path and native NML/MIRROR checks.
+Status: active. Enhanced local/rootless VDE2 proof `35959075714` and enhanced three-router MULTINET proof `35960257018` are green. The repository-tracked secret-safe Area-31 workflow is implemented but not yet executed as remote evidence. Its exact-candidate native VM path now covers NML/MIRROR plus credential-bearing CTERM and FAL probes with credentials kept off process command lines. A repository-tracked two-runner VDE2-over-SSH gate is also implemented but awaits execution against a pre-existing SSH rendezvous.
 
 ## Phase 9 - scale, portability, real peers and release images
 

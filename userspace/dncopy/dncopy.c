@@ -1214,7 +1214,11 @@ static int selftest(void)
 
 int main(int argc, char **argv)
 {
-    struct access_options options = { 0 };
+    struct access_options options = {
+        .user = getenv("DNACCESS_USER"),
+        .password = getenv("DNACCESS_PASSWORD"),
+        .account = getenv("DNACCESS_ACCOUNT")
+    };
     const char *mode;
     const char *prog;
     struct remote_spec remote;
@@ -1228,6 +1232,12 @@ int main(int argc, char **argv)
     prog = strrchr(argv[0], '/');
     prog = prog ? prog + 1 : argv[0];
 
+    if (options.user && !options.user[0])
+        options.user = NULL;
+    if (options.password && !options.password[0])
+        options.password = NULL;
+    if (options.account && !options.account[0])
+        options.account = NULL;
     env_options = getenv("DNCOPY_OPTIONS");
     if (apply_transfer_env(env_options, &text_mode, &store_rfm, &store_rat,
                            &metadata_override)) {
@@ -1407,7 +1417,9 @@ usage:
                 "--put LOCAL AREA.NODE REMOTE | --put-text LOCAL AREA.NODE REMOTE | "
                 "--dir AREA.NODE SPEC | --delete AREA.NODE FILE | "
                 "SOURCE DEST (one transparent AREA.NODE::FILE)\n"
-                "DNCOPY_OPTIONS may set default -m/-r/-c transfer options.\n",
+                "DNCOPY_OPTIONS may set default -m/-r/-c transfer options.\n"
+                "DNACCESS_USER, DNACCESS_PASSWORD and DNACCESS_ACCOUNT provide "
+                "non-command-line access defaults.\n",
                 argv[0]);
     }
     return 2;

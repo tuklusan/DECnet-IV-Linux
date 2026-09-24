@@ -61,6 +61,14 @@ linux_node=$(read_field DNIV_LINUX_NODE)
 linux_name=$(read_field DNIV_LINUX_NAME)
 gateway_node=$(read_field DNIV_GATEWAY_NODE)
 target=$(read_field DNIV_VAX_ADDR)
+user_file=/run/dniv-area31/vax-user
+password_file=/run/dniv-area31/vax-password
+[ -r "$user_file" ] || fail no-vax-user
+[ -r "$password_file" ] || fail no-vax-password
+vax_user=$(cat "$user_file")
+vax_password=$(cat "$password_file")
+[ -n "$vax_user" ] || fail empty-vax-user
+[ -n "$vax_password" ] || fail empty-vax-password
 
 parse_node "$linux_node" || fail bad-linux-node
 parse_node "$gateway_node" || fail bad-gateway-node
@@ -104,6 +112,12 @@ done
 
 DNIV_AREA31_TARGET="$target" /usr/local/sbin/dniv-area31-native >/dev/null ||
     fail remote-protocol
+
+DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password"     /usr/local/sbin/dnlogin --probe "$target" >/dev/null 2>&1 ||
+    fail cterm-access
+DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password"     /usr/local/bin/dncopy --probe "$target" >/dev/null 2>&1 ||
+    fail fal-access
+unset vax_user vax_password
 echo "DNIV-AREA31-NATIVE-PASS"
 sync
 poweroff -f || true

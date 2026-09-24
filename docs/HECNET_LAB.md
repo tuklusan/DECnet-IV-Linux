@@ -21,7 +21,7 @@ Area 31 is the project's Internet-connected HECnet lab area. External connectivi
 - Local/rootless VDE2 is independently green at enhanced workflow run `35959075714`: three libvdeplug endpoints completed 512 content-checked stress frames across a full switch restart, an endpoint restart, a nonexistent-endpoint negative, and Route20/PyDECnet adjacency recovery.
 - MULTINET TCP is independently green at enhanced workflow run `35960257018`: the pinned PyDECnet MULTINET module suite passed, an unopened-port negative stayed down, two simultaneous connector circuits came up, one connector survived five kill/restart cycles while the other stayed alive, and both recovered after listener restart.
 - Cross-runner VDE2 has not yet been proven. The documented SSH switch-join design is a plan until two separate hosted machines exchange real frames and DECnet traffic through it.
-- The repository now contains a manual, secret-backed Area-31 workflow, host-side VAX NICE probe, and an exact native DECnet-IV-Linux candidate VM path on the local VDE side. The native path requires gateway adjacency plus NML summary/status/counters and MIRROR exchanges to the VAX router. Remote execution remains unrecorded, so this is not yet external evidence.
+- The repository now contains a manual, secret-backed Area-31 workflow, host-side VAX NICE probe, and an exact native DECnet-IV-Linux candidate VM path on the local VDE side. The native path requires gateway adjacency, NML summary/status/counters, MIRROR exchanges, an authenticated CTERM/Foundation probe through `dnlogin`, and an authenticated FAL/DAP CONFIG probe through `dncopy` to the VAX router. Remote execution remains unrecorded, so this is not yet external evidence.
 
 ## VDE2
 
@@ -58,7 +58,7 @@ The Area-31 workflow will use these GitHub Actions secrets:
 - `VAX_USERNAME`
 - `VAX_PASSWORD`
 
-The workflow and its scripts must check for all required secret names before opening the remote MULTINET connection or attempting VAX access. If one or more are absent, they must stop cleanly and state which secret names are required. They must never print, persist in artifacts, place on process command lines where avoidable, or commit the secret values.
+The workflow and its scripts must check for all required secret names before opening the remote MULTINET connection or attempting VAX access. If one or more are absent, they must stop cleanly and state which secret names are required. They must never print, persist in artifacts, or commit the secret values. The Area-31 native path stores the VAX user/password only in private files on the disposable read-only control image, then supplies them to `dnlogin`/`dncopy` through `DNACCESS_USER` and `DNACCESS_PASSWORD`; the secret values never appear in QEMU or application command-line arguments.
 
 The MULTINET remote endpoint is one Area-31 area router. The node identified by `VAX_ADDR` is another Area-31 area router reachable after the MULTINET adjacency and routing path are established. VAX credentials are for controlled test deployment/login only.
 

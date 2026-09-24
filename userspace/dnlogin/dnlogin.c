@@ -15,6 +15,7 @@
 #define _DEFAULT_SOURCE
 #define _POSIX_C_SOURCE 200809L
 #include <errno.h>
+#include <getopt.h>
 #include <linux/dn.h>
 #include <poll.h>
 #include <stdint.h>
@@ -737,9 +738,9 @@ static int selftest(void)
     return 0;
 }
 
-static int probe(const char *node_text)
+static int probe(const char *node_text, const struct login_options *options)
 {
-    int fd = connect_cterm(node_text, NULL);
+    int fd = connect_cterm(node_text, options);
 
     if (fd == -2)
         return 2;
@@ -835,17 +836,30 @@ out:
 
 int main(int argc, char **argv)
 {
-    struct login_options options = { 0 };
+    static const struct option long_options[] = {
+        { "probe", no_argument, NULL, 'P' },
+        { NULL, 0, NULL, 0 }
+    };
+    struct login_options options = {
+        .user = getenv("DNACCESS_USER"),
+        .password = getenv("DNACCESS_PASSWORD"),
+        .account = getenv("DNACCESS_ACCOUNT")
+    };
     const char *node = NULL;
+    int probe_mode = 0;
     int opt;
 
+    if (options.user && !options.user[0])
+        options.user = NULL;
+    if (options.password && !options.password[0])
+        options.password = NULL;
+    if (options.account && !options.account[0])
+        options.account = NULL;
     if (argc == 2 && strcmp(argv[1], "--selftest") == 0)
         return selftest();
-    if (argc == 3 && strcmp(argv[1], "--probe") == 0)
-        return probe(argv[2]);
 
     opterr = 0;
-    while ((opt = getopt(argc, argv, "u:p:a:")) != -1) {
+    while ((opt = getopt_long(argc, argv, "u:p:a:P", long_options, NULL)) != -1) {
         switch (opt) {
         case 'u':
             options.user = optarg;
@@ -856,6 +870,9 @@ int main(int argc, char **argv)
         case 'a':
             options.account = optarg;
             break;
+        case 'P':
+            probe_mode = 1;
+            break;
         default:
             fprintf(stderr, "dnlogin: invalid option\n");
             return 2;
@@ -863,12 +880,16 @@ int main(int argc, char **argv)
     }
     if (optind + 1 == argc)
         node = argv[optind];
+    if (node && probe_mode)
+        return probe(node, &options);
     if (node)
         return session(node, &options);
     fprintf(stderr,
             "usage: %s [-u USER] [-p PASSWORD] [-a ACCOUNT] AREA.NODE\n"
-            "       %s --probe AREA.NODE\n"
-            "       %s --selftest\n",
+            "       %s [-u USER] [-p PASSWORD] [-a ACCOUNT] --probe AREA.NODE\n"
+            "       %s --selftest\n"
+            "DNACCESS_USER, DNACCESS_PASSWORD and DNACCESS_ACCOUNT provide "
+            "non-command-line access defaults.\n",
             argv[0], argv[0], argv[0]);
     return 2;
 }
