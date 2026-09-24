@@ -26,6 +26,8 @@
 #define PHONE_REPLYOK 0x01U
 #define PHONE_CONNECT 0x07U
 #define PHONE_DIAL 0x08U
+#define PHONE_HANGUP 0x09U
+#define PHONE_GOODBYE 0x0dU
 #define PHONE_DATA 0x0eU
 
 static int parse_target(const char *text, uint16_t *addr, const char **user)
@@ -183,7 +185,9 @@ int main(int argc, char **argv)
     }
     if (recv(fd, &reply, 1U, 0) != 1 || reply != PHONE_REPLYOK)
         goto fail;
-    if (send_packet(fd, PHONE_DATA, source, message, strlen(message)))
+    if (send_packet(fd, PHONE_DATA, source, message, strlen(message)) ||
+        send_packet(fd, PHONE_HANGUP, source, NULL, 0U) ||
+        send_packet(fd, PHONE_GOODBYE, source, NULL, 0U))
         goto fail;
     close(fd);
     return 0;

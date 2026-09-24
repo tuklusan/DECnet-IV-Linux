@@ -39,6 +39,10 @@ def main() -> int:
         if reply.type != "data" or bytes(reply) != b"\x01":
             raise RuntimeError(f"bad PHONE DIAL reply: {bytes(reply)!r}")
         connection.data(bytes((0x0e,)) + source + b"\0HELLO-FROM-PYDECNET")
+        connection.data(bytes((0x12,)) + source + b"\0")
+        connection.data(bytes((0x13,)) + source + b"\0")
+        connection.data(bytes((0x09,)) + source + b"\0")
+        connection.data(bytes((0x0d,)) + source + b"\0")
         connection.disconnect()
 
         directory, response = connector.connect(
@@ -53,7 +57,7 @@ def main() -> int:
         directory.disconnect()
     finally:
         connector.close()
-    print(f"pydecnet-phone: pass peer={destination} object=29 data=1 directory=1")
+    print(f"pydecnet-phone: pass peer={destination} object=29 data=1 controls=hold,unhold,hangup,goodbye directory=1")
     return 0
 
 if __name__ == "__main__":

@@ -27,8 +27,12 @@
 #define PHONE_REPLYNOUSER 0x06U
 #define PHONE_CONNECT 0x07U
 #define PHONE_DIAL 0x08U
+#define PHONE_HANGUP 0x09U
+#define PHONE_GOODBYE 0x0dU
 #define PHONE_DATA 0x0eU
 #define PHONE_DIRECTORY 0x0fU
+#define PHONE_HOLD 0x12U
+#define PHONE_UNHOLD 0x13U
 #define PHONE_BACKLOG 8
 
 static int make_listener(void)
@@ -126,20 +130,48 @@ static int serve(int fd, const char *user)
     if (send_code(fd, PHONE_REPLYOK))
         return -1;
 
-    got = recv(fd, buf, sizeof(buf) - 1U, 0);
-    if (got < 3 || buf[0] != PHONE_DATA)
-        return -1;
-    buf[got] = 0;
     {
-        size_t source_len = bounded_strlen((char *)buf + 1U, (size_t)got - 1U);
-        const char *text;
+        int seen_data = 0;
 
-        if (source_len >= (size_t)got - 1U)
-            return -1;
-        text = (char *)buf + 1U + source_len + 1U;
-        printf("dnphoned: data from=%s text=%s\n", buf + 1U, text);
+        for (;;) {
+            size_t source_len;
+
+            got = recv(fd, buf, sizeof(buf) - 1U, 0);
+            if (!got)
+                return seen_data ? 0 : -1;
+            if (got < 0)
+                return -1;
+            if (got < 2)
+                return -1;
+            buf[got] = 0;
+            source_len = bounded_strlen((char *)buf + 1U,
+                                        (size_t)got - 1U);
+            if (source_len >= (size_t)got - 1U)
+                return -1;
+
+            switch (buf[0]) {
+            case PHONE_DATA:
+                printf("dnphoned: data from=%s text=%s\n",
+                       buf + 1U, buf + 1U + source_len + 1U);
+                seen_data = 1;
+                break;
+            case PHONE_HOLD:
+                printf("dnphoned: hold from=%s\n", buf + 1U);
+                break;
+            case PHONE_UNHOLD:
+                printf("dnphoned: unhold from=%s\n", buf + 1U);
+                break;
+            case PHONE_HANGUP:
+                printf("dnphoned: hangup from=%s\n", buf + 1U);
+                break;
+            case PHONE_GOODBYE:
+                printf("dnphoned: goodbye from=%s\n", buf + 1U);
+                return seen_data ? 0 : -1;
+            default:
+                return -1;
+            }
+        }
     }
-    return 0;
 }
 
 static int selftest(void)
