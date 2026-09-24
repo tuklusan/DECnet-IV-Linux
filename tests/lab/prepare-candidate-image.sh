@@ -124,6 +124,8 @@ install -m 0755 /usr/src/decnet-iv-linux/userspace/dnmail/dnmaild /usr/local/sbi
 make -C /usr/src/decnet-iv-linux/userspace/libdnet clean all
 make -C /usr/src/decnet-iv-linux/userspace/dnping clean all
 install -m 0755 /usr/src/decnet-iv-linux/userspace/dnping/dnping /usr/local/bin/dnping
+make -C /usr/src/decnet-iv-linux/userspace/dnetd clean all
+install -m 0755 /usr/src/decnet-iv-linux/userspace/dnetd/dnetd /usr/local/sbin/dnetd
 install -d /usr/local/lib /usr/local/include/netdnet
 install -m 0644 /usr/src/decnet-iv-linux/userspace/libdnet/libdnet.a /usr/local/lib/libdnet.a
 install -m 0755 /usr/src/decnet-iv-linux/userspace/libdnet/libdnet.so.1.0 /usr/local/lib/libdnet.so.1.0
@@ -142,6 +144,11 @@ cc -I/usr/src/decnet-iv-linux/userspace/libdnet/include \
 cc -I/usr/src/decnet-iv-linux/userspace/libdnet/include \
     -I/usr/src/decnet-iv-linux/include/uapi -O2 -std=c11 -Wall -Wextra -Werror \
     -o /usr/local/sbin/dnetlib-daemon /usr/src/decnet-iv-linux/tests/lab/dnetlib-daemon.c \
+    /usr/src/decnet-iv-linux/userspace/libdnet/libdnet_daemon.a \
+    /usr/src/decnet-iv-linux/userspace/libdnet/libdnet.a
+cc -I/usr/src/decnet-iv-linux/userspace/libdnet/include \
+    -I/usr/src/decnet-iv-linux/include/uapi -O2 -std=c11 -Wall -Wextra -Werror \
+    -o /usr/local/sbin/dnetd-mirror /usr/src/decnet-iv-linux/tests/lab/dnetd-mirror.c \
     /usr/src/decnet-iv-linux/userspace/libdnet/libdnet_daemon.a \
     /usr/src/decnet-iv-linux/userspace/libdnet/libdnet.a
 cc -O2 -std=c11 -Wall -Wextra -Werror \
@@ -276,6 +283,8 @@ sudo test -s "$mnt/usr/local/sbin/dnbacklog"
 sudo test -s "$mnt/usr/local/sbin/dnreset"
 sudo test -s "$mnt/usr/local/sbin/dntermrace"
 sudo test -s "$mnt/usr/local/bin/dnping"
+sudo test -s "$mnt/usr/local/sbin/dnetd"
+sudo test -s "$mnt/usr/local/sbin/dnetd-mirror"
 sudo test -s "$mnt/usr/local/lib/libdnet.a"
 sudo test -s "$mnt/usr/local/lib/libdnet.so.1.0"
 sudo test -L "$mnt/usr/local/lib/libdnet.so.1"

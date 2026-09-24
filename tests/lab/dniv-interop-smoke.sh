@@ -505,6 +505,22 @@ EOF_DECNET_CONF
         exit 1
     fi
     echo "DNIV-INTEROP-LIBDNET-DAEMON-PASS session=$session scenario=$scenario node=$name peer=$peer_node object=LIBMIRROR"
+    cat > /tmp/dnetd.conf <<EOF_DNETD
+DNETDTEST 0 N,N root /usr/local/sbin/dnetd-mirror
+EOF_DNETD
+    /usr/local/sbin/dnetd -d --once -c /tmp/dnetd.conf &
+    dnetd_pid=$!
+    sleep 1
+    if ! kill -0 "$dnetd_pid" 2>/dev/null; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=dnetd-listener-start"
+        exit 1
+    fi
+    echo "DNIV-INTEROP-DNETD-READY session=$session scenario=$scenario node=$name peer=$peer_node"
+    if ! wait "$dnetd_pid"; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=dnetd-session"
+        exit 1
+    fi
+    echo "DNIV-INTEROP-DNETD-PASS session=$session scenario=$scenario node=$name peer=$peer_node object=DNETDTEST"
     /usr/local/sbin/dnnml --once &
     nml_pid=$!
     sleep 2
