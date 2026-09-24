@@ -113,7 +113,7 @@ def build_config(args):
             circuit += f" --remote-address {args.peer_host}"
         if args.peer_port is not None:
             circuit += f" --remote-port {args.peer_port}"
-    lines.extend((circuit, "logging console --events 4.15,4.16"))
+    lines.extend((circuit, "logging console --events 4.8,4.10,4.15,4.16"))
     return "\n".join(lines) + "\n"
 
 

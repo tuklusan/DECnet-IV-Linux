@@ -72,7 +72,7 @@ E4 router readiness is adjacency-backed rather than a boot marker: L1 routers mu
 
 ## Distributed VDE2, MULTINET and Area-31
 
-VDE2 and MULTINET are independent transport test tracks. `tests/lab/prove-vde2.sh` has a green local/rootless proof for real libvdeplug frame delivery plus Route20/PyDECnet adjacency. `tests/lab/prove-multinet.sh` has a separate green proof for the pinned PyDECnet MULTINET module and a live TCP point-to-point adjacency/reconnect cycle. These tracks are never combined to manufacture a pass.
+VDE2 and MULTINET are independent transport test tracks. `tests/lab/prove-vde2.sh` is green in enhanced run `35959075714` with three-endpoint frame stress, endpoint/switch restart, a missing-endpoint negative and Route20/PyDECnet adjacency recovery. `tests/lab/prove-multinet.sh` is green in enhanced run `35960257018` with the pinned PyDECnet MULTINET module suite, an unopened-port negative, two simultaneous live connector circuits, repeated connector churn and central-listener restart/recovery. These tracks are never combined to manufacture a pass.
 
 The current VDE2 proof is single-host. Cross-runner VDE2 remains unproven until two hosted machines each run their own `vde_switch` and the switches are actually joined, with frame delivery, adjacency, disconnect/reconnect and fault evidence retained across the host boundary.
 

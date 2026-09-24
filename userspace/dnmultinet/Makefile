@@ -21,10 +21,12 @@ test:
 	$(PYTHON) -m py_compile dnmultinet.py
 	$(PYTHON) dnmultinet.py --node 31.80 --name MNET80 --type l2router \
 		--vde vde:///tmp/dn31.ctl --mode connect \
-		--peer-host 127.0.0.1 --peer-port 700 --dry-run >/dev/null
+		--peer-host 127.0.0.1 --peer-port 700 --dry-run | \
+		grep -Fqx 'logging console --events 4.8,4.10,4.15,4.16'
 	$(PYTHON) dnmultinet.py --node 31.80 --name MNET80 --type l2router \
 		--vde vde:///tmp/dn31.ctl --mode listen --local-port 700 \
-		--dry-run >/dev/null
+		--dry-run | \
+		grep -Fqx 'logging console --events 4.8,4.10,4.15,4.16'
 
 clean:
 	rm -rf __pycache__

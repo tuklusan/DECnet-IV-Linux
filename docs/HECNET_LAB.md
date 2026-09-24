@@ -18,8 +18,8 @@ Area 31 is the project's Internet-connected HECnet lab area. External connectivi
 
 ## Current proof status
 
-- Local/rootless VDE2 is independently green: real libvdeplug frame delivery, PyDECnet VDE operation and Route20/PyDECnet adjacency were proven in workflow run `35440502997`.
-- MULTINET TCP is independently green: the pinned PyDECnet MULTINET test module plus live point-to-point circuit down/reconnect recovery were proven in workflow run `35440787624`.
+- Local/rootless VDE2 is independently green at enhanced workflow run `35959075714`: three libvdeplug endpoints completed 512 content-checked stress frames across a full switch restart, an endpoint restart, a nonexistent-endpoint negative, and Route20/PyDECnet adjacency recovery.
+- MULTINET TCP is independently green at enhanced workflow run `35960257018`: the pinned PyDECnet MULTINET module suite passed, an unopened-port negative stayed down, two simultaneous connector circuits came up, one connector survived five kill/restart cycles while the other stayed alive, and both recovered after listener restart.
 - Cross-runner VDE2 has not yet been proven. The documented SSH switch-join design is a plan until two separate hosted machines exchange real frames and DECnet traffic through it.
 - Area-31 and VAX integration have not yet been executed.
 

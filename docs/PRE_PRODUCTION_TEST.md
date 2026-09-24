@@ -29,7 +29,7 @@ Repository state, `docs/HANDOVER.md`, `docs/PROJECT_STATE.md`, `docs/ROADMAP.md`
 | Reference | Revision | Acceptance use |
 | --- | --- | --- |
 | Route20 | `a9ef7c0b7f875f0dd2e8abaf11213798a8e4474c` | independent Ethernet/routing behavior, live peer and native VDE reference |
-| PyDECnet behavior/live | `295938c76c956a70957f4cf96b05685f555b2a18` | independent live peer, native VDE and MULTINET authority |
+| PyDECnet behavior/live | `8d93c2a546317c67aba0adf9433f5f3efdf1f85c` | independent live peer, native VDE and MULTINET authority |
 | PyDECnet tests | `9a844987bf3a1450632dee8d37e60a23a453bad3` | protocol vectors/state machines and native reference baseline |
 | LinuxDECnet | `ff39eef045d1e4b7b72a3d40111e89c07a473398` | userspace/API and VAX-data conversion comparison |
 | SIMH | `5b73b1032b52d19bf80752ea4d9cbbdc92e7b5e0` | real DEC operating-system host and simulator reference health |
@@ -204,7 +204,7 @@ VDE2 and MULTINET are proven independently before they are combined.
 
 VDE2 proof requires real libvdeplug frame delivery, multiple independent VDE endpoints, Route20/PyDECnet adjacency on the VDE fabric, switch/client restart, disconnect/reconnect, malformed/oversized frame rejection where applicable, and an actual cross-host VDE join before any multi-runner topology depends on it. The already-green single-host proof does not satisfy the cross-runner requirement.
 
-MULTINET proof uses the pinned PyDECnet implementation as the behavioral authority. Run its complete MULTINET test module, including TCP connect/listen, fragmented/coalesced framing, IPv4/IPv6 cases where supported, late listener, restart and reconnect. Add a live two-router TCP point-to-point adjacency/reconnect proof. UDP is not part of the supported project transport claim.
+MULTINET proof uses the pinned PyDECnet implementation as the behavioral authority. Run its complete MULTINET test module, including TCP connect/listen, fragmented/coalesced framing, IPv4/IPv6 cases where supported, late listener, restart and reconnect. The live gate uses one L2 listener with two simultaneous L1 connectors, requires an unopened-port negative, repeated connector churn while the unaffected peer stays alive, and listener restart followed by recovery of both connectors. UDP is not part of the supported project transport claim.
 
 Transport proofs are separate jobs and separate evidence sets. Neither may mask a failure in the other.
 
