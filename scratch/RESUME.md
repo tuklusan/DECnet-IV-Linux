@@ -1048,3 +1048,6 @@ MAIL-11 v3 exposed a native deferred-accept socket ABI contradiction before prom
 
 
 Repository tree integrity was immediately restored after the preceding low-level Git tree write omitted the base tree. This follow-up rebuilds the exact parent tree and reapplies only the deferred-accept socket/test/document deltas; no additional protocol behavior is changed. Next: exact-SHA fast acceptance, then resume local sendmail/SMTP delivery bridging.
+
+
+Fast acceptance of deferred-accept candidate `2e913c4718eef308044cc0bb1930bd6284bb2c23` passed Repository Policy `35927160893`, Build Bootstrap `35927206787`, Project State Gate `35927209224` and Python QEMU VM Lab `35927211443` (x86_64 and aarch64). Route20 L1 interoperability also passed, but the PyDECnet L1 job in run `35927213490` hung immediately after MAIL readiness because the independent proof passed Session connect data under the connector-internal name `conndata`; pinned PyDECnet's public dictionary API names that argument `data`. Change only the harness keyword to the pinned API's actual public interface. Candidate MAIL-11/socket behavior is unchanged. Next: exact-SHA fast acceptance.

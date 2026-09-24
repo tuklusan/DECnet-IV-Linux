@@ -31,7 +31,7 @@ def main() -> int:
             dest=destination,
             remuser=27,
             localuser="PYMAIL",
-            conndata=MAIL11_V3,
+            data=MAIL11_V3,
         )
         if connection is None or response.type != "accept":
             raise RuntimeError("MAIL object connect rejected")
