@@ -143,16 +143,20 @@ static int set_access_field(unsigned char *dst, size_t cap, __u8 *len,
     return 0;
 }
 
-static void apply_access_defaults(struct task_spec *spec)
+static int apply_access_defaults(struct task_spec *spec)
 {
     const char *value;
 
-    if (!spec->user[0] && (value = getenv("DNACCESS_USER")) && value[0])
-        copy_field(spec->user, sizeof(spec->user), value, strlen(value));
-    if (!spec->password[0] && (value = getenv("DNACCESS_PASSWORD")) && value[0])
-        copy_field(spec->password, sizeof(spec->password), value, strlen(value));
-    if (!spec->account[0] && (value = getenv("DNACCESS_ACCOUNT")) && value[0])
-        copy_field(spec->account, sizeof(spec->account), value, strlen(value));
+    if (!spec->user[0] && (value = getenv("DNACCESS_USER")) && value[0] &&
+        copy_field(spec->user, sizeof(spec->user), value, strlen(value)))
+        return -1;
+    if (!spec->password[0] && (value = getenv("DNACCESS_PASSWORD")) && value[0] &&
+        copy_field(spec->password, sizeof(spec->password), value, strlen(value)))
+        return -1;
+    if (!spec->account[0] && (value = getenv("DNACCESS_ACCOUNT")) && value[0] &&
+        copy_field(spec->account, sizeof(spec->account), value, strlen(value)))
+        return -1;
+    return 0;
 }
 
 static int connect_task(const struct task_spec *spec, int timeout_seconds)
@@ -336,7 +340,10 @@ int main(int argc, char **argv)
     }
     if (arg + 1 != argc || parse_spec(argv[arg], &spec))
         goto usage;
-    apply_access_defaults(&spec);
+    if (apply_access_defaults(&spec)) {
+        fprintf(stderr, "dntask: DNACCESS field exceeds %u bytes\n", DN_MAXACCL);
+        return 2;
+    }
 
     fd = connect_task(&spec, connect_timeout);
     if (fd < 0) {
