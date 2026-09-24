@@ -352,11 +352,6 @@ static int accept_policy(const struct service *service, int fd)
     if (service->auto_mode > 0)
         return setsockopt(fd, DNPROTO_NSP, DSO_CONACCEPT, NULL, 0);
     if (service->auto_mode < 0) {
-        struct optdata_dn reject;
-        memset(&reject, 0, sizeof(reject));
-        reject.opt_status = cpu_to_le16_u(DNSTAT_REJECTED);
-        (void)setsockopt(fd, DNPROTO_NSP, DSO_DISDATA,
-                         &reject, sizeof(reject));
         (void)setsockopt(fd, DNPROTO_NSP, DSO_CONREJECT, NULL, 0);
         close(fd);
         return 1;
