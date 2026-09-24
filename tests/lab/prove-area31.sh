@@ -222,6 +222,7 @@ DNIV_QCOCAL_ADDR=$qcocal_node
 EOF
 if [[ -n "$qcocal_node" ]]; then
     python3 "$script_dir/vax/make-http-com.py" "$control_dir/DNIVHT.COM"
+    python3 "$script_dir/vax/make-task-com.py" "$control_dir/DNIVTK.COM"
 fi
 printf '%s' "$VAX_USERNAME" >"$control_dir/vax-user"
 printf '%s' "$VAX_PASSWORD" >"$control_dir/vax-password"

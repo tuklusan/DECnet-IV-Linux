@@ -84,6 +84,7 @@ if [ -n "$qcocal" ]; then
     [ "$qcocal" != "$gateway_node" ] || fail duplicate-qcocal-node
     [ "$qcocal" != "$target" ] || fail duplicate-qcocal-node
     [ -r /run/dniv-area31/DNIVHT.COM ] || fail no-qcocal-http
+    [ -r /run/dniv-area31/DNIVTK.COM ] || fail no-qcocal-task
 fi
 
 iface=
@@ -134,12 +135,12 @@ DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
 if [ -n "$qcocal" ]; then
     qcocal_listing=
     if ! qcocal_listing=$(DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
-        /usr/local/bin/dncopy --dir "$qcocal" 'DNIVHT.COM;*' 2>/dev/null); then
+        /usr/local/bin/dncopy --dir "$qcocal" 'DNIV*.COM;*' 2>/dev/null); then
         fail qcocal-http-preflight
     fi
-    if printf '%s\n' "$qcocal_listing" | grep -Fiq 'DNIVHT.COM'; then
+    if printf '%s\n' "$qcocal_listing" | grep -Eiq 'DNIV(HT|TK)\.COM'; then
         unset qcocal_listing
-        fail qcocal-http-existing
+        fail qcocal-object-existing
     fi
     unset qcocal_listing
     DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
@@ -156,6 +157,21 @@ if [ -n "$qcocal" ]; then
         /usr/local/bin/dndel "$qcocal" DNIVHT.COM >/dev/null 2>&1 ||
         fail qcocal-http-cleanup
     echo "DNIV-AREA31-QCOCAL-HTTP-PASS"
+
+    DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
+        /usr/local/bin/dncopy --put-text /run/dniv-area31/DNIVTK.COM "$qcocal" DNIVTK.COM \
+        >/dev/null 2>&1 || fail qcocal-task-install
+    if ! DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
+        /usr/local/bin/dntask "$qcocal::DNIVTK" 2>/dev/null | \
+        grep -Fq 'QCOCAL-DECNET-TASK-PASS'; then
+        DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
+            /usr/local/bin/dndel "$qcocal" DNIVTK.COM >/dev/null 2>&1 || true
+        fail qcocal-task-client
+    fi
+    DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
+        /usr/local/bin/dndel "$qcocal" DNIVTK.COM >/dev/null 2>&1 ||
+        fail qcocal-task-cleanup
+    echo "DNIV-AREA31-QCOCAL-TASK-PASS"
 fi
 
 unset vax_user vax_password
