@@ -132,6 +132,16 @@ DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
     fail fal-directory
 
 if [ -n "$qcocal" ]; then
+    qcocal_listing=
+    if ! qcocal_listing=$(DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
+        /usr/local/bin/dncopy --dir "$qcocal" 'DNIVHT.COM;*' 2>/dev/null); then
+        fail qcocal-http-preflight
+    fi
+    if printf '%s\n' "$qcocal_listing" | grep -Fiq 'DNIVHT.COM'; then
+        unset qcocal_listing
+        fail qcocal-http-existing
+    fi
+    unset qcocal_listing
     DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
         /usr/local/bin/dncopy --put-text /run/dniv-area31/DNIVHT.COM "$qcocal" DNIVHT.COM \
         >/dev/null 2>&1 || fail qcocal-http-install
