@@ -38,6 +38,20 @@ userspace:
 
 unit:
 	$(MAKE) -C tests/unit test
+	python3 tests/lab/vax/make-http-com.py --selftest
+	bash -n tests/lab/prove-area31.sh
+	env MULTINET_REMOTE_HOST=example.invalid MULTINET_REMOTE_PORT=60001 \
+		VAX_ADDR=31.91 VAX_USERNAME=TEST VAX_PASSWORD=TEST \
+		DNIV_AREA31_GATEWAY_NODE=31.92 DNIV_AREA31_GATEWAY_NAME=DNIV31 \
+		DNIV_AREA31_LINUX_NODE=31.93 DNIV_AREA31_LINUX_NAME=DNIV32 \
+		DNIV_QCOCAL_NODE=31.94 DNIV_AREA31_ARCH=amd64 \
+		tests/lab/prove-area31.sh --preflight-only >/dev/null
+	env MULTINET_REMOTE_HOST=example.invalid MULTINET_REMOTE_PORT=60001 \
+		VAX_ADDR=31.91 VAX_USERNAME=TEST VAX_PASSWORD=TEST \
+		DNIV_AREA31_GATEWAY_NODE=31.92 DNIV_AREA31_GATEWAY_NAME=DNIV31 \
+		DNIV_AREA31_LINUX_NODE=31.93 DNIV_AREA31_LINUX_NAME=DNIV32 \
+		DNIV_QCOCAL_NODE=31.94 DNIV_AREA31_ARCH=arm64 \
+		tests/lab/prove-area31.sh --preflight-only >/dev/null
 
 kernel:
 	$(MAKE) -C kernel/decnet KDIR="$(KDIR)"

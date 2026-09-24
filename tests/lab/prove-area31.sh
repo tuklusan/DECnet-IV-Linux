@@ -58,6 +58,14 @@ gateway_name=${DNIV_AREA31_GATEWAY_NAME:-}
 linux_node=${DNIV_AREA31_LINUX_NODE:-}
 linux_name=${DNIV_AREA31_LINUX_NAME:-}
 qcocal_node=${DNIV_QCOCAL_NODE:-}
+area31_arch=${DNIV_AREA31_ARCH:-amd64}
+case "$area31_arch" in
+    amd64|arm64) ;;
+    *)
+        echo "area31-proof: DNIV_AREA31_ARCH must be amd64 or arm64" >&2
+        exit 2
+        ;;
+esac
 if [[ ! "$gateway_node" =~ ^31\.([0-9]{1,4})$ ]] ||
    (( 10#${BASH_REMATCH[1]} < 1 || 10#${BASH_REMATCH[1]} > 1023 )); then
     echo "area31-proof: DNIV_AREA31_GATEWAY_NODE must identify an assigned Area-31 node" >&2
@@ -113,10 +121,15 @@ fi
 for path in "$DNIV_AREA31_CANDIDATE_IMAGE" "$DNIV_AREA31_KERNEL" "$DNIV_AREA31_INITRD"; do
     [[ -r "$path" ]] || { echo "area31-proof: native candidate input is unreadable" >&2; exit 2; }
 done
-for cmd in qemu-system-x86_64 qemu-img mke2fs; do
+if [[ "$area31_arch" == amd64 ]]; then
+    qemu_bin=qemu-system-x86_64
+else
+    qemu_bin=qemu-system-aarch64
+fi
+for cmd in "$qemu_bin" qemu-img mke2fs; do
     command -v "$cmd" >/dev/null || { echo "area31-proof: missing native VM dependency" >&2; exit 2; }
 done
-qemu-system-x86_64 -netdev help 2>&1 | grep -qw vde || {
+"$qemu_bin" -netdev help 2>&1 | grep -qw vde || {
     echo "area31-proof: QEMU VDE netdev support is unavailable" >&2
     exit 2
 }
@@ -215,9 +228,24 @@ node_num=${linux_node#31.}
 mac=$(printf 'aa:00:04:00:%02x:%02x' "$((node_num & 255))" "$(((31 << 2) | (node_num >> 8)) & 255)")
 accel=tcg
 [[ -r /dev/kvm && -w /dev/kvm ]] && accel=kvm
-qemu-system-x86_64 -name dniv-area31 -accel "$accel" -m 512 -smp 1 \
+qemu_args=(-name dniv-area31 -accel "$accel" -smp 1)
+if [[ "$area31_arch" == amd64 ]]; then
+    qemu_args+=(-m 512)
+    console="console=ttyS0"
+else
+    if [[ "$accel" == kvm ]]; then
+        machine="virt,gic-version=host"
+        cpu=host
+    else
+        machine="virt,gic-version=3"
+        cpu=max
+    fi
+    qemu_args+=(-machine "$machine" -cpu "$cpu" -m 1024)
+    console="earlycon=pl011,0x09000000 console=ttyAMA0"
+fi
+"$qemu_bin" "${qemu_args[@]}" \
     -kernel "$DNIV_AREA31_KERNEL" -initrd "$DNIV_AREA31_INITRD" \
-    -append "root=LABEL=dniv-root rootfstype=ext4 rw dniv.area31=1 console=ttyS0" \
+    -append "root=LABEL=dniv-root rootfstype=ext4 rw dniv.area31=1 $console" \
     -drive "file=$candidate,if=virtio,format=qcow2" \
     -drive "file=$control_img,if=virtio,format=raw,readonly=on" \
     -netdev "vde,id=lan,sock=$sock" \

@@ -51,10 +51,24 @@ concurrency:
 
 jobs:
   area31:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            slot: x64
+            arch: amd64
+            qemu_package: qemu-system-x86
+          - runner: ubuntu-24.04-arm
+            slot: arm64
+            arch: arm64
+            qemu_package: qemu-system-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
     env:
-      DNIV_OUTER_BASE_DIR: ${{ github.workspace }}/scratch/outer/amd64
+      DNIV_OUTER_BASE_DIR: ${{ github.workspace }}/scratch/outer/${{ matrix.arch }}
+      DNIV_AREA31_ARCH: ${{ matrix.arch }}
     steps:
       - name: Verify Area-31 secret prerequisites
         shell: bash
@@ -110,7 +124,7 @@ jobs:
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y python3-venv libpcap-dev vde2 libvdeplug-dev \
-            qemu-system-x86 qemu-utils e2fsprogs curl build-essential
+            ${{ matrix.qemu_package }} qemu-utils e2fsprogs curl build-essential
 
       - name: Compute stable amd64 foundation identity
         id: foundation-id
@@ -118,7 +132,7 @@ jobs:
         run: |
           set -euo pipefail
           fingerprint=$(cat image/ubuntu-base/images.env image/ubuntu-base/build-foundation.sh | sha256sum | cut -c1-16)
-          session="outer-v2-amd64-$fingerprint"
+          session="outer-v2-${{ matrix.arch }}-$fingerprint"
           echo "DNIV_FOUNDATION_FINGERPRINT=$fingerprint" >> "$GITHUB_ENV"
           echo "DNIV_OUTER_SESSION_ID=$session" >> "$GITHUB_ENV"
           echo "session_id=$session" >> "$GITHUB_OUTPUT"
@@ -136,9 +150,16 @@ jobs:
         run: |
           set -euo pipefail
           . image/ubuntu-base/images.env
-          curl -fL "$UBUNTU_BASE_URL/$UBUNTU_BASE_AMD64" -o "$RUNNER_TEMP/$UBUNTU_BASE_AMD64"
-          echo "$UBUNTU_BASE_AMD64_SHA256  $RUNNER_TEMP/$UBUNTU_BASE_AMD64" | sha256sum -c -
-          echo "UBUNTU_BASE_TARBALL=$RUNNER_TEMP/$UBUNTU_BASE_AMD64" >> "$GITHUB_ENV"
+          if [[ '${{ matrix.arch }}' == amd64 ]]; then
+            file=$UBUNTU_BASE_AMD64
+            sha=$UBUNTU_BASE_AMD64_SHA256
+          else
+            file=$UBUNTU_BASE_ARM64
+            sha=$UBUNTU_BASE_ARM64_SHA256
+          fi
+          curl -fL "$UBUNTU_BASE_URL/$file" -o "$RUNNER_TEMP/$file"
+          echo "$sha  $RUNNER_TEMP/$file" | sha256sum -c -
+          echo "UBUNTU_BASE_TARBALL=$RUNNER_TEMP/$file" >> "$GITHUB_ENV"
 
       - name: Build immutable amd64 foundation on cache miss
         if: ${{ steps.outer-base.outputs.cache-hit != 'true' }}
@@ -148,13 +169,13 @@ jobs:
           sudo -v
           rm -rf "$DNIV_OUTER_BASE_DIR"
           mkdir -p "$DNIV_OUTER_BASE_DIR/boot"
-          image/ubuntu-base/build-foundation.sh amd64 "$UBUNTU_BASE_TARBALL" \
+          image/ubuntu-base/build-foundation.sh '${{ matrix.arch }}' "$UBUNTU_BASE_TARBALL" \
             "$DNIV_OUTER_BASE_DIR/base.qcow2" "$DNIV_OUTER_BASE_DIR/boot"
           . image/ubuntu-base/images.env
           cat >"$DNIV_OUTER_BASE_DIR/session.env" <<EOF_SESSION
           FORMAT=2
           SESSION_ID=$DNIV_OUTER_SESSION_ID
-          ARCH=amd64
+          ARCH=${{ matrix.arch }}
           FOUNDATION_FINGERPRINT=$DNIV_FOUNDATION_FINGERPRINT
           UBUNTU_BASE_RELEASE=$UBUNTU_BASE_RELEASE
           UBUNTU_APT_SNAPSHOT=$UBUNTU_APT_SNAPSHOT
@@ -174,7 +195,7 @@ jobs:
           set -euo pipefail
           (cd "$DNIV_OUTER_BASE_DIR" && sha256sum -c SHA256SUMS)
           qemu-img check -q -f qcow2 "$DNIV_OUTER_BASE_DIR/base.qcow2"
-          candidate="$RUNNER_TEMP/area31-candidate.qcow2"
+          candidate="$RUNNER_TEMP/area31-candidate-${{ matrix.arch }}.qcow2"
           tests/lab/prepare-candidate-image.sh "$DNIV_OUTER_BASE_DIR/base.qcow2" "$candidate"
           echo "DNIV_AREA31_CANDIDATE_IMAGE=$candidate" >> "$GITHUB_ENV"
           echo "DNIV_AREA31_KERNEL=$DNIV_OUTER_BASE_DIR/boot/vmlinuz" >> "$GITHUB_ENV"
