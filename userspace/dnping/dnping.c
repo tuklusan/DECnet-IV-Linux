@@ -169,7 +169,8 @@ int main(int argc, char **argv)
         int got;
         long rtt;
 
-        tx[size > 1 ? 1 : 0] = (unsigned char)(i & 0xff);
+        if (size > 1)
+            tx[1] = (unsigned char)(i & 0xff);
         if (gettimeofday(&start, NULL)) {
             if (!quiet)
                 perror("dnping: gettimeofday");
