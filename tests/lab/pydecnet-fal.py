@@ -32,6 +32,7 @@ def main() -> int:
             dest=destination,
             remuser=17,
             localuser="PYFAL",
+            username="FALUSER", password="FALPASS", account="FALACCT",
         )
         if connection is None or response.type != "accept":
             raise RuntimeError(
@@ -84,6 +85,7 @@ def main() -> int:
             dest=destination,
             remuser=17,
             localuser="PYFAL",
+            username="FALUSER", password="FALPASS", account="FALACCT",
         )
         if connection is None or response.type != "accept":
             raise RuntimeError(
@@ -117,7 +119,8 @@ def main() -> int:
         connection.disconnect()
 
         connection, response = connector.connect(
-            system=system, dest=destination, remuser=17, localuser="PYFAL"
+            system=system, dest=destination, remuser=17, localuser="PYFAL",
+            username="FALUSER", password="FALPASS", account="FALACCT",
         )
         if connection is None or response.type != "accept":
             raise RuntimeError("FAL metadata get connect rejected")
@@ -157,7 +160,8 @@ def main() -> int:
         connection.disconnect()
 
         connection, response = connector.connect(
-            system=system, dest=destination, remuser=17, localuser="PYFAL"
+            system=system, dest=destination, remuser=17, localuser="PYFAL",
+            username="FALUSER", password="FALPASS", account="FALACCT",
         )
         if connection is None or response.type != "accept":
             raise RuntimeError("FAL rename connect rejected")
@@ -175,7 +179,8 @@ def main() -> int:
         connection.disconnect()
 
         connection, response = connector.connect(
-            system=system, dest=destination, remuser=17, localuser="PYFAL"
+            system=system, dest=destination, remuser=17, localuser="PYFAL",
+            username="FALUSER", password="FALPASS", account="FALACCT",
         )
         if connection is None or response.type != "accept":
             raise RuntimeError("FAL directory connect rejected")
@@ -201,7 +206,8 @@ def main() -> int:
         connection.disconnect()
 
         connection, response = connector.connect(
-            system=system, dest=destination, remuser=17, localuser="PYFAL"
+            system=system, dest=destination, remuser=17, localuser="PYFAL",
+            username="FALUSER", password="FALPASS", account="FALACCT",
         )
         if connection is None or response.type != "accept":
             raise RuntimeError("FAL erase connect rejected")

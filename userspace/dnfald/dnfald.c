@@ -618,9 +618,44 @@ static int selftest(void)
     return 0;
 }
 
+static int access_field_match(const unsigned char *data, unsigned int len,
+                              const char *expected)
+{
+    size_t n;
+
+    if (!expected)
+        return 1;
+    n = strlen(expected);
+    return n == len && !memcmp(data, expected, n);
+}
+
+static int authenticate_session(int fd, const char *user,
+                                const char *password, const char *account)
+{
+    struct accessdata_dn access;
+    socklen_t len = sizeof(access);
+
+    if (!user && !password && !account)
+        return 0;
+    memset(&access, 0, sizeof(access));
+    if (getsockopt(fd, DNPROTO_NSP, DSO_CONACCESS, &access, &len) ||
+        len != sizeof(access))
+        return -1;
+    if (!access_field_match(access.acc_user, access.acc_userl, user) ||
+        !access_field_match(access.acc_pass, access.acc_passl, password) ||
+        !access_field_match(access.acc_acc, access.acc_accl, account)) {
+        errno = EACCES;
+        return -1;
+    }
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     const char *root = NULL;
+    const char *user = NULL;
+    const char *password = NULL;
+    const char *account = NULL;
     int sessions = 0;
     int served = 0;
     int listener;
@@ -644,9 +679,15 @@ int main(int argc, char **argv)
             sessions = (int)value;
         } else if (!strcmp(argv[i], "--root") && i + 1 < argc) {
             root = argv[++i];
+        } else if (!strcmp(argv[i], "--user") && i + 1 < argc) {
+            user = argv[++i];
+        } else if (!strcmp(argv[i], "--password") && i + 1 < argc) {
+            password = argv[++i];
+        } else if (!strcmp(argv[i], "--account") && i + 1 < argc) {
+            account = argv[++i];
         } else {
             fprintf(stderr,
-                    "usage: %s [--once|--sessions N] [--root DIR] | --selftest\n",
+                    "usage: %s [--once|--sessions N] [--root DIR] [--user USER] [--password PASSWORD] [--account ACCOUNT] | --selftest\n",
                     argv[0]);
             return 2;
         }
@@ -671,7 +712,9 @@ int main(int argc, char **argv)
             close(listener);
             return 1;
         }
-        rc = serve_session(fd, root);
+        rc = authenticate_session(fd, user, password, account);
+        if (!rc)
+            rc = serve_session(fd, root);
         close(fd);
         if (rc) {
             perror("dnfald: session");
