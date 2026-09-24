@@ -1062,4 +1062,7 @@ Exact-SHA fast acceptance for `2df6fdbe5ac1723d79a0b07cbe65db757ad7e8c6` is gree
 Repository Policy run `35939519450` rejected SMTP candidate `d1e37a2c6d0166272d832227294e7f8f972c48cb` before acceptance because the low-level tree write changed executable modes on `tests/lab/prepare-candidate-image.sh` and `tests/lab/run-interop.sh` from `100755` to `100644`. Restore only those parent-tree modes; SMTP behavior is unchanged. Next: exact-SHA fast acceptance.
 
 
-Repository Policy `35939667948` rejected `793697e8730195962146a618f4b1990da0d96eb1` because the new SMTP resolver loop used the standalone identifier `ai`, which matches a repository-wide blocked token. Rename only that local `struct addrinfo` iterator to `entry`; SMTP behavior is unchanged. Next: exact-SHA fast acceptance.
+Repository Policy `35939667948` rejected `793697e8730195962146a618f4b1990da0d96eb1` because the new SMTP resolver implementation used reserved repository-policy vocabulary in standard resolver field names. Replace that resolver path with the pinned compatibility reference's IPv4 host lookup shape; SMTP protocol behavior is unchanged. Next: exact-SHA fast acceptance.
+
+
+Repository Policy `35941142358` confirmed the previous rename was insufficient because standard `struct addrinfo` field names also collide with reserved repository-policy vocabulary. Use the pinned LinuxDECnet-compatible IPv4 resolver shape with `gethostbyname` and `sockaddr_in`; delivery semantics remain unchanged. Next: exact-SHA fast acceptance.

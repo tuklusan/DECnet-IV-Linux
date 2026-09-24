@@ -17,6 +17,7 @@
 #include <errno.h>
 #include <linux/dn.h>
 #include <netdb.h>
+#include <netinet/in.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -260,45 +261,37 @@ static int smtp_open(const char *host, unsigned int port, const char *from,
                      const char *recipients, const char *sender,
                      const char *subject, const char *full_user)
 {
-    struct addrinfo hints;
-    struct addrinfo *result = NULL;
-    struct addrinfo *entry;
+    struct hostent *resolved;
+    struct sockaddr_in peer;
     struct timeval timeout = { .tv_sec = 30, .tv_usec = 0 };
-    char service[16];
     char command[1400];
     const char *part;
-    int fd = -1;
-    int rc;
+    int fd;
 
     if (!host || !*host || !from || !*from ||
         strchr(from, '\r') || strchr(from, '\n') ||
-        strchr(from, '<') || strchr(from, '>'))
+        strchr(from, '<') || strchr(from, '>') ||
+        port == 0U || port > 65535U)
         return -1;
-    if (snprintf(service, sizeof(service), "%u", port) >=
-        (int)sizeof(service))
+    resolved = gethostbyname(host);
+    if (!resolved || resolved->h_addrtype != AF_INET ||
+        resolved->h_length != (int)sizeof(peer.sin_addr) ||
+        !resolved->h_addr_list[0])
         return -1;
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_family = AF_UNSPEC;
-    hints.ai_socktype = SOCK_STREAM;
-    rc = getaddrinfo(host, service, &hints, &result);
-    if (rc)
-        return -1;
-    for (entry = result; entry; entry = entry->ai_next) {
-        fd = socket(entry->ai_family, entry->ai_socktype, entry->ai_protocol);
-        if (fd < 0)
-            continue;
-        (void)setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout,
-                         sizeof(timeout));
-        (void)setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout,
-                         sizeof(timeout));
-        if (!connect(fd, entry->ai_addr, entry->ai_addrlen))
-            break;
-        close(fd);
-        fd = -1;
-    }
-    freeaddrinfo(result);
+    memset(&peer, 0, sizeof(peer));
+    peer.sin_family = AF_INET;
+    peer.sin_port = htons((uint16_t)port);
+    memcpy(&peer.sin_addr, resolved->h_addr_list[0], sizeof(peer.sin_addr));
+
+    fd = socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0)
         return -1;
+    (void)setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+    (void)setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
+    if (connect(fd, (struct sockaddr *)&peer, sizeof(peer))) {
+        close(fd);
+        return -1;
+    }
     if (smtp_read_reply(fd, 220) ||
         smtp_command(fd, 250, "HELO decnet-iv-linux\r\n"))
         goto fail;
