@@ -26,6 +26,18 @@ work=$(mktemp -d /tmp/dniv-vde2.XXXXXX)
 sock="$work/switch.ctl"
 switch_pid=
 py_pid=
+stop_switch() {
+    if [ -n "${switch_pid:-}" ]; then
+        kill "$switch_pid" 2>/dev/null || true
+        for _ in $(seq 1 50); do
+            kill -0 "$switch_pid" 2>/dev/null || break
+            sleep 0.1
+        done
+        switch_pid=
+    fi
+    rm -rf "$sock"
+}
+
 cleanup() {
     set +e
     [ -z "${py_pid:-}" ] || kill "$py_pid" 2>/dev/null
@@ -34,7 +46,7 @@ cleanup() {
         [ -z "$rpid" ] || sudo kill "$rpid" 2>/dev/null
         sudo rm -f /var/run/route20.pid
     fi
-    [ -z "${switch_pid:-}" ] || kill "$switch_pid" 2>/dev/null
+    stop_switch
     rm -rf "$work"
 }
 trap cleanup EXIT INT TERM
@@ -56,21 +68,29 @@ python3 -m venv "$work/venv"
 "$work/venv/bin/python" -m pip install -q --upgrade pip setuptools
 "$work/venv/bin/python" -m pip install -q "$work/pydecnet/pydecnet"
 
-vde_switch -daemon -sock "$sock" >"$work/vde-switch.log" 2>&1
-for _ in $(seq 1 50); do
-    switch_pid=$(pgrep -f "vde_switch.*-sock $sock" | head -n1 || true)
-    [ -n "$switch_pid" ] && break
-    sleep 0.1
-done
-[ -n "$switch_pid" ] || { echo "vde2-proof: daemon pid absent" >&2; exit 1; }
-for _ in $(seq 1 100); do
-    [ -e "$sock" ] && break
-    kill -0 "$switch_pid" 2>/dev/null || { cat "$work/vde-switch.log" >&2; exit 1; }
-    sleep 0.1
-done
-[ -e "$sock" ] || { echo "vde2-proof: switch endpoint absent" >&2; exit 1; }
-[ -S "$sock/ctl" ] || { echo "vde2-proof: switch control socket absent" >&2; find "$sock" -maxdepth 2 -ls >&2 || true; exit 1; }
+start_switch() {
+    rm -rf "$sock"
+    : >"$work/vde-switch.log"
+    vde_switch -daemon -sock "$sock" >>"$work/vde-switch.log" 2>&1
+    switch_pid=
+    for _ in $(seq 1 50); do
+        switch_pid=$(pgrep -f "vde_switch.*-sock $sock" | head -n1 || true)
+        [ -n "$switch_pid" ] && break
+        sleep 0.1
+    done
+    [ -n "$switch_pid" ] || { echo "vde2-proof: daemon pid absent" >&2; exit 1; }
+    for _ in $(seq 1 100); do
+        [ -e "$sock" ] && break
+        kill -0 "$switch_pid" 2>/dev/null || { cat "$work/vde-switch.log" >&2; exit 1; }
+        sleep 0.1
+    done
+    [ -e "$sock" ] || { echo "vde2-proof: switch endpoint absent" >&2; exit 1; }
+    [ -S "$sock/ctl" ] || { echo "vde2-proof: switch control socket absent" >&2; find "$sock" -maxdepth 2 -ls >&2 || true; exit 1; }
+}
+
+start_switch
 url="vde://$sock"
+badurl="vde://$work/no-such-switch"
 
 cat >"$work/vde-native.c" <<'EOF_C'
 #include <errno.h>
@@ -80,60 +100,96 @@ cat >"$work/vde-native.c" <<'EOF_C'
 #include <sys/select.h>
 #include <unistd.h>
 
+static int receive_frame(VDECONN *conn, const unsigned char *expected,
+                         size_t expected_len)
+{
+    unsigned char got[2048];
+    fd_set rfds;
+    struct timeval tv = {2, 0};
+    int fd = vde_datafd(conn);
+    ssize_t n;
+
+    if (fd < 0)
+        return -1;
+    FD_ZERO(&rfds);
+    FD_SET(fd, &rfds);
+    if (select(fd + 1, &rfds, NULL, NULL, &tv) != 1)
+        return -1;
+    n = vde_recv(conn, got, sizeof(got), 0);
+    if (n != (ssize_t)expected_len ||
+        memcmp(expected, got, expected_len) != 0)
+        return -1;
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
-    VDECONN *a, *b;
+    VDECONN *a = NULL, *b = NULL, *c = NULL, *bad;
     unsigned char frame[60] = {0xab,0x00,0x00,0x04,0x00,0x00,
                                0x02,0x00,0x00,0x00,0x00,0x01,
                                0x60,0x03,0x2e,0x00};
-    unsigned char got[2048];
-    fd_set rfds;
-    struct timeval tv = {3, 0};
-    int fd;
-    ssize_t n;
+    unsigned int i;
+    int rc = 1;
 
-    if (argc != 2)
+    if (argc != 3)
         return 2;
+
+    errno = 0;
+    bad = vde_open(argv[2], (char *)"dniv-vde-negative", NULL);
+    if (bad) {
+        fprintf(stderr, "vde native proof: invalid endpoint unexpectedly opened\n");
+        vde_close(bad);
+        return 1;
+    }
+
     a = vde_open(argv[1], (char *)"dniv-vde-a", NULL);
-    if (!a) {
-        perror("vde_open a");
-        return 1;
-    }
     b = vde_open(argv[1], (char *)"dniv-vde-b", NULL);
-    if (!b) {
-        perror("vde_open b");
-        vde_close(a);
-        return 1;
+    c = vde_open(argv[1], (char *)"dniv-vde-c", NULL);
+    if (!a || !b || !c) {
+        perror("vde_open");
+        goto out;
     }
-    fd = vde_datafd(b);
-    if (fd < 0 || vde_send(a, frame, sizeof(frame), 0) != (ssize_t)sizeof(frame)) {
-        perror("vde send/datafd");
+
+    for (i = 0; i < 256U; i++) {
+        frame[16] = (unsigned char)(i & 0xffU);
+        frame[17] = (unsigned char)((i >> 8) & 0xffU);
+        frame[18] = (unsigned char)(i ^ 0xa5U);
+        if (vde_send(a, frame, sizeof(frame), 0) != (ssize_t)sizeof(frame) ||
+            receive_frame(b, frame, sizeof(frame)) ||
+            receive_frame(c, frame, sizeof(frame))) {
+            fprintf(stderr, "vde native proof: stress frame %u failed\n", i);
+            goto out;
+        }
+
+        if (i == 127U) {
+            vde_close(b);
+            b = vde_open(argv[1], (char *)"dniv-vde-b-restart", NULL);
+            if (!b) {
+                perror("vde reopen b");
+                goto out;
+            }
+        }
+    }
+
+    rc = 0;
+out:
+    if (c)
+        vde_close(c);
+    if (b)
         vde_close(b);
+    if (a)
         vde_close(a);
-        return 1;
-    }
-    FD_ZERO(&rfds);
-    FD_SET(fd, &rfds);
-    if (select(fd + 1, &rfds, NULL, NULL, &tv) != 1) {
-        fprintf(stderr, "vde native proof: receive timeout\n");
-        vde_close(b);
-        vde_close(a);
-        return 1;
-    }
-    n = vde_recv(b, got, sizeof(got), 0);
-    if (n != (ssize_t)sizeof(frame) || memcmp(frame, got, sizeof(frame)) != 0) {
-        fprintf(stderr, "vde native proof: frame mismatch (%zd)\n", n);
-        vde_close(b);
-        vde_close(a);
-        return 1;
-    }
-    vde_close(b);
-    vde_close(a);
-    return 0;
+    return rc;
 }
 EOF_C
 cc -std=c11 -Wall -Wextra -Werror "$work/vde-native.c" -lvdeplug -o "$work/vde-native"
-"$work/vde-native" "$url"
+"$work/vde-native" "$url" "$badurl"
+
+# Recreate the switch at the same endpoint and re-run the native multi-peer
+# stress proof so switch lifecycle is part of the transport acceptance.
+stop_switch
+start_switch
+"$work/vde-native" "$url" "$badurl"
 
 PYTHONPATH="$work/pydecnet/pydecnet" "$work/venv/bin/python" - "$url" <<'PY'
 import select
@@ -197,20 +253,44 @@ for _ in $(seq 1 100); do
 done
 [ -s /var/run/route20.pid ] || { echo "vde2-proof: Route20 did not start" >&2; exit 1; }
 
-(
-    cd "$work/pydecnet/pydecnet"
-    exec "$work/venv/bin/python" -u -m decnet.main "$work/pydecnet.conf"
-) >"$work/pydecnet.log" 2>&1 &
-py_pid=$!
+start_py() {
+    (
+        cd "$work/pydecnet/pydecnet"
+        exec "$work/venv/bin/python" -u -m decnet.main "$work/pydecnet.conf"
+    ) >>"$work/pydecnet.log" 2>&1 &
+    py_pid=$!
+}
 
+: >"$work/pydecnet.log"
+start_py
 for _ in $(seq 1 120); do
-    if grep -Fq "Adjacency up" "$work/pydecnet.log" && grep -Fq "31.77" "$work/pydecnet.log"; then
-        echo "vde2-proof: pass"
+    if grep -Fq "Adjacency up" "$work/pydecnet.log" &&
+       grep -Fq "31.77" "$work/pydecnet.log"; then
+        break
+    fi
+    kill -0 "$py_pid" 2>/dev/null || { cat "$work/pydecnet.log" >&2; exit 1; }
+    sleep 0.5
+done
+grep -Fq "Adjacency up" "$work/pydecnet.log" || {
+    cat "$work/pydecnet.log" >&2
+    echo "vde2-proof: initial Route20/PyDECnet VDE adjacency did not form" >&2
+    exit 1
+}
+
+kill "$py_pid"
+wait "$py_pid" 2>/dev/null || true
+py_pid=
+sleep 8
+start_py
+for _ in $(seq 1 160); do
+    ups=$(grep -Fc "Adjacency up" "$work/pydecnet.log" || true)
+    if [ "$ups" -ge 2 ]; then
+        echo "vde2-proof: pass stress_frames=512 peers=3 switch_restart=1 peer_restart=1"
         exit 0
     fi
     kill -0 "$py_pid" 2>/dev/null || { cat "$work/pydecnet.log" >&2; exit 1; }
     sleep 0.5
 done
 cat "$work/pydecnet.log" >&2
-echo "vde2-proof: Route20/PyDECnet VDE adjacency did not form" >&2
+echo "vde2-proof: adjacency did not recover after peer restart" >&2
 exit 1
