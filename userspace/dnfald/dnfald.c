@@ -713,6 +713,14 @@ int main(int argc, char **argv)
             return 1;
         }
         rc = authenticate_session(fd, user, password, account);
+        if (rc && errno == EACCES) {
+            fprintf(stderr, "dnfald: access denied\n");
+            close(fd);
+            served++;
+            if (sessions && served >= sessions)
+                break;
+            continue;
+        }
         if (!rc)
             rc = serve_session(fd, root);
         close(fd);

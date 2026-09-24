@@ -586,7 +586,7 @@ if [ "$reference" = pydecnet ]; then
     rm -rf "$fal_root"
     mkdir -p "$fal_root"
     printf 'SERVER-FAL\n' >"$fal_root/SERVER.TXT"
-    /usr/local/sbin/dnfald --root "$fal_root" --sessions 6 \
+    /usr/local/sbin/dnfald --root "$fal_root" --sessions 7 \
         --user FALUSER --password FALPASS --account FALACCT &
     fal_pid=$!
     sleep 1

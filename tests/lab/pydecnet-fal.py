@@ -27,6 +27,23 @@ def main() -> int:
     api_socket, destination, system = sys.argv[1:]
     connector = SimpleApiConnector(api_socket)
     try:
+        denied, response = connector.connect(
+            system=system,
+            dest=destination,
+            remuser=17,
+            localuser="PYFAL",
+            username="FALUSER", password="WRONG", account="FALACCT",
+        )
+        if denied is None or response.type != "accept":
+            raise RuntimeError("FAL negative-auth transport connect failed")
+        denied.data(CONFIG)
+        reply = denied.recv()
+        if reply.type not in ("disconnect", "abort", "reject"):
+            raise RuntimeError(
+                f"bad FAL negative-auth outcome: {reply.type!r}"
+            )
+        denied.close()
+
         connection, response = connector.connect(
             system=system,
             dest=destination,
