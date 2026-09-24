@@ -69,8 +69,8 @@ routing 31.78 --type l2router
 node 31.78 MNA78
 node 31.79 MNB79
 node 31.80 MNC80
-circuit MUL-B Multinet --mode listen --local-address 127.0.0.1 --local-port $port_b --cost 3 --t3 2
-circuit MUL-C Multinet --mode listen --local-address 127.0.0.1 --local-port $port_c --cost 3 --t3 2
+circuit MUL-1 Multinet --mode listen --local-address 127.0.0.1 --local-port $port_b --cost 3 --t3 2
+circuit MUL-2 Multinet --mode listen --local-address 127.0.0.1 --local-port $port_c --cost 3 --t3 2
 logging console --events 4.8,4.10
 EOF
 cat >"$work/b.conf" <<EOF
@@ -78,7 +78,7 @@ routing 31.79 --type l1router
 node 31.78 MNA78
 node 31.79 MNB79
 node 31.80 MNC80
-circuit MUL-A Multinet --mode connect --remote-address 127.0.0.1 --remote-port $port_b --cost 3 --t3 2
+circuit MUL-0 Multinet --mode connect --remote-address 127.0.0.1 --remote-port $port_b --cost 3 --t3 2
 logging console --events 4.8,4.10
 EOF
 cat >"$work/c.conf" <<EOF
@@ -86,13 +86,13 @@ routing 31.80 --type l1router
 node 31.78 MNA78
 node 31.79 MNB79
 node 31.80 MNC80
-circuit MUL-A Multinet --mode connect --remote-address 127.0.0.1 --remote-port $port_c --cost 3 --t3 2
+circuit MUL-0 Multinet --mode connect --remote-address 127.0.0.1 --remote-port $port_c --cost 3 --t3 2
 logging console --events 4.8,4.10
 EOF
 cat >"$work/bad.conf" <<EOF
 routing 31.81 --type l1router
 node 31.81 MND81
-circuit MUL-BAD Multinet --mode connect --remote-address 127.0.0.1 --remote-port $port_bad --cost 3 --t3 2
+circuit MUL-0 Multinet --mode connect --remote-address 127.0.0.1 --remote-port $port_bad --cost 3 --t3 2
 logging console --events 4.8,4.10
 EOF
 
