@@ -20,8 +20,8 @@ Area 31 is the project's Internet-connected HECnet lab area. External connectivi
 
 - Local/rootless VDE2 is independently green at enhanced workflow run `35959075714`: three libvdeplug endpoints completed 512 content-checked stress frames across a full switch restart, an endpoint restart, a nonexistent-endpoint negative, and Route20/PyDECnet adjacency recovery.
 - MULTINET TCP is independently green at enhanced workflow run `35960257018`: the pinned PyDECnet MULTINET module suite passed, an unopened-port negative stayed down, two simultaneous connector circuits came up, one connector survived five kill/restart cycles while the other stayed alive, and both recovered after listener restart.
-- Cross-runner VDE2 has not yet been proven. The documented SSH switch-join design is a plan until two separate hosted machines exchange real frames and DECnet traffic through it.
-- The repository now contains a manual, secret-backed Area-31 workflow, host-side VAX NICE probe, and an exact native DECnet-IV-Linux candidate VM path on the local VDE side. The native path requires gateway adjacency, NML summary/status/counters, MIRROR exchanges, an authenticated CTERM/Foundation probe through `dnlogin`, and authenticated FAL/DAP CONFIG plus directory operations through `dncopy` to the VAX router. Remote execution remains unrecorded, so this is not yet external evidence.
+- Cross-runner VDE2 has not yet been proven. Full acceptance now dispatches the two-runner SSH switch-join gate automatically; it fails closed when the required rendezvous secrets are absent.
+- The repository now contains an automatically dispatched, secret-backed Area-31 workflow, host-side NML/NICE probes, and an exact native DECnet-IV-Linux candidate VM path on the local VDE side. The native path requires gateway adjacency, NML summary/status/counters, MIRROR exchanges, an authenticated CTERM/Foundation probe through `dnlogin`, and authenticated FAL/DAP CONFIG plus directory operations through `dncopy` to the VAX router. Remote execution remains unrecorded, so this is not yet external evidence.
 
 ## VDE2
 
@@ -38,7 +38,7 @@ The project forks carrying native VDE support are pinned in `tests/reference/ref
 
 ### Cross-runner SSH rendezvous contract
 
-The manual cross-runner VDE2 workflow consumes `VDE_SSH_HOST`, `VDE_SSH_PORT`, `VDE_SSH_USER`, `VDE_SSH_KEY` and `VDE_SSH_KNOWN_HOSTS` only at runtime, plus an explicitly assigned unprivileged reverse-forward port input. The bastion must already exist and permit TCP reverse forwarding; the project does not create or assume a public relay. Both runners validate prerequisites before checkout/network activity, write key/configuration material only below runner-temporary storage with restrictive permissions, and never retain it as evidence. The server's ephemeral inner SSH account is restricted to the VDE plug plus readiness/completion marker commands.
+The cross-runner VDE2 workflow consumes `VDE_SSH_HOST`, `VDE_SSH_PORT`, `VDE_SSH_USER`, `VDE_SSH_KEY` and `VDE_SSH_KNOWN_HOSTS` only at runtime. Its unprivileged reverse-forward port is derived automatically from the exact candidate SHA. The bastion must already exist and permit TCP reverse forwarding; the project does not create or assume a public relay. Both runners validate prerequisites before checkout/network activity, write key/configuration material only below runner-temporary storage with restrictive permissions, and never retain it as evidence. The server's ephemeral inner SSH account is restricted to the VDE plug plus readiness/completion marker commands.
 
 ## MULTINET
 
@@ -64,7 +64,7 @@ The MULTINET remote endpoint is one Area-31 area router. The node identified by 
 
 ## Repository-tracked Area-31 tests
 
-Remote tests belong in the repository rather than in ad-hoc runner commands. `.github/workflows/area31-interop.yml` is manual-only and requires an explicitly assigned disposable gateway node/name plus all five runtime secrets before it checks out the repository or opens the remote lab path. `tests/lab/prove-area31.sh` rechecks the contract, starts the rootless VDE/MULTINET gateway and uses `tests/lab/area31-nice.py` to require VAX executor summary/status/counter replies without printing secret values. The intended progression is:
+Remote tests belong in the repository rather than in ad-hoc runner commands. Full acceptance dispatches `.github/workflows/area31-interop.yml` automatically. The workflow keeps remote endpoints and credentials in Actions secrets, establishes the MULTINET adjacency to PYRTR at 31.3, asks PYRTR through NML for known nodes, and selects disposable Area-31 identities not present in that view before the native proof. `tests/lab/prove-area31.sh` rechecks the contract, starts the rootless VDE/MULTINET gateway and uses `tests/lab/area31-nice.py` to require VAX executor summary/status/counter replies without printing secret values. The intended progression is:
 
 1. start a local VDE DECnet-IV-Linux topology and the MULTINET gateway in TCP client mode;
 2. establish the controlled adjacency to the remote Area-31 router and record routing state/counters;
@@ -78,4 +78,4 @@ Remote tests belong in the repository rather than in ad-hoc runner commands. `.g
 
 VAX-side scripts/programs should live in a dedicated `tests/lab` subdirectory and be paired with the Linux driver that invokes and validates them. Application experiments such as a small VAX DECnet service plus a `dnlynx` client are welcome after the underlying Session/object and standard DECnet/Linux userspace features are stable; they are supplemental tests, not a shortcut around those layers.
 
-No public HECnet route is advertised from a disposable CI job until its node identity and peer endpoint have been explicitly assigned for that run. External connectivity remains optional interoperability evidence and never substitutes for local exact-SHA acceptance.
+No public HECnet route is advertised from a disposable CI job outside Area 31. Disposable identities are selected only from Area 31 and checked against PYRTR's NML known-node view before the final proof identity is used. External connectivity remains optional interoperability evidence and never substitutes for local exact-SHA acceptance.

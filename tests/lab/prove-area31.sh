@@ -196,6 +196,62 @@ show_gateway_log() {
         -e "s#${VAX_PASSWORD//[#\\&]/\\&}#[masked-password]#g" \
         "$gateway_log" >&2 || true
 }
+ncp_app="$work/pydecnet/pydecnet/applications/ncp"
+run_ncp() {
+    env DECNETAPI="$api_sock" PYTHONPATH="$work/pydecnet/pydecnet" \
+        "$work/venv/bin/python" "$ncp_app" "$@"
+}
+wait_gateway_wan() {
+    for _ in $(seq 1 180); do
+        kill -0 "$gateway_pid" 2>/dev/null || {
+            echo "area31-proof: gateway exited before PYRTR adjacency became usable" >&2
+            show_gateway_log
+            return 1
+        }
+        if [[ -S "$api_sock" ]] &&
+           grep -Fq "Circuit up" "$gateway_log" &&
+           grep -Fq "Adjacent node = 31.3" "$gateway_log"; then
+            return 0
+        fi
+        sleep 1
+    done
+    echo "area31-proof: PYRTR MULTINET adjacency did not converge" >&2
+    show_gateway_log
+    return 1
+}
+query_pyrtr_known() {
+    local outfile=$1 tmp="${1}.tmp"
+    for _ in $(seq 1 30); do
+        : >"$tmp"
+        run_ncp tell 31.3 show known nodes >"$tmp" 2>&1 || true
+        if grep -Eq '31\.[0-9]{1,4}' "$tmp" &&
+           ! grep -Eq 'Error processing command|Error connecting to NML|Unexpected reply' "$tmp"; then
+            mv "$tmp" "$outfile"
+            return 0
+        fi
+        sleep 2
+    done
+    echo "area31-proof: PYRTR NML SHOW KNOWN NODES failed" >&2
+    cat "$tmp" >&2 || true
+    rm -f "$tmp"
+    return 1
+}
+wait_vax_nice() {
+    for _ in $(seq 1 60); do
+        if env PYTHONPATH="$work/pydecnet/pydecnet" VAX_ADDR="$VAX_ADDR" \
+            "$work/venv/bin/python" "$script_dir/area31-nice.py" \
+            "$api_sock" "$gateway_name" >/dev/null 2>&1; then
+            env PYTHONPATH="$work/pydecnet/pydecnet" VAX_ADDR="$VAX_ADDR" \
+                "$work/venv/bin/python" "$script_dir/area31-nice.py" \
+                "$api_sock" "$gateway_name" >/dev/null
+            return 0
+        fi
+        sleep 1
+    done
+    echo "area31-proof: VAX NICE reachability did not converge" >&2
+    show_gateway_log
+    return 1
+}
 "$work/venv/bin/python" "$repo_root/userspace/dnmultinet/dnmultinet.py" \
     --node "$gateway_node" --name "$gateway_name" --type l2router \
     --vde "vde://$sock" --mode connect --runtime-peer-env \
@@ -203,36 +259,10 @@ show_gateway_log() {
     >"$gateway_log" 2>&1 &
 gateway_pid=$!
 
-for _ in $(seq 1 300); do
-    kill -0 "$gateway_pid" 2>/dev/null || {
-        echo "area31-proof: gateway exited before remote routing became usable" >&2
-        show_gateway_log
-        exit 1
-    }
-    if [[ -S "$api_sock" ]] &&
-       env PYTHONPATH="$work/pydecnet/pydecnet" VAX_ADDR="$VAX_ADDR" \
-           "$work/venv/bin/python" "$script_dir/area31-nice.py" \
-           "$api_sock" "$gateway_name" >/dev/null 2>&1; then
-        env PYTHONPATH="$work/pydecnet/pydecnet" VAX_ADDR="$VAX_ADDR" \
-            "$work/venv/bin/python" "$script_dir/area31-nice.py" \
-            "$api_sock" "$gateway_name" >/dev/null
-        break
-    fi
-    sleep 1
-done
-
-if ! env PYTHONPATH="$work/pydecnet/pydecnet" VAX_ADDR="$VAX_ADDR" \
-    "$work/venv/bin/python" "$script_dir/area31-nice.py" "$api_sock" "$gateway_name" \
-    >/dev/null 2>&1; then
-    echo "area31-proof: VAX NICE reachability did not converge" >&2
-    show_gateway_log
-    exit 1
-fi
+wait_gateway_wan || exit 1
 
 known_file="$work/pyrtr-known.txt"
-env PYTHONPATH="$work/pydecnet/pydecnet" \
-    "$work/venv/bin/python" "$script_dir/area31-list-known.py" \
-    "$api_sock" "$gateway_name" 31.3 >"$known_file"
+query_pyrtr_known "$known_file" || exit 1
 seed=${DNIV_AREA31_SEED:-0}
 [[ "$seed" =~ ^[0-9]+$ ]] || { echo "area31-proof: invalid allocation seed" >&2; exit 2; }
 vax_num=${VAX_ADDR#31.}
@@ -240,7 +270,7 @@ free=()
 for step in $(seq 0 123); do
     n=$((900 + ((seed + step) % 124)))
     (( n != vax_num && n != 3 )) || continue
-    grep -Eq "^31\\.${n}([[:space:]]|$)" "$known_file" && continue
+    grep -Eq "(^|[^0-9])31\\.${n}([^0-9]|$)" "$known_file" && continue
     free+=("$n")
     (( ${#free[@]} == 2 )) && break
 done
@@ -263,16 +293,10 @@ if [[ "$gateway_node" != "$final_gateway" || "$linux_node" != "$final_linux" ]];
         --api-socket "$api_sock" --pydecnet-dir "$work/pydecnet/pydecnet" \
         >"$gateway_log" 2>&1 &
     gateway_pid=$!
-    for _ in $(seq 1 300); do
-        kill -0 "$gateway_pid" 2>/dev/null || break
-        if [[ -S "$api_sock" ]] && env PYTHONPATH="$work/pydecnet/pydecnet" VAX_ADDR="$VAX_ADDR" \
-            "$work/venv/bin/python" "$script_dir/area31-nice.py" "$api_sock" "$gateway_name" >/dev/null 2>&1; then break; fi
-        sleep 1
-    done
-    env PYTHONPATH="$work/pydecnet/pydecnet" VAX_ADDR="$VAX_ADDR" \
-        "$work/venv/bin/python" "$script_dir/area31-nice.py" "$api_sock" "$gateway_name" >/dev/null
+    wait_gateway_wan || exit 1
 fi
 echo "area31-proof: selected two Area-31 identities absent from PYRTR known nodes"
+wait_vax_nice || exit 1
 
 discovered_qcocal=$(env PYTHONPATH="$work/pydecnet/pydecnet" \
     "$work/venv/bin/python" "$script_dir/area31-find-node.py" \

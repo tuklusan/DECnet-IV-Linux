@@ -27,12 +27,7 @@ test:
 		--vde vde:///tmp/dn31.ctl --mode listen --local-port 700 \
 		--api-socket /tmp/dniv-api.sock --dry-run | \
 		grep -Fqx 'api /tmp/dniv-api.sock --mode 600'
-	@tmp=$(mktemp -d); \
-		$(PYTHON) dnmultinet.py --node 31.80 --name MNET80 --type l2router \
-		--vde vde:///tmp/dn31.ctl --mode listen --local-port 700 \
-		--api-socket /tmp/dniv-api.sock --config-out "$tmp/router.conf" \
-		--validate-only >/dev/null; \
-		rm -rf "$tmp"
+	$(PYTHON) -c 'import dnmultinet as d; a=d.parser().parse_args(["--node","31.80","--name","MNET80","--type","l2router","--vde","vde:///tmp/dn31.ctl","--mode","listen","--local-port","700","--api-socket","/tmp/dniv-api.sock"]); d.validate(a); assert "\\napi " not in d.build_config(a); assert d.build_api_config(a) == "api /tmp/dniv-api.sock --mode 600\\n"'
 	MULTINET_REMOTE_HOST=127.0.0.1 MULTINET_REMOTE_PORT=700 \
 		$(PYTHON) dnmultinet.py --node 31.80 --name MNET80 --type l2router \
 		--vde vde:///tmp/dn31.ctl --mode connect --runtime-peer-env \
