@@ -202,14 +202,19 @@ if ! env PYTHONPATH="$work/pydecnet/pydecnet" VAX_ADDR="$VAX_ADDR" \
     exit 1
 fi
 
-if [[ -z "$qcocal_node" ]]; then
-    qcocal_node=$(env PYTHONPATH="$work/pydecnet/pydecnet" \
-        "$work/venv/bin/python" "$script_dir/area31-find-node.py" \
-        "$api_sock" "$gateway_name" "$VAX_ADDR" QCOCAL 2>/dev/null || true)
-    if [[ -n "$qcocal_node" ]]; then
-        echo "area31-proof: QCOCAL discovered by NICE"
+discovered_qcocal=$(env PYTHONPATH="$work/pydecnet/pydecnet" \
+    "$work/venv/bin/python" "$script_dir/area31-find-node.py" \
+    "$api_sock" "$gateway_name" "$VAX_ADDR" QCOCAL 2>/dev/null || true)
+if [[ -n "$qcocal_node" ]]; then
+    if [[ -n "$discovered_qcocal" && "$discovered_qcocal" != "$qcocal_node" ]]; then
+        echo "area31-proof: explicit QCOCAL address disagrees with NICE" >&2
+        exit 1
     fi
+elif [[ -n "$discovered_qcocal" ]]; then
+    qcocal_node=$discovered_qcocal
+    echo "area31-proof: QCOCAL discovered by NICE"
 fi
+unset discovered_qcocal
 
 control_dir="$work/control"
 mkdir -p "$control_dir"
