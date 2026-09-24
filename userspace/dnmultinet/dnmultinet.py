@@ -155,10 +155,14 @@ def build_config(args):
         if args.peer_port is not None:
             circuit += f" --remote-port {args.peer_port}"
     lines.append(circuit)
-    if args.api_socket:
-        lines.append(f"api {args.api_socket} --mode 600")
     lines.append("logging console --events 4.8,4.10,4.15,4.16")
     return "\n".join(lines) + "\n"
+
+
+def build_api_config(args):
+    if not args.api_socket:
+        return None
+    return f"api {args.api_socket} --mode 600\n"
 
 
 def main():
@@ -169,21 +173,33 @@ def main():
         print("dnmultinet: configuration valid")
         return 0
     config = build_config(args)
+    api_config = build_api_config(args)
     if args.dry_run:
         sys.stdout.write(config)
+        if api_config:
+            sys.stdout.write(api_config)
         return 0
 
-    config_fd = None
+    config_fds = []
+    config_names = []
     if args.config_out:
         path = pathlib.Path(args.config_out)
         path.write_text(config, encoding="utf-8")
-        config_name = str(path)
+        config_names.append(str(path))
+        if api_config:
+            api_path = pathlib.Path(str(path) + ".api")
+            api_path.write_text(api_config, encoding="utf-8")
+            config_names.append(str(api_path))
     else:
-        config_fd = os.memfd_create("dnmultinet.conf", flags=0)
-        os.write(config_fd, config.encode("utf-8"))
-        os.lseek(config_fd, 0, os.SEEK_SET)
-        os.set_inheritable(config_fd, True)
-        config_name = f"/proc/self/fd/{config_fd}"
+        for label, text in (("routing", config), ("api", api_config)):
+            if text is None:
+                continue
+            config_fd = os.memfd_create(f"dnmultinet-{label}.conf", flags=0)
+            os.write(config_fd, text.encode("utf-8"))
+            os.lseek(config_fd, 0, os.SEEK_SET)
+            os.set_inheritable(config_fd, True)
+            config_fds.append(config_fd)
+            config_names.append(f"/proc/self/fd/{config_fd}")
 
     env = os.environ.copy()
     if args.pydecnet_dir:
@@ -193,7 +209,7 @@ def main():
 
     os.execve(
         sys.executable,
-        [sys.executable, "-u", "-m", "decnet.main", config_name],
+        [sys.executable, "-u", "-m", "decnet.main", *config_names],
         env,
     )
 
