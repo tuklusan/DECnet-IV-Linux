@@ -36,7 +36,7 @@ on:
         default: DNIV32
         type: string
       qcocal_node:
-        description: Optional current Area-31 address for QCOCAL VAX HTTP proof
+        description: Optional QCOCAL Area-31 address override; blank enables NICE discovery
         required: false
         default: ""
         type: string
