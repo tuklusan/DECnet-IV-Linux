@@ -487,6 +487,19 @@ EOF_DECNET_CONF
         exit 1
     fi
     echo "DNIV-INTEROP-LIBDNET-CONN-PASS session=$session scenario=$scenario node=$name peer=$peer_node object=MIRROR node-db=PEER"
+    /usr/local/sbin/dnetlib-daemon &
+    libdaemon_pid=$!
+    sleep 1
+    if ! kill -0 "$libdaemon_pid" 2>/dev/null; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=libdnet-daemon-listener-start"
+        exit 1
+    fi
+    echo "DNIV-INTEROP-LIBDNET-DAEMON-READY session=$session scenario=$scenario node=$name peer=$peer_node"
+    if ! wait "$libdaemon_pid"; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=libdnet-daemon-session"
+        exit 1
+    fi
+    echo "DNIV-INTEROP-LIBDNET-DAEMON-PASS session=$session scenario=$scenario node=$name peer=$peer_node object=LIBMIRROR"
     /usr/local/sbin/dnnml --once &
     nml_pid=$!
     sleep 2

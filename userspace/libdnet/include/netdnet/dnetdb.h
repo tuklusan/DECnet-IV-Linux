@@ -68,6 +68,11 @@ int getobjectbynumber(int number, char *name, size_t name_len);
 int dnet_recv(int fd, void *buf, int len, unsigned int flags);
 int dnet_eof(int fd);
 int getnodename(char *name, size_t len);
+int dnet_daemon(int object, char *named_object, int verbosity, int do_fork);
+void dnet_accept(int fd, short status, char *data, int len);
+void dnet_reject(int fd, short status, char *data, int len);
+void dnet_set_optdata(char *data, int len);
+char *dnet_daemon_name(void);
 
 #define DNOBJECT_FAL    (getobjectbyname("FAL"))
 #define DNOBJECT_NICE   (getobjectbyname("NICE"))

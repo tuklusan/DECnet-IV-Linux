@@ -127,11 +127,20 @@ install -m 0644 /usr/src/decnet-iv-linux/userspace/libdnet/libdnet.a /usr/local/
 install -m 0755 /usr/src/decnet-iv-linux/userspace/libdnet/libdnet.so.1.0 /usr/local/lib/libdnet.so.1.0
 ln -sf libdnet.so.1.0 /usr/local/lib/libdnet.so.1
 ln -sf libdnet.so.1 /usr/local/lib/libdnet.so
+install -m 0644 /usr/src/decnet-iv-linux/userspace/libdnet/libdnet_daemon.a /usr/local/lib/libdnet_daemon.a
+install -m 0755 /usr/src/decnet-iv-linux/userspace/libdnet/libdnet_daemon.so.1.0 /usr/local/lib/libdnet_daemon.so.1.0
+ln -sf libdnet_daemon.so.1.0 /usr/local/lib/libdnet_daemon.so.1
+ln -sf libdnet_daemon.so.1 /usr/local/lib/libdnet_daemon.so
 install -m 0644 /usr/src/decnet-iv-linux/userspace/libdnet/include/netdnet/dn.h /usr/local/include/netdnet/dn.h
 install -m 0644 /usr/src/decnet-iv-linux/userspace/libdnet/include/netdnet/dnetdb.h /usr/local/include/netdnet/dnetdb.h
 cc -I/usr/src/decnet-iv-linux/userspace/libdnet/include \
     -I/usr/src/decnet-iv-linux/include/uapi -O2 -std=c11 -Wall -Wextra -Werror \
     -o /usr/local/sbin/dnetlib-mirror /usr/src/decnet-iv-linux/tests/lab/dnetlib-mirror.c \
+    /usr/src/decnet-iv-linux/userspace/libdnet/libdnet.a
+cc -I/usr/src/decnet-iv-linux/userspace/libdnet/include \
+    -I/usr/src/decnet-iv-linux/include/uapi -O2 -std=c11 -Wall -Wextra -Werror \
+    -o /usr/local/sbin/dnetlib-daemon /usr/src/decnet-iv-linux/tests/lab/dnetlib-daemon.c \
+    /usr/src/decnet-iv-linux/userspace/libdnet/libdnet_daemon.a \
     /usr/src/decnet-iv-linux/userspace/libdnet/libdnet.a
 cc -O2 -std=c11 -Wall -Wextra -Werror \
     -o /usr/local/sbin/dnsmtpfake /usr/src/decnet-iv-linux/tests/lab/dnsmtpfake.c
@@ -268,9 +277,14 @@ sudo test -s "$mnt/usr/local/lib/libdnet.a"
 sudo test -s "$mnt/usr/local/lib/libdnet.so.1.0"
 sudo test -L "$mnt/usr/local/lib/libdnet.so.1"
 sudo test -L "$mnt/usr/local/lib/libdnet.so"
+sudo test -s "$mnt/usr/local/lib/libdnet_daemon.a"
+sudo test -s "$mnt/usr/local/lib/libdnet_daemon.so.1.0"
+sudo test -L "$mnt/usr/local/lib/libdnet_daemon.so.1"
+sudo test -L "$mnt/usr/local/lib/libdnet_daemon.so"
 sudo test -s "$mnt/usr/local/include/netdnet/dn.h"
 sudo test -s "$mnt/usr/local/include/netdnet/dnetdb.h"
 sudo test -s "$mnt/usr/local/sbin/dnetlib-mirror"
+sudo test -s "$mnt/usr/local/sbin/dnetlib-daemon"
 sudo test -s "$mnt/usr/local/sbin/dniv-smoke"
 sudo test -s "$mnt/usr/local/sbin/dniv-interop-smoke"
 

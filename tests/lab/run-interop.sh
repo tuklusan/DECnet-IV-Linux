@@ -330,6 +330,23 @@ if [[ "$reference" == pydecnet ]]; then
         tail -180 "$ref1_log" >&2 || true
         exit 1
     fi
+    if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-LIBDNET-DAEMON-READY session=$session scenario=$scenario" 30 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+        tail -240 "$candidate_log" >&2 || true
+        tail -180 "$ref1_log" >&2 || true
+        exit 1
+    fi
+    if ! env PYTHONPATH="$host_pydecnet/pydecnet" python3 \
+        "$script_dir/pydecnet-mirror.py" "$host_pydecnet_api" \
+        "$area.$node" "$ref_name" LIBMIRROR; then
+        tail -260 "$candidate_log" >&2 || true
+        tail -200 "$ref1_log" >&2 || true
+        exit 1
+    fi
+    if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-LIBDNET-DAEMON-PASS session=$session scenario=$scenario" 30 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+        tail -260 "$candidate_log" >&2 || true
+        tail -200 "$ref1_log" >&2 || true
+        exit 1
+    fi
     if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-NML-READY session=$session scenario=$scenario" "$timeout_seconds" "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
         tail -220 "$candidate_log" >&2 || true
         tail -160 "$ref1_log" >&2 || true
