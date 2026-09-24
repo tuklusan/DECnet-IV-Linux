@@ -23,12 +23,12 @@ static int exchange(int fd, const unsigned char *request, size_t request_len,
                     const unsigned char *expected, size_t expected_len)
 {
     unsigned char reply[128];
-    ssize_t got;
+    int got;
 
     if (send(fd, request, request_len, MSG_EOR | MSG_NOSIGNAL) !=
         (ssize_t)request_len)
         return -1;
-    got = recv(fd, reply, sizeof(reply), 0);
+    got = dnet_recv(fd, reply, sizeof(reply), MSG_EOR);
     if (got != (ssize_t)expected_len ||
         memcmp(reply, expected, expected_len))
         return -1;
@@ -122,6 +122,11 @@ int main(int argc, char **argv)
                    NULL, 0, accept_data, &accept_len);
     if (fd < 0) {
         perror("dnetlib-mirror: dnet_conn");
+        return 1;
+    }
+    if (dnet_eof(fd)) {
+        perror("dnetlib-mirror: dnet_eof");
+        close(fd);
         return 1;
     }
     if (accept_len != 2 || accept_data[0] != 0xffU ||

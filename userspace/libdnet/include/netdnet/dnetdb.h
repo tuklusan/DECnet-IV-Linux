@@ -65,6 +65,9 @@ int dnet_setobjhinum_handling(int handling, int min);
 int dnet_checkobjectnumber(int number);
 int getobjectbyname(const char *name);
 int getobjectbynumber(int number, char *name, size_t name_len);
+int dnet_recv(int fd, void *buf, int len, unsigned int flags);
+int dnet_eof(int fd);
+int getnodename(char *name, size_t len);
 
 #define DNOBJECT_FAL    (getobjectbyname("FAL"))
 #define DNOBJECT_NICE   (getobjectbyname("NICE"))

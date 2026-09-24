@@ -124,6 +124,9 @@ install -m 0755 /usr/src/decnet-iv-linux/userspace/dnmail/dnmaild /usr/local/sbi
 make -C /usr/src/decnet-iv-linux/userspace/libdnet clean all
 install -d /usr/local/lib /usr/local/include/netdnet
 install -m 0644 /usr/src/decnet-iv-linux/userspace/libdnet/libdnet.a /usr/local/lib/libdnet.a
+install -m 0755 /usr/src/decnet-iv-linux/userspace/libdnet/libdnet.so.1.0 /usr/local/lib/libdnet.so.1.0
+ln -sf libdnet.so.1.0 /usr/local/lib/libdnet.so.1
+ln -sf libdnet.so.1 /usr/local/lib/libdnet.so
 install -m 0644 /usr/src/decnet-iv-linux/userspace/libdnet/include/netdnet/dn.h /usr/local/include/netdnet/dn.h
 install -m 0644 /usr/src/decnet-iv-linux/userspace/libdnet/include/netdnet/dnetdb.h /usr/local/include/netdnet/dnetdb.h
 cc -I/usr/src/decnet-iv-linux/userspace/libdnet/include \
@@ -262,6 +265,9 @@ sudo test -s "$mnt/usr/local/sbin/dnbacklog"
 sudo test -s "$mnt/usr/local/sbin/dnreset"
 sudo test -s "$mnt/usr/local/sbin/dntermrace"
 sudo test -s "$mnt/usr/local/lib/libdnet.a"
+sudo test -s "$mnt/usr/local/lib/libdnet.so.1.0"
+sudo test -L "$mnt/usr/local/lib/libdnet.so.1"
+sudo test -L "$mnt/usr/local/lib/libdnet.so"
 sudo test -s "$mnt/usr/local/include/netdnet/dn.h"
 sudo test -s "$mnt/usr/local/include/netdnet/dnetdb.h"
 sudo test -s "$mnt/usr/local/sbin/dnetlib-mirror"
