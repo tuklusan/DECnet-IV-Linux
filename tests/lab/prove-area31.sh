@@ -44,8 +44,15 @@ if [[ ! "$VAX_ADDR" =~ ^31\.([0-9]{1,4})$ ]] ||
     echo "area31-proof: VAX_ADDR must identify an Area-31 node" >&2
     exit 2
 fi
-if (( ${#VAX_USERNAME} > 40 || ${#VAX_PASSWORD} > 40 )) ||
-   [[ "$VAX_USERNAME" == *
+if (( ${#VAX_USERNAME} > 40 || ${#VAX_PASSWORD} > 40 )); then
+    echo "area31-proof: VAX access credentials are invalid" >&2
+    exit 2
+fi
+if [[ "$VAX_USERNAME" == *$'\\n'* || "$VAX_USERNAME" == *$'\\r'* ||
+      "$VAX_PASSWORD" == *$'\\n'* || "$VAX_PASSWORD" == *$'\\r'* ]]; then
+    echo "area31-proof: VAX access credentials are invalid" >&2
+    exit 2
+fi
 
 gateway_node=${DNIV_AREA31_GATEWAY_NODE:-}
 gateway_name=${DNIV_AREA31_GATEWAY_NAME:-}
