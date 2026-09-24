@@ -55,5 +55,19 @@ test:
 		! printf '%s\n' "$$out" | grep -Fq '127.0.0.1'; \
 	fi
 
+	bash -n ../../tests/lab/prove-vde2-cross-runner.sh
+	VDE_SSH_HOST=bastion.invalid VDE_SSH_PORT=22 VDE_SSH_USER=TEST \
+		VDE_SSH_KEY=TESTKEY VDE_SSH_KNOWN_HOSTS=TESTHOSTKEY \
+		DNIV_VDE_REVERSE_PORT=22022 \
+		../../tests/lab/prove-vde2-cross-runner.sh --preflight-only | \
+		grep -Fqx 'vde2-cross: preflight pass'
+	@if out=$(VDE_SSH_HOST=bastion.invalid VDE_SSH_PORT=22 VDE_SSH_USER=TEST \
+		VDE_SSH_KEY= VDE_SSH_KNOWN_HOSTS=TESTHOSTKEY DNIV_VDE_REVERSE_PORT=22022 \
+		../../tests/lab/prove-vde2-cross-runner.sh --preflight-only 2>&1); then \
+		echo 'cross-runner preflight unexpectedly accepted missing key' >&2; exit 1; \
+	else \
+		printf '%s\n' "$out" | grep -Fqx 'vde2-cross: missing required secret/input: VDE_SSH_KEY'; \
+	fi
+
 clean:
 	rm -rf __pycache__

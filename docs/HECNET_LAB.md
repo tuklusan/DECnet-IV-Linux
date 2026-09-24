@@ -30,10 +30,15 @@ VDE2 is the preferred Ethernet fabric for rootless local and distributed lab seg
 - Every runner/container owns its own user-mode `vde_switch`.
 - QEMU, PyDECnet and the Route20 fork attach directly through libvdeplug.
 - Separate hosts may join their VDE switches with `vde_plug` over SSH.
+- `.github/workflows/vde2-cross-runner.yml` is the repository-tracked two-host gate. It uses a pre-existing SSH bastion only as rendezvous; hosted runners are never assumed to accept inbound Internet connections directly.
 - The cross-runner proof must demonstrate real frame delivery in both directions, DECnet adjacency, switch/client restart and disconnect/reconnect across the host boundary before distributed scale depends on it.
 - VDE2 evidence remains independent of MULTINET evidence. A failure in either transport cannot be hidden by the other.
 
 The project forks carrying native VDE support are pinned in `tests/reference/refs.env`. SIMH already provides a VDE backend and remains a separate interoperability participant.
+
+### Cross-runner SSH rendezvous contract
+
+The manual cross-runner VDE2 workflow consumes `VDE_SSH_HOST`, `VDE_SSH_PORT`, `VDE_SSH_USER`, `VDE_SSH_KEY` and `VDE_SSH_KNOWN_HOSTS` only at runtime, plus an explicitly assigned unprivileged reverse-forward port input. The bastion must already exist and permit TCP reverse forwarding; the project does not create or assume a public relay. Both runners validate prerequisites before checkout/network activity, write key/configuration material only below runner-temporary storage with restrictive permissions, and never retain it as evidence. The server's ephemeral inner SSH account is restricted to the VDE plug plus readiness/completion marker commands.
 
 ## MULTINET
 

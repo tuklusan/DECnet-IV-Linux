@@ -1,0 +1,144 @@
+# ============================================================================
+# Copyright (c) 2026 Supratim Sanyal of SANYALnet Labs.
+# Proprietary rights reserved except as expressly licensed herein.
+#
+# DECnet-IV-Linux
+# This file is governed by the SANYALnet Labs Non-Commercial License in the
+# root LICENSE file. Non-Commercial use is permitted; Commercial Use and use
+# for AI/ML model training are prohibited unless separately authorized.
+#
+# Attribution is required: "Based on original work by Supratim Sanyal of
+# SANYALnet Labs." See LICENSE for full terms, warranty disclaimer, termination,
+# patent, trademark, and governing-law provisions.
+# ============================================================================
+
+name: Cross-runner VDE2 Proof
+
+on:
+  workflow_dispatch:
+    inputs:
+      reverse_port:
+        description: Assigned unprivileged reverse-forward port on the SSH bastion
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dniv-vde2-cross-runner
+  queue: max
+  cancel-in-progress: false
+
+jobs:
+  server:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Verify SSH rendezvous prerequisites
+        shell: bash
+        env:
+          VDE_SSH_HOST: ${{ secrets.VDE_SSH_HOST }}
+          VDE_SSH_PORT: ${{ secrets.VDE_SSH_PORT }}
+          VDE_SSH_USER: ${{ secrets.VDE_SSH_USER }}
+          VDE_SSH_KEY: ${{ secrets.VDE_SSH_KEY }}
+          VDE_SSH_KNOWN_HOSTS: ${{ secrets.VDE_SSH_KNOWN_HOSTS }}
+          DNIV_VDE_REVERSE_PORT: ${{ inputs.reverse_port }}
+        run: |
+          set -euo pipefail
+          required=(VDE_SSH_HOST VDE_SSH_PORT VDE_SSH_USER VDE_SSH_KEY VDE_SSH_KNOWN_HOSTS DNIV_VDE_REVERSE_PORT)
+          missing=()
+          for name in "${required[@]}"; do
+            value=${!name:-}
+            if [[ -z "$value" ]]; then
+              missing+=("$name")
+            elif [[ "$name" != DNIV_VDE_REVERSE_PORT ]]; then
+              printf '::add-mask::%s\n' "$value"
+            fi
+          done
+          if (( ${#missing[@]} )); then
+            printf 'missing required cross-runner VDE2 secret/input: %s\n' "${missing[@]}" >&2
+            exit 2
+          fi
+
+      - name: Check out exact repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+
+      - name: Install cross-runner VDE2 dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y build-essential libpcap-dev vde2 libvdeplug-dev python3-venv openssh-server
+
+      - name: Serve remote VDE endpoint
+        shell: bash
+        env:
+          VDE_SSH_HOST: ${{ secrets.VDE_SSH_HOST }}
+          VDE_SSH_PORT: ${{ secrets.VDE_SSH_PORT }}
+          VDE_SSH_USER: ${{ secrets.VDE_SSH_USER }}
+          VDE_SSH_KEY: ${{ secrets.VDE_SSH_KEY }}
+          VDE_SSH_KNOWN_HOSTS: ${{ secrets.VDE_SSH_KNOWN_HOSTS }}
+          DNIV_VDE_REVERSE_PORT: ${{ inputs.reverse_port }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          tests/lab/prove-vde2-cross-runner.sh --server
+
+  client:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Verify SSH rendezvous prerequisites
+        shell: bash
+        env:
+          VDE_SSH_HOST: ${{ secrets.VDE_SSH_HOST }}
+          VDE_SSH_PORT: ${{ secrets.VDE_SSH_PORT }}
+          VDE_SSH_USER: ${{ secrets.VDE_SSH_USER }}
+          VDE_SSH_KEY: ${{ secrets.VDE_SSH_KEY }}
+          VDE_SSH_KNOWN_HOSTS: ${{ secrets.VDE_SSH_KNOWN_HOSTS }}
+          DNIV_VDE_REVERSE_PORT: ${{ inputs.reverse_port }}
+        run: |
+          set -euo pipefail
+          required=(VDE_SSH_HOST VDE_SSH_PORT VDE_SSH_USER VDE_SSH_KEY VDE_SSH_KNOWN_HOSTS DNIV_VDE_REVERSE_PORT)
+          missing=()
+          for name in "${required[@]}"; do
+            value=${!name:-}
+            if [[ -z "$value" ]]; then
+              missing+=("$name")
+            elif [[ "$name" != DNIV_VDE_REVERSE_PORT ]]; then
+              printf '::add-mask::%s\n' "$value"
+            fi
+          done
+          if (( ${#missing[@]} )); then
+            printf 'missing required cross-runner VDE2 secret/input: %s\n' "${missing[@]}" >&2
+            exit 2
+          fi
+
+      - name: Check out exact repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+
+      - name: Install cross-runner VDE2 dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y build-essential libpcap-dev vde2 libvdeplug-dev python3-venv openssh-client
+
+      - name: Join remote VDE switch and prove recovery
+        shell: bash
+        env:
+          VDE_SSH_HOST: ${{ secrets.VDE_SSH_HOST }}
+          VDE_SSH_PORT: ${{ secrets.VDE_SSH_PORT }}
+          VDE_SSH_USER: ${{ secrets.VDE_SSH_USER }}
+          VDE_SSH_KEY: ${{ secrets.VDE_SSH_KEY }}
+          VDE_SSH_KNOWN_HOSTS: ${{ secrets.VDE_SSH_KNOWN_HOSTS }}
+          DNIV_VDE_REVERSE_PORT: ${{ inputs.reverse_port }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          tests/lab/prove-vde2-cross-runner.sh --client

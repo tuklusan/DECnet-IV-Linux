@@ -26,6 +26,7 @@ work=$(mktemp -d /tmp/dniv-vde2.XXXXXX)
 sock="$work/switch.ctl"
 switch_pid=
 py_pid=
+frame_echo_pid=
 stop_switch() {
     if [ -n "${switch_pid:-}" ]; then
         kill "$switch_pid" 2>/dev/null || true
@@ -41,6 +42,7 @@ stop_switch() {
 cleanup() {
     set +e
     [ -z "${py_pid:-}" ] || kill "$py_pid" 2>/dev/null
+    [ -z "${frame_echo_pid:-}" ] || kill "$frame_echo_pid" 2>/dev/null
     if [ -r /var/run/route20.pid ]; then
         rpid=$(cat /var/run/route20.pid 2>/dev/null)
         [ -z "$rpid" ] || sudo kill "$rpid" 2>/dev/null
@@ -91,6 +93,14 @@ start_switch() {
 start_switch
 url="vde://$sock"
 badurl="vde://$work/no-such-switch"
+
+cc -std=c11 -Wall -Wextra -Werror "$root/tests/lab/vde-frame-echo.c" -lvdeplug -o "$work/vde-frame-echo"
+"$work/vde-frame-echo" server "$url" >/dev/null 2>&1 &
+frame_echo_pid=$!
+"$work/vde-frame-echo" client "$url" 1 >/dev/null
+kill "$frame_echo_pid"
+wait "$frame_echo_pid" 2>/dev/null || true
+frame_echo_pid=
 
 cat >"$work/vde-native.c" <<'EOF_C'
 #include <errno.h>
