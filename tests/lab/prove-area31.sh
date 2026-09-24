@@ -270,7 +270,7 @@ if ! "$work/venv/bin/python" "$script_dir/area31-parse-known.py" "$known_file" >
     exit 1
 fi
 if ! grep -Fxq '31.3' "$occupied_file"; then
-    echo "area31-proof: PYRTR NCP known-node output lacked a structured PYRTR row" >&2
+    echo "area31-proof: PYRTR NCP known-node output lacked a structured PYRTR identity" >&2
     cat "$known_file" >&2
     exit 1
 fi
