@@ -534,6 +534,48 @@ if [[ "$reference" == pydecnet ]]; then
         tail -160 "$ref1_log" >&2 || true
         exit 1
     fi
+    pyhttp_server_log="$work/pydecnet-http-server.log"
+    env PYTHONPATH="$host_pydecnet/pydecnet" python3 \
+        "$script_dir/pydecnet-http-server.py" "$host_pydecnet_api" "$ref_name" \
+        >"$pyhttp_server_log" 2>&1 &
+    pyhttp_pid=$!
+    pyhttp_ready=0
+    for _ in $(seq 1 100); do
+        if grep -Fq 'pydecnet-http-server: ready object=HTTP' "$pyhttp_server_log" 2>/dev/null; then
+            pyhttp_ready=1
+            break
+        fi
+        if ! kill -0 "$pyhttp_pid" 2>/dev/null; then
+            break
+        fi
+        sleep 0.1
+    done
+    if [[ "$pyhttp_ready" -ne 1 ]]; then
+        cat "$pyhttp_server_log" >&2 || true
+        wait "$pyhttp_pid" 2>/dev/null || true
+        exit 1
+    fi
+    if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-DNLYNX-READY session=$session scenario=$scenario" 30 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+        kill "$pyhttp_pid" 2>/dev/null || true
+        wait "$pyhttp_pid" 2>/dev/null || true
+        cat "$pyhttp_server_log" >&2 || true
+        exit 1
+    fi
+    if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-DNLYNX-PASS session=$session scenario=$scenario" 30 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+        kill "$pyhttp_pid" 2>/dev/null || true
+        wait "$pyhttp_pid" 2>/dev/null || true
+        cat "$pyhttp_server_log" >&2 || true
+        tail -220 "$candidate_log" >&2 || true
+        exit 1
+    fi
+    if ! wait "$pyhttp_pid"; then
+        cat "$pyhttp_server_log" >&2 || true
+        exit 1
+    fi
+    grep -Fq 'pydecnet-http-server: pass' "$pyhttp_server_log" || {
+        cat "$pyhttp_server_log" >&2 || true
+        exit 1
+    }
     if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-PHONE-READY session=$session scenario=$scenario" 30 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
         tail -220 "$candidate_log" >&2 || true
         tail -160 "$ref1_log" >&2 || true

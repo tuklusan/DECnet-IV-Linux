@@ -115,6 +115,8 @@ make -C /usr/src/decnet-iv-linux/userspace/dnobject clean all
 install -m 0755 /usr/src/decnet-iv-linux/userspace/dnobject/dnobject /usr/local/sbin/dnobject
 make -C /usr/src/decnet-iv-linux/userspace/dnhttpd clean all
 install -m 0755 /usr/src/decnet-iv-linux/userspace/dnhttpd/dnhttpd /usr/local/sbin/dnhttpd
+make -C /usr/src/decnet-iv-linux/userspace/dnlynx clean all
+install -m 0755 /usr/src/decnet-iv-linux/userspace/dnlynx/dnlynx /usr/local/bin/dnlynx
 make -C /usr/src/decnet-iv-linux/userspace/dnphone clean all
 install -m 0755 /usr/src/decnet-iv-linux/userspace/dnphone/dnphoned /usr/local/sbin/dnphoned
 install -m 0755 /usr/src/decnet-iv-linux/userspace/dnphone/phone /usr/local/bin/phone
@@ -268,6 +270,8 @@ sudo test -s "$mnt/usr/local/sbin/dnnml"
 sudo test -s "$mnt/usr/local/sbin/dnnice"
 sudo test -s "$mnt/usr/local/sbin/dnmirror"
 sudo test -s "$mnt/usr/local/sbin/dnobject"
+sudo test -s "$mnt/usr/local/sbin/dnhttpd"
+sudo test -s "$mnt/usr/local/bin/dnlynx"
 sudo test -s "$mnt/usr/local/sbin/dnraw"
 sudo test -s "$mnt/usr/local/sbin/dnmrr"
 sudo test -s "$mnt/usr/local/sbin/dnloss"
