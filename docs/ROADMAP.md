@@ -82,6 +82,8 @@ Exit criteria: the useful DECnet/Linux command environment works on the new kern
 
 Phase 7 also includes a small DECnet-native web server. Prefer a clean, license-compatible port/adaptation of tinyhttpd or a similarly small auditable HTTP daemon, using native DECnet sockets to serve static websites. Pin imported upstream source and preserve its license.
 
+Status: complete on exact userspace candidate `a967af2787638ab49bf1a929a27ef9f7ab8564e9`; full promotion acceptance passed Repository Policy `35954451490`, Build Bootstrap `35954483756`, Project State Gate `35954485477`, External Reference Baselines `35954487274`, x86_64/aarch64 E1-E4 VM runs `35954489283`, `35954491199`, `35954492983`, `35954494765`, and the full 14-job Route20/PyDECnet interoperability matrix `35954497878`.
+
 ## Phase 8 - distributed VDE2, MULTINET and HECnet interoperability
 
 Deliver:
