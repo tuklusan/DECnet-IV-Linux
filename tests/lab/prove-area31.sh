@@ -186,16 +186,27 @@ done
 }
 
 api_sock="$work/decnetapi.sock"
+gateway_log="$work/gateway.log"
+show_gateway_log() {
+    sed \
+        -e "s#${MULTINET_REMOTE_HOST//[#\\&]/\\&}#[masked-host]#g" \
+        -e "s#${MULTINET_REMOTE_PORT//[#\\&]/\\&}#[masked-port]#g" \
+        -e "s#${VAX_ADDR//[#\\&]/\\&}#[masked-vax]#g" \
+        -e "s#${VAX_USERNAME//[#\\&]/\\&}#[masked-user]#g" \
+        -e "s#${VAX_PASSWORD//[#\\&]/\\&}#[masked-password]#g" \
+        "$gateway_log" >&2 || true
+}
 "$work/venv/bin/python" "$repo_root/userspace/dnmultinet/dnmultinet.py" \
     --node "$gateway_node" --name "$gateway_name" --type l2router \
     --vde "vde://$sock" --mode connect --runtime-peer-env \
     --api-socket "$api_sock" --pydecnet-dir "$work/pydecnet/pydecnet" \
-    >/dev/null 2>&1 &
+    >"$gateway_log" 2>&1 &
 gateway_pid=$!
 
 for _ in $(seq 1 300); do
     kill -0 "$gateway_pid" 2>/dev/null || {
         echo "area31-proof: gateway exited before remote routing became usable" >&2
+        show_gateway_log
         exit 1
     }
     if [[ -S "$api_sock" ]] &&
@@ -214,6 +225,7 @@ if ! env PYTHONPATH="$work/pydecnet/pydecnet" VAX_ADDR="$VAX_ADDR" \
     "$work/venv/bin/python" "$script_dir/area31-nice.py" "$api_sock" "$gateway_name" \
     >/dev/null 2>&1; then
     echo "area31-proof: VAX NICE reachability did not converge" >&2
+    show_gateway_log
     exit 1
 fi
 
@@ -244,11 +256,12 @@ if [[ "$gateway_node" != "$final_gateway" || "$linux_node" != "$final_linux" ]];
     linux_node=$final_linux
     linux_name=$(printf 'DL%04d' "${free[1]}")
     rm -f "$api_sock"
+    : >"$gateway_log"
     "$work/venv/bin/python" "$repo_root/userspace/dnmultinet/dnmultinet.py" \
         --node "$gateway_node" --name "$gateway_name" --type l2router \
         --vde "vde://$sock" --mode connect --runtime-peer-env \
         --api-socket "$api_sock" --pydecnet-dir "$work/pydecnet/pydecnet" \
-        >/dev/null 2>&1 &
+        >"$gateway_log" 2>&1 &
     gateway_pid=$!
     for _ in $(seq 1 300); do
         kill -0 "$gateway_pid" 2>/dev/null || break
