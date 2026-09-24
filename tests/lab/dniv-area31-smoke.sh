@@ -113,10 +113,15 @@ done
 DNIV_AREA31_TARGET="$target" /usr/local/sbin/dniv-area31-native >/dev/null ||
     fail remote-protocol
 
-DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password"     /usr/local/sbin/dnlogin --probe "$target" >/dev/null 2>&1 ||
+DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
+    /usr/local/sbin/dnlogin --probe "$target" >/dev/null 2>&1 ||
     fail cterm-access
-DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password"     /usr/local/bin/dncopy --probe "$target" >/dev/null 2>&1 ||
+DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
+    /usr/local/bin/dncopy --probe "$target" >/dev/null 2>&1 ||
     fail fal-access
+DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
+    /usr/local/bin/dncopy --dir "$target" '*.*;*' >/dev/null 2>&1 ||
+    fail fal-directory
 unset vax_user vax_password
 echo "DNIV-AREA31-NATIVE-PASS"
 sync
