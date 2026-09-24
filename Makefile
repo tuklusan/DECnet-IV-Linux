@@ -32,6 +32,7 @@ userspace:
 	$(MAKE) -C userspace/dnmail
 	$(MAKE) -C userspace/dnmultinet
 	$(MAKE) -C userspace/libdnet test
+	$(MAKE) -C userspace/dnping test
 
 unit:
 	$(MAKE) -C tests/unit test
@@ -54,6 +55,7 @@ clean:
 	$(MAKE) -C userspace/dnphone clean
 	$(MAKE) -C userspace/dnmail clean
 	$(MAKE) -C userspace/dnmultinet clean
+	$(MAKE) -C userspace/dnping clean
 	$(MAKE) -C userspace/libdnet clean
 	$(MAKE) -C tests/unit clean
 	@if [ -n "$(KDIR)" ]; then $(MAKE) -C kernel/decnet KDIR="$(KDIR)" clean; fi

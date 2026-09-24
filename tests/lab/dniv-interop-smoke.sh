@@ -487,6 +487,11 @@ EOF_DECNET_CONF
         exit 1
     fi
     echo "DNIV-INTEROP-LIBDNET-CONN-PASS session=$session scenario=$scenario node=$name peer=$peer_node object=MIRROR node-db=PEER"
+    if ! /usr/local/bin/dnping -q -c 3 -s 128 -w 10 PEER; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=dnping"
+        exit 1
+    fi
+    echo "DNIV-INTEROP-DNPING-PASS session=$session scenario=$scenario node=$name peer=$peer_node packets=3 size=128"
     /usr/local/sbin/dnetlib-daemon &
     libdaemon_pid=$!
     sleep 1
