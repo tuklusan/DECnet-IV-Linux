@@ -262,7 +262,7 @@ static int smtp_open(const char *host, unsigned int port, const char *from,
 {
     struct addrinfo hints;
     struct addrinfo *result = NULL;
-    struct addrinfo *ai;
+    struct addrinfo *entry;
     struct timeval timeout = { .tv_sec = 30, .tv_usec = 0 };
     char service[16];
     char command[1400];
@@ -283,15 +283,15 @@ static int smtp_open(const char *host, unsigned int port, const char *from,
     rc = getaddrinfo(host, service, &hints, &result);
     if (rc)
         return -1;
-    for (ai = result; ai; ai = ai->ai_next) {
-        fd = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
+    for (entry = result; entry; entry = entry->ai_next) {
+        fd = socket(entry->ai_family, entry->ai_socktype, entry->ai_protocol);
         if (fd < 0)
             continue;
         (void)setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout,
                          sizeof(timeout));
         (void)setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout,
                          sizeof(timeout));
-        if (!connect(fd, ai->ai_addr, ai->ai_addrlen))
+        if (!connect(fd, entry->ai_addr, entry->ai_addrlen))
             break;
         close(fd);
         fd = -1;
