@@ -240,9 +240,9 @@ if [[ "$gateway_node" != "$final_gateway" || "$linux_node" != "$final_linux" ]];
     wait "$gateway_pid" 2>/dev/null || true
     gateway_pid=
     gateway_node=$final_gateway
-    gateway_name=$(printf 'DNG%03d' "${free[0]}")
+    gateway_name=$(printf 'DG%04d' "${free[0]}")
     linux_node=$final_linux
-    linux_name=$(printf 'DNL%03d' "${free[1]}")
+    linux_name=$(printf 'DL%04d' "${free[1]}")
     rm -f "$api_sock"
     "$work/venv/bin/python" "$repo_root/userspace/dnmultinet/dnmultinet.py" \
         --node "$gateway_node" --name "$gateway_name" --type l2router \

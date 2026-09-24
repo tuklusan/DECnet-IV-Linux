@@ -74,9 +74,9 @@ jobs:
           linux_num=$((900 + ((seed + 1) % 124)))
           printf 'DNIV_AREA31_SEED=%s\n' "$seed" >> "$GITHUB_ENV"
           printf 'DNIV_AREA31_GATEWAY_NODE=31.%s\n' "$gateway_num" >> "$GITHUB_ENV"
-          printf 'DNIV_AREA31_GATEWAY_NAME=DNG%03d\n' "$gateway_num" >> "$GITHUB_ENV"
+          printf 'DNIV_AREA31_GATEWAY_NAME=DG%04d\n' "$gateway_num" >> "$GITHUB_ENV"
           printf 'DNIV_AREA31_LINUX_NODE=31.%s\n' "$linux_num" >> "$GITHUB_ENV"
-          printf 'DNIV_AREA31_LINUX_NAME=DNL%03d\n' "$linux_num" >> "$GITHUB_ENV"
+          printf 'DNIV_AREA31_LINUX_NAME=DL%04d\n' "$linux_num" >> "$GITHUB_ENV"
           printf 'DNIV_QCOCAL_NODE=\n' >> "$GITHUB_ENV"
 
       - name: Verify Area-31 secret prerequisites and provisional identities
