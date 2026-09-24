@@ -25,10 +25,21 @@ done
 work=$(mktemp -d /tmp/dniv-multinet.XXXXXX)
 a_pid=
 b_pid=
+c_pid=
+bad_pid=
+
+stop_pid() {
+    local pid=${1:-}
+    [ -z "$pid" ] || kill "$pid" 2>/dev/null || true
+    [ -z "$pid" ] || wait "$pid" 2>/dev/null || true
+}
+
 cleanup() {
     set +e
-    [ -z "${a_pid:-}" ] || kill "$a_pid" 2>/dev/null
-    [ -z "${b_pid:-}" ] || kill "$b_pid" 2>/dev/null
+    stop_pid "${bad_pid:-}"
+    stop_pid "${c_pid:-}"
+    stop_pid "${b_pid:-}"
+    stop_pid "${a_pid:-}"
     rm -rf "$work"
 }
 trap cleanup EXIT INT TERM
@@ -48,73 +59,119 @@ python3 -m venv "$work/venv"
     PYTHONPATH=. "$work/venv/bin/python" -m unittest -v tests.test_multinet
 )
 
-port=$((31000 + ($$ % 2000)))
+base_port=$((31000 + (($$ % 1500) * 3)))
+port_b=$base_port
+port_c=$((base_port + 1))
+port_bad=$((base_port + 2))
+
 cat >"$work/a.conf" <<EOF
-routing 31.78 --type l1router
+routing 31.78 --type l2router
 node 31.78 MNA78
 node 31.79 MNB79
-circuit MUL-0 Multinet --mode listen --local-address 127.0.0.1 --local-port $port --cost 3 --t3 2
+node 31.80 MNC80
+circuit MUL-B Multinet --mode listen --local-address 127.0.0.1 --local-port $port_b --cost 3 --t3 2
+circuit MUL-C Multinet --mode listen --local-address 127.0.0.1 --local-port $port_c --cost 3 --t3 2
 logging console --events 4.8,4.10
 EOF
 cat >"$work/b.conf" <<EOF
 routing 31.79 --type l1router
 node 31.78 MNA78
 node 31.79 MNB79
-circuit MUL-0 Multinet --mode connect --remote-address 127.0.0.1 --remote-port $port --cost 3 --t3 2
+node 31.80 MNC80
+circuit MUL-A Multinet --mode connect --remote-address 127.0.0.1 --remote-port $port_b --cost 3 --t3 2
+logging console --events 4.8,4.10
+EOF
+cat >"$work/c.conf" <<EOF
+routing 31.80 --type l1router
+node 31.78 MNA78
+node 31.79 MNB79
+node 31.80 MNC80
+circuit MUL-A Multinet --mode connect --remote-address 127.0.0.1 --remote-port $port_c --cost 3 --t3 2
+logging console --events 4.8,4.10
+EOF
+cat >"$work/bad.conf" <<EOF
+routing 31.81 --type l1router
+node 31.81 MND81
+circuit MUL-BAD Multinet --mode connect --remote-address 127.0.0.1 --remote-port $port_bad --cost 3 --t3 2
 logging console --events 4.8,4.10
 EOF
 
-start_a() {
+start_node() {
+    local config=$1 log=$2
     (
         cd "$work/pydecnet/pydecnet"
-        exec "$work/venv/bin/python" -u -m decnet.main "$work/a.conf"
-    ) >>"$work/a.log" 2>&1 &
-    a_pid=$!
-}
-start_b() {
-    (
-        cd "$work/pydecnet/pydecnet"
-        exec "$work/venv/bin/python" -u -m decnet.main "$work/b.conf"
-    ) >>"$work/b.log" 2>&1 &
-    b_pid=$!
+        exec "$work/venv/bin/python" -u -m decnet.main "$config"
+    ) >>"$log" 2>&1 &
+    printf '%s\n' "$!"
 }
 
-start_a
+wait_count() {
+    local file=$1 pattern=$2 minimum=$3
+    shift 3
+    local count pid
+    for _ in $(seq 1 200); do
+        count=$(grep -Fc "$pattern" "$file" 2>/dev/null || true)
+        if [ "$count" -ge "$minimum" ]; then
+            return 0
+        fi
+        for pid in "$@"; do
+            [ -z "$pid" ] || kill -0 "$pid" 2>/dev/null || {
+                cat "$file" >&2 || true
+                return 1
+            }
+        done
+        sleep 0.25
+    done
+    cat "$file" >&2 || true
+    return 1
+}
+
+: >"$work/bad.log"
+bad_pid=$(start_node "$work/bad.conf" "$work/bad.log")
+sleep 3
+if grep -Fq "Circuit up" "$work/bad.log"; then
+    cat "$work/bad.log" >&2
+    echo "multinet-proof: unopened remote port false-positive" >&2
+    exit 1
+fi
+stop_pid "$bad_pid"
+bad_pid=
+
+: >"$work/a.log"
+: >"$work/b.log"
+: >"$work/c.log"
+a_pid=$(start_node "$work/a.conf" "$work/a.log")
 sleep 1
-start_b
+b_pid=$(start_node "$work/b.conf" "$work/b.log")
+c_pid=$(start_node "$work/c.conf" "$work/c.log")
 
-for _ in $(seq 1 120); do
-    if grep -Fq "Circuit up" "$work/a.log" && grep -Fq "31.79" "$work/a.log" &&
-       grep -Fq "Circuit up" "$work/b.log" && grep -Fq "31.78" "$work/b.log"; then
-        break
-    fi
-    kill -0 "$a_pid" 2>/dev/null || { cat "$work/a.log" >&2; exit 1; }
-    kill -0 "$b_pid" 2>/dev/null || { cat "$work/b.log" >&2; exit 1; }
-    sleep 0.5
-done
-grep -Fq "Circuit up" "$work/a.log" || { cat "$work/a.log" >&2; exit 1; }
-grep -Fq "Circuit up" "$work/b.log" || { cat "$work/b.log" >&2; exit 1; }
+wait_count "$work/a.log" "Circuit up" 2 "$a_pid" "$b_pid" "$c_pid"
+wait_count "$work/b.log" "Circuit up" 1 "$a_pid" "$b_pid" "$c_pid"
+wait_count "$work/c.log" "Circuit up" 1 "$a_pid" "$b_pid" "$c_pid"
 
-kill "$b_pid"
-wait "$b_pid" 2>/dev/null || true
-b_pid=
-for _ in $(seq 1 80); do
-    grep -Fq "Circuit down" "$work/a.log" && break
-    sleep 0.5
+for cycle in $(seq 1 5); do
+    down_before=$(grep -Fc "Circuit down" "$work/a.log" || true)
+    stop_pid "$b_pid"
+    b_pid=
+    wait_count "$work/a.log" "Circuit down" $((down_before + 1)) "$a_pid" "$c_pid"
+
+    up_before=$(grep -Fc "Circuit up" "$work/a.log" || true)
+    b_pid=$(start_node "$work/b.conf" "$work/b.log")
+    wait_count "$work/a.log" "Circuit up" $((up_before + 1)) "$a_pid" "$b_pid" "$c_pid"
+    kill -0 "$c_pid"
 done
 
-start_b
-for _ in $(seq 1 160); do
-    ups=$(grep -Fc "Circuit up" "$work/a.log" || true)
-    if [ "$ups" -ge 2 ]; then
-        echo "multinet-proof: pass"
-        exit 0
-    fi
-    kill -0 "$a_pid" 2>/dev/null || { cat "$work/a.log" >&2; exit 1; }
-    kill -0 "$b_pid" 2>/dev/null || { cat "$work/b.log" >&2; exit 1; }
-    sleep 0.5
-done
-cat "$work/a.log" >&2
-cat "$work/b.log" >&2
-echo "multinet-proof: reconnect adjacency did not recover" >&2
-exit 1
+b_down_before=$(grep -Fc "Circuit down" "$work/b.log" || true)
+c_down_before=$(grep -Fc "Circuit down" "$work/c.log" || true)
+b_up_before=$(grep -Fc "Circuit up" "$work/b.log" || true)
+c_up_before=$(grep -Fc "Circuit up" "$work/c.log" || true)
+stop_pid "$a_pid"
+a_pid=
+wait_count "$work/b.log" "Circuit down" $((b_down_before + 1)) "$b_pid" "$c_pid"
+wait_count "$work/c.log" "Circuit down" $((c_down_before + 1)) "$b_pid" "$c_pid"
+
+a_pid=$(start_node "$work/a.conf" "$work/a.log")
+wait_count "$work/b.log" "Circuit up" $((b_up_before + 1)) "$a_pid" "$b_pid" "$c_pid"
+wait_count "$work/c.log" "Circuit up" $((c_up_before + 1)) "$a_pid" "$b_pid" "$c_pid"
+
+echo "multinet-proof: pass peers=3 connector_restarts=5 listener_restart=1 negative_unopened_port=1"
