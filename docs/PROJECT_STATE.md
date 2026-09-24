@@ -115,8 +115,6 @@ Complete on exact protocol candidate `c11045a70e7deb59870fff5f8bc22213e0df2bc0`.
 
 Complete on exact userspace candidate `a967af2787638ab49bf1a929a27ef9f7ab8564e9`; full promotion acceptance passed the required build, state, reference, x86_64/aarch64 E1-E4 and 14-job independent interoperability gates.
 
-Initial NSP foundation is implemented and repository-policy headers are canonical: deterministic Phase IV NSP packet codecs for ACK Data/Other/Connect, data segments, interrupt, Link Service, CI/RCI, CC, DI and DC; optional ACK/NAK/XACK/XNAK decoding; 12-bit sequence arithmetic; malformed-input rejection; and baseline response/connect/inactivity timer constants.
-
 ### Phase 8
 
 Active. Enhanced local/rootless VDE2 and MULTINET TCP proofs are green. Cross-runner VDE2 and the repository-tracked Area-31/VAX workflow remain outstanding.
@@ -1206,3 +1204,5 @@ MULTINET retry workflow `35959966978` accepted the corrected three-router config
 Light documentation/code sanity pass after `92e5f56293e9a0747b7116bcf4fbb0476b22c5ec`: enhanced MULTINET workflow `35960257018` is green on that exact commit, followed by fast acceptance Build Bootstrap `35960311447`, Project State Gate `35960313483`, Python QEMU VM Lab `35960315522` (x86_64 and aarch64) and Independent Ethernet Interoperability `35960317698`. A later scheduled full reproof of the same exact commit is also green through Build Bootstrap `35984721554`, Project State Gate `35984724951`, External Reference Baselines `35984728083`, x86_64/aarch64 E1-E4 runs `35984731413`, `35984734808`, `35984737886`, `35984740897`, and full interoperability `35984744413`.
 
 The sanity pass found one concrete code drift and several documentation drifts. `dnmultinet.py` still selected only Ethernet adjacency events 4.15/4.16 even though its WAN circuit is MULTINET point-to-point, whose useful circuit down/up events are 4.8/4.10; generate both point-to-point and Ethernet event classes and lock the generated configuration in its Makefile tests. Refresh Phase 8 status, enhanced VDE2/MULTINET run IDs, the current PyDECnet live pin and the three-router MULTINET acceptance description across the lab/pre-production documents. No kernel, routing, NSP or Session behavior changes. Next: exact-SHA fast acceptance, then implement the secret-safe Area-31 workflow and reusable Linux/VAX checks; cross-runner VDE2 remains separately outstanding.
+
+Documentation sanity follow-up: remove the stale NSP-foundation paragraph that had drifted under the Phase 7 heading; NSP remains fully recorded in the Phase 5 chronology below. No implementation or acceptance requirement changes. Fast acceptance of the preceding sanity commit `e0da821f6ba10f8b080d8615463af77889052236` is green: Repository Policy `35991295675`, Build Bootstrap `35991336543`, Project State Gate `35991338731`, Python QEMU VM Lab `35991340917` (x86_64 and aarch64), and Independent Ethernet Interoperability `35991343247` (Route20 and PyDECnet L1).
