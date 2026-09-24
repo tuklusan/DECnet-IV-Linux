@@ -15,7 +15,7 @@
 CC ?= cc
 AR ?= ar
 CFLAGS ?= -O2 -Wall -Wextra -Werror -std=c11
-CPPFLAGS += -Iinclude
+CPPFLAGS += -Iinclude -I../../include/uapi
 LIB = libdnet.a
 OBJ = libdnet.o
 
