@@ -28,7 +28,6 @@ import sys
 
 NODE_RE = re.compile(r"^([0-9]{1,2})\.([0-9]{1,4})$")
 NAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9]{0,5}$")
-HOST_RE = re.compile(r"^[A-Za-z0-9_.:%\\-\\[\\]]+$")
 
 
 def node_address(value):
@@ -94,7 +93,7 @@ def load_runtime_peer(args):
 
     host = os.environ["MULTINET_REMOTE_HOST"]
     port_text = os.environ["MULTINET_REMOTE_PORT"]
-    if not HOST_RE.fullmatch(host):
+    if any(ch.isspace() for ch in host):
         raise SystemExit("MULTINET_REMOTE_HOST has invalid syntax")
     if not port_text.isdigit():
         raise SystemExit("MULTINET_REMOTE_PORT must be numeric")
@@ -115,7 +114,7 @@ def validate(args):
     if args.mode == "connect":
         if not args.peer_host or args.peer_port is None:
             raise SystemExit("connect mode requires --peer-host and --peer-port")
-        if not HOST_RE.fullmatch(args.peer_host):
+        if any(ch.isspace() for ch in args.peer_host):
             raise SystemExit("peer host has invalid syntax")
     else:
         if args.local_port is None:
