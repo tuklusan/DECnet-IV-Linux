@@ -686,6 +686,23 @@ EOF_DNETD
         exit 1
     fi
     echo "DNIV-INTEROP-DNLYNX-PASS session=$session scenario=$scenario node=$name peer=$peer_node"
+    echo "DNIV-INTEROP-DNLYNX-OBJECT-READY session=$session scenario=$scenario node=$name peer=$peer_node"
+    dnlynx_object_ok=0
+    i=0
+    while [ "$i" -lt 40 ]; do
+        i=$((i + 1))
+        if output=$(/usr/local/bin/dnlynx -o DNIVHT "$peer_node" / 2>/dev/null) &&
+           printf '%s\n' "$output" | grep -Fq 'PYDECNET-DNLYNX-OBJECT-PASS'; then
+            dnlynx_object_ok=1
+            break
+        fi
+        sleep 0.5
+    done
+    if [ "$dnlynx_object_ok" -ne 1 ]; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=dnlynx-object-client"
+        exit 1
+    fi
+    echo "DNIV-INTEROP-DNLYNX-OBJECT-PASS session=$session scenario=$scenario node=$name peer=$peer_node"
     /usr/local/sbin/dnphoned --sessions 2 --user TEST &
     phone_pid=$!
     sleep 1

@@ -18,13 +18,17 @@ import asyncio
 import sys
 from decnet.async_connectors import AsyncApiConnector
 
-BODY=b"PYDECNET-DNLYNX-PASS\n"
+def valid_object(name: str) -> bool:
+    return 1 <= len(name) <= 16 and name[0].isalpha() and name.isalnum()
 
-async def serve_one(api_socket: str, system: str) -> None:
+async def serve_one(api_socket: str, system: str, object_name: str, marker: str) -> None:
+    if not valid_object(object_name):
+        raise RuntimeError("invalid DECnet object name")
+    body=(marker+"\n").encode("ascii")
     connector=AsyncApiConnector(api_socket)
     await connector.start()
-    listener=await connector.bind(name="HTTP",auth="off",system=system)
-    print("pydecnet-http-server: ready object=HTTP",flush=True)
+    listener=await connector.bind(name=object_name,auth="off",system=system)
+    print(f"pydecnet-http-server: ready object={object_name}",flush=True)
     try:
         conn=await asyncio.wait_for(listener.listen(),45)
         request=await asyncio.wait_for(conn.recv(),15)
@@ -35,17 +39,20 @@ async def serve_one(api_socket: str, system: str) -> None:
         raw=bytes(data)
         if not raw.startswith(b"GET / HTTP/1.0\r\n") or b"\r\n\r\n" not in raw:
             conn.abort(); raise RuntimeError(f"bad HTTP request: {raw!r}")
-        header=(b"HTTP/1.0 200 OK\r\n"+f"Content-Length: {len(BODY)}\r\n".encode("ascii")+
+        header=(b"HTTP/1.0 200 OK\r\n"+f"Content-Length: {len(body)}\r\n".encode("ascii")+
                 b"Content-Type: text/plain\r\nConnection: close\r\n\r\n")
-        conn.data(header); conn.data(BODY); conn.disconnect()
+        conn.data(header); conn.data(body); conn.disconnect()
         print("pydecnet-http-server: pass",flush=True)
     finally:
         listener.close()
         await connector.close()
 
 def main() -> int:
-    if len(sys.argv)!=3: raise SystemExit(f"usage: {sys.argv[0]} API-SOCKET SYSTEM")
-    asyncio.run(serve_one(sys.argv[1],sys.argv[2])); return 0
+    if len(sys.argv) not in (3,4,5):
+        raise SystemExit(f"usage: {sys.argv[0]} API-SOCKET SYSTEM [OBJECT [MARKER]]")
+    object_name=sys.argv[3] if len(sys.argv)>=4 else "HTTP"
+    marker=sys.argv[4] if len(sys.argv)>=5 else "PYDECNET-DNLYNX-PASS"
+    asyncio.run(serve_one(sys.argv[1],sys.argv[2],object_name,marker)); return 0
 
 if __name__=="__main__":
     raise SystemExit(main())
