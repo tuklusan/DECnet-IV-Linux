@@ -1132,3 +1132,6 @@ Repository Policy `35939667948` rejected `793697e8730195962146a618f4b1990da0d96e
 
 
 Repository Policy `35941142358` confirmed the previous rename was insufficient because standard `struct addrinfo` field names also collide with reserved repository-policy vocabulary. Use the pinned LinuxDECnet-compatible IPv4 resolver shape with `gethostbyname` and `sockaddr_in`; delivery semantics remain unchanged. Next: exact-SHA fast acceptance.
+
+
+Exact-SHA fast acceptance for `b30eefc296104ce83cf06dd36c3953e27b378b82` is green: Repository Policy `35941303768`, Build Bootstrap `35941337499`, Project State Gate `35941339515`, Python QEMU VM Lab `35941341577` (x86_64 and aarch64), and Independent Ethernet Interoperability `35941343707` (Route20 and PyDECnet L1). Continue Phase 7 PHONE completeness with the classic object-29 DIRECTORY operation. `dnphoned` now answers a directory request with a bounded entry for its configured local user and gains bounded `--sessions N` proof mode; the independent PyDECnet PHONE proof validates DIRECTORY on a second logical link after CONNECT/DIAL/DATA. Command 0x0f and directory behavior were checked against pinned LinuxDECnet `ff39eef045d1e4b7b72a3d40111e89c07a473398`. Next: exact-SHA fast acceptance, then PHONE session controls and remaining FAL/application completeness.

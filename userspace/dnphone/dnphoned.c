@@ -90,6 +90,17 @@ static int serve(int fd, const char *user)
         return -1;
 
     got = recv(fd, buf, sizeof(buf) - 1U, 0);
+    if (got == 1 && buf[0] == PHONE_DIRECTORY) {
+        char line[192];
+        int len = snprintf(line, sizeof(line),
+                           "%-15s %-15s %-15s Available",
+                           user, user, "LOCAL");
+
+        if (len < 0 || (size_t)len >= sizeof(line))
+            return -1;
+        return send(fd, line, (size_t)len, MSG_EOR | MSG_NOSIGNAL) == len ?
+            0 : -1;
+    }
     if (got < 4 || buf[0] != PHONE_CONNECT)
         return -1;
     buf[got] = 0;
@@ -144,7 +155,7 @@ static int selftest(void)
 int main(int argc, char **argv)
 {
     const char *user = NULL;
-    int once = 0;
+    int sessions = 0;
     int listener;
     int i;
 
@@ -152,11 +163,21 @@ int main(int argc, char **argv)
         return selftest();
     for (i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--once"))
-            once = 1;
-        else if (!strcmp(argv[i], "--user") && i + 1 < argc)
+            sessions = 1;
+        else if (!strcmp(argv[i], "--sessions") && i + 1 < argc) {
+            char *end;
+            long value;
+
+            errno = 0;
+            value = strtol(argv[++i], &end, 10);
+            if (errno || !*argv[i] || *end || value < 1 || value > 64)
+                return 2;
+            sessions = (int)value;
+        } else if (!strcmp(argv[i], "--user") && i + 1 < argc)
             user = argv[++i];
         else {
-            fprintf(stderr, "usage: %s --user USER [--once] | --selftest\n",
+            fprintf(stderr,
+                    "usage: %s --user USER [--once | --sessions N] | --selftest\n",
                     argv[0]);
             return 2;
         }
@@ -189,7 +210,7 @@ int main(int argc, char **argv)
             close(listener);
             return 1;
         }
-        if (once)
+        if (sessions > 0 && --sessions == 0)
             break;
     }
     close(listener);

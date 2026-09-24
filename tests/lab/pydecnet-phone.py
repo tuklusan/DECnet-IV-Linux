@@ -40,9 +40,20 @@ def main() -> int:
             raise RuntimeError(f"bad PHONE DIAL reply: {bytes(reply)!r}")
         connection.data(bytes((0x0e,)) + source + b"\0HELLO-FROM-PYDECNET")
         connection.disconnect()
+
+        directory, response = connector.connect(
+            system=system, dest=destination, remuser=29, localuser="PYPHONE"
+        )
+        if directory is None or response.type != "accept":
+            raise RuntimeError("PHONE directory connect rejected")
+        directory.data(b"\x0f")
+        reply = directory.recv()
+        if reply.type != "data" or b"TEST" not in bytes(reply):
+            raise RuntimeError(f"bad PHONE DIRECTORY reply: {bytes(reply)!r}")
+        directory.disconnect()
     finally:
         connector.close()
-    print(f"pydecnet-phone: pass peer={destination} object=29 data=1")
+    print(f"pydecnet-phone: pass peer={destination} object=29 data=1 directory=1")
     return 0
 
 if __name__ == "__main__":
