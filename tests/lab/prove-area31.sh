@@ -199,7 +199,7 @@ DNIV_VAX_ADDR=$VAX_ADDR
 DNIV_QCOCAL_ADDR=$qcocal_node
 EOF
 if [[ -n "$qcocal_node" ]]; then
-    cp "$script_dir/vax/HTTP.COM" "$control_dir/HTTP.COM"
+    python3 "$script_dir/vax/make-http-com.py" "$control_dir/HTTP.COM"
 fi
 printf '%s' "$VAX_USERNAME" >"$control_dir/vax-user"
 printf '%s' "$VAX_PASSWORD" >"$control_dir/vax-password"
