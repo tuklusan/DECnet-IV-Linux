@@ -641,7 +641,15 @@ if [ "$reference" = pydecnet ]; then
     mail_root="/tmp/dniv-mail-root.$"
     rm -rf "$mail_root"
     mkdir -p "$mail_root"
-    /usr/local/sbin/dnmaild --once --root "$mail_root" &
+    mail_sendmail="$mail_root/fake-sendmail"
+    cat > "$mail_sendmail" <<'EOF_DNIV_SENDMAIL'
+#!/bin/sh
+root=${0%/*}
+printf '%s\n' "$*" > "$root/sendmail.args"
+cat > "$root/delivered.eml"
+EOF_DNIV_SENDMAIL
+    chmod 0755 "$mail_sendmail"
+    /usr/local/sbin/dnmaild --once --root "$mail_root" --sendmail "$mail_sendmail" &
     mail_pid=$!
     sleep 1
     if ! kill -0 "$mail_pid" 2>/dev/null; then
@@ -661,6 +669,16 @@ if [ "$reference" = pydecnet ]; then
        ! grep -Fq 'BODY-ONE' "$mail_root/mailbox.log" ||
        ! grep -Fq 'BODY-TWO' "$mail_root/mailbox.log"; then
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=mail-spool-content"
+        rm -rf "$mail_root"
+        exit 1
+    fi
+    if ! grep -Fxq -- '-i -t' "$mail_root/sendmail.args" ||
+       ! grep -Fq 'From: PYDECNET' "$mail_root/delivered.eml" ||
+       ! grep -Fq 'To: TEST,SECOND' "$mail_root/delivered.eml" ||
+       ! grep -Fq 'Subject: MAIL-11-PROOF' "$mail_root/delivered.eml" ||
+       ! grep -Fq 'BODY-ONE' "$mail_root/delivered.eml" ||
+       ! grep -Fq 'BODY-TWO' "$mail_root/delivered.eml"; then
+        echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=mail-sendmail-delivery"
         rm -rf "$mail_root"
         exit 1
     fi

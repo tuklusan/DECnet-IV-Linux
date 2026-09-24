@@ -12,13 +12,19 @@
 // patent, trademark, and governing-law provisions.
 // ============================================================================
 
+#define _POSIX_C_SOURCE 200809L
+
 #include <errno.h>
 #include <linux/dn.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <time.h>
 #include <sys/time.h>
 #include <unistd.h>
 
@@ -119,13 +125,99 @@ static int send_ack(int fd)
         (ssize_t)sizeof(ack) ? 0 : -1;
 }
 
-static int serve(int fd, const char *root)
+static int write_all(int fd, const void *data, size_t len)
+{
+    const unsigned char *p = data;
+
+    while (len) {
+        ssize_t done = write(fd, p, len);
+
+        if (done < 0) {
+            if (errno == EINTR)
+                continue;
+            return -1;
+        }
+        if (!done)
+            return -1;
+        p += done;
+        len -= (size_t)done;
+    }
+    return 0;
+}
+
+static int start_sendmail(const char *path, int *input_fd, pid_t *child)
+{
+    int pipefd[2];
+    pid_t pid;
+
+    if (pipe(pipefd))
+        return -1;
+    pid = fork();
+    if (pid < 0) {
+        close(pipefd[0]);
+        close(pipefd[1]);
+        return -1;
+    }
+    if (!pid) {
+        close(pipefd[1]);
+        if (dup2(pipefd[0], STDIN_FILENO) < 0)
+            _exit(127);
+        close(pipefd[0]);
+        execl(path, path, "-i", "-t", (char *)NULL);
+        _exit(127);
+    }
+    close(pipefd[0]);
+    *input_fd = pipefd[1];
+    *child = pid;
+    return 0;
+}
+
+static void abort_sendmail(int input_fd, pid_t child)
+{
+    int status;
+
+    if (input_fd >= 0)
+        close(input_fd);
+    if (child <= 0)
+        return;
+    kill(child, SIGKILL);
+    while (waitpid(child, &status, 0) < 0 && errno == EINTR)
+        ;
+}
+
+static int finish_sendmail(int input_fd, pid_t child)
+{
+    static const struct timespec delay = { .tv_sec = 0, .tv_nsec = 100000000L };
+    int status;
+    int i;
+
+    if (close(input_fd))
+        return -1;
+    for (i = 0; i < 300; i++) {
+        pid_t rc = waitpid(child, &status, WNOHANG);
+
+        if (rc == child)
+            return WIFEXITED(status) && WEXITSTATUS(status) == 0 ? 0 : -1;
+        if (rc < 0 && errno != EINTR)
+            return -1;
+        nanosleep(&delay, NULL);
+    }
+    kill(child, SIGKILL);
+    while (waitpid(child, &status, 0) < 0 && errno == EINTR)
+        ;
+    errno = ETIMEDOUT;
+    return -1;
+}
+
+static int serve(int fd, const char *root, const char *sendmail_path)
 {
     struct timeval timeout = { .tv_sec = 30, .tv_usec = 0 };
     unsigned char body[4096];
     char sender[256], recipient[256], recipients[1024];
-    char full_user[256], subject[256], path[1024];
+    char full_user[256], subject[256], path[1024], header[4096];
     FILE *out = NULL;
+    int mail_fd = -1;
+    pid_t mail_child = -1;
     ssize_t got;
 
     if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) ||
@@ -171,9 +263,23 @@ static int serve(int fd, const char *root)
     out = fopen(path, "ab");
     if (!out)
         return -1;
-    if (fprintf(out, "From: %s\nTo: %s\nX-VMSmail: %s\nSubject: %s\n\n",
-                sender, recipients, full_user, subject) < 0)
-        goto fail;
+    {
+        int header_len = snprintf(
+            header, sizeof(header),
+            "From: %s\nTo: %s\nX-VMSmail: %s\nSubject: %s\n\n",
+            sender, recipients, full_user, subject);
+
+        if (header_len < 0 || (size_t)header_len >= sizeof(header))
+            goto fail;
+        if (fwrite(header, 1, (size_t)header_len, out) !=
+            (size_t)header_len)
+            goto fail;
+        if (sendmail_path) {
+            if (start_sendmail(sendmail_path, &mail_fd, &mail_child) ||
+                write_all(mail_fd, header, (size_t)header_len))
+                goto fail;
+        }
+    }
 
     for (;;) {
         got = recv(fd, body, sizeof(body), 0);
@@ -186,15 +292,28 @@ static int serve(int fd, const char *root)
         if (fwrite(body, 1, (size_t)got, out) != (size_t)got ||
             fputc('\n', out) == EOF)
             goto fail;
+        if (mail_fd >= 0 &&
+            (write_all(mail_fd, body, (size_t)got) ||
+             write_all(mail_fd, "\n", 1U)))
+            goto fail;
     }
     if (fputs("--\n", out) == EOF || fclose(out))
-        return -1;
+        goto fail;
     out = NULL;
+    if (mail_fd >= 0) {
+        int finish_rc = finish_sendmail(mail_fd, mail_child);
+
+        mail_fd = -1;
+        mail_child = -1;
+        if (finish_rc)
+            return -1;
+    }
     return send_ack(fd);
 
 fail:
     if (out)
         fclose(out);
+    abort_sendmail(mail_fd, mail_child);
     return -1;
 }
 
@@ -209,6 +328,7 @@ static int selftest(void)
 int main(int argc, char **argv)
 {
     const char *root = ".";
+    const char *sendmail_path = NULL;
     int once = 0;
     int listener;
     int i;
@@ -220,8 +340,11 @@ int main(int argc, char **argv)
             once = 1;
         else if (!strcmp(argv[i], "--root") && i + 1 < argc)
             root = argv[++i];
+        else if (!strcmp(argv[i], "--sendmail") && i + 1 < argc)
+            sendmail_path = argv[++i];
         else {
-            fprintf(stderr, "usage: %s [--once] [--root DIR] | --selftest\n",
+            fprintf(stderr,
+                    "usage: %s [--once] [--root DIR] [--sendmail PATH] | --selftest\n",
                     argv[0]);
             return 2;
         }
@@ -247,7 +370,7 @@ int main(int argc, char **argv)
         }
         rc = accept_mail_session(fd);
         if (!rc)
-            rc = serve(fd, root);
+            rc = serve(fd, root, sendmail_path);
         close(fd);
         if (rc) {
             perror("dnmaild: session");
