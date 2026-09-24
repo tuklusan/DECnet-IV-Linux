@@ -44,12 +44,50 @@ done
     exit 2
 }
 
+write_remote_wrapper() {
+    local path=$1 ready=$2 sock=$3 done=$4
+    cat >"$path" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+case "\${SSH_ORIGINAL_COMMAND:-}" in
+    "test -f $ready") test -f "$ready" ;;
+    "vde_plug $sock") exec vde_plug "$sock" ;;
+    "touch $done") : >"$done" ;;
+    *) exit 126 ;;
+esac
+EOF
+    chmod 700 "$path"
+}
+
 if [[ "${1:-}" == "--preflight-only" ]]; then
     echo "vde2-cross: preflight pass"
     exit 0
 fi
+if [[ "${1:-}" == "--wrapper-selftest" ]]; then
+    selftest_dir=$(mktemp -d /tmp/dniv-vde-wrapper.XXXXXX)
+    trap 'rm -rf "$selftest_dir"' EXIT
+    selftest_ready="$selftest_dir/ready"
+    selftest_done="$selftest_dir/done"
+    selftest_sock="$selftest_dir/switch.ctl"
+    selftest_wrapper="$selftest_dir/remote-command.sh"
+    : >"$selftest_ready"
+    write_remote_wrapper "$selftest_wrapper" "$selftest_ready" "$selftest_sock" "$selftest_done"
+    SSH_ORIGINAL_COMMAND="test -f $selftest_ready" "$selftest_wrapper"
+    if SSH_ORIGINAL_COMMAND="not-allowed" "$selftest_wrapper"; then
+        echo "vde2-cross: wrapper accepted an unlisted command" >&2
+        exit 1
+    else
+        rc=$?
+        [[ "$rc" -eq 126 ]] || {
+            echo "vde2-cross: wrapper returned the wrong rejection status" >&2
+            exit 1
+        }
+    fi
+    echo "vde2-cross: wrapper selftest pass"
+    exit 0
+fi
 if [[ "${1:-}" != "--server" && "${1:-}" != "--client" ]]; then
-    echo "usage: $0 --preflight-only|--server|--client" >&2
+    echo "usage: $0 --preflight-only|--wrapper-selftest|--server|--client" >&2
     exit 2
 fi
 
@@ -182,17 +220,7 @@ EOF
     [[ -s /var/run/route20.pid ]] || { echo "vde2-cross: Route20 did not start" >&2; exit 1; }
 
     wrapper="$work/remote-command.sh"
-    cat >"$wrapper" <<EOF
-#!/usr/bin/env bash
-set -euo pipefail
-case "${SSH_ORIGINAL_COMMAND:-}" in
-    "test -f $ready_file") test -f "$ready_file" ;;
-    "vde_plug $server_sock") exec vde_plug "$server_sock" ;;
-    "touch $done_file") : >"$done_file" ;;
-    *) exit 126 ;;
-esac
-EOF
-    chmod 700 "$wrapper"
+    write_remote_wrapper "$wrapper" "$ready_file" "$server_sock" "$done_file"
     pub=$(cat "$work/bastion.pub")
     printf 'restrict,command="%s" %s\n' "$wrapper" "$pub" >"$work/authorized_keys"
     ssh-keygen -q -t ed25519 -N '' -f "$work/ssh_host_ed25519_key"
