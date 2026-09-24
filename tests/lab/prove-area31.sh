@@ -57,6 +57,7 @@ gateway_node=${DNIV_AREA31_GATEWAY_NODE:-}
 gateway_name=${DNIV_AREA31_GATEWAY_NAME:-}
 linux_node=${DNIV_AREA31_LINUX_NODE:-}
 linux_name=${DNIV_AREA31_LINUX_NAME:-}
+qcocal_node=${DNIV_QCOCAL_NODE:-}
 if [[ ! "$gateway_node" =~ ^31\.([0-9]{1,4})$ ]] ||
    (( 10#${BASH_REMATCH[1]} < 1 || 10#${BASH_REMATCH[1]} > 1023 )); then
     echo "area31-proof: DNIV_AREA31_GATEWAY_NODE must identify an assigned Area-31 node" >&2
@@ -79,6 +80,18 @@ if [[ "$linux_node" == "$gateway_node" || "$linux_node" == "$VAX_ADDR" ||
       "$gateway_node" == "$VAX_ADDR" ]]; then
     echo "area31-proof: assigned Area-31 node identities must be distinct" >&2
     exit 2
+fi
+if [[ -n "$qcocal_node" ]]; then
+    if [[ ! "$qcocal_node" =~ ^31\.([0-9]{1,4})$ ]] ||
+       (( 10#${BASH_REMATCH[1]} < 1 || 10#${BASH_REMATCH[1]} > 1023 )); then
+        echo "area31-proof: DNIV_QCOCAL_NODE must identify an Area-31 node" >&2
+        exit 2
+    fi
+    if [[ "$qcocal_node" == "$gateway_node" || "$qcocal_node" == "$linux_node" ||
+          "$qcocal_node" == "$VAX_ADDR" ]]; then
+        echo "area31-proof: QCOCAL identity must be distinct" >&2
+        exit 2
+    fi
 fi
 
 if [[ "${1:-}" == "--preflight-only" ]]; then
@@ -183,7 +196,11 @@ DNIV_LINUX_NODE=$linux_node
 DNIV_LINUX_NAME=$linux_name
 DNIV_GATEWAY_NODE=$gateway_node
 DNIV_VAX_ADDR=$VAX_ADDR
+DNIV_QCOCAL_ADDR=$qcocal_node
 EOF
+if [[ -n "$qcocal_node" ]]; then
+    cp "$script_dir/vax/HTTP.COM" "$control_dir/HTTP.COM"
+fi
 printf '%s' "$VAX_USERNAME" >"$control_dir/vax-user"
 printf '%s' "$VAX_PASSWORD" >"$control_dir/vax-password"
 chmod 600 "$control_dir/dniv-area31.env" "$control_dir/vax-user" "$control_dir/vax-password"

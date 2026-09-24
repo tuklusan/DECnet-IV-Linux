@@ -35,6 +35,11 @@ on:
         required: true
         default: DNIV32
         type: string
+      qcocal_node:
+        description: Optional current Area-31 address for QCOCAL VAX HTTP proof
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -88,6 +93,7 @@ jobs:
           DNIV_AREA31_GATEWAY_NAME: ${{ inputs.gateway_name }}
           DNIV_AREA31_LINUX_NODE: ${{ inputs.linux_node }}
           DNIV_AREA31_LINUX_NAME: ${{ inputs.linux_name }}
+          DNIV_QCOCAL_NODE: ${{ inputs.qcocal_node }}
           MULTINET_REMOTE_HOST: ${{ secrets.MULTINET_REMOTE_HOST }}
           MULTINET_REMOTE_PORT: ${{ secrets.MULTINET_REMOTE_PORT }}
           VAX_ADDR: ${{ secrets.VAX_ADDR }}
@@ -181,6 +187,7 @@ jobs:
           DNIV_AREA31_GATEWAY_NAME: ${{ inputs.gateway_name }}
           DNIV_AREA31_LINUX_NODE: ${{ inputs.linux_node }}
           DNIV_AREA31_LINUX_NAME: ${{ inputs.linux_name }}
+          DNIV_QCOCAL_NODE: ${{ inputs.qcocal_node }}
           MULTINET_REMOTE_HOST: ${{ secrets.MULTINET_REMOTE_HOST }}
           MULTINET_REMOTE_PORT: ${{ secrets.MULTINET_REMOTE_PORT }}
           VAX_ADDR: ${{ secrets.VAX_ADDR }}

@@ -61,6 +61,7 @@ linux_node=$(read_field DNIV_LINUX_NODE)
 linux_name=$(read_field DNIV_LINUX_NAME)
 gateway_node=$(read_field DNIV_GATEWAY_NODE)
 target=$(read_field DNIV_VAX_ADDR)
+qcocal=$(read_field DNIV_QCOCAL_ADDR)
 user_file=/run/dniv-area31/vax-user
 password_file=/run/dniv-area31/vax-password
 [ -r "$user_file" ] || fail no-vax-user
@@ -77,6 +78,13 @@ parse_name "$linux_name" || fail bad-linux-name
 [ "$linux_node" != "$gateway_node" ] || fail duplicate-node
 [ "$linux_node" != "$target" ] || fail duplicate-node
 [ "$gateway_node" != "$target" ] || fail duplicate-node
+if [ -n "$qcocal" ]; then
+    parse_node "$qcocal" || fail bad-qcocal-node
+    [ "$qcocal" != "$linux_node" ] || fail duplicate-qcocal-node
+    [ "$qcocal" != "$gateway_node" ] || fail duplicate-qcocal-node
+    [ "$qcocal" != "$target" ] || fail duplicate-qcocal-node
+    [ -r /run/dniv-area31/HTTP.COM ] || fail no-qcocal-http
+fi
 
 iface=
 for _ in $(seq 1 100); do
@@ -122,6 +130,24 @@ DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
 DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
     /usr/local/bin/dncopy --dir "$target" '*.*;*' >/dev/null 2>&1 ||
     fail fal-directory
+
+if [ -n "$qcocal" ]; then
+    DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
+        /usr/local/bin/dncopy --put-text /run/dniv-area31/HTTP.COM "$qcocal" HTTP.COM \
+        >/dev/null 2>&1 || fail qcocal-http-install
+    if ! DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
+        /usr/local/bin/dnlynx "$qcocal" / 2>/dev/null | \
+        grep -Fq 'QCOCAL-DECNET-HTTP-PASS'; then
+        DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
+            /usr/local/bin/dndel "$qcocal" HTTP.COM >/dev/null 2>&1 || true
+        fail qcocal-http-client
+    fi
+    DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
+        /usr/local/bin/dndel "$qcocal" HTTP.COM >/dev/null 2>&1 ||
+        fail qcocal-http-cleanup
+    echo "DNIV-AREA31-QCOCAL-HTTP-PASS"
+fi
+
 unset vax_user vax_password
 echo "DNIV-AREA31-NATIVE-PASS"
 sync
