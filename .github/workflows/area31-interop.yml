@@ -22,9 +22,18 @@ on:
         required: true
         type: string
       gateway_name:
-        description: Assigned disposable DECnet node name
+        description: Assigned disposable DECnet gateway name
         required: true
         default: DNIV31
+        type: string
+      linux_node:
+        description: Assigned disposable Area-31 native Linux DECnet address
+        required: true
+        type: string
+      linux_name:
+        description: Assigned disposable native Linux DECnet node name
+        required: true
+        default: DNIV32
         type: string
 
 permissions:
@@ -38,7 +47,9 @@ concurrency:
 jobs:
   area31:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 50
+    env:
+      DNIV_OUTER_BASE_DIR: ${{ github.workspace }}/scratch/outer/amd64
     steps:
       - name: Verify Area-31 secret prerequisites
         shell: bash
@@ -75,6 +86,8 @@ jobs:
         env:
           DNIV_AREA31_GATEWAY_NODE: ${{ inputs.gateway_node }}
           DNIV_AREA31_GATEWAY_NAME: ${{ inputs.gateway_name }}
+          DNIV_AREA31_LINUX_NODE: ${{ inputs.linux_node }}
+          DNIV_AREA31_LINUX_NAME: ${{ inputs.linux_name }}
           MULTINET_REMOTE_HOST: ${{ secrets.MULTINET_REMOTE_HOST }}
           MULTINET_REMOTE_PORT: ${{ secrets.MULTINET_REMOTE_PORT }}
           VAX_ADDR: ${{ secrets.VAX_ADDR }}
@@ -90,13 +103,84 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y python3-venv libpcap-dev vde2 libvdeplug-dev
+          sudo apt-get install -y python3-venv libpcap-dev vde2 libvdeplug-dev \
+            qemu-system-x86 qemu-utils e2fsprogs curl build-essential
 
-      - name: Prove remote MULTINET routing and VAX NICE reachability
+      - name: Compute stable amd64 foundation identity
+        id: foundation-id
+        shell: bash
+        run: |
+          set -euo pipefail
+          fingerprint=$(cat image/ubuntu-base/images.env image/ubuntu-base/build-foundation.sh | sha256sum | cut -c1-16)
+          session="outer-v2-amd64-$fingerprint"
+          echo "DNIV_FOUNDATION_FINGERPRINT=$fingerprint" >> "$GITHUB_ENV"
+          echo "DNIV_OUTER_SESSION_ID=$session" >> "$GITHUB_ENV"
+          echo "session_id=$session" >> "$GITHUB_OUTPUT"
+
+      - name: Restore immutable amd64 foundation
+        id: outer-base
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ${{ env.DNIV_OUTER_BASE_DIR }}
+          key: ${{ steps.foundation-id.outputs.session_id }}
+
+      - name: Download pinned Ubuntu Base on foundation miss
+        if: ${{ steps.outer-base.outputs.cache-hit != 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          . image/ubuntu-base/images.env
+          curl -fL "$UBUNTU_BASE_URL/$UBUNTU_BASE_AMD64" -o "$RUNNER_TEMP/$UBUNTU_BASE_AMD64"
+          echo "$UBUNTU_BASE_AMD64_SHA256  $RUNNER_TEMP/$UBUNTU_BASE_AMD64" | sha256sum -c -
+          echo "UBUNTU_BASE_TARBALL=$RUNNER_TEMP/$UBUNTU_BASE_AMD64" >> "$GITHUB_ENV"
+
+      - name: Build immutable amd64 foundation on cache miss
+        if: ${{ steps.outer-base.outputs.cache-hit != 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo -v
+          rm -rf "$DNIV_OUTER_BASE_DIR"
+          mkdir -p "$DNIV_OUTER_BASE_DIR/boot"
+          image/ubuntu-base/build-foundation.sh amd64 "$UBUNTU_BASE_TARBALL" \
+            "$DNIV_OUTER_BASE_DIR/base.qcow2" "$DNIV_OUTER_BASE_DIR/boot"
+          . image/ubuntu-base/images.env
+          cat >"$DNIV_OUTER_BASE_DIR/session.env" <<EOF_SESSION
+          FORMAT=2
+          SESSION_ID=$DNIV_OUTER_SESSION_ID
+          ARCH=amd64
+          FOUNDATION_FINGERPRINT=$DNIV_FOUNDATION_FINGERPRINT
+          UBUNTU_BASE_RELEASE=$UBUNTU_BASE_RELEASE
+          UBUNTU_APT_SNAPSHOT=$UBUNTU_APT_SNAPSHOT
+          EOF_SESSION
+          (cd "$DNIV_OUTER_BASE_DIR" && sha256sum base.qcow2 boot/vmlinuz boot/initrd.img session.env >SHA256SUMS)
+
+      - name: Save immutable amd64 foundation
+        if: ${{ steps.outer-base.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ${{ env.DNIV_OUTER_BASE_DIR }}
+          key: ${{ steps.foundation-id.outputs.session_id }}
+
+      - name: Verify foundation and prepare exact candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd "$DNIV_OUTER_BASE_DIR" && sha256sum -c SHA256SUMS)
+          qemu-img check -q -f qcow2 "$DNIV_OUTER_BASE_DIR/base.qcow2"
+          candidate="$RUNNER_TEMP/area31-candidate.qcow2"
+          tests/lab/prepare-candidate-image.sh "$DNIV_OUTER_BASE_DIR/base.qcow2" "$candidate"
+          echo "DNIV_AREA31_CANDIDATE_IMAGE=$candidate" >> "$GITHUB_ENV"
+          echo "DNIV_AREA31_KERNEL=$DNIV_OUTER_BASE_DIR/boot/vmlinuz" >> "$GITHUB_ENV"
+          echo "DNIV_AREA31_INITRD=$DNIV_OUTER_BASE_DIR/boot/initrd.img" >> "$GITHUB_ENV"
+
+      - name: Prove native Linux path through MULTINET to VAX
         shell: bash
         env:
           DNIV_AREA31_GATEWAY_NODE: ${{ inputs.gateway_node }}
           DNIV_AREA31_GATEWAY_NAME: ${{ inputs.gateway_name }}
+          DNIV_AREA31_LINUX_NODE: ${{ inputs.linux_node }}
+          DNIV_AREA31_LINUX_NAME: ${{ inputs.linux_name }}
           MULTINET_REMOTE_HOST: ${{ secrets.MULTINET_REMOTE_HOST }}
           MULTINET_REMOTE_PORT: ${{ secrets.MULTINET_REMOTE_PORT }}
           VAX_ADDR: ${{ secrets.VAX_ADDR }}

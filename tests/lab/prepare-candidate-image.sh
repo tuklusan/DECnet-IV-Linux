@@ -205,6 +205,11 @@ cc -I/usr/src/decnet-iv-linux/include/uapi -O2 -std=c11 -Wall -Wextra -Werror \
     -o /usr/local/sbin/dnreset /usr/src/decnet-iv-linux/tests/lab/dnreset.c
 cc -I/usr/src/decnet-iv-linux/include/uapi -O2 -std=c11 -Wall -Wextra -Werror \
     -o /usr/local/sbin/dntermrace /usr/src/decnet-iv-linux/tests/lab/dntermrace.c
+cc -I/usr/src/decnet-iv-linux/userspace/libdnet/include \
+    -I/usr/src/decnet-iv-linux/include/uapi -I/usr/src/decnet-iv-linux/include \
+    -O2 -std=c11 -Wall -Wextra -Werror \
+    -o /usr/local/sbin/dniv-area31-native /usr/src/decnet-iv-linux/tests/lab/area31-native.c \
+    /usr/src/decnet-iv-linux/userspace/libdnet/libdnet.a
 make -C /usr/src/decnet-iv-linux/kernel/decnet KDIR="/lib/modules/$krel/build" clean all
 install -D -m 0644 /usr/src/decnet-iv-linux/kernel/decnet/decnet_iv.ko \
     "/lib/modules/$krel/extra/decnet_iv.ko"
@@ -238,6 +243,13 @@ WantedBy=multi-user.target
 EOF_SERVICE
 sudo ln -sf ../dniv-interop-smoke.service \
     "$mnt/etc/systemd/system/multi-user.target.wants/dniv-interop-smoke.service"
+
+sudo install -m 0755 "$mnt/usr/src/decnet-iv-linux/tests/lab/dniv-area31-smoke.sh" \
+    "$mnt/usr/local/sbin/dniv-area31-smoke"
+sudo install -m 0644 "$mnt/usr/src/decnet-iv-linux/tests/lab/dniv-area31-smoke.service" \
+    "$mnt/etc/systemd/system/dniv-area31-smoke.service"
+sudo ln -sf ../dniv-area31-smoke.service \
+    "$mnt/etc/systemd/system/multi-user.target.wants/dniv-area31-smoke.service"
 
 sudo test "$(sudo cat "$mnt/usr/src/decnet-iv-linux/.source-commit")" = "$source_commit"
 sudo test "$(sudo cat "$mnt/etc/dniv-candidate-sha")" = "$source_commit"
@@ -299,6 +311,9 @@ sudo test -s "$mnt/usr/local/sbin/dnetlib-mirror"
 sudo test -s "$mnt/usr/local/sbin/dnetlib-daemon"
 sudo test -s "$mnt/usr/local/sbin/dniv-smoke"
 sudo test -s "$mnt/usr/local/sbin/dniv-interop-smoke"
+sudo test -s "$mnt/usr/local/sbin/dniv-area31-native"
+sudo test -s "$mnt/usr/local/sbin/dniv-area31-smoke"
+sudo test -s "$mnt/etc/systemd/system/dniv-area31-smoke.service"
 
 sudo umount -R "$mnt/dev"
 sudo umount "$mnt/sys"

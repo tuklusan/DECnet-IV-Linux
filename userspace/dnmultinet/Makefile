@@ -32,15 +32,20 @@ test:
 		--vde vde:///tmp/dn31.ctl --mode connect --runtime-peer-env \
 		--validate-only | grep -Fqx 'dnmultinet: configuration valid'
 	$(PYTHON) -m py_compile ../../tests/lab/area31-nice.py
+	$(CC) -std=c11 -Wall -Wextra -Werror -I../../include/uapi -I../../include \
+		-I../libdnet/include -fsyntax-only ../../tests/lab/area31-native.c
 	bash -n ../../tests/lab/prove-area31.sh
+	sh -n ../../tests/lab/dniv-area31-smoke.sh
 	MULTINET_REMOTE_HOST=127.0.0.1 MULTINET_REMOTE_PORT=700 \
 		VAX_ADDR=31.99 VAX_USERNAME=TESTUSR VAX_PASSWORD=TESTPASS \
 		DNIV_AREA31_GATEWAY_NODE=31.80 DNIV_AREA31_GATEWAY_NAME=MNET80 \
+		DNIV_AREA31_LINUX_NODE=31.81 DNIV_AREA31_LINUX_NAME=DNIV81 \
 		../../tests/lab/prove-area31.sh --preflight-only | \
 		grep -Fqx 'area31-proof: preflight pass'
 	@if out=$$(MULTINET_REMOTE_HOST=127.0.0.1 MULTINET_REMOTE_PORT=700 \
 		VAX_ADDR=31.99 VAX_USERNAME=TESTUSR VAX_PASSWORD= \
 		DNIV_AREA31_GATEWAY_NODE=31.80 DNIV_AREA31_GATEWAY_NAME=MNET80 \
+		DNIV_AREA31_LINUX_NODE=31.81 DNIV_AREA31_LINUX_NAME=DNIV81 \
 		../../tests/lab/prove-area31.sh --preflight-only 2>&1); then \
 		echo 'area31 preflight unexpectedly accepted missing password' >&2; exit 1; \
 	else \
