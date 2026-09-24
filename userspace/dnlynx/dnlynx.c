@@ -68,12 +68,29 @@ static int set_access_field(unsigned char *dst, size_t cap, __u8 *len, const cha
     return 0;
 }
 
-static int connect_http(const char *node_text, const struct access_options *options)
+static int valid_object(const char *object)
+{
+    size_t i, n;
+    if (!object) return 0;
+    n = strlen(object);
+    if (n < 1U || n > DN_MAXOBJL) return 0;
+    if (!((object[0] >= 'A' && object[0] <= 'Z') ||
+          (object[0] >= 'a' && object[0] <= 'z'))) return 0;
+    for (i = 1U; i < n; i++)
+        if (!((object[i] >= 'A' && object[i] <= 'Z') ||
+              (object[i] >= 'a' && object[i] <= 'z') ||
+              (object[i] >= '0' && object[i] <= '9'))) return 0;
+    return 1;
+}
+
+static int connect_http(const char *node_text, const char *object,
+                        const struct access_options *options)
 {
     struct sockaddr_dn peer; struct accessdata_dn access;
     struct timeval timeout = { .tv_sec = 15, .tv_usec = 0 };
-    uint16_t address; size_t object_len = strlen(DNLYNX_OBJECT); int fd;
+    uint16_t address; size_t object_len = strlen(object); int fd;
     if (parse_node(node_text, &address)) { fprintf(stderr, "dnlynx: invalid DECnet node %s\n", node_text); return -1; }
+    if (!valid_object(object)) { fprintf(stderr, "dnlynx: invalid DECnet object\n"); return -1; }
     fd = socket(AF_DECnet, SOCK_SEQPACKET, DNPROTO_NSP);
     if (fd < 0) { perror("dnlynx: socket"); return -1; }
     if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) ||
@@ -94,7 +111,7 @@ static int connect_http(const char *node_text, const struct access_options *opti
     memset(&peer, 0, sizeof(peer));
     peer.sdn_family = AF_DECnet;
     peer.sdn_objnamel = cpu_to_le16_u((uint16_t)object_len);
-    memcpy(peer.sdn_objname, DNLYNX_OBJECT, object_len);
+    memcpy(peer.sdn_objname, object, object_len);
     peer.sdn_add.a_len = cpu_to_le16_u(2U);
     peer.sdn_add.a_addr[0] = (unsigned char)(address & 0xffU);
     peer.sdn_add.a_addr[1] = (unsigned char)(address >> 8);
@@ -156,6 +173,8 @@ static int selftest(void)
         normalize_path("/index.html",path,sizeof(path)) || strcmp(path,"/index.html") ||
         !normalize_path("index.html",path,sizeof(path)) ||
         !normalize_path("/bad\nheader",path,sizeof(path)) ||
+        !valid_object("HTTP") || !valid_object("DNIVHT") ||
+        valid_object("") || valid_object("1HTTP") || valid_object("BAD-NAME") ||
         header_end(ok,sizeof(ok)-1U)!=38 || status_code(ok,sizeof(ok)-1U)!=200) return 1;
     puts("dnlynx selftest passed"); return 0;
 }
@@ -163,15 +182,17 @@ static int selftest(void)
 int main(int argc, char **argv)
 {
     struct access_options options={getenv("DNACCESS_USER"),getenv("DNACCESS_PASSWORD"),getenv("DNACCESS_ACCOUNT")};
-    char path[1024]; const char *node; int include_headers=0,opt,fd,rc;
+    char path[1024]; const char *node; const char *object=DNLYNX_OBJECT;
+    int include_headers=0,opt,fd,rc;
     if (argc==2 && !strcmp(argv[1],"--selftest")) return selftest();
     if (options.user && !options.user[0]) options.user=NULL;
     if (options.password && !options.password[0]) options.password=NULL;
     if (options.account && !options.account[0]) options.account=NULL;
     opterr=0;
-    while ((opt=getopt(argc,argv,"iu:p:a:"))!=-1) {
+    while ((opt=getopt(argc,argv,"io:u:p:a:"))!=-1) {
         switch(opt) {
         case 'i': include_headers=1; break;
+        case 'o': object=optarg; break;
         case 'u': options.user=optarg; break;
         case 'p': options.password=optarg; break;
         case 'a': options.account=optarg; break;
@@ -179,7 +200,7 @@ int main(int argc, char **argv)
         }
     }
     if (optind>=argc || optind+2<argc) {
-        fprintf(stderr,"usage: %s [-i] [-u USER] [-p PASSWORD] [-a ACCOUNT] AREA.NODE [PATH]\n"
+        fprintf(stderr,"usage: %s [-i] [-o OBJECT] [-u USER] [-p PASSWORD] [-a ACCOUNT] AREA.NODE [PATH]\n"
                        "       %s --selftest\n"
                        "DNACCESS_USER, DNACCESS_PASSWORD and DNACCESS_ACCOUNT provide non-command-line access defaults.\n",
                        argv[0],argv[0]); return 2;
@@ -188,7 +209,7 @@ int main(int argc, char **argv)
     if (normalize_path(optind<argc?argv[optind]:"/",path,sizeof(path))) {
         fprintf(stderr,"dnlynx: invalid HTTP path\n"); return 2;
     }
-    fd=connect_http(node,&options); if (fd<0) return 1;
+    fd=connect_http(node,object,&options); if (fd<0) return 1;
     rc=run_http(fd,node,path,include_headers); close(fd);
     if (rc<0) { fprintf(stderr,"dnlynx: HTTP exchange failed\n"); return 1; }
     return rc;
