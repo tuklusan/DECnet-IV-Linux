@@ -12,7 +12,9 @@
 # SANYALnet Labs." See LICENSE for full terms, warranty disclaimer, termination,
 # patent, trademark, and governing-law provisions.
 # ============================================================================
+
 from __future__ import annotations
+
 import sys
 from decnet.common import Nodeid
 from decnet.connectors import SimpleApiConnector
