@@ -17,8 +17,12 @@ name: Cross-runner VDE2 Proof
 on:
   workflow_dispatch:
     inputs:
-      reverse_port:
-        description: Assigned unprivileged reverse-forward port on the SSH bastion
+      expected_sha:
+        description: Exact main candidate SHA supplied by the acceptance dispatcher
+        required: true
+        type: string
+      parent_run_id:
+        description: Acceptance dispatcher run ID
         required: true
         type: string
 
@@ -35,6 +39,23 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
+      - name: Check out exact repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.expected_sha }}
+          fetch-depth: 0
+
+      - name: Bind exact candidate and deterministic reverse-forward port
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          port=$((20000 + (16#${EXPECTED_SHA:0:8} % 30000)))
+          printf 'DNIV_VDE_REVERSE_PORT=%s\n' "$port" >> "$GITHUB_ENV"
+
       - name: Verify SSH rendezvous prerequisites
         shell: bash
         env:
@@ -43,7 +64,6 @@ jobs:
           VDE_SSH_USER: ${{ secrets.VDE_SSH_USER }}
           VDE_SSH_KEY: ${{ secrets.VDE_SSH_KEY }}
           VDE_SSH_KNOWN_HOSTS: ${{ secrets.VDE_SSH_KNOWN_HOSTS }}
-          DNIV_VDE_REVERSE_PORT: ${{ inputs.reverse_port }}
         run: |
           set -euo pipefail
           required=(VDE_SSH_HOST VDE_SSH_PORT VDE_SSH_USER VDE_SSH_KEY VDE_SSH_KNOWN_HOSTS DNIV_VDE_REVERSE_PORT)
@@ -57,14 +77,10 @@ jobs:
             fi
           done
           if (( ${#missing[@]} )); then
-            printf 'missing required cross-runner VDE2 secret/input: %s\n' "${missing[@]}" >&2
+            printf 'missing required cross-runner VDE2 secret: %s\n' "${missing[@]}" >&2
             exit 2
           fi
-
-      - name: Check out exact repository
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with:
-          fetch-depth: 0
+          tests/lab/prove-vde2-cross-runner.sh --preflight-only
 
       - name: Install cross-runner VDE2 dependencies
         shell: bash
@@ -81,16 +97,32 @@ jobs:
           VDE_SSH_USER: ${{ secrets.VDE_SSH_USER }}
           VDE_SSH_KEY: ${{ secrets.VDE_SSH_KEY }}
           VDE_SSH_KNOWN_HOSTS: ${{ secrets.VDE_SSH_KNOWN_HOSTS }}
-          DNIV_VDE_REVERSE_PORT: ${{ inputs.reverse_port }}
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "${{ inputs.expected_sha }}"
           tests/lab/prove-vde2-cross-runner.sh --server
 
   client:
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
+      - name: Check out exact repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.expected_sha }}
+          fetch-depth: 0
+
+      - name: Bind exact candidate and deterministic reverse-forward port
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          port=$((20000 + (16#${EXPECTED_SHA:0:8} % 30000)))
+          printf 'DNIV_VDE_REVERSE_PORT=%s\n' "$port" >> "$GITHUB_ENV"
+
       - name: Verify SSH rendezvous prerequisites
         shell: bash
         env:
@@ -99,7 +131,6 @@ jobs:
           VDE_SSH_USER: ${{ secrets.VDE_SSH_USER }}
           VDE_SSH_KEY: ${{ secrets.VDE_SSH_KEY }}
           VDE_SSH_KNOWN_HOSTS: ${{ secrets.VDE_SSH_KNOWN_HOSTS }}
-          DNIV_VDE_REVERSE_PORT: ${{ inputs.reverse_port }}
         run: |
           set -euo pipefail
           required=(VDE_SSH_HOST VDE_SSH_PORT VDE_SSH_USER VDE_SSH_KEY VDE_SSH_KNOWN_HOSTS DNIV_VDE_REVERSE_PORT)
@@ -113,14 +144,10 @@ jobs:
             fi
           done
           if (( ${#missing[@]} )); then
-            printf 'missing required cross-runner VDE2 secret/input: %s\n' "${missing[@]}" >&2
+            printf 'missing required cross-runner VDE2 secret: %s\n' "${missing[@]}" >&2
             exit 2
           fi
-
-      - name: Check out exact repository
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with:
-          fetch-depth: 0
+          tests/lab/prove-vde2-cross-runner.sh --preflight-only
 
       - name: Install cross-runner VDE2 dependencies
         shell: bash
@@ -137,8 +164,7 @@ jobs:
           VDE_SSH_USER: ${{ secrets.VDE_SSH_USER }}
           VDE_SSH_KEY: ${{ secrets.VDE_SSH_KEY }}
           VDE_SSH_KNOWN_HOSTS: ${{ secrets.VDE_SSH_KNOWN_HOSTS }}
-          DNIV_VDE_REVERSE_PORT: ${{ inputs.reverse_port }}
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "${{ inputs.expected_sha }}"
           tests/lab/prove-vde2-cross-runner.sh --client

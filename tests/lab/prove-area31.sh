@@ -202,6 +202,50 @@ if ! env PYTHONPATH="$work/pydecnet/pydecnet" VAX_ADDR="$VAX_ADDR" \
     exit 1
 fi
 
+known_file="$work/pyrtr-known.txt"
+env PYTHONPATH="$work/pydecnet/pydecnet" \
+    "$work/venv/bin/python" "$script_dir/area31-list-known.py" \
+    "$api_sock" "$gateway_name" 31.3 >"$known_file"
+seed=${DNIV_AREA31_SEED:-0}
+[[ "$seed" =~ ^[0-9]+$ ]] || { echo "area31-proof: invalid allocation seed" >&2; exit 2; }
+vax_num=${VAX_ADDR#31.}
+free=()
+for step in $(seq 0 123); do
+    n=$((900 + ((seed + step) % 124)))
+    (( n != vax_num && n != 3 )) || continue
+    grep -Eq "^31\\.${n}([[:space:]]|$)" "$known_file" && continue
+    free+=("$n")
+    (( ${#free[@]} == 2 )) && break
+done
+(( ${#free[@]} == 2 )) || { echo "area31-proof: no two free Area-31 identities found from PYRTR known nodes" >&2; exit 1; }
+final_gateway="31.${free[0]}"
+final_linux="31.${free[1]}"
+if [[ "$gateway_node" != "$final_gateway" || "$linux_node" != "$final_linux" ]]; then
+    kill "$gateway_pid" 2>/dev/null || true
+    wait "$gateway_pid" 2>/dev/null || true
+    gateway_pid=
+    gateway_node=$final_gateway
+    gateway_name=$(printf 'DNG%03d' "${free[0]}")
+    linux_node=$final_linux
+    linux_name=$(printf 'DNL%03d' "${free[1]}")
+    rm -f "$api_sock"
+    "$work/venv/bin/python" "$repo_root/userspace/dnmultinet/dnmultinet.py" \
+        --node "$gateway_node" --name "$gateway_name" --type l2router \
+        --vde "vde://$sock" --mode connect --runtime-peer-env \
+        --api-socket "$api_sock" --pydecnet-dir "$work/pydecnet/pydecnet" \
+        >/dev/null 2>&1 &
+    gateway_pid=$!
+    for _ in $(seq 1 300); do
+        kill -0 "$gateway_pid" 2>/dev/null || break
+        if [[ -S "$api_sock" ]] && env PYTHONPATH="$work/pydecnet/pydecnet" VAX_ADDR="$VAX_ADDR" \
+            "$work/venv/bin/python" "$script_dir/area31-nice.py" "$api_sock" "$gateway_name" >/dev/null 2>&1; then break; fi
+        sleep 1
+    done
+    env PYTHONPATH="$work/pydecnet/pydecnet" VAX_ADDR="$VAX_ADDR" \
+        "$work/venv/bin/python" "$script_dir/area31-nice.py" "$api_sock" "$gateway_name" >/dev/null
+fi
+echo "area31-proof: selected two Area-31 identities absent from PYRTR known nodes"
+
 discovered_qcocal=$(env PYTHONPATH="$work/pydecnet/pydecnet" \
     "$work/venv/bin/python" "$script_dir/area31-find-node.py" \
     "$api_sock" "$gateway_name" "$VAX_ADDR" QCOCAL 2>/dev/null || true)

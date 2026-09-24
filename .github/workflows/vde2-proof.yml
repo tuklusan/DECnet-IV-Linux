@@ -16,12 +16,18 @@ name: VDE2 Transport Proof
 
 on:
   workflow_dispatch:
-  issues:
-    types: [opened, reopened]
+    inputs:
+      expected_sha:
+        description: Exact main candidate SHA supplied by the acceptance dispatcher
+        required: true
+        type: string
+      parent_run_id:
+        description: Acceptance dispatcher run ID
+        required: true
+        type: string
 
 permissions:
   contents: read
-  issues: read
 
 concurrency:
   group: dniv-vde2-proof
@@ -30,14 +36,22 @@ concurrency:
 
 jobs:
   prove-vde2:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.issue.title == 'DNIV VDE2 proof' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - name: Check out exact repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
+          ref: ${{ inputs.expected_sha }}
           fetch-depth: 0
+
+      - name: Verify exact candidate
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
 
       - name: Install VDE2 proof dependencies
         shell: bash

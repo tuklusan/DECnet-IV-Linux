@@ -17,28 +17,13 @@ name: Area-31 Interoperability
 on:
   workflow_dispatch:
     inputs:
-      gateway_node:
-        description: Assigned disposable Area-31 DECnet address
+      expected_sha:
+        description: Exact main candidate SHA supplied by the acceptance dispatcher
         required: true
         type: string
-      gateway_name:
-        description: Assigned disposable DECnet gateway name
+      parent_run_id:
+        description: Acceptance dispatcher run ID
         required: true
-        default: DNIV31
-        type: string
-      linux_node:
-        description: Assigned disposable Area-31 native Linux DECnet address
-        required: true
-        type: string
-      linux_name:
-        description: Assigned disposable native Linux DECnet node name
-        required: true
-        default: DNIV32
-        type: string
-      qcocal_node:
-        description: Optional QCOCAL Area-31 address override; blank enables NICE discovery
-        required: false
-        default: ""
         type: string
 
 permissions:
@@ -70,7 +55,31 @@ jobs:
       DNIV_OUTER_BASE_DIR: ${{ github.workspace }}/scratch/outer/${{ matrix.arch }}
       DNIV_AREA31_ARCH: ${{ matrix.arch }}
     steps:
-      - name: Verify Area-31 secret prerequisites
+      - name: Check out exact repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.expected_sha }}
+          fetch-depth: 0
+
+      - name: Bind exact candidate and provisional Area-31 identities
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          seed=$((16#${EXPECTED_SHA:0:8} % 124))
+          gateway_num=$((900 + seed))
+          linux_num=$((900 + ((seed + 1) % 124)))
+          printf 'DNIV_AREA31_SEED=%s\n' "$seed" >> "$GITHUB_ENV"
+          printf 'DNIV_AREA31_GATEWAY_NODE=31.%s\n' "$gateway_num" >> "$GITHUB_ENV"
+          printf 'DNIV_AREA31_GATEWAY_NAME=DNG%03d\n' "$gateway_num" >> "$GITHUB_ENV"
+          printf 'DNIV_AREA31_LINUX_NODE=31.%s\n' "$linux_num" >> "$GITHUB_ENV"
+          printf 'DNIV_AREA31_LINUX_NAME=DNL%03d\n' "$linux_num" >> "$GITHUB_ENV"
+          printf 'DNIV_QCOCAL_NODE=\n' >> "$GITHUB_ENV"
+
+      - name: Verify Area-31 secret prerequisites and provisional identities
         shell: bash
         env:
           MULTINET_REMOTE_HOST: ${{ secrets.MULTINET_REMOTE_HOST }}
@@ -94,28 +103,6 @@ jobs:
             printf 'missing required Area-31 secret: %s\n' "${missing[@]}" >&2
             exit 2
           fi
-
-      - name: Check out exact repository
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with:
-          fetch-depth: 0
-
-      - name: Verify assigned gateway identity
-        shell: bash
-        env:
-          DNIV_AREA31_GATEWAY_NODE: ${{ inputs.gateway_node }}
-          DNIV_AREA31_GATEWAY_NAME: ${{ inputs.gateway_name }}
-          DNIV_AREA31_LINUX_NODE: ${{ inputs.linux_node }}
-          DNIV_AREA31_LINUX_NAME: ${{ inputs.linux_name }}
-          DNIV_QCOCAL_NODE: ${{ inputs.qcocal_node }}
-          MULTINET_REMOTE_HOST: ${{ secrets.MULTINET_REMOTE_HOST }}
-          MULTINET_REMOTE_PORT: ${{ secrets.MULTINET_REMOTE_PORT }}
-          VAX_ADDR: ${{ secrets.VAX_ADDR }}
-          VAX_USERNAME: ${{ secrets.VAX_USERNAME }}
-          VAX_PASSWORD: ${{ secrets.VAX_PASSWORD }}
-        run: |
-          set -euo pipefail
-          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           tests/lab/prove-area31.sh --preflight-only
 
       - name: Install Area-31 proof dependencies
@@ -204,11 +191,6 @@ jobs:
       - name: Prove native Linux path through MULTINET to VAX
         shell: bash
         env:
-          DNIV_AREA31_GATEWAY_NODE: ${{ inputs.gateway_node }}
-          DNIV_AREA31_GATEWAY_NAME: ${{ inputs.gateway_name }}
-          DNIV_AREA31_LINUX_NODE: ${{ inputs.linux_node }}
-          DNIV_AREA31_LINUX_NAME: ${{ inputs.linux_name }}
-          DNIV_QCOCAL_NODE: ${{ inputs.qcocal_node }}
           MULTINET_REMOTE_HOST: ${{ secrets.MULTINET_REMOTE_HOST }}
           MULTINET_REMOTE_PORT: ${{ secrets.MULTINET_REMOTE_PORT }}
           VAX_ADDR: ${{ secrets.VAX_ADDR }}

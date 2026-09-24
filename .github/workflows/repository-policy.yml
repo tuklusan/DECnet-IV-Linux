@@ -319,6 +319,19 @@ jobs:
             -f profile="$profile" -f scope="$scope" \
             -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
 
+          if [[ "$profile" != fast ]]; then
+            gh workflow run vde2-proof.yml --repo "$GITHUB_REPOSITORY" --ref main \
+              -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
+            gh workflow run multinet-proof.yml --repo "$GITHUB_REPOSITORY" --ref main \
+              -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
+          fi
+          if [[ "$profile" == full ]]; then
+            gh workflow run vde2-cross-runner.yml --repo "$GITHUB_REPOSITORY" --ref main \
+              -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
+            gh workflow run area31-interop.yml --repo "$GITHUB_REPOSITORY" --ref main \
+              -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
+          fi
+
       - name: Verify dispatcher exact tree
         shell: bash
         run: |

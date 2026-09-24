@@ -96,7 +96,7 @@ Deliver:
 
 Exit criteria: VDE2 and MULTINET pass separate positive, negative, restart and stress proofs; cross-runner VDE2 is demonstrated; then an exact candidate routes successfully between local VDE lab nodes, the MULTINET-facing Area-31 router and the VAX area router without one-off protocol patches or credential leakage.
 
-Status: active. Enhanced local/rootless VDE2 proof `35959075714` and enhanced three-router MULTINET proof `35960257018` are green. The repository-tracked secret-safe Area-31 workflow is implemented but not yet executed as remote evidence. Its exact-candidate native VM path now covers NML/MIRROR plus credential-bearing CTERM and FAL probes with credentials kept off process command lines. A native `dnlynx` HTTP-over-DECnet client is now paired with `dnhttpd` and independent PyDECnet HTTP service coverage, providing a reusable application probe for later real-node work. The Area-31 VAX pair also includes credential-safe generic named-task access through `dntask`. A repository-tracked two-runner VDE2-over-SSH gate is also implemented but awaits execution against a pre-existing SSH rendezvous.
+Status: active. Enhanced local/rootless VDE2 proof `35959075714` and enhanced three-router MULTINET proof `35960257018` are green. Consolidated/full acceptance automatically dispatches local VDE2 and MULTINET proofs. Full acceptance automatically dispatches Area-31 and cross-runner VDE2 external gates. Area-31 allocation is restricted to Area 31 and queries PYRTR at 31.3 via NML for known nodes before choosing two unused high-number addresses. Credentials/endpoints remain GitHub Actions secrets. Real external success is still required before Phase 8 closes.
 
 ## Phase 9 - scale, portability, real peers and release images
 
