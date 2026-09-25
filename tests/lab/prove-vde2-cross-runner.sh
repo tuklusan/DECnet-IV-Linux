@@ -135,6 +135,7 @@ bridge_pid=
 py_pid=
 echo_pid=
 reverse_pid=
+client_forward_pid=
 sshd_pid=
 
 stop_pid() {
@@ -151,6 +152,7 @@ cleanup() {
         wait "$bridge_pid" 2>/dev/null || true
     fi
     stop_pid "${echo_pid:-}"
+    stop_pid "${client_forward_pid:-}"
     stop_pid "${reverse_pid:-}"
     if [[ -n "${sshd_pid:-}" ]]; then
         sudo kill "$sshd_pid" 2>/dev/null || true
@@ -351,31 +353,8 @@ EOF
 fi
 
 remote_user=runner
-proxy="ssh -F $ssh_config dniv-bastion -W 127.0.0.1:${DNIV_VDE_REVERSE_PORT}"
-probe_proxy="$proxy"
-inner_opts=(
-    -i "$key_file"
-    -o "ProxyCommand=$proxy"
-    -o BatchMode=yes
-    -o IdentitiesOnly=yes
-    -o ConnectTimeout=5
-    -o ConnectionAttempts=1
-    -o StrictHostKeyChecking=no
-    -o UserKnownHostsFile=/dev/null
-    -o LogLevel=ERROR
-)
-probe_inner_opts=(
-    -i "$key_file"
-    -o "ProxyCommand=$probe_proxy"
-    -o BatchMode=yes
-    -o IdentitiesOnly=yes
-    -o ConnectTimeout=5
-    -o ConnectionAttempts=1
-    -o StrictHostKeyChecking=no
-    -o UserKnownHostsFile=/dev/null
-    -o LogLevel=ERROR
-)
-remote_host="$remote_user@dniv-vde-server"
+remote_host="$remote_user@127.0.0.1"
+local_forward_port=$DNIV_VDE_REVERSE_PORT
 
 banner_err="$work/server-banner.err"
 banner=
@@ -395,6 +374,45 @@ if [[ "$banner" != "SSH-2.0-" ]]; then
     echo "vde2-cross: reverse endpoint did not present inner SSH banner" >&2
     exit 1
 fi
+
+client_forward_log="$work/client-forward.log"
+forward_ready=0
+for _ in $(seq 1 6); do
+    : >"$client_forward_log"
+    ssh -E "$client_forward_log" -F "$ssh_config" -NT -o ExitOnForwardFailure=yes \
+        -L "127.0.0.1:${local_forward_port}:127.0.0.1:${DNIV_VDE_REVERSE_PORT}" dniv-bastion &
+    client_forward_pid=$!
+    sleep 1
+    if kill -0 "$client_forward_pid" 2>/dev/null; then
+        forward_ready=1
+        break
+    fi
+    wait "$client_forward_pid" 2>/dev/null || true
+    client_forward_pid=
+    sleep 1
+done
+if (( ! forward_ready )); then
+    if is_outer_connect_timeout "$client_forward_log"; then
+        echo "vde2-cross: persistent bastion connection timed out" >&2
+        exit 75
+    fi
+    echo "vde2-cross: persistent bastion forward did not start" >&2
+    exit 1
+fi
+
+inner_opts=(
+    -F /dev/null
+    -i "$key_file"
+    -p "$local_forward_port"
+    -o BatchMode=yes
+    -o IdentitiesOnly=yes
+    -o ConnectTimeout=5
+    -o ConnectionAttempts=1
+    -o StrictHostKeyChecking=no
+    -o UserKnownHostsFile=/dev/null
+    -o LogLevel=ERROR
+)
+probe_inner_opts=("${inner_opts[@]}")
 
 ready_err="$work/server-ready.err"
 ready=0
