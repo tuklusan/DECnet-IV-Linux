@@ -237,18 +237,25 @@ query_pyrtr_known() {
     return 1
 }
 wait_vax_nice() {
+    local nice_log="$work/vax-nice-last.log"
+    local route_log="$work/gateway-known.txt"
     for _ in $(seq 1 60); do
+        : >"$nice_log"
         if env PYTHONPATH="$work/pydecnet/pydecnet" VAX_ADDR="$VAX_ADDR" \
             "$work/venv/bin/python" "$script_dir/area31-nice.py" \
-            "$api_sock" "$gateway_name" >/dev/null 2>&1; then
-            env PYTHONPATH="$work/pydecnet/pydecnet" VAX_ADDR="$VAX_ADDR" \
-                "$work/venv/bin/python" "$script_dir/area31-nice.py" \
-                "$api_sock" "$gateway_name" >/dev/null
+            "$api_sock" "$gateway_name" >"$nice_log" 2>&1; then
+            cat "$nice_log"
             return 0
         fi
         sleep 1
     done
     echo "area31-proof: VAX NICE reachability did not converge" >&2
+    cat "$nice_log" >&2 || true
+    : >"$route_log"
+    run_ncp show known nodes >"$route_log" 2>&1 || true
+    if ! grep -F "$VAX_ADDR" "$route_log" >&2; then
+        echo "area31-proof: local known-node view has no VAX row" >&2
+    fi
     show_gateway_log
     return 1
 }
