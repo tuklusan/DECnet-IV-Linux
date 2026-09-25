@@ -45,6 +45,7 @@ unit:
 	cc -Iuserspace/libdnet/include -Iinclude/uapi -Iinclude -std=c11 -Wall -Wextra -Werror -fsyntax-only tests/lab/area31-native.c
 	python3 tests/lab/area31-parse-known.py --selftest
 	tests/lab/prove-vde2-cross-runner.sh --classifier-selftest
+	tests/lab/prove-vde2-cross-runner.sh --bridge-stop-selftest
 	bash -n tests/lab/prove-area31.sh
 	env MULTINET_REMOTE_HOST=example.invalid MULTINET_REMOTE_PORT=60001 \
 		VAX_ADDR=31.91 VAX_USERNAME=TEST VAX_PASSWORD=TEST \
