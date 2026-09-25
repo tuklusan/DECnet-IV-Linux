@@ -96,7 +96,7 @@ Deliver:
 
 Exit criteria: VDE2 and MULTINET pass separate positive, negative, restart and stress proofs; cross-runner VDE2 is demonstrated; then an exact candidate routes successfully between local VDE lab nodes, the MULTINET-facing Area-31 router and the VAX area router without one-off protocol patches or credential leakage.
 
-Status: active. Enhanced local/rootless VDE2 proof `35959075714` and enhanced three-router MULTINET proof `35960257018` are green. Consolidated/full acceptance automatically dispatches local VDE2 and MULTINET proofs. Full acceptance automatically dispatches Area-31 and cross-runner VDE2 external gates. Area-31 allocation is restricted to Area 31 and queries PYRTR at 31.3 via NML for known nodes before choosing two unused high-number addresses. Credentials/endpoints remain GitHub Actions secrets. Real external success is still required before Phase 8 closes.
+Status: active at the final external dependency. Exact candidate `5cf52c584e077d841a8a240fc7cf326b1d0b3f6b` passed local VDE2 `36139326492`, local MULTINET `36139328804`, and dual-architecture Area-31 interoperability `36139333328`. Area-31 allocation is restricted to the full legal Area-31 node range, queries PYRTR at 31.3 via real NML before choosing disposable identities, and the native x86_64/aarch64 proofs cover routed NICE/MIRROR, authenticated VAX login/FAL, and discovered-QCOCAL HTTP/task access. Cross-runner VDE2 run `36139331212` remains correctly fail-closed because the five required `VDE_SSH_*` rendezvous secrets are absent. Credentials/endpoints remain GitHub Actions secrets. The real two-runner VDE2 proof is the sole remaining Phase 8 exit criterion; Phase 9 must not start until it is green.
 
 ## Phase 9 - scale, portability, real peers and release images
 

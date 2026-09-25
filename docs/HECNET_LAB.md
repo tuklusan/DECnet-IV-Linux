@@ -18,10 +18,10 @@ Area 31 is the project's Internet-connected HECnet lab area. External connectivi
 
 ## Current proof status
 
-- Local/rootless VDE2 is independently green at enhanced workflow run `35959075714`: three libvdeplug endpoints completed 512 content-checked stress frames across a full switch restart, an endpoint restart, a nonexistent-endpoint negative, and Route20/PyDECnet adjacency recovery.
-- MULTINET TCP is independently green at enhanced workflow run `35960257018`: the pinned PyDECnet MULTINET module suite passed, an unopened-port negative stayed down, two simultaneous connector circuits came up, one connector survived five kill/restart cycles while the other stayed alive, and both recovered after listener restart.
-- Cross-runner VDE2 has not yet been proven. Full acceptance now dispatches the two-runner SSH switch-join gate automatically; it fails closed when the required rendezvous secrets are absent.
-- The repository now contains an automatically dispatched, secret-backed Area-31 workflow, host-side NML/NICE probes, and an exact native DECnet-IV-Linux candidate VM path on the local VDE side. The native path requires gateway adjacency, NML summary/status/counters, MIRROR exchanges, an authenticated CTERM/Foundation probe through `dnlogin`, and authenticated FAL/DAP CONFIG plus directory operations through `dncopy` to the VAX router. Remote execution remains unrecorded, so this is not yet external evidence.
+- Local/rootless VDE2 is green on exact candidate `5cf52c584e077d841a8a240fc7cf326b1d0b3f6b` at workflow run `36139326492`; the earlier enhanced proof `35959075714` remains the detailed restart/stress baseline.
+- MULTINET TCP is green on the same exact candidate at workflow run `36139328804`; the earlier enhanced three-router proof `35960257018` remains the detailed negative/restart/stress baseline.
+- Dual-architecture Area-31 interoperability is now real external evidence: workflow run `36139333328` passed x86_64 and arm64 on exact candidate `5cf52c584e077d841a8a240fc7cf326b1d0b3f6b`. The proof allocated disposable Area-31 identities from PYRTR's real NML view, routed native Linux through the VDE/MULTINET gateway, passed VAX NICE summary/status/counters and MIRROR, authenticated VAX login/FAL operations, discovered QCOCAL through NICE, and completed the non-destructive temporary HTTP/task object checks.
+- Cross-runner VDE2 is the sole remaining Phase 8 exit dependency. Workflow run `36139331212` failed closed before transport activity because `VDE_SSH_HOST`, `VDE_SSH_PORT`, `VDE_SSH_USER`, `VDE_SSH_KEY`, and `VDE_SSH_KNOWN_HOSTS` are absent. Do not fabricate or replace these with manual inputs.
 
 ## VDE2
 
