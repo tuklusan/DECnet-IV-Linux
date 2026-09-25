@@ -156,7 +156,7 @@ static int mirror_query(const char *target)
     int fd;
     int i;
 
-    fd = dnet_conn((char *)target, "MIRROR", SOCK_SEQPACKET,
+    fd = dnet_conn((char *)target, "#25", SOCK_SEQPACKET,
                    NULL, 0, NULL, NULL);
     if (fd < 0)
         return -1;
