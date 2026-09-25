@@ -160,6 +160,8 @@ Host dniv-bastion
     UserKnownHostsFile $known_hosts
     StrictHostKeyChecking yes
     LogLevel ERROR
+    ConnectTimeout 10
+    ConnectionAttempts 1
     ServerAliveInterval 15
     ServerAliveCountMax 3
 EOF
@@ -252,7 +254,9 @@ EOF
     [[ -s "$work/sshd.pid" ]] || { echo "vde2-cross: inner sshd did not start" >&2; exit 1; }
     sshd_pid=$(cat "$work/sshd.pid")
 
-    ssh -F "$ssh_config" -NT -o ExitOnForwardFailure=yes         -R "127.0.0.1:${DNIV_VDE_REVERSE_PORT}:127.0.0.1:22222" dniv-bastion &
+    ssh -F "$ssh_config" -NT -o ExitOnForwardFailure=yes \
+        -o ConnectTimeout=10 -o ConnectionAttempts=1 \
+        -R "127.0.0.1:${DNIV_VDE_REVERSE_PORT}:127.0.0.1:22222" dniv-bastion &
     reverse_pid=$!
     sleep 2
     kill -0 "$reverse_pid" 2>/dev/null || {
@@ -261,7 +265,7 @@ EOF
     }
 
     : >"$ready_file"
-    for _ in $(seq 1 900); do
+    for _ in $(seq 1 600); do
         [[ -f "$done_file" ]] && {
             echo "vde2-cross: server pass"
             exit 0
@@ -272,7 +276,7 @@ EOF
         }
         sleep 1
     done
-    echo "vde2-cross: client completion marker timed out" >&2
+    echo "vde2-cross: client completion marker timed out after 600s" >&2
     exit 1
 fi
 
@@ -283,22 +287,30 @@ inner_opts=(
     -o "ProxyCommand=$proxy"
     -o BatchMode=yes
     -o IdentitiesOnly=yes
+    -o ConnectTimeout=5
+    -o ConnectionAttempts=1
     -o StrictHostKeyChecking=no
     -o UserKnownHostsFile=/dev/null
     -o LogLevel=ERROR
 )
 remote_host="$remote_user@dniv-vde-server"
 
-for _ in $(seq 1 300); do
-    if ssh "${inner_opts[@]}" "$remote_host" test -f "$ready_file" >/dev/null 2>&1; then
+ready_err="$work/server-ready.err"
+ready=0
+for _ in $(seq 1 60); do
+    : >"$ready_err"
+    if timeout 8 ssh "${inner_opts[@]}" "$remote_host" test -f "$ready_file" \
+        >/dev/null 2>"$ready_err"; then
+        ready=1
         break
     fi
     sleep 1
 done
-ssh "${inner_opts[@]}" "$remote_host" test -f "$ready_file" >/dev/null 2>&1 || {
+if (( ! ready )); then
+    sed -n '1,8p' "$ready_err" >&2 || true
     echo "vde2-cross: server rendezvous did not become ready" >&2
     exit 1
-}
+fi
 
 local_sock="$work/client.ctl"
 start_switch "$local_sock"
@@ -391,5 +403,8 @@ start_py
 wait_ups $((up_before + 1))
 "$work/vde-frame-echo" client "vde://$local_sock" 3 >/dev/null
 
-ssh "${inner_opts[@]}" "$remote_host" touch "$done_file" >/dev/null
+if ! timeout 8 ssh "${inner_opts[@]}" "$remote_host" touch "$done_file" >/dev/null; then
+    echo "vde2-cross: completion marker command failed" >&2
+    exit 1
+fi
 echo "vde2-cross: client pass frames=3 bridge_reconnect=1 switch_restart=1 adjacency_recoveries=2"
