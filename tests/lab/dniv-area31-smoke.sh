@@ -130,8 +130,23 @@ for _ in $(seq 1 320); do
 done
 [ "$route_ready" -eq 1 ] || fail vax-route
 
-DNIV_AREA31_TARGET="$target" /usr/local/sbin/dniv-area31-native >/dev/null ||
+remote_log=/tmp/dniv-area31-native.err
+remote_ready=0
+for _ in $(seq 1 120); do
+    : >"$remote_log"
+    if DNIV_AREA31_TARGET="$target" /usr/local/sbin/dniv-area31-native \
+        >/dev/null 2>"$remote_log"; then
+        remote_ready=1
+        break
+    fi
+    sleep 0.5
+done
+if [ "$remote_ready" -ne 1 ]; then
+    cat "$remote_log" >&2 || true
+    rm -f "$remote_log"
     fail remote-protocol
+fi
+rm -f "$remote_log"
 
 DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
     /usr/local/sbin/dnlogin --probe "$target" >/dev/null 2>&1 ||
