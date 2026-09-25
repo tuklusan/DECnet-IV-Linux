@@ -387,7 +387,7 @@ local_sock="$work/client.ctl"
 start_switch "$local_sock"
 
 start_bridge() {
-    setsid dpipe vde_plug "$local_sock" =         ssh "${inner_opts[@]}" "$remote_host" vde_plug "$server_sock"         >>"$work/bridge.log" 2>&1 &
+    dpipe vde_plug "$local_sock" =         ssh "${inner_opts[@]}" "$remote_host" vde_plug "$server_sock"         >>"$work/bridge.log" 2>&1 &
     bridge_pid=$!
     sleep 1
     kill -0 "$bridge_pid" 2>/dev/null || {
