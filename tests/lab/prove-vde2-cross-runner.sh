@@ -243,10 +243,10 @@ PermitTTY no
 X11Forwarding no
 AllowAgentForwarding no
 AllowTcpForwarding no
-LogLevel ERROR
+LogLevel VERBOSE
 EOF
     sudo mkdir -p /run/sshd
-    sudo /usr/sbin/sshd -f "$work/sshd_config"
+    sudo /usr/sbin/sshd -E "$work/sshd.log" -f "$work/sshd_config"
     for _ in $(seq 1 50); do
         [[ -s "$work/sshd.pid" ]] && break
         sleep 0.1
@@ -266,9 +266,10 @@ EOF
         -o LogLevel=ERROR
     )
     local_inner_err="$work/local-inner.err"
-    if ! timeout -k 2 8 ssh "${local_inner_opts[@]}" "$server_user@127.0.0.1" \
+    if ! timeout -k 2 8 ssh -vvv "${local_inner_opts[@]}" "$server_user@127.0.0.1" \
         test -f "$ready_file" >/dev/null 2>"$local_inner_err"; then
-        sed -n '1,6p' "$local_inner_err" >&2 || true
+        tail -n 24 "$local_inner_err" >&2 || true
+        tail -n 24 "$work/sshd.log" >&2 || true
         echo "vde2-cross: inner SSH selfcheck failed" >&2
         exit 1
     fi
