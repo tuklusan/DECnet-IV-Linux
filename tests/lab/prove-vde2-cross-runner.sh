@@ -51,7 +51,7 @@ write_remote_wrapper() {
 set -euo pipefail
 case "\${SSH_ORIGINAL_COMMAND:-}" in
     "test -f $ready") test -f "$ready" ;;
-    "vde_plug $sock") exec vde_plug "$sock" ;;
+    "vde_plug vde://$sock") exec vde_plug "vde://$sock" ;;
     "touch $done") : >"$done" ;;
     *) exit 126 ;;
 esac
@@ -387,7 +387,7 @@ local_sock="$work/client.ctl"
 start_switch "$local_sock"
 
 start_bridge() {
-    dpipe vde_plug "$local_sock" =         ssh "${inner_opts[@]}" "$remote_host" vde_plug "$server_sock"         >>"$work/bridge.log" 2>&1 &
+    dpipe vde_plug "vde://$local_sock" =         ssh "${inner_opts[@]}" "$remote_host" vde_plug "vde://$server_sock"         >>"$work/bridge.log" 2>&1 &
     bridge_pid=$!
     sleep 1
     kill -0 "$bridge_pid" 2>/dev/null || {
