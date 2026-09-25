@@ -171,13 +171,25 @@ if [ -n "$qcocal" ]; then
     DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
         /usr/local/bin/dncopy --put-text /run/dniv-area31/DNIVHT.COM "$qcocal" DNIVHT.COM \
         >/dev/null 2>&1 || fail qcocal-http-install
+    http_out=/tmp/dniv-qcocal-http.out
+    http_err=/tmp/dniv-qcocal-http.err
     if ! DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
-        /usr/local/bin/dnlynx -o DNIVHT "$qcocal" / 2>/dev/null | \
-        grep -Fq 'QCOCAL-DECNET-HTTP-PASS'; then
+        /usr/local/bin/dnlynx -i -o DNIVHT "$qcocal" / >"$http_out" 2>"$http_err"; then
+        sed -n '1p' "$http_err" >&2 || true
+        sed -n '1{s/\r$//;/^HTTP\/1\.[01] [0-9][0-9][0-9] /p;}' "$http_out" >&2 || true
         DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
             /usr/local/bin/dndel "$qcocal" DNIVHT.COM >/dev/null 2>&1 || true
+        rm -f "$http_out" "$http_err"
         fail qcocal-http-client
     fi
+    if ! grep -Fq 'QCOCAL-DECNET-HTTP-PASS' "$http_out"; then
+        sed -n '1{s/\r$//;/^HTTP\/1\.[01] [0-9][0-9][0-9] /p;}' "$http_out" >&2 || true
+        DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
+            /usr/local/bin/dndel "$qcocal" DNIVHT.COM >/dev/null 2>&1 || true
+        rm -f "$http_out" "$http_err"
+        fail qcocal-http-client
+    fi
+    rm -f "$http_out" "$http_err"
     DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
         /usr/local/bin/dndel "$qcocal" DNIVHT.COM >/dev/null 2>&1 ||
         fail qcocal-http-cleanup
