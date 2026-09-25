@@ -105,6 +105,89 @@ jobs:
   client:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 25
+    outputs:
+      retry_on_x64: ${{ steps.join.outputs.retry_on_x64 }}
+    steps:
+      - name: Check out exact repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.expected_sha }}
+          fetch-depth: 0
+
+      - name: Bind exact candidate and deterministic reverse-forward port
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          port=$((20000 + (16#${EXPECTED_SHA:0:8} % 30000)))
+          printf 'DNIV_VDE_REVERSE_PORT=%s\n' "$port" >> "$GITHUB_ENV"
+
+      - name: Verify SSH rendezvous prerequisites
+        shell: bash
+        env:
+          VDE_SSH_HOST: ${{ secrets.VDE_SSH_HOST }}
+          VDE_SSH_PORT: ${{ secrets.VDE_SSH_PORT }}
+          VDE_SSH_USER: ${{ secrets.VDE_SSH_USER }}
+          VDE_SSH_KEY: ${{ secrets.VDE_SSH_KEY }}
+          VDE_SSH_KNOWN_HOSTS: ${{ secrets.VDE_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          required=(VDE_SSH_HOST VDE_SSH_PORT VDE_SSH_USER VDE_SSH_KEY VDE_SSH_KNOWN_HOSTS DNIV_VDE_REVERSE_PORT)
+          missing=()
+          for name in "${required[@]}"; do
+            value=${!name:-}
+            if [[ -z "$value" ]]; then
+              missing+=("$name")
+            elif [[ "$name" != DNIV_VDE_REVERSE_PORT ]]; then
+              printf '::add-mask::%s\n' "$value"
+            fi
+          done
+          if (( ${#missing[@]} )); then
+            printf 'missing required cross-runner VDE2 secret: %s\n' "${missing[@]}" >&2
+            exit 2
+          fi
+          tests/lab/prove-vde2-cross-runner.sh --preflight-only
+
+      - name: Install cross-runner VDE2 dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y build-essential libpcap-dev vde2 libvdeplug-dev python3-venv openssh-client
+
+      - name: Join remote VDE switch and prove recovery
+        id: join
+        shell: bash
+        env:
+          VDE_SSH_HOST: ${{ secrets.VDE_SSH_HOST }}
+          VDE_SSH_PORT: ${{ secrets.VDE_SSH_PORT }}
+          VDE_SSH_USER: ${{ secrets.VDE_SSH_USER }}
+          VDE_SSH_KEY: ${{ secrets.VDE_SSH_KEY }}
+          VDE_SSH_KNOWN_HOSTS: ${{ secrets.VDE_SSH_KNOWN_HOSTS }}
+          DNIV_VDE_BANNER_ATTEMPTS: "12"
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ inputs.expected_sha }}"
+          set +e
+          tests/lab/prove-vde2-cross-runner.sh --client
+          rc=$?
+          set -e
+          if [[ "$rc" -eq 75 ]]; then
+            echo "retry_on_x64=true" >> "$GITHUB_OUTPUT"
+            echo "vde2-cross: primary client has no bastion egress; using automatic x86_64 fallback" >&2
+            exit 0
+          fi
+          echo "retry_on_x64=false" >> "$GITHUB_OUTPUT"
+          exit "$rc"
+
+  client-fallback:
+    needs: client
+    if: ${{ needs.client.outputs.retry_on_x64 == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
     steps:
       - name: Check out exact repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262

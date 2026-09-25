@@ -31,6 +31,11 @@ for name in VDE_SSH_PORT DNIV_VDE_REVERSE_PORT; do
     value=${!name}
     [[ "$value" =~ ^[0-9]+$ ]] || { echo "vde2-cross: $name must be numeric" >&2; exit 2; }
 done
+banner_attempts=${DNIV_VDE_BANNER_ATTEMPTS:-30}
+[[ "$banner_attempts" =~ ^[0-9]+$ ]] && (( banner_attempts >= 1 && banner_attempts <= 60 )) || {
+    echo "vde2-cross: DNIV_VDE_BANNER_ATTEMPTS must be 1..60" >&2
+    exit 2
+}
 (( VDE_SSH_PORT >= 1 && VDE_SSH_PORT <= 65535 )) || {
     echo "vde2-cross: VDE_SSH_PORT is invalid" >&2
     exit 2
@@ -353,7 +358,7 @@ remote_host="$remote_user@dniv-vde-server"
 
 banner_err="$work/server-banner.err"
 banner=
-for _ in $(seq 1 30); do
+for _ in $(seq 1 "$banner_attempts"); do
     : >"$banner_err"
     banner=$(timeout -k 2 8 ssh -F "$ssh_config" dniv-bastion \
         -W "127.0.0.1:${DNIV_VDE_REVERSE_PORT}" 2>"$banner_err" | head -c 8 || true)
@@ -361,6 +366,10 @@ for _ in $(seq 1 30); do
     sleep 1
 done
 if [[ "$banner" != "SSH-2.0-" ]]; then
+    if grep -Eq '^ssh: connect to host .+ port [0-9]+: Connection timed out$' "$banner_err"; then
+        echo "vde2-cross: outer bastion connection timed out" >&2
+        exit 75
+    fi
     sed -n '1,8p' "$banner_err" >&2 || true
     echo "vde2-cross: reverse endpoint did not present inner SSH banner" >&2
     exit 1
