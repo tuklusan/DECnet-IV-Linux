@@ -366,7 +366,130 @@ for _ in $(seq 1 "$banner_attempts"); do
     sleep 1
 done
 if [[ "$banner" != "SSH-2.0-" ]]; then
-    if grep -Eq '^ssh: connect to host .+ port [0-9]+: Connection timed out$' "$banner_err"; then
+    if grep -Eq '^ssh: connect to host .+ port .+: Connection timed out
+        echo "vde2-cross: outer bastion connection timed out" >&2
+        exit 75
+    fi
+    sed -n '1,8p' "$banner_err" >&2 || true
+    echo "vde2-cross: reverse endpoint did not present inner SSH banner" >&2
+    exit 1
+fi
+
+ready_err="$work/server-ready.err"
+ready=0
+for _ in $(seq 1 20); do
+    : >"$ready_err"
+    if timeout -k 2 8 ssh "${probe_inner_opts[@]}" "$remote_host" test -f "$ready_file" \
+        >/dev/null 2>"$ready_err"; then
+        ready=1
+        break
+    fi
+    sleep 1
+done
+if (( ! ready )); then
+    sed -n '1,8p' "$ready_err" >&2 || true
+    echo "vde2-cross: server rendezvous did not become ready" >&2
+    exit 1
+fi
+
+local_sock="$work/client.ctl"
+start_switch "$local_sock"
+
+start_bridge() {
+    vde_plug "vde://$local_sock" = ssh "${inner_opts[@]}" "$remote_host" vde_plug "vde://$server_sock" \
+        >>"$work/bridge.log" 2>&1 &
+    bridge_pid=$!
+    sleep 1
+    kill -0 "$bridge_pid" 2>/dev/null || {
+        cat "$work/bridge.log" >&2 || true
+        echo "vde2-cross: VDE-over-SSH bridge did not start" >&2
+        exit 1
+    }
+}
+stop_bridge() {
+    if [[ -n "${bridge_pid:-}" ]]; then
+        kill "$bridge_pid" 2>/dev/null || true
+        wait "$bridge_pid" 2>/dev/null || true
+        bridge_pid=
+    fi
+}
+start_bridge
+"$work/vde-frame-echo" client "vde://$local_sock" 1 >/dev/null
+
+git init -q "$work/pydecnet"
+git -C "$work/pydecnet" remote add origin https://github.com/tuklusan/pydecnet.git
+git -C "$work/pydecnet" fetch -q --depth=1 origin "$PYDECNET_REF"
+git -C "$work/pydecnet" checkout -q --detach FETCH_HEAD
+test "$(git -C "$work/pydecnet" rev-parse HEAD)" = "$PYDECNET_REF"
+python3 -m venv "$work/venv"
+"$work/venv/bin/python" -m pip install -q --upgrade pip setuptools
+"$work/venv/bin/python" -m pip install -q "$work/pydecnet/pydecnet"
+cat >"$work/pydecnet.conf" <<EOF
+routing 31.78 --type l1router
+node 31.77 VDR77
+node 31.78 VDP78
+circuit ETH-0 Ethernet vde://$local_sock --mode vde --cost 3 --t3 2 --priority 64
+logging console --events 4.15,4.16
+EOF
+
+start_py() {
+    (
+        cd "$work/pydecnet/pydecnet"
+        exec "$work/venv/bin/python" -u -m decnet.main "$work/pydecnet.conf"
+    ) >>"$work/pydecnet.log" 2>&1 &
+    py_pid=$!
+}
+wait_ups() {
+    local want=$1
+    for _ in $(seq 1 160); do
+        count=$(grep -Fc "Adjacency up" "$work/pydecnet.log" 2>/dev/null || true)
+        (( count >= want )) && return 0
+        kill -0 "$py_pid" 2>/dev/null || {
+            cat "$work/pydecnet.log" >&2 || true
+            return 1
+        }
+        sleep 0.5
+    done
+    cat "$work/pydecnet.log" >&2 || true
+    return 1
+}
+
+: >"$work/pydecnet.log"
+start_py
+wait_ups 1
+
+up_before=$(grep -Fc "Adjacency up" "$work/pydecnet.log" || true)
+stop_bridge
+sleep 8
+start_bridge
+wait_ups $((up_before + 1))
+"$work/vde-frame-echo" client "vde://$local_sock" 2 >/dev/null
+
+stop_pid "$py_pid"
+py_pid=
+stop_bridge
+if [[ -n "${switch_pid:-}" ]]; then
+    kill "$switch_pid" 2>/dev/null || true
+    for _ in $(seq 1 50); do
+        kill -0 "$switch_pid" 2>/dev/null || break
+        sleep 0.1
+    done
+    switch_pid=
+fi
+rm -rf "$local_sock"
+start_switch "$local_sock"
+start_bridge
+up_before=$(grep -Fc "Adjacency up" "$work/pydecnet.log" || true)
+start_py
+wait_ups $((up_before + 1))
+"$work/vde-frame-echo" client "vde://$local_sock" 3 >/dev/null
+
+if ! timeout -k 2 8 ssh "${probe_inner_opts[@]}" "$remote_host" touch "$done_file" >/dev/null; then
+    echo "vde2-cross: completion marker command failed" >&2
+    exit 1
+fi
+echo "vde2-cross: client pass frames=3 bridge_reconnect=1 switch_restart=1 adjacency_recoveries=2"
+ "$banner_err"; then
         echo "vde2-cross: outer bastion connection timed out" >&2
         exit 75
     fi
