@@ -237,7 +237,7 @@ PubkeyAuthentication yes
 PasswordAuthentication no
 KbdInteractiveAuthentication no
 PermitRootLogin no
-UsePAM no
+UsePAM yes
 AllowUsers $server_user
 PermitTTY no
 X11Forwarding no
@@ -265,8 +265,10 @@ EOF
         -o UserKnownHostsFile=/dev/null
         -o LogLevel=ERROR
     )
+    local_inner_err="$work/local-inner.err"
     if ! timeout -k 2 8 ssh "${local_inner_opts[@]}" "$server_user@127.0.0.1" \
-        test -f "$ready_file" >/dev/null 2>&1; then
+        test -f "$ready_file" >/dev/null 2>"$local_inner_err"; then
+        sed -n '1,6p' "$local_inner_err" >&2 || true
         echo "vde2-cross: inner SSH selfcheck failed" >&2
         exit 1
     fi
