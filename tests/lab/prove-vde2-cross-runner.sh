@@ -253,6 +253,23 @@ EOF
     done
     [[ -s "$work/sshd.pid" ]] || { echo "vde2-cross: inner sshd did not start" >&2; exit 1; }
     sshd_pid=$(cat "$work/sshd.pid")
+    : >"$ready_file"
+    local_inner_opts=(
+        -i "$key_file"
+        -p 22222
+        -o BatchMode=yes
+        -o IdentitiesOnly=yes
+        -o ConnectTimeout=5
+        -o ConnectionAttempts=1
+        -o StrictHostKeyChecking=no
+        -o UserKnownHostsFile=/dev/null
+        -o LogLevel=ERROR
+    )
+    if ! timeout -k 2 8 ssh "${local_inner_opts[@]}" "$server_user@127.0.0.1" \
+        test -f "$ready_file" >/dev/null 2>&1; then
+        echo "vde2-cross: inner SSH selfcheck failed" >&2
+        exit 1
+    fi
 
     ssh -F "$ssh_config" -NT -o ExitOnForwardFailure=yes \
         -o ConnectTimeout=10 -o ConnectionAttempts=1 \
@@ -264,7 +281,6 @@ EOF
         exit 1
     }
 
-    : >"$ready_file"
     for _ in $(seq 1 600); do
         [[ -f "$done_file" ]] && {
             echo "vde2-cross: server pass"
@@ -282,6 +298,7 @@ fi
 
 remote_user=runner
 proxy="ssh -F $ssh_config dniv-bastion -W 127.0.0.1:${DNIV_VDE_REVERSE_PORT}"
+probe_proxy="timeout -k 2 8 ssh -F $ssh_config dniv-bastion -W 127.0.0.1:${DNIV_VDE_REVERSE_PORT}"
 inner_opts=(
     -i "$key_file"
     -o "ProxyCommand=$proxy"
@@ -293,13 +310,39 @@ inner_opts=(
     -o UserKnownHostsFile=/dev/null
     -o LogLevel=ERROR
 )
+probe_inner_opts=(
+    -i "$key_file"
+    -o "ProxyCommand=$probe_proxy"
+    -o BatchMode=yes
+    -o IdentitiesOnly=yes
+    -o ConnectTimeout=5
+    -o ConnectionAttempts=1
+    -o StrictHostKeyChecking=no
+    -o UserKnownHostsFile=/dev/null
+    -o LogLevel=ERROR
+)
 remote_host="$remote_user@dniv-vde-server"
+
+banner_err="$work/server-banner.err"
+banner=
+for _ in $(seq 1 30); do
+    : >"$banner_err"
+    banner=$(timeout -k 2 8 ssh -F "$ssh_config" dniv-bastion \
+        -W "127.0.0.1:${DNIV_VDE_REVERSE_PORT}" 2>"$banner_err" | head -c 8 || true)
+    [[ "$banner" == "SSH-2.0-" ]] && break
+    sleep 1
+done
+if [[ "$banner" != "SSH-2.0-" ]]; then
+    sed -n '1,8p' "$banner_err" >&2 || true
+    echo "vde2-cross: reverse endpoint did not present inner SSH banner" >&2
+    exit 1
+fi
 
 ready_err="$work/server-ready.err"
 ready=0
-for _ in $(seq 1 60); do
+for _ in $(seq 1 20); do
     : >"$ready_err"
-    if timeout 8 ssh "${inner_opts[@]}" "$remote_host" test -f "$ready_file" \
+    if timeout -k 2 8 ssh "${probe_inner_opts[@]}" "$remote_host" test -f "$ready_file" \
         >/dev/null 2>"$ready_err"; then
         ready=1
         break
@@ -403,7 +446,7 @@ start_py
 wait_ups $((up_before + 1))
 "$work/vde-frame-echo" client "vde://$local_sock" 3 >/dev/null
 
-if ! timeout 8 ssh "${inner_opts[@]}" "$remote_host" touch "$done_file" >/dev/null; then
+if ! timeout -k 2 8 ssh "${probe_inner_opts[@]}" "$remote_host" touch "$done_file" >/dev/null; then
     echo "vde2-cross: completion marker command failed" >&2
     exit 1
 fi
