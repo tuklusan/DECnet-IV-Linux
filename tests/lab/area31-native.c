@@ -55,7 +55,29 @@ static int parse_node(const char *text, uint16_t *address)
     return 0;
 }
 
-static int nice_read_executor_reply(int fd, uint16_t target)
+static void nice_dump_frame(unsigned int info, const unsigned char *buf,
+                            ssize_t length)
+{
+    size_t limit;
+    size_t i;
+
+    if (length < 0) {
+        fprintf(stderr, "area31-native: NICE info=%u recv errno=%d\n",
+                info, errno);
+        return;
+    }
+    limit = (size_t)length < 32U ? (size_t)length : 32U;
+    fprintf(stderr, "area31-native: NICE info=%u frame-len=%zd data=",
+            info, length);
+    for (i = 0U; i < limit; i++)
+        fprintf(stderr, "%02x", buf[i]);
+    if ((size_t)length > limit)
+        fputs("...", stderr);
+    fputc('\n', stderr);
+}
+
+static int nice_read_executor_reply(int fd, uint16_t target,
+                                    unsigned int info)
 {
     unsigned char response[512];
     int multiple = 0;
@@ -68,27 +90,41 @@ static int nice_read_executor_reply(int fd, uint16_t target)
         int code;
 
         got = recv(fd, response, sizeof(response), 0);
-        if (got < 1)
+        if (got < 1) {
+            nice_dump_frame(info, response, got);
             return -1;
+        }
         code = (int)(int8_t)response[0];
 
         if (code == 2) {
-            if (multiple || saw_item)
+            if (multiple || saw_item) {
+                nice_dump_frame(info, response, got);
                 return -1;
+            }
             multiple = 1;
             continue;
         }
-        if (code == -128)
-            return multiple && saw_item ? 0 : -1;
-        if (code != DNIV_NICE_RET_SUCCESS)
+        if (code == -128) {
+            if (multiple && saw_item)
+                return 0;
+            nice_dump_frame(info, response, got);
             return -1;
+        }
+        if (code != DNIV_NICE_RET_SUCCESS) {
+            nice_dump_frame(info, response, got);
+            return -1;
+        }
         if (dniv_nice_parse_node_reply(response, (size_t)got, &reply) ||
-            reply.address != target)
+            reply.address != target) {
+            nice_dump_frame(info, response, got);
             return -1;
+        }
         saw_item = 1;
         if (!multiple)
             return 0;
     }
+    fprintf(stderr, "area31-native: NICE info=%u response frame limit\n",
+            info);
     return -1;
 }
 
@@ -102,13 +138,19 @@ static int nice_query(uint16_t target, unsigned int info)
     struct optdata_dn conndata;
     struct optdata_dn acceptdata;
     struct timeval timeout = {10, 0};
+    const char *stage = "socket";
     socklen_t optlen;
     int fd;
 
     request[1] = (unsigned char)(info << 4);
     fd = socket(AF_DECnet, SOCK_SEQPACKET, DNPROTO_NSP);
-    if (fd < 0)
+    if (fd < 0) {
+        fprintf(stderr, "area31-native: NICE info=%u stage=%s errno=%d\n",
+                info, stage, errno);
         return -1;
+    }
+
+    stage = "timeouts";
     if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) ||
         setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)))
         goto fail;
@@ -116,6 +158,7 @@ static int nice_query(uint16_t target, unsigned int info)
     memset(&conndata, 0, sizeof(conndata));
     conndata.opt_optl = cpu_to_le16_u(sizeof(version));
     memcpy(conndata.opt_data, version, sizeof(version));
+    stage = "connect-data";
     if (setsockopt(fd, DNPROTO_NSP, DSO_CONDATA, &conndata, sizeof(conndata)))
         goto fail;
 
@@ -125,26 +168,32 @@ static int nice_query(uint16_t target, unsigned int info)
     peer.sdn_nodeaddrl = cpu_to_le16_u(2U);
     peer.sdn_nodeaddr[0] = (unsigned char)(target & 0xffU);
     peer.sdn_nodeaddr[1] = (unsigned char)(target >> 8);
+    stage = "connect";
     if (connect(fd, (struct sockaddr *)&peer, sizeof(peer)))
         goto fail;
 
     memset(&acceptdata, 0, sizeof(acceptdata));
     optlen = sizeof(acceptdata);
+    stage = "accept-data";
     if (getsockopt(fd, DNPROTO_NSP, DSO_CONDATA, &acceptdata, &optlen) ||
         optlen != sizeof(acceptdata) ||
         acceptdata.opt_optl != cpu_to_le16_u(sizeof(version)) ||
         memcmp(acceptdata.opt_data, version, sizeof(version)))
         goto fail;
 
+    stage = "request";
     if (send(fd, request, sizeof(request), MSG_EOR | MSG_NOSIGNAL) !=
         (ssize_t)sizeof(request))
         goto fail;
-    if (nice_read_executor_reply(fd, target))
+    stage = "reply";
+    if (nice_read_executor_reply(fd, target, info))
         goto fail;
 
     close(fd);
     return 0;
 fail:
+    fprintf(stderr, "area31-native: NICE info=%u stage=%s errno=%d\n",
+            info, stage, errno);
     close(fd);
     return -1;
 }
