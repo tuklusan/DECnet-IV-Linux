@@ -429,6 +429,17 @@ if [[ "$banner" != "SSH-2.0-" ]]; then
 fi
 
 client_forward_log="$work/client-forward.log"
+probe_client_forward() {
+    python3 - "$local_forward_port" <<'PY'
+import socket
+import sys
+
+with socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=3) as sock:
+    sock.settimeout(3)
+    if sock.recv(8) != b"SSH-2.0-":
+        raise SystemExit(1)
+PY
+}
 start_client_forward() {
     local forward_ready=0
     for _ in $(seq 1 6); do
@@ -437,11 +448,11 @@ start_client_forward() {
             -L "127.0.0.1:${local_forward_port}:127.0.0.1:${DNIV_VDE_REVERSE_PORT}" dniv-bastion &
         client_forward_pid=$!
         sleep 1
-        if kill -0 "$client_forward_pid" 2>/dev/null; then
+        if kill -0 "$client_forward_pid" 2>/dev/null && probe_client_forward; then
             forward_ready=1
             break
         fi
-        wait "$client_forward_pid" 2>/dev/null || true
+        stop_pid "$client_forward_pid"
         client_forward_pid=
         sleep 1
     done
@@ -450,7 +461,7 @@ start_client_forward() {
             echo "vde2-cross: persistent bastion connection timed out" >&2
             return 75
         fi
-        echo "vde2-cross: persistent bastion forward did not start" >&2
+        echo "vde2-cross: persistent bastion forward did not pass local SSH banner probe" >&2
         return 1
     fi
 }
