@@ -436,7 +436,9 @@ fi
     -display none -monitor none -serial "file:$vm_log" -no-reboot &
 vm_pid=$!
 
-for _ in $(seq 1 360); do
+proof_wait=360
+[[ "$area31_arch" == arm64 ]] && proof_wait=540
+for _ in $(seq 1 "$proof_wait"); do
     if grep -Fq 'DNIV-AREA31-NATIVE-PASS' "$vm_log" 2>/dev/null; then
         wait "$vm_pid" 2>/dev/null || true
         vm_pid=
