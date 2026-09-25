@@ -361,6 +361,15 @@ jobs:
               -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
           fi
 
+          if [[ "$GITHUB_EVENT_NAME" == issues ]]; then
+            issue_number=$(jq -r '.issue.number' "$GITHUB_EVENT_PATH")
+            {
+              printf 'Acceptance child runs for `%s` (%s/%s):\n\n' "$GITHUB_SHA" "$profile" "$scope"
+              sed -n '/_RUN_ID=/p' "$DNIV_SCRATCH_DIR/dispatch.env" | sed 's/^/- `/; s/=/` = `/; s/$/`/'
+            } > "$DNIV_SCRATCH_DIR/dispatch-comment.md"
+            gh issue comment "$issue_number" --repo "$GITHUB_REPOSITORY" --body-file "$DNIV_SCRATCH_DIR/dispatch-comment.md"
+          fi
+
       - name: Verify dispatcher exact tree
         shell: bash
         run: |
