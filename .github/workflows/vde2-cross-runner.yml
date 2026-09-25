@@ -103,7 +103,7 @@ jobs:
           tests/lab/prove-vde2-cross-runner.sh --server
 
   client:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 25
     steps:
       - name: Check out exact repository
