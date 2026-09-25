@@ -27,12 +27,12 @@ $ open/read/write net sys$net
 $ read/end=done net request
 $ cr = f$char(13)
 $ lf = f$char(10)
-$ body = "QCOCAL-DECNET-HTTP-PASS" + lf
-$ reply = "HTTP/1.0 200 OK" + cr + lf + -
-          "Content-Length: {CONTENT_LENGTH}" + cr + lf + -
-          "Content-Type: text/plain" + cr + lf + -
-          "Connection: close" + cr + lf + cr + lf + body
-$ write net reply
+$ write net "HTTP/1.0 200 OK" + cr + lf
+$ write net "Content-Length: {CONTENT_LENGTH}" + cr + lf
+$ write net "Content-Type: text/plain" + cr + lf
+$ write net "Connection: close" + cr + lf
+$ write net cr + lf
+$ write net "QCOCAL-DECNET-HTTP-PASS" + lf
 $done:
 $ close net
 $ exit
@@ -43,15 +43,19 @@ def validate(program: str) -> None:
     required = (
         "$ open/read/write net sys$net",
         "$ read/end=done net request",
-        f'"Content-Length: {CONTENT_LENGTH}"',
-        "QCOCAL-DECNET-HTTP-PASS",
-        "$ write net reply",
+        f'$ write net "Content-Length: {CONTENT_LENGTH}" + cr + lf',
+        '$ write net "HTTP/1.0 200 OK" + cr + lf',
+        '$ write net "Connection: close" + cr + lf',
+        "$ write net cr + lf",
+        '$ write net "QCOCAL-DECNET-HTTP-PASS" + lf',
         "$ close net",
     )
     if not all(item in program for item in required):
         raise SystemExit("make-http-com: invalid generated program")
     if "#" in program:
         raise SystemExit("make-http-com: non-DCL header leaked into generated program")
+    if " + -\n" in program:
+        raise SystemExit("make-http-com: DCL continuation is not allowed")
 
 
 def main() -> int:
