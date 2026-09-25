@@ -253,7 +253,8 @@ wait_vax_nice() {
     cat "$nice_log" >&2 || true
     : >"$route_log"
     run_ncp show known nodes >"$route_log" 2>&1 || true
-    if ! grep -F "$VAX_ADDR" "$route_log" >&2; then
+    if ! awk -v addr="$VAX_ADDR" '$1 == addr { print; found = 1 } END { exit !found }' \
+        "$route_log" >&2; then
         echo "area31-proof: local known-node view has no VAX row" >&2
     fi
     show_gateway_log

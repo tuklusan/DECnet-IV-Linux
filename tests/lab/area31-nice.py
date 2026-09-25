@@ -57,8 +57,12 @@ def main() -> int:
             for label, request in REQUESTS:
                 connection.data(request)
                 response = connection.recv()
-                if response.type != "data" or not positive_nice_reply(bytes(response)):
-                    raise RuntimeError(f"NICE {label} failed")
+                payload = bytes(response) if response.type == "data" else b""
+                if response.type != "data" or not positive_nice_reply(payload):
+                    raise RuntimeError(
+                        f"NICE {label} failed: type={response.type} "
+                        f"data={payload[:64].hex()}"
+                    )
         finally:
             connection.disconnect()
     finally:
