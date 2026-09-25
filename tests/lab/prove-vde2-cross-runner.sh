@@ -326,7 +326,7 @@ fi
 
 remote_user=runner
 proxy="ssh -F $ssh_config dniv-bastion -W 127.0.0.1:${DNIV_VDE_REVERSE_PORT}"
-probe_proxy="timeout -k 2 8 ssh -F $ssh_config dniv-bastion -W 127.0.0.1:${DNIV_VDE_REVERSE_PORT}"
+probe_proxy="$proxy"
 inner_opts=(
     -i "$key_file"
     -o "ProxyCommand=$proxy"
