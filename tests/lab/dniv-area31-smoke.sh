@@ -144,9 +144,23 @@ DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
     fail fal-directory
 
 if [ -n "$qcocal" ]; then
+    qcocal_route_ready=0
+    for _ in $(seq 1 320); do
+        output=$(/usr/local/sbin/dnctl routes 2>/dev/null || true)
+        if printf '%s\n' "$output" | grep -F "L1 $qcocal via $gateway_node " >/dev/null; then
+            qcocal_route_ready=1
+            break
+        fi
+        sleep 0.25
+    done
+    [ "$qcocal_route_ready" -eq 1 ] || fail qcocal-route
+    DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
+        /usr/local/bin/dncopy --probe "$qcocal" >/dev/null 2>&1 ||
+        fail qcocal-fal-access
+
     qcocal_listing=
     if ! qcocal_listing=$(DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
-        /usr/local/bin/dncopy --dir "$qcocal" 'DNIV*.COM;*' 2>/dev/null); then
+        /usr/local/bin/dncopy --dir "$qcocal" '*.*;*' 2>/dev/null); then
         fail qcocal-http-preflight
     fi
     if printf '%s\n' "$qcocal_listing" | grep -Eiq 'DNIV(HT|TK)\.COM'; then

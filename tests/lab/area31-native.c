@@ -66,7 +66,7 @@ static void nice_dump_frame(unsigned int info, const unsigned char *buf,
                 info, errno);
         return;
     }
-    limit = (size_t)length < 32U ? (size_t)length : 32U;
+    limit = (size_t)length < 4U ? (size_t)length : 4U;
     fprintf(stderr, "area31-native: NICE info=%u frame-len=%zd data=",
             info, length);
     for (i = 0U; i < limit; i++)
