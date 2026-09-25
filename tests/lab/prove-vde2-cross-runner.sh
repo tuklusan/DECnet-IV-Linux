@@ -447,11 +447,17 @@ start_client_forward() {
         ssh -E "$client_forward_log" -F "$ssh_config" -NT -o ExitOnForwardFailure=yes \
             -L "127.0.0.1:${local_forward_port}:127.0.0.1:${DNIV_VDE_REVERSE_PORT}" dniv-bastion &
         client_forward_pid=$!
-        sleep 1
-        if kill -0 "$client_forward_pid" 2>/dev/null && probe_client_forward; then
-            forward_ready=1
-            break
-        fi
+        for _ in $(seq 1 16); do
+            if ! kill -0 "$client_forward_pid" 2>/dev/null; then
+                break
+            fi
+            if probe_client_forward >/dev/null 2>&1; then
+                forward_ready=1
+                break
+            fi
+            sleep 0.5
+        done
+        (( forward_ready )) && break
         stop_pid "$client_forward_pid"
         client_forward_pid=
         sleep 1
