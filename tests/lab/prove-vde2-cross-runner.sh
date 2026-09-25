@@ -429,29 +429,36 @@ if [[ "$banner" != "SSH-2.0-" ]]; then
 fi
 
 client_forward_log="$work/client-forward.log"
-forward_ready=0
-for _ in $(seq 1 6); do
-    : >"$client_forward_log"
-    ssh -E "$client_forward_log" -F "$ssh_config" -NT -o ExitOnForwardFailure=yes \
-        -L "127.0.0.1:${local_forward_port}:127.0.0.1:${DNIV_VDE_REVERSE_PORT}" dniv-bastion &
-    client_forward_pid=$!
-    sleep 1
-    if kill -0 "$client_forward_pid" 2>/dev/null; then
-        forward_ready=1
-        break
+start_client_forward() {
+    local forward_ready=0
+    for _ in $(seq 1 6); do
+        : >"$client_forward_log"
+        ssh -E "$client_forward_log" -F "$ssh_config" -NT -o ExitOnForwardFailure=yes \
+            -L "127.0.0.1:${local_forward_port}:127.0.0.1:${DNIV_VDE_REVERSE_PORT}" dniv-bastion &
+        client_forward_pid=$!
+        sleep 1
+        if kill -0 "$client_forward_pid" 2>/dev/null; then
+            forward_ready=1
+            break
+        fi
+        wait "$client_forward_pid" 2>/dev/null || true
+        client_forward_pid=
+        sleep 1
+    done
+    if (( ! forward_ready )); then
+        if is_outer_connect_timeout "$client_forward_log"; then
+            echo "vde2-cross: persistent bastion connection timed out" >&2
+            return 75
+        fi
+        echo "vde2-cross: persistent bastion forward did not start" >&2
+        return 1
     fi
-    wait "$client_forward_pid" 2>/dev/null || true
+}
+stop_client_forward() {
+    stop_pid "${client_forward_pid:-}"
     client_forward_pid=
-    sleep 1
-done
-if (( ! forward_ready )); then
-    if is_outer_connect_timeout "$client_forward_log"; then
-        echo "vde2-cross: persistent bastion connection timed out" >&2
-        exit 75
-    fi
-    echo "vde2-cross: persistent bastion forward did not start" >&2
-    exit 1
-fi
+}
+start_client_forward || exit $?
 
 inner_opts=(
     -F /dev/null
@@ -567,11 +574,13 @@ wait_ups 1
 up_before=$(grep -Fc "Adjacency up" "$work/pydecnet.log" || true)
 down_before=$(grep -Fc "Adjacency down" "$work/pydecnet.log" || true)
 stop_bridge
+stop_client_forward
 if "$work/vde-frame-echo" client "vde://$local_sock" 90 >/dev/null 2>&1; then
-    echo "vde2-cross: bridge stop left cross-runner frame path alive" >&2
+    echo "vde2-cross: transport stop left cross-runner frame path alive" >&2
     exit 1
 fi
 wait_downs $((down_before + 1))
+start_client_forward || exit $?
 start_bridge
 wait_ups $((up_before + 1))
 "$work/vde-frame-echo" client "vde://$local_sock" 2 >/dev/null
@@ -579,6 +588,7 @@ wait_ups $((up_before + 1))
 stop_pid "$py_pid"
 py_pid=
 stop_bridge
+stop_client_forward
 if [[ -n "${switch_pid:-}" ]]; then
     kill "$switch_pid" 2>/dev/null || true
     for _ in $(seq 1 50); do
@@ -589,6 +599,7 @@ if [[ -n "${switch_pid:-}" ]]; then
 fi
 rm -rf "$local_sock"
 start_switch "$local_sock"
+start_client_forward || exit $?
 start_bridge
 up_before=$(grep -Fc "Adjacency up" "$work/pydecnet.log" || true)
 start_py
