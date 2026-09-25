@@ -145,7 +145,9 @@ work=$(mktemp -d /tmp/dniv-area31.XXXXXX)
 gateway_pid=
 switch_pid=
 tap_bridge_pid=
-tap_name=
+qemu_tap_name=
+vde_tap_name=
+bridge_name=
 vm_pid=
 
 cleanup() {
@@ -156,9 +158,14 @@ cleanup() {
     [[ -z "${vm_pid:-}" ]] || wait "$vm_pid" 2>/dev/null || true
     [[ -z "${tap_bridge_pid:-}" ]] || kill "$tap_bridge_pid" 2>/dev/null || true
     [[ -z "${tap_bridge_pid:-}" ]] || wait "$tap_bridge_pid" 2>/dev/null || true
-    if [[ -n "${tap_name:-}" ]]; then
-        sudo ip link set dev "$tap_name" down 2>/dev/null || true
-        sudo ip tuntap del dev "$tap_name" mode tap 2>/dev/null || true
+    for tap in "${qemu_tap_name:-}" "${vde_tap_name:-}"; do
+        [[ -z "$tap" ]] && continue
+        sudo ip link set dev "$tap" down 2>/dev/null || true
+        sudo ip tuntap del dev "$tap" mode tap 2>/dev/null || true
+    done
+    if [[ -n "${bridge_name:-}" ]]; then
+        sudo ip link set dev "$bridge_name" down 2>/dev/null || true
+        sudo ip link del dev "$bridge_name" type bridge 2>/dev/null || true
     fi
     [[ -z "${switch_pid:-}" ]] || kill "$switch_pid" 2>/dev/null || true
     rm -rf "$work"
@@ -358,25 +365,44 @@ mke2fs -q -F -t ext4 -L DNIVCTL -d "$control_dir" "$control_img"
 candidate="$work/candidate.qcow2"
 qemu-img create -q -f qcow2 -F qcow2 -b "$(readlink -f "$DNIV_AREA31_CANDIDATE_IMAGE")" "$candidate"
 vm_log="$work/candidate.log"
+show_vm_log() {
+    sed \
+        -e "s#${MULTINET_REMOTE_HOST//[#\\&]/\\&}#[masked-host]#g" \
+        -e "s#${MULTINET_REMOTE_PORT//[#\\&]/\\&}#[masked-port]#g" \
+        -e "s#${VAX_ADDR//[#\\&]/\\&}#[masked-vax]#g" \
+        -e "s#${VAX_USERNAME//[#\\&]/\\&}#[masked-user]#g" \
+        -e "s#${VAX_PASSWORD//[#\\&]/\\&}#[masked-password]#g" \
+        "$vm_log" >&2 || true
+}
 node_num=${linux_node#31.}
-mac=$(printf 'aa:00:04:00:%02x:%02x' "$((node_num & 255))" "$(((31 << 2) | (node_num >> 8)) & 255)")
+area_mac_octet=$(( ((31 << 2) | (node_num >> 8)) & 255 ))
+mac=$(printf 'aa:00:04:00:%02x:%02x' "$((node_num & 255))" "$area_mac_octet")
 accel=tcg
 [[ -r /dev/kvm && -w /dev/kvm ]] && accel=kvm
 qemu_args=(-name dniv-area31 -accel "$accel" -smp 1)
 if (( qemu_vde )); then
     netdev_arg="vde,id=lan,sock=$sock"
 else
-    tap_name=$(printf 'dnivtap%05d' "$((BASHPID % 100000))")
-    sudo ip tuntap add dev "$tap_name" mode tap user "$(id -un)"
-    sudo ip link set dev "$tap_name" up
-    vde_plug2tap -s "$sock" "$tap_name" >/dev/null 2>&1 &
+    tap_suffix=$(printf '%05d' "$((BASHPID % 100000))")
+    qemu_tap_name="dnq$tap_suffix"
+    vde_tap_name="dnv$tap_suffix"
+    bridge_name="dnb$tap_suffix"
+    sudo ip link add name "$bridge_name" type bridge
+    sudo ip link set dev "$bridge_name" up
+    sudo ip tuntap add dev "$qemu_tap_name" mode tap user "$(id -un)"
+    sudo ip tuntap add dev "$vde_tap_name" mode tap user "$(id -un)"
+    sudo ip link set dev "$qemu_tap_name" master "$bridge_name"
+    sudo ip link set dev "$vde_tap_name" master "$bridge_name"
+    sudo ip link set dev "$qemu_tap_name" up
+    sudo ip link set dev "$vde_tap_name" up
+    vde_plug2tap -s "$sock" "$vde_tap_name" >/dev/null 2>&1 &
     tap_bridge_pid=$!
     sleep 1
     kill -0 "$tap_bridge_pid" 2>/dev/null || {
         echo "area31-proof: VDE-to-TAP bridge did not start" >&2
         exit 1
     }
-    netdev_arg="tap,id=lan,ifname=$tap_name,script=no,downscript=no"
+    netdev_arg="tap,id=lan,ifname=$qemu_tap_name,script=no,downscript=no"
 fi
 if [[ "$area31_arch" == amd64 ]]; then
     qemu_args+=(-m 512)
@@ -411,9 +437,11 @@ for _ in $(seq 1 360); do
     fi
     if ! kill -0 "$vm_pid" 2>/dev/null; then
         echo "area31-proof: native candidate exited before proof completed" >&2
+        show_vm_log
         exit 1
     fi
     sleep 1
 done
 echo "area31-proof: native candidate proof timed out" >&2
+show_vm_log
 exit 1
