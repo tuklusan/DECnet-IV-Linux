@@ -198,30 +198,32 @@ fail:
     return -1;
 }
 
-static int mirror_query(const char *target)
+static int mirror_query(const char *target, int matrix)
 {
-    unsigned char tx[128];
-    unsigned char rx[128];
+    static const size_t sizes[] = {1U, 127U, 128U, 255U, 256U, 511U, 512U};
+    unsigned char tx[512];
+    unsigned char rx[512];
+    size_t count = matrix ? sizeof(sizes) / sizeof(sizes[0]) : 1U;
     int fd;
-    int i;
+    size_t i;
 
     fd = dnet_conn((char *)target, "#25", SOCK_SEQPACKET,
                    NULL, 0, NULL, NULL);
     if (fd < 0)
         return -1;
-    for (i = 0; i < 3; i++) {
+    for (i = 0U; i < count; i++) {
+        size_t len = matrix ? sizes[i] : 128U;
         int got;
         size_t j;
 
         tx[0] = 0U;
-        for (j = 1U; j < sizeof(tx); j++)
-            tx[j] = (unsigned char)(j ^ (size_t)(0x31 + i));
-        if (send(fd, tx, sizeof(tx), MSG_EOR | MSG_NOSIGNAL) !=
-            (ssize_t)sizeof(tx))
+        for (j = 1U; j < len; j++)
+            tx[j] = (unsigned char)(j ^ (size_t)(0x31U + i));
+        if (send(fd, tx, len, MSG_EOR | MSG_NOSIGNAL) != (ssize_t)len)
             goto fail;
-        got = dnet_recv(fd, rx, sizeof(rx), MSG_EOR);
-        if (got != (int)sizeof(rx) || rx[0] != 1U ||
-            memcmp(tx + 1, rx + 1, sizeof(tx) - 1U))
+        got = dnet_recv(fd, rx, len, MSG_EOR);
+        if (got != (int)len || rx[0] != 1U ||
+            memcmp(tx + 1, rx + 1, len - 1U))
             goto fail;
     }
     close(fd);
@@ -231,11 +233,31 @@ fail:
     return -1;
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
-    const char *target_text = getenv("DNIV_AREA31_TARGET");
+    const char *target_text;
     uint16_t target;
 
+    if (argc == 3 &&
+        (!strcmp(argv[1], "--nice-summary") ||
+         !strcmp(argv[1], "--mirror-once"))) {
+        target_text = argv[2];
+        if (parse_node(target_text, &target) || (target >> 10) != 31U) {
+            fputs("area31-native: invalid probe target\n", stderr);
+            return 2;
+        }
+        if (!strcmp(argv[1], "--nice-summary"))
+            return nice_query(target, DNIV_NICE_INFO_SUMMARY) ? 1 : 0;
+        return mirror_query(target_text, 0) ? 1 : 0;
+    }
+    if (argc != 1) {
+        fprintf(stderr,
+                "usage: %s | --nice-summary AREA.NODE | --mirror-once AREA.NODE\n",
+                argv[0]);
+        return 2;
+    }
+
+    target_text = getenv("DNIV_AREA31_TARGET");
     if (parse_node(target_text, &target) || (target >> 10) != 31U) {
         fputs("area31-native: invalid target environment\n", stderr);
         return 2;
@@ -246,10 +268,14 @@ int main(void)
         fputs("area31-native: NICE proof failed\n", stderr);
         return 1;
     }
-    if (mirror_query(target_text)) {
+    if (mirror_query(target_text, 1)) {
         fputs("area31-native: MIRROR proof failed\n", stderr);
         return 1;
     }
-    puts("area31-native: NICE summary/status/counters and MIRROR pass");
+    if (nice_query(target, DNIV_NICE_INFO_COUNTERS)) {
+        fputs("area31-native: post-MIRROR NICE counters failed\n", stderr);
+        return 1;
+    }
+    puts("area31-native: NICE summary/status/counters and MIRROR matrix pass");
     return 0;
 }

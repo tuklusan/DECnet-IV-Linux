@@ -279,6 +279,12 @@ wait_gateway_wan || exit 1
 known_file="$work/pyrtr-known.txt"
 query_pyrtr_known "$known_file" || exit 1
 occupied_file="$work/pyrtr-occupied.txt"
+manifest_file="$work/pyrtr-manifest.tsv"
+if ! "$work/venv/bin/python" "$script_dir/area31-parse-known.py" --manifest "$known_file" >"$manifest_file"; then
+    echo "area31-proof: PYRTR NCP known-node manifest could not be parsed" >&2
+    cat "$known_file" >&2
+    exit 1
+fi
 if ! "$work/venv/bin/python" "$script_dir/area31-parse-known.py" "$known_file" >"$occupied_file"; then
     echo "area31-proof: PYRTR NCP known-node output could not be parsed" >&2
     cat "$known_file" >&2
@@ -344,6 +350,7 @@ unset discovered_qcocal
 
 control_dir="$work/control"
 mkdir -p "$control_dir"
+cp "$manifest_file" "$control_dir/area31-manifest.tsv"
 cat >"$control_dir/dniv-area31.env" <<EOF
 DNIV_LINUX_NODE=$linux_node
 DNIV_LINUX_NAME=$linux_name
@@ -357,7 +364,8 @@ if [[ -n "$qcocal_node" ]]; then
 fi
 printf '%s' "$VAX_USERNAME" >"$control_dir/vax-user"
 printf '%s' "$VAX_PASSWORD" >"$control_dir/vax-password"
-chmod 600 "$control_dir/dniv-area31.env" "$control_dir/vax-user" "$control_dir/vax-password"
+chmod 600 "$control_dir/dniv-area31.env" "$control_dir/area31-manifest.tsv" \
+    "$control_dir/vax-user" "$control_dir/vax-password"
 control_img="$work/control.ext4"
 truncate -s 8M "$control_img"
 mke2fs -q -F -t ext4 -L DNIVCTL -d "$control_dir" "$control_img"

@@ -13,7 +13,7 @@
 # patent, trademark, and governing-law provisions.
 # ============================================================================
 
-"""Extract occupied Area-31 identities from NCP SHOW KNOWN NODES output."""
+"""Parse PYRTR NCP SHOW KNOWN NODES output for allocation and survey."""
 
 from __future__ import annotations
 
@@ -33,15 +33,30 @@ ROW_RE = re.compile(
 )
 
 
-def occupied_nodes(text: str) -> tuple[int, list[str]]:
-    rows = 0
-    occupied: set[str] = set()
+def parsed_rows(text: str) -> tuple[int, list[tuple[str, str, str]]]:
+    row_count = 0
+    by_address: dict[str, tuple[str, str, str]] = {}
+
+    def remember(address: str, number: str, name: str | None, state: str) -> None:
+        node_number = int(number, 10)
+        if not 1 <= node_number <= 1023:
+            return
+        candidate = (address, name or "-", state)
+        current = by_address.get(address)
+        if current is None:
+            by_address[address] = candidate
+            return
+        if current[1] == "-" and candidate[1] != "-":
+            by_address[address] = candidate
+            return
+        if current[2] == "Unreachable" and candidate[2] != "Unreachable":
+            by_address[address] = candidate
+
     for line in text.splitlines():
         executor = EXECUTOR_RE.match(line)
         if executor:
-            node_number = int(executor.group(2), 10)
-            if 1 <= node_number <= 1023:
-                occupied.add(executor.group(1))
+            remember(executor.group(1), executor.group(2), executor.group(3),
+                     executor.group(4))
             continue
         match = ROW_RE.match(line)
         if not match:
@@ -49,11 +64,26 @@ def occupied_nodes(text: str) -> tuple[int, list[str]]:
         node_number = int(match.group(2), 10)
         if not 1 <= node_number <= 1023:
             continue
-        rows += 1
-        address, name, state = match.group(1), match.group(3), match.group(4)
-        if name is not None or state != "Unreachable":
-            occupied.add(address)
-    return rows, sorted(occupied, key=lambda value: int(value.split(".", 1)[1]))
+        row_count += 1
+        remember(match.group(1), match.group(2), match.group(3), match.group(4))
+
+    rows = sorted(by_address.values(),
+                  key=lambda row: int(row[0].split(".", 1)[1]))
+    return row_count, rows
+
+
+def occupied_rows(text: str) -> tuple[int, list[tuple[str, str, str]]]:
+    row_count, rows = parsed_rows(text)
+    occupied = [
+        row for row in rows
+        if row[1] != "-" or row[2] != "Unreachable"
+    ]
+    return row_count, occupied
+
+
+def occupied_nodes(text: str) -> tuple[int, list[str]]:
+    row_count, rows = occupied_rows(text)
+    return row_count, [row[0] for row in rows]
 
 
 def selftest() -> int:
@@ -63,6 +93,7 @@ def selftest() -> int:
 Node            State        Links   Delay  Circuit      Next Node
 31.1 (IMPVAX)   Reachable
 31.2 (STATIC)   Unreachable
+31.3            Unreachable
 31.4            Unreachable
 31.5            Reachable    0
 31.6            Unreachable
@@ -71,8 +102,15 @@ noise 31.7 Reachable
 32.4 (OTHER)    Reachable
 """
     rows, occupied = occupied_nodes(sample)
-    assert rows == 6
+    assert rows == 7
     assert occupied == ["31.1", "31.2", "31.3", "31.5"]
+    _, manifest = occupied_rows(sample)
+    assert manifest == [
+        ("31.1", "IMPVAX", "Reachable"),
+        ("31.2", "STATIC", "Unreachable"),
+        ("31.3", "PYRTR", "On"),
+        ("31.5", "-", "Reachable"),
+    ]
     print("area31-parse-known selftest passed")
     return 0
 
@@ -80,14 +118,25 @@ noise 31.7 Reachable
 def main() -> int:
     if sys.argv[1:] == ["--selftest"]:
         return selftest()
-    if len(sys.argv) != 2:
-        raise SystemExit(f"usage: {sys.argv[0]} NCP-OUTPUT | --selftest")
-    text = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace")
-    rows, occupied = occupied_nodes(text)
+    manifest = len(sys.argv) == 3 and sys.argv[1] == "--manifest"
+    if manifest:
+        path = sys.argv[2]
+    elif len(sys.argv) == 2:
+        path = sys.argv[1]
+    else:
+        raise SystemExit(
+            f"usage: {sys.argv[0]} NCP-OUTPUT | --manifest NCP-OUTPUT | --selftest"
+        )
+    text = pathlib.Path(path).read_text(encoding="utf-8", errors="replace")
+    rows, occupied = occupied_rows(text)
     if rows == 0:
         raise SystemExit("area31-parse-known: no structured Area-31 node rows")
-    for address in occupied:
-        print(address)
+    if manifest:
+        for address, name, state in occupied:
+            print(f"{address}\t{name}\t{state}")
+    else:
+        for address, _name, _state in occupied:
+            print(address)
     return 0
 
 

@@ -64,6 +64,8 @@ target=$(read_field DNIV_VAX_ADDR)
 qcocal=$(read_field DNIV_QCOCAL_ADDR)
 user_file=/run/dniv-area31/vax-user
 password_file=/run/dniv-area31/vax-password
+survey_manifest=/run/dniv-area31/area31-manifest.tsv
+[ -r "$survey_manifest" ] || fail no-survey-manifest
 [ -r "$user_file" ] || fail no-vax-user
 [ -r "$password_file" ] || fail no-vax-password
 vax_user=$(cat "$user_file")
@@ -225,6 +227,45 @@ if [ -n "$qcocal" ]; then
         fail qcocal-task-cleanup
     echo "DNIV-AREA31-QCOCAL-TASK-PASS"
 fi
+
+survey_live=0
+survey_nice=0
+survey_mirror=0
+tab=$(printf '\t')
+while IFS="$tab" read -r survey_node survey_name survey_state; do
+    [ -n "$survey_node" ] || continue
+    parse_node "$survey_node" || fail survey-bad-node
+    [ "$survey_state" != "Unreachable" ] || continue
+    [ "$survey_node" != "$linux_node" ] || continue
+    [ "$survey_node" != "$gateway_node" ] || continue
+    survey_live=$((survey_live + 1))
+    nice_result=unavailable
+    mirror_result=skipped
+    if timeout 6 /usr/local/sbin/dniv-area31-native --nice-summary "$survey_node"         >/dev/null 2>/dev/null; then
+        nice_result=pass
+        survey_nice=$((survey_nice + 1))
+        if timeout 6 /usr/local/sbin/dniv-area31-native --mirror-once "$survey_node"             >/dev/null 2>/dev/null; then
+            mirror_result=pass
+            survey_mirror=$((survey_mirror + 1))
+        else
+            rc=$?
+            if [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then
+                mirror_result=timeout
+            else
+                mirror_result=unavailable
+            fi
+        fi
+    else
+        rc=$?
+        if [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then
+            nice_result=timeout
+        fi
+    fi
+    echo "DNIV-AREA31-SURVEY node=$survey_node name=$survey_name state=$survey_state nice=$nice_result mirror=$mirror_result"
+done <"$survey_manifest"
+[ "$survey_live" -gt 0 ] || fail survey-empty
+[ "$survey_nice" -gt 0 ] || fail survey-no-nice
+echo "DNIV-AREA31-SURVEY-PASS live=$survey_live nice=$survey_nice mirror=$survey_mirror"
 
 unset vax_user vax_password
 echo "DNIV-AREA31-NATIVE-PASS"
