@@ -493,13 +493,29 @@ wait_ups() {
     return 1
 }
 
+wait_downs() {
+    local want=$1
+    for _ in $(seq 1 240); do
+        count=$(grep -Fc "Adjacency down" "$work/pydecnet.log" 2>/dev/null || true)
+        (( count >= want )) && return 0
+        kill -0 "$py_pid" 2>/dev/null || {
+            cat "$work/pydecnet.log" >&2 || true
+            return 1
+        }
+        sleep 0.5
+    done
+    cat "$work/pydecnet.log" >&2 || true
+    return 1
+}
+
 : >"$work/pydecnet.log"
 start_py
 wait_ups 1
 
 up_before=$(grep -Fc "Adjacency up" "$work/pydecnet.log" || true)
+down_before=$(grep -Fc "Adjacency down" "$work/pydecnet.log" || true)
 stop_bridge
-sleep 8
+wait_downs $((down_before + 1))
 start_bridge
 wait_ups $((up_before + 1))
 "$work/vde-frame-echo" client "vde://$local_sock" 2 >/dev/null
