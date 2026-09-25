@@ -119,6 +119,17 @@ for _ in $(seq 1 320); do
 done
 [ "$ready" -eq 1 ] || fail gateway-adjacency
 
+route_ready=0
+for _ in $(seq 1 320); do
+    output=$(/usr/local/sbin/dnctl routes 2>/dev/null || true)
+    if printf '%s\n' "$output" | grep -F "L1 $target via $gateway_node " >/dev/null; then
+        route_ready=1
+        break
+    fi
+    sleep 0.25
+done
+[ "$route_ready" -eq 1 ] || fail vax-route
+
 DNIV_AREA31_TARGET="$target" /usr/local/sbin/dniv-area31-native >/dev/null ||
     fail remote-protocol
 
