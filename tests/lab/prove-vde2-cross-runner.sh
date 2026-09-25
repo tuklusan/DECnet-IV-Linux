@@ -274,7 +274,8 @@ EOF
         exit 1
     fi
 
-    ssh -F "$ssh_config" -NT -o ExitOnForwardFailure=yes \
+    reverse_log="$work/reverse-ssh.log"
+    ssh -vvv -E "$reverse_log" -F "$ssh_config" -NT -o ExitOnForwardFailure=yes \
         -o ConnectTimeout=10 -o ConnectionAttempts=1 \
         -R "127.0.0.1:${DNIV_VDE_REVERSE_PORT}:127.0.0.1:22222" dniv-bastion &
     reverse_pid=$!
@@ -283,6 +284,30 @@ EOF
         echo "vde2-cross: reverse SSH rendezvous failed" >&2
         exit 1
     }
+
+    reverse_banner_err="$work/reverse-banner.err"
+    reverse_banner=
+    for _ in $(seq 1 6); do
+        : >"$reverse_banner_err"
+        reverse_banner=$(timeout -k 2 8 ssh -F "$ssh_config" dniv-bastion \
+            -W "127.0.0.1:${DNIV_VDE_REVERSE_PORT}" 2>"$reverse_banner_err" | head -c 8 || true)
+        [[ "$reverse_banner" == "SSH-2.0-" ]] && break
+        kill -0 "$reverse_pid" 2>/dev/null || break
+        sleep 1
+    done
+    if [[ "$reverse_banner" != "SSH-2.0-" ]]; then
+        if grep -qi 'administratively prohibited' "$reverse_banner_err"; then
+            echo "vde2-cross: bastion denies client-side forwarding to the reverse listener" >&2
+        elif grep -qi 'connection refused' "$reverse_banner_err"; then
+            echo "vde2-cross: bastion reverse listener refused the selfcheck connection" >&2
+        elif grep -q 'forwarded-tcpip' "$reverse_log"; then
+            echo "vde2-cross: reverse listener reached the server runner but relayed no inner SSH banner" >&2
+        else
+            echo "vde2-cross: reverse listener delivered no forwarding channel to the server runner" >&2
+        fi
+        exit 1
+    fi
+    echo "vde2-cross: reverse SSH banner selfcheck pass"
 
     for _ in $(seq 1 600); do
         [[ -f "$done_file" ]] && {
