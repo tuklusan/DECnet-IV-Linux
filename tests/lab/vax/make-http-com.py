@@ -27,12 +27,12 @@ $ open/read/write net sys$net
 $ read/end=done net request
 $ cr = f$char(13)
 $ lf = f$char(10)
-$ write net "HTTP/1.0 200 OK" + cr + lf
-$ write net "Content-Length: {CONTENT_LENGTH}" + cr + lf
-$ write net "Content-Type: text/plain" + cr + lf
-$ write net "Connection: close" + cr + lf
-$ write net cr + lf
-$ write net "QCOCAL-DECNET-HTTP-PASS" + lf
+$ write net "HTTP/1.0 200 OK",cr,lf
+$ write net "Content-Length: {CONTENT_LENGTH}",cr,lf
+$ write net "Content-Type: text/plain",cr,lf
+$ write net "Connection: close",cr,lf
+$ write net cr,lf
+$ write net "QCOCAL-DECNET-HTTP-PASS",lf
 $done:
 $ close net
 $ exit
@@ -43,11 +43,11 @@ def validate(program: str) -> None:
     required = (
         "$ open/read/write net sys$net",
         "$ read/end=done net request",
-        f'$ write net "Content-Length: {CONTENT_LENGTH}" + cr + lf',
-        '$ write net "HTTP/1.0 200 OK" + cr + lf',
-        '$ write net "Connection: close" + cr + lf',
-        "$ write net cr + lf",
-        '$ write net "QCOCAL-DECNET-HTTP-PASS" + lf',
+        f'$ write net "Content-Length: {CONTENT_LENGTH}",cr,lf',
+        '$ write net "HTTP/1.0 200 OK",cr,lf',
+        '$ write net "Connection: close",cr,lf',
+        "$ write net cr,lf",
+        '$ write net "QCOCAL-DECNET-HTTP-PASS",lf',
         "$ close net",
     )
     if not all(item in program for item in required):
@@ -56,6 +56,9 @@ def validate(program: str) -> None:
         raise SystemExit("make-http-com: non-DCL header leaked into generated program")
     if " + -\n" in program:
         raise SystemExit("make-http-com: DCL continuation is not allowed")
+    if any(" + " in line for line in program.splitlines()
+           if line.lower().startswith("$ write net ")):
+        raise SystemExit("make-http-com: WRITE operands must use DCL comma syntax")
 
 
 def main() -> int:
