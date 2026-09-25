@@ -117,7 +117,7 @@ if [[ "${1:-}" != "--server" && "${1:-}" != "--client" ]]; then
     exit 2
 fi
 
-for cmd in cc git make python3 ssh ssh-keygen vde_plug vde_switch dpipe; do
+for cmd in cc git make python3 setsid ssh ssh-keygen vde_plug vde_switch dpipe; do
     command -v "$cmd" >/dev/null || { echo "vde2-cross: missing $cmd" >&2; exit 2; }
 done
 
@@ -148,7 +148,7 @@ cleanup() {
     set +e
     stop_pid "${py_pid:-}"
     if [[ -n "${bridge_pid:-}" ]]; then
-        kill "$bridge_pid" 2>/dev/null || true
+        kill -- "-$bridge_pid" 2>/dev/null || true
         wait "$bridge_pid" 2>/dev/null || true
     fi
     stop_pid "${echo_pid:-}"
@@ -435,7 +435,7 @@ local_sock="$work/client.ctl"
 start_switch "$local_sock"
 
 start_bridge() {
-    vde_plug -- "vde://$local_sock" = ssh "${inner_opts[@]}" "$remote_host" vde_plug "vde://$server_sock" \
+    setsid vde_plug -- "vde://$local_sock" = ssh "${inner_opts[@]}" "$remote_host" vde_plug "vde://$server_sock" \
         >>"$work/bridge.log" 2>&1 &
     bridge_pid=$!
     sleep 1
@@ -447,7 +447,7 @@ start_bridge() {
 }
 stop_bridge() {
     if [[ -n "${bridge_pid:-}" ]]; then
-        kill "$bridge_pid" 2>/dev/null || true
+        kill -- "-$bridge_pid" 2>/dev/null || true
         wait "$bridge_pid" 2>/dev/null || true
         bridge_pid=
     fi
