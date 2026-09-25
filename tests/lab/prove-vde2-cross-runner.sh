@@ -160,7 +160,7 @@ Host dniv-bastion
     UserKnownHostsFile $known_hosts
     StrictHostKeyChecking yes
     LogLevel ERROR
-    ConnectTimeout 10
+    ConnectTimeout 5
     ConnectionAttempts 1
     ServerAliveInterval 15
     ServerAliveCountMax 3
