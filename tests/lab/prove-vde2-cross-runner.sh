@@ -435,7 +435,7 @@ local_sock="$work/client.ctl"
 start_switch "$local_sock"
 
 start_bridge() {
-    vde_plug "vde://$local_sock" = ssh "${inner_opts[@]}" "$remote_host" vde_plug "vde://$server_sock" \
+    vde_plug -- "vde://$local_sock" = ssh "${inner_opts[@]}" "$remote_host" vde_plug "vde://$server_sock" \
         >>"$work/bridge.log" 2>&1 &
     bridge_pid=$!
     sleep 1
