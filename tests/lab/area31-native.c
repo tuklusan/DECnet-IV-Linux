@@ -55,21 +55,54 @@ static int parse_node(const char *text, uint16_t *address)
     return 0;
 }
 
+static int nice_read_executor_reply(int fd, uint16_t target)
+{
+    unsigned char response[512];
+    int multiple = 0;
+    int saw_item = 0;
+    unsigned int frame;
+
+    for (frame = 0U; frame < 64U; frame++) {
+        struct dniv_nice_node_reply reply;
+        ssize_t got;
+        int code;
+
+        got = recv(fd, response, sizeof(response), 0);
+        if (got < 1)
+            return -1;
+        code = (int)(int8_t)response[0];
+
+        if (code == 2) {
+            if (multiple || saw_item)
+                return -1;
+            multiple = 1;
+            continue;
+        }
+        if (code == -128)
+            return multiple && saw_item ? 0 : -1;
+        if (code != DNIV_NICE_RET_SUCCESS)
+            return -1;
+        if (dniv_nice_parse_node_reply(response, (size_t)got, &reply) ||
+            reply.address != target)
+            return -1;
+        saw_item = 1;
+        if (!multiple)
+            return 0;
+    }
+    return -1;
+}
+
 static int nice_query(uint16_t target, unsigned int info)
 {
     static const unsigned char version[3] = {4U, 0U, 0U};
     unsigned char request[5] = {
         DNIV_NICE_FUNC_READ_INFO, 0U, 0U, 0U, 0U
     };
-    unsigned char response[512];
     struct sockaddr_dn peer;
     struct optdata_dn conndata;
     struct optdata_dn acceptdata;
     struct timeval timeout = {10, 0};
     socklen_t optlen;
-    ssize_t got;
-    size_t off;
-    uint16_t reply_addr;
     int fd;
 
     request[1] = (unsigned char)(info << 4);
@@ -106,16 +139,7 @@ static int nice_query(uint16_t target, unsigned int info)
     if (send(fd, request, sizeof(request), MSG_EOR | MSG_NOSIGNAL) !=
         (ssize_t)sizeof(request))
         goto fail;
-    got = recv(fd, response, sizeof(response), 0);
-    if (got < 7 || response[0] != DNIV_NICE_RET_SUCCESS)
-        goto fail;
-
-    off = 4U + (size_t)response[3];
-    if ((size_t)got < off + 3U)
-        goto fail;
-    reply_addr = (uint16_t)((uint16_t)response[off] |
-                            ((uint16_t)response[off + 1U] << 8));
-    if (reply_addr != target)
+    if (nice_read_executor_reply(fd, target))
         goto fail;
 
     close(fd);

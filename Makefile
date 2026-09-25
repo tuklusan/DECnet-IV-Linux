@@ -42,6 +42,7 @@ unit:
 	python3 tests/lab/vax/make-task-com.py --selftest
 	python3 -m py_compile tests/lab/area31-find-node.py
 	python3 -m py_compile tests/lab/area31-nice.py
+	cc -Iuserspace/libdnet/include -Iinclude/uapi -Iinclude -std=c11 -Wall -Wextra -Werror -fsyntax-only tests/lab/area31-native.c
 	python3 tests/lab/area31-parse-known.py --selftest
 	bash -n tests/lab/prove-area31.sh
 	env MULTINET_REMOTE_HOST=example.invalid MULTINET_REMOTE_PORT=60001 \
