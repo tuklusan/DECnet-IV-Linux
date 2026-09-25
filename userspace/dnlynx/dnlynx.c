@@ -141,25 +141,58 @@ static int run_http(int fd, const char *node, const char *path, int include_head
     char request[1536]; size_t used=0U; int code=-1, have_header=0; int n;
     n=snprintf(request,sizeof(request),
         "GET %s HTTP/1.0\r\nHost: %s\r\nUser-Agent: dnlynx/1\r\nConnection: close\r\n\r\n",path,node);
-    if (n<0 || (size_t)n>=sizeof(request)) return -1;
-    if (send(fd,request,(size_t)n,MSG_EOR|MSG_NOSIGNAL)!=n) return -1;
+    if (n<0 || (size_t)n>=sizeof(request)) {
+        fputs("dnlynx: HTTP stage=request-format\n", stderr);
+        return -1;
+    }
+    if (send(fd,request,(size_t)n,MSG_EOR|MSG_NOSIGNAL)!=n) {
+        fprintf(stderr,"dnlynx: HTTP stage=request-send errno=%d\n",errno);
+        return -1;
+    }
     for (;;) {
         ssize_t got=recv(fd,record,sizeof(record),0);
         if (got==0) break;
-        if (got<0) return -1;
+        if (got<0) {
+            fprintf(stderr,"dnlynx: HTTP stage=response-recv errno=%d\n",errno);
+            return -1;
+        }
         if (!have_header) {
             ssize_t end;
-            if (used+(size_t)got>sizeof(header)) return -1;
+            if (used+(size_t)got>sizeof(header)) {
+                fputs("dnlynx: HTTP stage=header-limit\n",stderr);
+                return -1;
+            }
             memcpy(header+used,record,(size_t)got); used+=(size_t)got;
             end=header_end(header,used); if (end<0) continue;
-            code=status_code(header,used); if (code<0) return -1; have_header=1;
-            if (include_headers && fwrite(header,1,(size_t)end,stdout)!=(size_t)end) return -1;
-            if (used>(size_t)end && fwrite(header+end,1,used-(size_t)end,stdout)!=used-(size_t)end) return -1;
+            code=status_code(header,used);
+            if (code<0) {
+                fputs("dnlynx: HTTP stage=status-line\n",stderr);
+                return -1;
+            }
+            have_header=1;
+            if (include_headers && fwrite(header,1,(size_t)end,stdout)!=(size_t)end) {
+                fputs("dnlynx: HTTP stage=header-output\n",stderr);
+                return -1;
+            }
+            if (used>(size_t)end && fwrite(header+end,1,used-(size_t)end,stdout)!=used-(size_t)end) {
+                fputs("dnlynx: HTTP stage=body-output\n",stderr);
+                return -1;
+            }
             continue;
         }
-        if (fwrite(record,1,(size_t)got,stdout)!=(size_t)got) return -1;
+        if (fwrite(record,1,(size_t)got,stdout)!=(size_t)got) {
+            fputs("dnlynx: HTTP stage=body-output\n",stderr);
+            return -1;
+        }
     }
-    if (!have_header || fflush(stdout)) return -1;
+    if (!have_header) {
+        fputs("dnlynx: HTTP stage=no-header\n",stderr);
+        return -1;
+    }
+    if (fflush(stdout)) {
+        fputs("dnlynx: HTTP stage=flush\n",stderr);
+        return -1;
+    }
     return code>=200 && code<300 ? 0 : 1;
 }
 
