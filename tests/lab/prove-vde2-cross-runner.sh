@@ -439,6 +439,22 @@ inner_opts=(
 )
 probe_inner_opts=("${inner_opts[@]}")
 
+bridge_ssh="$work/bridge-ssh"
+cat >"$bridge_ssh" <<EOF
+#!/usr/bin/env bash
+exec ssh -i "$key_file" \
+    -o "ProxyCommand=$proxy" \
+    -o BatchMode=yes \
+    -o IdentitiesOnly=yes \
+    -o ConnectTimeout=5 \
+    -o ConnectionAttempts=1 \
+    -o StrictHostKeyChecking=no \
+    -o UserKnownHostsFile=/dev/null \
+    -o LogLevel=ERROR \
+    "$remote_host" vde_plug "vde://$server_sock"
+EOF
+chmod 700 "$bridge_ssh"
+
 ready_err="$work/server-ready.err"
 ready=0
 for _ in $(seq 1 20); do
@@ -460,7 +476,7 @@ local_sock="$work/client.ctl"
 start_switch "$local_sock"
 
 start_bridge() {
-    setsid vde_plug -- "vde://$local_sock" = ssh "${inner_opts[@]}" "$remote_host" vde_plug "vde://$server_sock" \
+    setsid vde_plug -- "vde://$local_sock" = "$bridge_ssh" \
         >>"$work/bridge.log" 2>&1 &
     bridge_pid=$!
     sleep 1
