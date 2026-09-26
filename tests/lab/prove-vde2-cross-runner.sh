@@ -424,11 +424,18 @@ if [[ "$banner" != "SSH-2.0-" ]]; then
     exit 1
 fi
 
-proxy="ssh -F $ssh_config dniv-bastion -W 127.0.0.1:${DNIV_VDE_REVERSE_PORT}"
+proxy_err="$work/proxy-command.err"
+proxy_cmd="$work/proxy-command"
+cat >"$proxy_cmd" <<EOF
+#!/usr/bin/env bash
+exec ssh -F "$ssh_config" dniv-bastion -W "127.0.0.1:${DNIV_VDE_REVERSE_PORT}" 2>>"$proxy_err"
+EOF
+chmod 700 "$proxy_cmd"
+
 remote_host="$remote_user@dniv-vde-server"
 inner_opts=(
     -i "$key_file"
-    -o "ProxyCommand=$proxy"
+    -o "ProxyCommand=$proxy_cmd"
     -o BatchMode=yes
     -o IdentitiesOnly=yes
     -o ConnectTimeout=5
@@ -443,7 +450,7 @@ bridge_ssh="$work/bridge-ssh"
 cat >"$bridge_ssh" <<EOF
 #!/usr/bin/env bash
 exec ssh -i "$key_file" \
-    -o "ProxyCommand=$proxy" \
+    -o "ProxyCommand=$proxy_cmd" \
     -o BatchMode=yes \
     -o IdentitiesOnly=yes \
     -o ConnectTimeout=5 \
@@ -459,10 +466,15 @@ ready_err="$work/server-ready.err"
 ready=0
 for _ in $(seq 1 20); do
     : >"$ready_err"
+    : >"$proxy_err"
     if timeout -k 2 8 ssh "${probe_inner_opts[@]}" "$remote_host" test -f "$ready_file" \
         >/dev/null 2>"$ready_err"; then
         ready=1
         break
+    fi
+    if is_outer_connect_timeout "$proxy_err"; then
+        echo "vde2-cross: authenticated probe outer bastion connection timed out" >&2
+        exit 75
     fi
     sleep 1
 done
