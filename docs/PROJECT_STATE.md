@@ -73,7 +73,7 @@ Implementation order:
 
 | Field | Current value |
 | --- | --- |
-| Protocol phase | Phase 8 |
+| Protocol phase | Phase 9 |
 | Working ref | `main` only |
 | Remote branches | only `refs/heads/main` |
 | Phase 3 tag | `PHASE-3-COMPLETE` |
@@ -117,7 +117,7 @@ Complete on exact userspace candidate `a967af2787638ab49bf1a929a27ef9f7ab8564e9`
 
 ### Phase 8
 
-Active at the final external dependency. Local VDE2, MULTINET TCP and dual-architecture Area-31/VAX interoperability are green; only the real cross-runner VDE2 SSH rendezvous proof remains outstanding.
+Complete on exact candidate `9b73e61bbd0f95b82410276f7b5dc3db94e219ba`; the complete full acceptance matrix, including cross-runner VDE2, is green.
 
 ## Next action
 
@@ -1474,3 +1474,6 @@ Phase 8 is closed on exact unchanged candidate `9b73e61bbd0f95b82410276f7b5dc3db
 
 
 Phase 9 scale work starts from Phase 8 closure commit `fa36d2ea46b63607c617320c2b6341016a67b50a`. A new exact-candidate controller, `tests/lab/dniv_scale.py`, defines 4/8/16 independent-VM routed topologies using the existing immutable architecture foundations and disposable candidate overlays. The 4-node mode proves three endpoints across a forced two-LAN router; 8/16 modes build a two-area L1/L2 topology and require host-PCAP forwarding source/visit evidence for every paired endpoint direction. `vm-lab.yml` exposes `scale4`/`scale8`/`scale16`; full acceptance initially dispatches only `scale4` on both architectures so scale expansion remains incremental and evidence-backed. Handover/Test Lab documentation is advanced to Phase 9 and stale Phase 8 'unproven' text is removed. Candidate DECnet behavior is unchanged. Next: exact-SHA fast acceptance, then full acceptance requiring the new dual-architecture 4-node scale gate; only after that promote 8 and 16 nodes.
+
+
+Phase 9 follow-up fixes the initial scale-controller parse defect in `tests/lab/dniv_scale.py` (`RuntimeError` formatting in transit-guest failure handling) before any scale result can be accepted. The infrastructure summary is also advanced to Phase 9 and the stale Phase 8 active-status sentence is retired. Candidate DECnet protocol behavior is unchanged. Next: run exact-SHA fast acceptance, then full acceptance with dual-architecture `scale4`; promote `scale8` and `scale16` only after the 4-node gate is green.

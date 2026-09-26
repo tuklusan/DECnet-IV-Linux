@@ -260,7 +260,7 @@ def wait_for_markers(guests: list[Guest], marker: str, session: str,
             return
         for g in keepalive:
             if g.process and g.process.poll() is not None:
-                raise RuntimeError(&"scale transit guest exited: {g.name}")
+                raise RuntimeError(f"scale transit guest exited: {g.name}")
         for g in guests:
             if g.process and g.process.poll() is not None and not contains(
                     g.log, f"{marker} session={session} node={g.name}"):
