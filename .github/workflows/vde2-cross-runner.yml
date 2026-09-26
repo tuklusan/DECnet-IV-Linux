@@ -247,6 +247,7 @@ jobs:
           VDE_SSH_USER: ${{ secrets.VDE_SSH_USER }}
           VDE_SSH_KEY: ${{ secrets.VDE_SSH_KEY }}
           VDE_SSH_KNOWN_HOSTS: ${{ secrets.VDE_SSH_KNOWN_HOSTS }}
+          DNIV_VDE_BANNER_ATTEMPTS: "12"
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "${{ inputs.expected_sha }}"

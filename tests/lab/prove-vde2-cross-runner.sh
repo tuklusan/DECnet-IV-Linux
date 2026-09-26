@@ -189,6 +189,7 @@ bridge_pid=
 py_pid=
 echo_pid=
 reverse_pid=
+client_forward_pid=
 sshd_pid=
 
 stop_pid() {
@@ -204,6 +205,7 @@ cleanup() {
         stop_process_tree "$bridge_pid"
     fi
     stop_pid "${echo_pid:-}"
+    stop_pid "${client_forward_pid:-}"
     stop_pid "${reverse_pid:-}"
     if [[ -n "${sshd_pid:-}" ]]; then
         sudo kill "$sshd_pid" 2>/dev/null || true
@@ -404,38 +406,66 @@ EOF
 fi
 
 remote_user=runner
+remote_host="$remote_user@127.0.0.1"
+local_forward_port=$DNIV_VDE_REVERSE_PORT
+client_forward_log="$work/client-forward.log"
 
-banner_err="$work/server-banner.err"
-banner=
-for _ in $(seq 1 "$banner_attempts"); do
-    : >"$banner_err"
-    banner=$(timeout -k 2 8 ssh -F "$ssh_config" dniv-bastion \
-        -W "127.0.0.1:${DNIV_VDE_REVERSE_PORT}" 2>"$banner_err" | head -c 8 || true)
-    [[ "$banner" == "SSH-2.0-" ]] && break
-    sleep 1
-done
-if [[ "$banner" != "SSH-2.0-" ]]; then
-    if is_outer_connect_timeout "$banner_err"; then
-        echo "vde2-cross: outer bastion connection timed out" >&2
-        exit 75
+probe_client_forward() {
+    timeout -k 1 4 python3 - "$local_forward_port" <<'PY' >/dev/null 2>&1
+import socket
+import sys
+
+with socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=3) as sock:
+    sock.settimeout(3)
+    if sock.recv(8) != b"SSH-2.0-":
+        raise SystemExit(1)
+PY
+}
+
+start_client_forward() {
+    local forward_ready=0
+    local attempts=${DNIV_VDE_BANNER_ATTEMPTS:-12}
+    for _ in $(seq 1 "$attempts"); do
+        : >"$client_forward_log"
+        ssh -E "$client_forward_log" -F "$ssh_config" -NT -o ExitOnForwardFailure=yes \
+            -L "127.0.0.1:${local_forward_port}:127.0.0.1:${DNIV_VDE_REVERSE_PORT}" dniv-bastion &
+        client_forward_pid=$!
+        for _ in $(seq 1 16); do
+            if ! kill -0 "$client_forward_pid" 2>/dev/null; then
+                break
+            fi
+            if probe_client_forward; then
+                forward_ready=1
+                break
+            fi
+            sleep 0.5
+        done
+        (( forward_ready )) && break
+        stop_pid "$client_forward_pid"
+        client_forward_pid=
+        sleep 1
+    done
+    if (( ! forward_ready )); then
+        if is_outer_connect_timeout "$client_forward_log"; then
+            echo "vde2-cross: persistent bastion connection timed out" >&2
+            return 75
+        fi
+        echo "vde2-cross: persistent bastion forward did not present inner SSH banner" >&2
+        return 1
     fi
-    sed -n '1,8p' "$banner_err" >&2 || true
-    echo "vde2-cross: reverse endpoint did not present inner SSH banner" >&2
-    exit 1
-fi
+}
 
-proxy_err="$work/proxy-command.err"
-proxy_cmd="$work/proxy-command"
-cat >"$proxy_cmd" <<EOF
-#!/usr/bin/env bash
-exec ssh -F "$ssh_config" dniv-bastion -W "127.0.0.1:${DNIV_VDE_REVERSE_PORT}" 2>>"$proxy_err"
-EOF
-chmod 700 "$proxy_cmd"
+stop_client_forward() {
+    stop_pid "${client_forward_pid:-}"
+    client_forward_pid=
+}
 
-remote_host="$remote_user@dniv-vde-server"
+start_client_forward || exit $?
+
 inner_opts=(
+    -F /dev/null
     -i "$key_file"
-    -o "ProxyCommand=$proxy_cmd"
+    -p "$local_forward_port"
     -o BatchMode=yes
     -o IdentitiesOnly=yes
     -o ConnectTimeout=5
@@ -446,35 +476,14 @@ inner_opts=(
 )
 probe_inner_opts=("${inner_opts[@]}")
 
-bridge_ssh="$work/bridge-ssh"
-cat >"$bridge_ssh" <<EOF
-#!/usr/bin/env bash
-exec ssh -i "$key_file" \
-    -o "ProxyCommand=$proxy_cmd" \
-    -o BatchMode=yes \
-    -o IdentitiesOnly=yes \
-    -o ConnectTimeout=5 \
-    -o ConnectionAttempts=1 \
-    -o StrictHostKeyChecking=no \
-    -o UserKnownHostsFile=/dev/null \
-    -o LogLevel=ERROR \
-    "$remote_host" vde_plug "vde://$server_sock"
-EOF
-chmod 700 "$bridge_ssh"
-
 ready_err="$work/server-ready.err"
 ready=0
 for _ in $(seq 1 20); do
     : >"$ready_err"
-    : >"$proxy_err"
     if timeout -k 2 8 ssh "${probe_inner_opts[@]}" "$remote_host" test -f "$ready_file" \
         >/dev/null 2>"$ready_err"; then
         ready=1
         break
-    fi
-    if is_outer_connect_timeout "$proxy_err"; then
-        echo "vde2-cross: authenticated probe outer bastion connection timed out" >&2
-        exit 75
     fi
     sleep 1
 done
@@ -486,30 +495,26 @@ fi
 
 local_sock="$work/client.ctl"
 start_switch "$local_sock"
-bridge_bootstrap_fallback=1
 
 start_bridge() {
-    : >"$proxy_err"
-    setsid vde_plug -- "vde://$local_sock" = "$bridge_ssh" \
-        >>"$work/bridge.log" 2>&1 &
+    setsid vde_plug -- "vde://$local_sock" = ssh "${inner_opts[@]}" "$remote_host" \
+        vde_plug "vde://$server_sock" >>"$work/bridge.log" 2>&1 &
     bridge_pid=$!
     sleep 1
     kill -0 "$bridge_pid" 2>/dev/null || {
-        if (( bridge_bootstrap_fallback )) && is_outer_connect_timeout "$proxy_err"; then
-            echo "vde2-cross: bridge bootstrap outer bastion connection timed out" >&2
-            exit 75
-        fi
         cat "$work/bridge.log" >&2 || true
         echo "vde2-cross: VDE-over-SSH bridge did not start" >&2
         exit 1
     }
 }
+
 stop_bridge() {
     if [[ -n "${bridge_pid:-}" ]]; then
         stop_process_tree "$bridge_pid"
         bridge_pid=
     fi
 }
+
 wait_bridge_frame() {
     local token=$1
     for _ in $(seq 1 3); do
@@ -517,26 +522,18 @@ wait_bridge_frame() {
             return 0
         fi
         kill -0 "$bridge_pid" 2>/dev/null || {
-            if (( bridge_bootstrap_fallback )) && is_outer_connect_timeout "$proxy_err"; then
-                echo "vde2-cross: bridge bootstrap outer bastion connection timed out" >&2
-                return 75
-            fi
             cat "$work/bridge.log" >&2 || true
             echo "vde2-cross: VDE-over-SSH bridge exited during frame readiness" >&2
             return 1
         }
         sleep 1
     done
-    if (( bridge_bootstrap_fallback )) && is_outer_connect_timeout "$proxy_err"; then
-        echo "vde2-cross: bridge bootstrap outer bastion connection timed out" >&2
-        return 75
-    fi
     echo "vde2-cross: VDE-over-SSH bridge did not become frame-ready" >&2
     return 1
 }
+
 start_bridge
 wait_bridge_frame 1
-bridge_bootstrap_fallback=0
 
 git init -q "$work/pydecnet"
 git -C "$work/pydecnet" remote add origin https://github.com/tuklusan/pydecnet.git
@@ -598,11 +595,13 @@ wait_ups 1
 up_before=$(grep -Fc "Adjacency up" "$work/pydecnet.log" || true)
 down_before=$(grep -Fc "Adjacency down" "$work/pydecnet.log" || true)
 stop_bridge
+stop_client_forward
 if "$work/vde-frame-echo" client "vde://$local_sock" 90 >/dev/null 2>&1; then
     echo "vde2-cross: transport stop left cross-runner frame path alive" >&2
     exit 1
 fi
 wait_downs $((down_before + 1))
+start_client_forward || exit $?
 start_bridge
 wait_ups $((up_before + 1))
 "$work/vde-frame-echo" client "vde://$local_sock" 2 >/dev/null
@@ -610,6 +609,7 @@ wait_ups $((up_before + 1))
 stop_pid "$py_pid"
 py_pid=
 stop_bridge
+stop_client_forward
 if [[ -n "${switch_pid:-}" ]]; then
     kill "$switch_pid" 2>/dev/null || true
     for _ in $(seq 1 50); do
@@ -620,6 +620,7 @@ if [[ -n "${switch_pid:-}" ]]; then
 fi
 rm -rf "$local_sock"
 start_switch "$local_sock"
+start_client_forward || exit $?
 start_bridge
 up_before=$(grep -Fc "Adjacency up" "$work/pydecnet.log" || true)
 start_py
