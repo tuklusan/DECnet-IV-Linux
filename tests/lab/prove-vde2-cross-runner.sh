@@ -362,7 +362,7 @@ EOF
         exit 1
     }
     rpid=$(cat /var/run/route20.pid)
-    kill -0 "$rpid" 2>/dev/null || {
+    sudo kill -0 "$rpid" 2>/dev/null || {
         echo "vde2-cross: Route20 exited during socat relay proof" >&2
         exit 1
     }
