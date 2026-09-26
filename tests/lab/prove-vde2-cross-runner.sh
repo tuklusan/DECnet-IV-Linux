@@ -544,7 +544,7 @@ routing 31.78 --type l1router
 node 31.77 VDR77
 node 31.78 VDP78
 circuit ETH-0 Ethernet vde://$local_sock --mode vde --cost 3 --t3 2 --priority 64
-logging console --events 4.15,4.16
+logging console --events 4.15,4.18
 EOF
 
 start_py() {
