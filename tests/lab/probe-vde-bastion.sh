@@ -55,6 +55,13 @@ echo 'vde2-bastion-probe: SSH login probe start'
 ssh -F "$ssh_config" dniv-bastion 'sh -s' <<'EOF_REMOTE'
 set -eu
 echo 'vde2-bastion-probe: SSH login pass'
+for tool in socat nc netcat ncat; do
+    if path=$(command -v "$tool" 2>/dev/null); then
+        echo "vde2-bastion-probe: tool available name=$tool path=$path"
+    else
+        echo "vde2-bastion-probe: tool unavailable name=$tool"
+    fi
+done
 echo 'vde2-bastion-probe: vde_switch process inventory:'
 processes=$(ps -eo pid=,args= | grep '[v]de_switch' || true)
 if [ -n "$processes" ]; then
