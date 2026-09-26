@@ -180,9 +180,31 @@ if [ -n "$qcocal" ]; then
         /usr/local/bin/dncopy --dir "$qcocal" '*.*;*' 2>/dev/null); then
         fail qcocal-http-preflight
     fi
+    for stale_file in DNIVHT.COM DNIVTK.COM; do
+        stale_attempt=0
+        while printf '%s\n' "$qcocal_listing" | grep -Fiq "$stale_file"; do
+            stale_attempt=$((stale_attempt + 1))
+            if [ "$stale_attempt" -gt 8 ]; then
+                unset qcocal_listing
+                fail qcocal-stale-cleanup
+            fi
+            DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
+                /usr/local/bin/dndel "$qcocal" "$stale_file" >/dev/null 2>&1 ||
+                {
+                    unset qcocal_listing
+                    fail qcocal-stale-cleanup
+                }
+            echo "DNIV-AREA31-QCOCAL-STALE-CLEANUP file=$stale_file"
+            if ! qcocal_listing=$(DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
+                /usr/local/bin/dncopy --dir "$qcocal" '*.*;*' 2>/dev/null); then
+                unset qcocal_listing
+                fail qcocal-stale-recheck
+            fi
+        done
+    done
     if printf '%s\n' "$qcocal_listing" | grep -Eiq 'DNIV(HT|TK)\.COM'; then
         unset qcocal_listing
-        fail qcocal-object-existing
+        fail qcocal-stale-cleanup
     fi
     unset qcocal_listing
     DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \

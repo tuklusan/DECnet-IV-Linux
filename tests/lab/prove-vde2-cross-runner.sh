@@ -603,8 +603,8 @@ fi
 wait_downs $((down_before + 1))
 start_client_forward || exit $?
 start_bridge
+wait_bridge_frame 2
 wait_ups $((up_before + 1))
-"$work/vde-frame-echo" client "vde://$local_sock" 2 >/dev/null
 
 stop_pid "$py_pid"
 py_pid=
