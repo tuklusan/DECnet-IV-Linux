@@ -334,6 +334,11 @@ EOF
             echo "vde2-cross: socat server bridge session $session exited before client attachment rc=$rc" >&2
             exit 1
         fi
+        if is_outer_connect_timeout "$log"; then
+            cat "$log" >&2 || true
+            echo "vde2-cross: socat server bridge session $session lost to outer SSH connect timeout" >&2
+            exit 1
+        fi
         if grep -Eqi 'Permission denied|Authentication failed|Host key verification failed|REMOTE HOST IDENTIFICATION HAS CHANGED' "$log"; then
             cat "$log" >&2 || true
             echo "vde2-cross: socat server bridge session $session failed SSH authentication/verification" >&2
@@ -420,6 +425,11 @@ wait_bridge_frame() {
             return 0
         fi
         kill -0 "$bridge_pid" 2>/dev/null || {
+            if is_outer_connect_timeout "$current_bridge_log"; then
+                cat "$current_bridge_log" >&2 || true
+                echo "vde2-cross: socat VDE bridge lost to outer SSH connect timeout" >&2
+                return 75
+            fi
             cat "$current_bridge_log" >&2 || true
             echo "vde2-cross: socat VDE bridge exited during frame readiness" >&2
             return 1
