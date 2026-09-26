@@ -430,42 +430,49 @@ PY
 start_client_forward() {
     local forward_ready=0
     local attempts=${DNIV_VDE_BANNER_ATTEMPTS:-12}
+
+    : >"$client_forward_log"
+    ssh -vvv -E "$client_forward_log" -F "$ssh_config" -NT -o ExitOnForwardFailure=yes \
+        -L "127.0.0.1:${local_forward_port}:127.0.0.1:${DNIV_VDE_REVERSE_PORT}" dniv-bastion &
+    client_forward_pid=$!
+
     for _ in $(seq 1 "$attempts"); do
-        : >"$client_forward_log"
-        ssh -E "$client_forward_log" -F "$ssh_config" -NT -o ExitOnForwardFailure=yes \
-            -L "127.0.0.1:${local_forward_port}:127.0.0.1:${DNIV_VDE_REVERSE_PORT}" dniv-bastion &
-        client_forward_pid=$!
-        for _ in $(seq 1 16); do
-            if ! kill -0 "$client_forward_pid" 2>/dev/null; then
-                break
-            fi
-            if probe_client_forward; then
-                forward_ready=1
-                break
-            fi
-            sleep 0.5
-        done
-        (( forward_ready )) && break
+        if ! kill -0 "$client_forward_pid" 2>/dev/null; then
+            break
+        fi
+        if probe_client_forward; then
+            forward_ready=1
+            break
+        fi
+        sleep 2
+    done
+    (( forward_ready )) && return 0
+
+    if is_outer_connect_timeout "$client_forward_log"; then
         stop_pid "$client_forward_pid"
         client_forward_pid=
-        sleep 1
-    done
-    if (( ! forward_ready )); then
-        if is_outer_connect_timeout "$client_forward_log"; then
-            echo "vde2-cross: persistent bastion outer connection timed out" >&2
-            return 75
-        fi
-        if grep -Eqi 'Permission denied|Authentication failed' "$client_forward_log"; then
-            echo "vde2-cross: persistent bastion authentication failed" >&2
-        elif grep -Eqi 'Host key verification failed|REMOTE HOST IDENTIFICATION HAS CHANGED' "$client_forward_log"; then
-            echo "vde2-cross: persistent bastion host verification failed" >&2
-        elif grep -Eqi 'open failed: connect failed|connect_to .* failed' "$client_forward_log"; then
-            echo "vde2-cross: persistent bastion forward could not reach reverse endpoint" >&2
-        else
-            echo "vde2-cross: persistent bastion forward did not present inner SSH banner" >&2
-        fi
-        return 1
+        echo "vde2-cross: persistent bastion outer connection timed out" >&2
+        return 75
     fi
+
+    if grep -Eqi 'Permission denied|Authentication failed' "$client_forward_log"; then
+        echo "vde2-cross: persistent bastion authentication failed" >&2
+    elif grep -Eqi 'Host key verification failed|REMOTE HOST IDENTIFICATION HAS CHANGED' "$client_forward_log"; then
+        echo "vde2-cross: persistent bastion host verification failed" >&2
+    elif grep -Eqi 'Address already in use|cannot listen to port|Could not request local forwarding' "$client_forward_log"; then
+        echo "vde2-cross: persistent bastion local listener could not bind" >&2
+    elif grep -Fq 'Authenticated to ' "$client_forward_log"; then
+        echo "vde2-cross: persistent bastion outer connection authenticated but forward delivered no inner SSH banner" >&2
+    elif grep -Eqi 'open failed: connect failed|connect_to .* failed' "$client_forward_log"; then
+        echo "vde2-cross: persistent bastion forward could not reach reverse endpoint" >&2
+    elif kill -0 "$client_forward_pid" 2>/dev/null; then
+        echo "vde2-cross: persistent bastion outer connection remained live without forward readiness" >&2
+    else
+        echo "vde2-cross: persistent bastion connection exited before forward readiness" >&2
+    fi
+    stop_pid "$client_forward_pid"
+    client_forward_pid=
+    return 1
 }
 
 stop_client_forward() {
