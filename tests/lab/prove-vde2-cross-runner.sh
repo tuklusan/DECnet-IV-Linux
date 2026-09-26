@@ -190,7 +190,6 @@ py_pid=
 echo_pid=
 reverse_pid=
 client_forward_pid=
-client_control=
 sshd_pid=
 
 stop_pid() {
@@ -427,9 +426,8 @@ if [[ "$banner" != "SSH-2.0-" ]]; then
     exit 1
 fi
 
-client_forward_log="$work/client-master.log"
-client_control="$work/bastion-control.sock"
-local_forward_port=$((DNIV_VDE_REVERSE_PORT + 10000))
+client_forward_log="$work/client-forward.log"
+local_forward_port=$DNIV_VDE_REVERSE_PORT
 remote_host="$remote_user@127.0.0.1"
 
 probe_client_forward() {
@@ -445,53 +443,27 @@ PY
 }
 start_client_forward() {
     local forward_ready=0
-    local master_ready=0
-    local forward_requested=0
-    local failure_stage=master
-    local forward_err="$work/client-forward-request.err"
+    local failure_stage=forward-process
     for _ in $(seq 1 6); do
-        rm -f "$client_control"
         : >"$client_forward_log"
-        : >"$forward_err"
-        ssh -E "$client_forward_log" -F "$ssh_config" -MN \
-            -o ControlMaster=yes -o ControlPath="$client_control" -o ControlPersist=no dniv-bastion &
+        ssh -E "$client_forward_log" -F "$ssh_config" -NT -o ExitOnForwardFailure=yes \
+            -L "127.0.0.1:${local_forward_port}:127.0.0.1:${DNIV_VDE_REVERSE_PORT}" dniv-bastion &
         client_forward_pid=$!
-        master_ready=0
-        forward_requested=0
-        failure_stage=master
+        failure_stage=forward-process
         for _ in $(seq 1 16); do
             if ! kill -0 "$client_forward_pid" 2>/dev/null; then
                 break
             fi
-            if [[ -S "$client_control" ]]; then
-                master_ready=1
+            failure_stage=forward-banner
+            if probe_client_forward; then
+                forward_ready=1
                 break
             fi
             sleep 0.5
         done
-        if (( master_ready )); then
-            failure_stage=forward-request
-            if ssh -F "$ssh_config" -S "$client_control" -O forward \
-                -L "127.0.0.1:${local_forward_port}:127.0.0.1:${DNIV_VDE_REVERSE_PORT}" \
-                dniv-bastion >/dev/null 2>"$forward_err"; then
-                forward_requested=1
-                failure_stage=forward-banner
-                for _ in $(seq 1 16); do
-                    if ! kill -0 "$client_forward_pid" 2>/dev/null; then
-                        break
-                    fi
-                    if probe_client_forward; then
-                        forward_ready=1
-                        break
-                    fi
-                    sleep 0.5
-                done
-            fi
-        fi
         (( forward_ready )) && break
         stop_pid "$client_forward_pid"
         client_forward_pid=
-        rm -f "$client_control"
         sleep 1
     done
     if (( ! forward_ready )); then
@@ -499,12 +471,10 @@ start_client_forward() {
             echo "vde2-cross: persistent bastion connection timed out" >&2
             return 75
         fi
-        if [[ "$failure_stage" == forward-request ]]; then
-            if grep -qiE 'address already in use|cannot listen|bind.*failed' "$forward_err"; then
-                failure_stage=local-listen
-            elif grep -qiE 'administratively prohibited|forwarding disabled|not permitted' "$forward_err"; then
-                failure_stage=forward-denied
-            fi
+        if grep -qiE 'address already in use|cannot listen|bind.*failed' "$client_forward_log"; then
+            failure_stage=local-listen
+        elif grep -qiE 'administratively prohibited|forwarding disabled|not permitted' "$client_forward_log"; then
+            failure_stage=forward-denied
         fi
         echo "vde2-cross: persistent bastion transport bootstrap failed stage=$failure_stage; using alternate runner" >&2
         return 75
@@ -513,7 +483,6 @@ start_client_forward() {
 stop_client_forward() {
     stop_pid "${client_forward_pid:-}"
     client_forward_pid=
-    rm -f "${client_control:-}"
 }
 start_client_forward || exit $?
 
