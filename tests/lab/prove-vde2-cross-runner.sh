@@ -386,7 +386,7 @@ start_bridge() {
             >>"$log" 2>&1 &
         bridge_pid=$!
         ready_seen=0
-        for _ in $(seq 1 90); do
+        for _ in $(seq 1 315); do
             if grep -Fxq 'DNIV_RELAY_READY' "$log"; then
                 ready_seen=1
                 break
