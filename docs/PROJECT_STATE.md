@@ -1477,3 +1477,6 @@ Phase 9 scale work starts from Phase 8 closure commit `fa36d2ea46b63607c617320c2
 
 
 Phase 9 follow-up fixes the initial scale-controller parse defect in `tests/lab/dniv_scale.py` (`RuntimeError` formatting in transit-guest failure handling) before any scale result can be accepted. The infrastructure summary is also advanced to Phase 9 and the stale Phase 8 active-status sentence is retired. Candidate DECnet protocol behavior is unchanged. Next: run exact-SHA fast acceptance, then full acceptance with dual-architecture `scale4`; promote `scale8` and `scale16` only after the 4-node gate is green.
+
+
+Phase 9 scale4 promotion is proven on exact candidate `40bfc630221b36b01058f7d1e6ceaf8b8be23c53`: full acceptance parent `36272872463` completed green, including dual-architecture scale4 run `36272996817` plus Build `36272902266`, Project State `36272914106`, Cross-runner VDE2 `36272926392`, References `36272938725`, E1-E4 `36272949765`/`36272960084`/`36272972717`/`36272986003`, Interop `36273007733`, local VDE2 `36273017722`, MULTINET `36273028407`, and Area-31 `36273038929`. Full acceptance now promotes the existing scale8 controller on both architectures while retaining scale4. Candidate DECnet behavior is unchanged. Next: exact-SHA fast acceptance, then full acceptance requiring both scale4 and scale8; promote scale16 only after scale8 is green.
