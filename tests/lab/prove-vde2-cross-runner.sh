@@ -304,7 +304,7 @@ EOF
         log="$work/server-bridge-${session}.log"
         : >"$log"
         started=$SECONDS
-        setsid timeout -k 5 300 vde_plug -- "vde://$server_sock" = \
+        setsid timeout -k 5 300 dpipe vde_plug "vde://$server_sock" = \
             ssh -F "$ssh_config" dniv-bastion socat \
             "UNIX-LISTEN:$relay_sock,unlink-early,unlink-close" STDIO \
             >>"$log" 2>&1 &
@@ -361,7 +361,7 @@ start_bridge() {
     for attempt in $(seq 1 8); do
         log="$work/client-bridge-${bridge_generation}-${attempt}.log"
         : >"$log"
-        setsid vde_plug -- "vde://$local_sock" = \
+        setsid dpipe vde_plug "vde://$local_sock" = \
             ssh -F "$ssh_config" dniv-bastion socat \
             "UNIX-CONNECT:$relay_sock" STDIO >>"$log" 2>&1 &
         bridge_pid=$!
