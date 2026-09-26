@@ -89,6 +89,19 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential libpcap-dev vde2 libvdeplug-dev python3-venv openssh-server
 
+      - name: Probe bastion VDE inventory
+        continue-on-error: true
+        shell: bash
+        env:
+          VDE_SSH_HOST: ${{ secrets.VDE_SSH_HOST }}
+          VDE_SSH_PORT: ${{ secrets.VDE_SSH_PORT }}
+          VDE_SSH_USER: ${{ secrets.VDE_SSH_USER }}
+          VDE_SSH_KEY: ${{ secrets.VDE_SSH_KEY }}
+          VDE_SSH_KNOWN_HOSTS: ${{ secrets.VDE_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          tests/lab/probe-vde-bastion.sh
+
       - name: Serve remote VDE endpoint
         shell: bash
         env:
@@ -157,6 +170,19 @@ jobs:
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y build-essential libpcap-dev vde2 libvdeplug-dev python3-venv openssh-client
+
+      - name: Probe bastion VDE inventory
+        continue-on-error: true
+        shell: bash
+        env:
+          VDE_SSH_HOST: ${{ secrets.VDE_SSH_HOST }}
+          VDE_SSH_PORT: ${{ secrets.VDE_SSH_PORT }}
+          VDE_SSH_USER: ${{ secrets.VDE_SSH_USER }}
+          VDE_SSH_KEY: ${{ secrets.VDE_SSH_KEY }}
+          VDE_SSH_KNOWN_HOSTS: ${{ secrets.VDE_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          tests/lab/probe-vde-bastion.sh
 
       - name: Join remote VDE switch and prove recovery
         id: join
@@ -238,6 +264,19 @@ jobs:
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y build-essential libpcap-dev vde2 libvdeplug-dev python3-venv openssh-client
+
+      - name: Probe bastion VDE inventory
+        continue-on-error: true
+        shell: bash
+        env:
+          VDE_SSH_HOST: ${{ secrets.VDE_SSH_HOST }}
+          VDE_SSH_PORT: ${{ secrets.VDE_SSH_PORT }}
+          VDE_SSH_USER: ${{ secrets.VDE_SSH_USER }}
+          VDE_SSH_KEY: ${{ secrets.VDE_SSH_KEY }}
+          VDE_SSH_KNOWN_HOSTS: ${{ secrets.VDE_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          tests/lab/probe-vde-bastion.sh
 
       - name: Join remote VDE switch and prove recovery
         shell: bash
