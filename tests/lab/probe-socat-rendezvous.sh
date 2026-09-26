@@ -62,52 +62,33 @@ Host dniv-bastion
 EOF
 chmod 600 "$ssh_config"
 
-ssh_run() {
-    ssh -F "$ssh_config" dniv-bastion "$@"
-}
-
-ssh_run 'command -v socat >/dev/null' || {
-    echo "socat-rendezvous: socat unavailable on bastion" >&2
-    exit 3
-}
-
 if [[ "$mode" == "--server" ]]; then
-    ssh_run "rm -f '$remote_sock'"
     python3 - "$ssh_config" "$remote_sock" "$run_id" <<'PY'
-import os
 import select
 import subprocess
 import sys
-import time
 
 cfg, sock, run_id = sys.argv[1:]
 cmd = ["ssh", "-F", cfg, "dniv-bastion",
-       f"exec socat UNIX-LISTEN:'{sock}',unlink-early STDIO"]
+       f"exec socat UNIX-LISTEN:{sock},unlink-early STDIO"]
 p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                      stderr=subprocess.PIPE, text=True, bufsize=1)
 try:
-    ready = False
-    for _ in range(60):
-        q = subprocess.run(["ssh", "-F", cfg, "dniv-bastion", f"test -S '{sock}'"],
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        if q.returncode == 0:
-            ready = True
-            break
-        if p.poll() is not None:
-            break
-        time.sleep(0.5)
-    if not ready:
-        err = p.stderr.read() if p.poll() is not None else ""
-        raise SystemExit("socat-rendezvous: server socket did not become ready" + (f": {err.strip()}" if err else ""))
-
-    p.stdin.write(f"DNIV-SOCAT-SERVER {run_id}\n")
+    p.stdin.write(f"DNIV-SOCAT-SERVER {run_id}\\n")
     p.stdin.flush()
-    r, _, _ = select.select([p.stdout], [], [], 90)
+    r, _, _ = select.select([p.stdout], [], [], 75)
     if not r:
-        raise SystemExit("socat-rendezvous: server timed out waiting for client marker")
-    line = p.stdout.readline().rstrip("\n")
+        rc = p.poll()
+        err = p.stderr.read().strip() if rc is not None else ""
+        detail = f" rc={rc}" if rc is not None else ""
+        if err:
+            detail += f" stderr={err}"
+        raise SystemExit("socat-rendezvous: server timed out waiting for client marker" + detail)
+    line = p.stdout.readline().rstrip("\\n")
     if line != f"DNIV-SOCAT-CLIENT {run_id}":
-        raise SystemExit(f"socat-rendezvous: server marker mismatch: {line!r}")
+        rc = p.poll()
+        err = p.stderr.read().strip() if rc is not None else ""
+        raise SystemExit(f"socat-rendezvous: server marker mismatch: {line!r} rc={rc} stderr={err}")
     print("socat-rendezvous: server pass")
 finally:
     try:
@@ -123,54 +104,54 @@ finally:
         except Exception:
             pass
 PY
-    ssh_run "rm -f '$remote_sock'" || true
     exit 0
 fi
 
-ready=0
-for _ in $(seq 1 90); do
-    if ssh_run "test -S '$remote_sock'" >/dev/null 2>&1; then
-        ready=1
-        break
-    fi
-    sleep 1
-done
-(( ready )) || {
-    echo "socat-rendezvous: client did not see server socket" >&2
-    exit 4
-}
-
+sleep 6
 python3 - "$ssh_config" "$remote_sock" "$run_id" <<'PY'
 import select
 import subprocess
 import sys
+import time
 
 cfg, sock, run_id = sys.argv[1:]
-cmd = ["ssh", "-F", cfg, "dniv-bastion",
-       f"exec socat UNIX-CONNECT:'{sock}' STDIO"]
-p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                     stderr=subprocess.PIPE, text=True, bufsize=1)
-try:
-    p.stdin.write(f"DNIV-SOCAT-CLIENT {run_id}\n")
-    p.stdin.flush()
-    r, _, _ = select.select([p.stdout], [], [], 30)
-    if not r:
-        raise SystemExit("socat-rendezvous: client timed out waiting for server marker")
-    line = p.stdout.readline().rstrip("\n")
-    if line != f"DNIV-SOCAT-SERVER {run_id}":
-        raise SystemExit(f"socat-rendezvous: client marker mismatch: {line!r}")
-    print("socat-rendezvous: client pass")
-finally:
+
+last = ""
+for attempt in range(2):
+    cmd = ["ssh", "-F", cfg, "dniv-bastion",
+           f"exec socat UNIX-CONNECT:{sock} STDIO"]
+    p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                         stderr=subprocess.PIPE, text=True, bufsize=1)
     try:
-        p.stdin.close()
-    except Exception:
-        pass
-    try:
-        p.terminate()
-        p.wait(timeout=3)
-    except Exception:
+        p.stdin.write(f"DNIV-SOCAT-CLIENT {run_id}\\n")
+        p.stdin.flush()
+        r, _, _ = select.select([p.stdout], [], [], 20)
+        if r:
+            line = p.stdout.readline().rstrip("\\n")
+            if line == f"DNIV-SOCAT-SERVER {run_id}":
+                print("socat-rendezvous: client pass")
+                raise SystemExit(0)
+            last = f"marker mismatch: {line!r}"
+        else:
+            rc = p.poll()
+            err = p.stderr.read().strip() if rc is not None else ""
+            last = f"timeout rc={rc} stderr={err}"
+    finally:
         try:
-            p.kill()
+            p.stdin.close()
         except Exception:
             pass
+        try:
+            p.terminate()
+            p.wait(timeout=3)
+        except Exception:
+            try:
+                p.kill()
+            except Exception:
+                pass
+    if attempt == 0:
+        time.sleep(4)
+
+raise SystemExit("socat-rendezvous: client failed: " + last)
 PY
+
