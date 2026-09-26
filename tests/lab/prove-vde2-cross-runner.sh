@@ -189,7 +189,6 @@ bridge_pid=
 py_pid=
 echo_pid=
 reverse_pid=
-client_forward_pid=
 sshd_pid=
 
 stop_pid() {
@@ -205,7 +204,6 @@ cleanup() {
         stop_process_tree "$bridge_pid"
     fi
     stop_pid "${echo_pid:-}"
-    stop_pid "${client_forward_pid:-}"
     stop_pid "${reverse_pid:-}"
     if [[ -n "${sshd_pid:-}" ]]; then
         sudo kill "$sshd_pid" 2>/dev/null || true
@@ -426,70 +424,11 @@ if [[ "$banner" != "SSH-2.0-" ]]; then
     exit 1
 fi
 
-client_forward_log="$work/client-forward.log"
-local_forward_port=$DNIV_VDE_REVERSE_PORT
-remote_host="$remote_user@127.0.0.1"
-
-probe_client_forward() {
-    timeout -k 1 4 python3 - "$local_forward_port" <<'PY' >/dev/null 2>&1
-import socket
-import sys
-
-with socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=3) as sock:
-    sock.settimeout(3)
-    if sock.recv(8) != b"SSH-2.0-":
-        raise SystemExit(1)
-PY
-}
-start_client_forward() {
-    local forward_ready=0
-    local failure_stage=forward-process
-    for _ in $(seq 1 6); do
-        : >"$client_forward_log"
-        ssh -E "$client_forward_log" -F "$ssh_config" -NT -o ExitOnForwardFailure=yes \
-            -L "127.0.0.1:${local_forward_port}:127.0.0.1:${DNIV_VDE_REVERSE_PORT}" dniv-bastion &
-        client_forward_pid=$!
-        failure_stage=forward-process
-        for _ in $(seq 1 16); do
-            if ! kill -0 "$client_forward_pid" 2>/dev/null; then
-                break
-            fi
-            failure_stage=forward-banner
-            if probe_client_forward; then
-                forward_ready=1
-                break
-            fi
-            sleep 0.5
-        done
-        (( forward_ready )) && break
-        stop_pid "$client_forward_pid"
-        client_forward_pid=
-        sleep 1
-    done
-    if (( ! forward_ready )); then
-        if is_outer_connect_timeout "$client_forward_log"; then
-            echo "vde2-cross: persistent bastion connection timed out" >&2
-            return 75
-        fi
-        if grep -qiE 'address already in use|cannot listen|bind.*failed' "$client_forward_log"; then
-            failure_stage=local-listen
-        elif grep -qiE 'administratively prohibited|forwarding disabled|not permitted' "$client_forward_log"; then
-            failure_stage=forward-denied
-        fi
-        echo "vde2-cross: persistent bastion transport bootstrap failed stage=$failure_stage; using alternate runner" >&2
-        return 75
-    fi
-}
-stop_client_forward() {
-    stop_pid "${client_forward_pid:-}"
-    client_forward_pid=
-}
-start_client_forward || exit $?
-
+proxy="ssh -F $ssh_config dniv-bastion -W 127.0.0.1:${DNIV_VDE_REVERSE_PORT}"
+remote_host="$remote_user@dniv-vde-server"
 inner_opts=(
-    -F /dev/null
     -i "$key_file"
-    -p "$local_forward_port"
+    -o "ProxyCommand=$proxy"
     -o BatchMode=yes
     -o IdentitiesOnly=yes
     -o ConnectTimeout=5
@@ -600,13 +539,11 @@ wait_ups 1
 up_before=$(grep -Fc "Adjacency up" "$work/pydecnet.log" || true)
 down_before=$(grep -Fc "Adjacency down" "$work/pydecnet.log" || true)
 stop_bridge
-stop_client_forward
 if "$work/vde-frame-echo" client "vde://$local_sock" 90 >/dev/null 2>&1; then
     echo "vde2-cross: transport stop left cross-runner frame path alive" >&2
     exit 1
 fi
 wait_downs $((down_before + 1))
-start_client_forward || exit $?
 start_bridge
 wait_ups $((up_before + 1))
 "$work/vde-frame-echo" client "vde://$local_sock" 2 >/dev/null
@@ -614,7 +551,6 @@ wait_ups $((up_before + 1))
 stop_pid "$py_pid"
 py_pid=
 stop_bridge
-stop_client_forward
 if [[ -n "${switch_pid:-}" ]]; then
     kill "$switch_pid" 2>/dev/null || true
     for _ in $(seq 1 50); do
@@ -625,7 +561,6 @@ if [[ -n "${switch_pid:-}" ]]; then
 fi
 rm -rf "$local_sock"
 start_switch "$local_sock"
-start_client_forward || exit $?
 start_bridge
 up_before=$(grep -Fc "Adjacency up" "$work/pydecnet.log" || true)
 start_py
