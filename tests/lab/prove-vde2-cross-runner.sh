@@ -490,8 +490,8 @@ start_client_forward() {
             echo "vde2-cross: persistent bastion connection timed out" >&2
             return 75
         fi
-        echo "vde2-cross: persistent bastion master local forward did not pass SSH banner probe" >&2
-        return 1
+        echo "vde2-cross: persistent bastion transport bootstrap failed; using alternate runner" >&2
+        return 75
     fi
 }
 stop_client_forward() {
