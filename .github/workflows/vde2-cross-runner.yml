@@ -87,7 +87,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y build-essential libpcap-dev vde2 libvdeplug-dev python3-venv openssh-server
+          sudo apt-get install -y build-essential cmake libpcap-dev vde2 libvdeplug-dev python3-venv openssh-server
 
       - name: Probe bastion VDE inventory
         continue-on-error: true
@@ -182,7 +182,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y build-essential libpcap-dev vde2 libvdeplug-dev python3-venv openssh-client
+          sudo apt-get install -y build-essential cmake libpcap-dev vde2 libvdeplug-dev python3-venv openssh-client
 
       - name: Probe bastion VDE inventory
         continue-on-error: true
@@ -289,7 +289,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y build-essential libpcap-dev vde2 libvdeplug-dev python3-venv openssh-client
+          sudo apt-get install -y build-essential cmake libpcap-dev vde2 libvdeplug-dev python3-venv openssh-client
 
       - name: Probe bastion VDE inventory
         continue-on-error: true

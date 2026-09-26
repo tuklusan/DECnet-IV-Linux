@@ -176,7 +176,7 @@ if [[ "${1:-}" != "--server" && "${1:-}" != "--client" ]]; then
     exit 2
 fi
 
-for cmd in cc git make python3 setsid ssh ssh-keygen vde_plug vde_switch dpipe; do
+for cmd in cc cmake git make python3 setsid ssh ssh-keygen; do
     command -v "$cmd" >/dev/null || { echo "vde2-cross: missing $cmd" >&2; exit 2; }
 done
 
@@ -247,10 +247,24 @@ chmod 600 "$ssh_config"
 
 cc -std=c11 -Wall -Wextra -Werror "$root/tests/lab/vde-frame-echo.c" -lvdeplug -o "$work/vde-frame-echo"
 
+git init -q "$work/vde2"
+git -C "$work/vde2" remote add origin https://github.com/tuklusan/vde-2.git
+git -C "$work/vde2" fetch -q --depth=1 origin "$VDE2_REF"
+git -C "$work/vde2" checkout -q --detach FETCH_HEAD
+test "$(git -C "$work/vde2" rev-parse HEAD)" = "$VDE2_REF"
+cmake -S "$work/vde2" -B "$work/vde2-build"     -DWITH_VDEPLUG4=OFF     -DENABLE_CRYPTCAB=OFF     -DENABLE_VXLAN=OFF     -DENABLE_ROUTER=OFF     -DENABLE_PCAP=OFF     -DENABLE_TUNTAP=OFF     -DENABLE_VDE_OVER_NS=OFF >/dev/null
+cmake --build "$work/vde2-build" --target dpipe vde_plug vde_switch -j2 >/dev/null
+dpipe_bin="$work/vde2-build/src/dpipe"
+vde_plug_bin="$work/vde2-build/src/vde_plug"
+vde_switch_bin="$work/vde2-build/src/vde_switch/vde_switch"
+for bin in "$dpipe_bin" "$vde_plug_bin" "$vde_switch_bin"; do
+    [[ -x "$bin" ]] || { echo "vde2-cross: pinned VDE2 build is incomplete" >&2; exit 1; }
+done
+
 start_switch() {
     local sock=$1
     rm -rf "$sock"
-    vde_switch -daemon -sock "$sock" >/dev/null 2>&1
+    "$vde_switch_bin" -daemon -sock "$sock" >/dev/null 2>&1
     switch_pid=
     for _ in $(seq 1 80); do
         switch_pid=$(pgrep -f "vde_switch.*-sock $sock" | head -n1 || true)
@@ -304,7 +318,7 @@ EOF
         log="$work/server-bridge-${session}.log"
         : >"$log"
         started=$SECONDS
-        timeout -k 5 300 dpipe vde_plug "vde://$server_sock" = \
+        timeout -k 5 300 "$dpipe_bin" "$vde_plug_bin" "$server_sock" = \
             ssh -F "$ssh_config" dniv-bastion socat \
             "UNIX-LISTEN:$relay_sock,unlink-early,unlink-close" STDIO \
             >>"$log" 2>&1 &
@@ -361,7 +375,7 @@ start_bridge() {
     for attempt in $(seq 1 8); do
         log="$work/client-bridge-${bridge_generation}-${attempt}.log"
         : >"$log"
-        dpipe vde_plug "vde://$local_sock" = \
+        "$dpipe_bin" "$vde_plug_bin" "$local_sock" = \
             ssh -F "$ssh_config" dniv-bastion socat \
             "UNIX-CONNECT:$relay_sock" STDIO >>"$log" 2>&1 &
         bridge_pid=$!
