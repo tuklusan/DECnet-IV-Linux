@@ -407,7 +407,6 @@ EOF
 fi
 
 remote_user=runner
-remote_host="$remote_user@dniv-vde-server"
 
 banner_err="$work/server-banner.err"
 banner=
@@ -430,30 +429,56 @@ fi
 
 client_forward_log="$work/client-master.log"
 client_control="$work/bastion-control.sock"
+local_forward_port=$((DNIV_VDE_REVERSE_PORT + 10000))
+remote_host="$remote_user@127.0.0.1"
+
 probe_client_forward() {
-    local got
-    got=$(timeout -k 2 8 ssh -F "$ssh_config" -S "$client_control" dniv-bastion \
-        -W "127.0.0.1:${DNIV_VDE_REVERSE_PORT}" 2>/dev/null | head -c 8 || true)
-    [[ "$got" == "SSH-2.0-" ]]
+    timeout -k 1 4 python3 - "$local_forward_port" <<'PY' >/dev/null 2>&1
+import socket
+import sys
+
+with socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=3) as sock:
+    sock.settimeout(3)
+    if sock.recv(8) != b"SSH-2.0-":
+        raise SystemExit(1)
+PY
 }
 start_client_forward() {
     local forward_ready=0
+    local master_ready=0
     for _ in $(seq 1 6); do
         rm -f "$client_control"
         : >"$client_forward_log"
         ssh -E "$client_forward_log" -F "$ssh_config" -MN \
             -o ControlMaster=yes -o ControlPath="$client_control" -o ControlPersist=no dniv-bastion &
         client_forward_pid=$!
+        master_ready=0
         for _ in $(seq 1 16); do
             if ! kill -0 "$client_forward_pid" 2>/dev/null; then
                 break
             fi
-            if [[ -S "$client_control" ]] && probe_client_forward; then
-                forward_ready=1
+            if [[ -S "$client_control" ]]; then
+                master_ready=1
                 break
             fi
             sleep 0.5
         done
+        if (( master_ready )); then
+            if ssh -F "$ssh_config" -S "$client_control" -O forward \
+                -L "127.0.0.1:${local_forward_port}:127.0.0.1:${DNIV_VDE_REVERSE_PORT}" \
+                dniv-bastion >/dev/null 2>&1; then
+                for _ in $(seq 1 16); do
+                    if ! kill -0 "$client_forward_pid" 2>/dev/null; then
+                        break
+                    fi
+                    if probe_client_forward; then
+                        forward_ready=1
+                        break
+                    fi
+                    sleep 0.5
+                done
+            fi
+        fi
         (( forward_ready )) && break
         stop_pid "$client_forward_pid"
         client_forward_pid=
@@ -465,7 +490,7 @@ start_client_forward() {
             echo "vde2-cross: persistent bastion connection timed out" >&2
             return 75
         fi
-        echo "vde2-cross: persistent bastion master did not pass reverse SSH banner probe" >&2
+        echo "vde2-cross: persistent bastion master local forward did not pass SSH banner probe" >&2
         return 1
     fi
 }
@@ -476,11 +501,10 @@ stop_client_forward() {
 }
 start_client_forward || exit $?
 
-proxy="ssh -F $ssh_config -S $client_control dniv-bastion -W 127.0.0.1:${DNIV_VDE_REVERSE_PORT}"
 inner_opts=(
     -F /dev/null
     -i "$key_file"
-    -o "ProxyCommand=$proxy"
+    -p "$local_forward_port"
     -o BatchMode=yes
     -o IdentitiesOnly=yes
     -o ConnectTimeout=5
