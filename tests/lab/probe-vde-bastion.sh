@@ -62,6 +62,20 @@ if [ -n "$processes" ]; then
 else
     echo 'vde2-bastion-probe: no vde_switch process visible'
 fi
+if command -v vde_switch >/dev/null 2>&1; then
+    echo 'vde2-bastion-probe: vde_switch available'
+    have_switch=1
+else
+    echo 'vde2-bastion-probe: vde_switch unavailable'
+    have_switch=0
+fi
+if command -v vde_plug >/dev/null 2>&1; then
+    echo 'vde2-bastion-probe: vde_plug available'
+    have_plug=1
+else
+    echo 'vde2-bastion-probe: vde_plug unavailable'
+    have_plug=0
+fi
 candidates=$(
     {
         ps -eo args= | awk '
@@ -71,37 +85,82 @@ candidates=$(
                     if ($i ~ /^--sock=/) { sub(/^--sock=/, "", $i); print $i }
                 }
             }'
-        find /tmp -maxdepth 4 -type s -name ctl -print 2>/dev/null | sed 's#/ctl$##'
+        for search_root in /tmp /run /var/run "$HOME"; do
+            [ -d "$search_root" ] || continue
+            find "$search_root" -maxdepth 5 -type s -name ctl -print 2>/dev/null | sed 's#/ctl$##'
+        done
     } | awk 'NF && !seen[$0]++'
 )
-if [ -z "$candidates" ]; then
-    echo 'vde2-bastion-probe: no VDE control socket candidate found'
-    exit 3
-fi
-echo 'vde2-bastion-probe: VDE control candidates:'
-printf '%s\n' "$candidates"
-if ! command -v vde_plug >/dev/null 2>&1; then
-    echo 'vde2-bastion-probe: vde_plug is unavailable on bastion'
-    exit 4
-fi
 attached=0
-for socket_dir in $candidates; do
-    vde_plug "vde://$socket_dir" </dev/null >/dev/null 2>&1 &
-    plug_pid=$!
-    sleep 1
-    if kill -0 "$plug_pid" 2>/dev/null; then
-        echo "vde2-bastion-probe: attach pass socket=$socket_dir"
-        attached=1
-        kill "$plug_pid" 2>/dev/null || true
-        wait "$plug_pid" 2>/dev/null || true
-    else
-        if wait "$plug_pid"; then
-            echo "vde2-bastion-probe: attach pass socket=$socket_dir"
-            attached=1
-        else
-            echo "vde2-bastion-probe: attach fail socket=$socket_dir"
-        fi
+if [ -n "$candidates" ]; then
+    echo 'vde2-bastion-probe: VDE control candidates:'
+    printf '%s\n' "$candidates"
+    if [ "$have_plug" -eq 1 ]; then
+        for socket_dir in $candidates; do
+            vde_plug "vde://$socket_dir" </dev/null >/dev/null 2>&1 &
+            plug_pid=$!
+            sleep 1
+            if kill -0 "$plug_pid" 2>/dev/null; then
+                echo "vde2-bastion-probe: attach pass socket=$socket_dir"
+                attached=1
+                kill "$plug_pid" 2>/dev/null || true
+                wait "$plug_pid" 2>/dev/null || true
+            else
+                if wait "$plug_pid"; then
+                    echo "vde2-bastion-probe: attach pass socket=$socket_dir"
+                    attached=1
+                else
+                    echo "vde2-bastion-probe: attach fail socket=$socket_dir"
+                fi
+            fi
+        done
     fi
+else
+    echo 'vde2-bastion-probe: no existing VDE control socket candidate found'
+fi
+if [ "$attached" -eq 1 ]; then
+    exit 0
+fi
+[ "$have_switch" -eq 1 ] || exit 6
+[ "$have_plug" -eq 1 ] || exit 4
+
+probe_root=$(mktemp -d /tmp/dniv-vde-bastion-switch.XXXXXX)
+probe_sock="$probe_root/switch.ctl"
+switch_pid=
+plug_pid=
+cleanup_probe_switch() {
+    set +e
+    [ -z "${plug_pid:-}" ] || kill "$plug_pid" 2>/dev/null || true
+    [ -z "${plug_pid:-}" ] || wait "$plug_pid" 2>/dev/null || true
+    [ -z "${switch_pid:-}" ] || kill "$switch_pid" 2>/dev/null || true
+    [ -z "${switch_pid:-}" ] || wait "$switch_pid" 2>/dev/null || true
+    rm -rf "$probe_root"
+}
+trap cleanup_probe_switch EXIT HUP INT TERM
+vde_switch -sock "$probe_sock" >/dev/null 2>&1 &
+switch_pid=$!
+for _ in $(seq 1 50); do
+    [ -S "$probe_sock/ctl" ] && break
+    kill -0 "$switch_pid" 2>/dev/null || break
+    sleep 0.1
 done
-[ "$attached" -eq 1 ] || exit 5
+if [ ! -S "$probe_sock/ctl" ]; then
+    echo 'vde2-bastion-probe: ephemeral vde_switch could not create a control socket'
+    exit 7
+fi
+vde_plug "vde://$probe_sock" </dev/null >/dev/null 2>&1 &
+plug_pid=$!
+sleep 1
+if kill -0 "$plug_pid" 2>/dev/null; then
+    echo 'vde2-bastion-probe: ephemeral switch create/attach pass'
+    exit 0
+fi
+if wait "$plug_pid"; then
+    plug_pid=
+    echo 'vde2-bastion-probe: ephemeral switch create/attach pass'
+    exit 0
+fi
+plug_pid=
+echo 'vde2-bastion-probe: ephemeral switch attach failed'
+exit 8
 EOF_REMOTE
