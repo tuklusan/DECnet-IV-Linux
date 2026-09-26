@@ -486,13 +486,19 @@ fi
 
 local_sock="$work/client.ctl"
 start_switch "$local_sock"
+bridge_bootstrap_fallback=1
 
 start_bridge() {
+    : >"$proxy_err"
     setsid vde_plug -- "vde://$local_sock" = "$bridge_ssh" \
         >>"$work/bridge.log" 2>&1 &
     bridge_pid=$!
     sleep 1
     kill -0 "$bridge_pid" 2>/dev/null || {
+        if (( bridge_bootstrap_fallback )) && is_outer_connect_timeout "$proxy_err"; then
+            echo "vde2-cross: bridge bootstrap outer bastion connection timed out" >&2
+            exit 75
+        fi
         cat "$work/bridge.log" >&2 || true
         echo "vde2-cross: VDE-over-SSH bridge did not start" >&2
         exit 1
@@ -511,17 +517,26 @@ wait_bridge_frame() {
             return 0
         fi
         kill -0 "$bridge_pid" 2>/dev/null || {
+            if (( bridge_bootstrap_fallback )) && is_outer_connect_timeout "$proxy_err"; then
+                echo "vde2-cross: bridge bootstrap outer bastion connection timed out" >&2
+                return 75
+            fi
             cat "$work/bridge.log" >&2 || true
             echo "vde2-cross: VDE-over-SSH bridge exited during frame readiness" >&2
             return 1
         }
         sleep 1
     done
+    if (( bridge_bootstrap_fallback )) && is_outer_connect_timeout "$proxy_err"; then
+        echo "vde2-cross: bridge bootstrap outer bastion connection timed out" >&2
+        return 75
+    fi
     echo "vde2-cross: VDE-over-SSH bridge did not become frame-ready" >&2
     return 1
 }
 start_bridge
 wait_bridge_frame 1
+bridge_bootstrap_fallback=0
 
 git init -q "$work/pydecnet"
 git -C "$work/pydecnet" remote add origin https://github.com/tuklusan/pydecnet.git
