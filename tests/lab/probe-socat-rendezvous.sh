@@ -74,7 +74,7 @@ cmd = ["ssh", "-F", cfg, "dniv-bastion",
 p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                      stderr=subprocess.PIPE, text=True, bufsize=1)
 try:
-    p.stdin.write(f"DNIV-SOCAT-SERVER {run_id}\\n")
+    p.stdin.write(f"DNIV-SOCAT-SERVER {run_id}\n")
     p.stdin.flush()
     r, _, _ = select.select([p.stdout], [], [], 75)
     if not r:
@@ -84,7 +84,7 @@ try:
         if err:
             detail += f" stderr={err}"
         raise SystemExit("socat-rendezvous: server timed out waiting for client marker" + detail)
-    line = p.stdout.readline().rstrip("\\n")
+    line = p.stdout.readline().rstrip("\n")
     if line != f"DNIV-SOCAT-CLIENT {run_id}":
         rc = p.poll()
         err = p.stderr.read().strip() if rc is not None else ""
@@ -123,11 +123,11 @@ for attempt in range(2):
     p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                          stderr=subprocess.PIPE, text=True, bufsize=1)
     try:
-        p.stdin.write(f"DNIV-SOCAT-CLIENT {run_id}\\n")
+        p.stdin.write(f"DNIV-SOCAT-CLIENT {run_id}\n")
         p.stdin.flush()
         r, _, _ = select.select([p.stdout], [], [], 20)
         if r:
-            line = p.stdout.readline().rstrip("\\n")
+            line = p.stdout.readline().rstrip("\n")
             if line == f"DNIV-SOCAT-SERVER {run_id}":
                 print("socat-rendezvous: client pass")
                 raise SystemExit(0)

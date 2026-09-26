@@ -1438,3 +1438,6 @@ Full acceptance on exact candidate `7511061bc0608e544b26bcc38eb25e6c041ec315` wa
 
 
 Cross-runner run `36239303917` on exact candidate `a4a967324fc2bebfef80abab42e1f3196866b346` showed the first socat rendezvous probe was still opening several short-lived bastion SSH sessions for capability checks, cleanup and socket-readiness polling; the server-side probe exited with SSH status 255 before the marked-byte exchange. The probe now uses one persistent outer SSH connection per runner for the actual socat UNIX-socket rendezvous, with no remote readiness polling and only one bounded client retry after a fixed server-start interval. Diagnostic stderr is emitted only on failure and contains no secret values. Candidate DECnet behavior is unchanged. Next: exact-SHA fast acceptance, then full acceptance; require marked-byte exchange through socat before converting the VDE transport to this rendezvous.
+
+
+Pre-acceptance review of the single-connection socat probe found that the embedded Python marker strings contained a literal backslash-n instead of a newline, which could block `readline()` despite successful byte transport. The marker writes and reads are corrected before any acceptance claim is made. Candidate DECnet behavior is unchanged. Next: exact-SHA fast acceptance, then full acceptance of the socat rendezvous probe.
