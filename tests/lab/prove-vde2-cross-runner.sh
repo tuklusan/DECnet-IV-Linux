@@ -446,13 +446,19 @@ PY
 start_client_forward() {
     local forward_ready=0
     local master_ready=0
+    local forward_requested=0
+    local failure_stage=master
+    local forward_err="$work/client-forward-request.err"
     for _ in $(seq 1 6); do
         rm -f "$client_control"
         : >"$client_forward_log"
+        : >"$forward_err"
         ssh -E "$client_forward_log" -F "$ssh_config" -MN \
             -o ControlMaster=yes -o ControlPath="$client_control" -o ControlPersist=no dniv-bastion &
         client_forward_pid=$!
         master_ready=0
+        forward_requested=0
+        failure_stage=master
         for _ in $(seq 1 16); do
             if ! kill -0 "$client_forward_pid" 2>/dev/null; then
                 break
@@ -464,9 +470,12 @@ start_client_forward() {
             sleep 0.5
         done
         if (( master_ready )); then
+            failure_stage=forward-request
             if ssh -F "$ssh_config" -S "$client_control" -O forward \
                 -L "127.0.0.1:${local_forward_port}:127.0.0.1:${DNIV_VDE_REVERSE_PORT}" \
-                dniv-bastion >/dev/null 2>&1; then
+                dniv-bastion >/dev/null 2>"$forward_err"; then
+                forward_requested=1
+                failure_stage=forward-banner
                 for _ in $(seq 1 16); do
                     if ! kill -0 "$client_forward_pid" 2>/dev/null; then
                         break
@@ -490,7 +499,14 @@ start_client_forward() {
             echo "vde2-cross: persistent bastion connection timed out" >&2
             return 75
         fi
-        echo "vde2-cross: persistent bastion transport bootstrap failed; using alternate runner" >&2
+        if [[ "$failure_stage" == forward-request ]]; then
+            if grep -qiE 'address already in use|cannot listen|bind.*failed' "$forward_err"; then
+                failure_stage=local-listen
+            elif grep -qiE 'administratively prohibited|forwarding disabled|not permitted' "$forward_err"; then
+                failure_stage=forward-denied
+            fi
+        fi
+        echo "vde2-cross: persistent bastion transport bootstrap failed stage=$failure_stage; using alternate runner" >&2
         return 75
     fi
 }
