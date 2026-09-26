@@ -375,17 +375,26 @@ start_switch "$local_sock"
 bridge_generation=0
 
 start_bridge() {
-    local attempt rc log
+    local attempt rc log ready_seen
     bridge_generation=$((bridge_generation + 1))
     for attempt in $(seq 1 8); do
         log="$work/client-bridge-${bridge_generation}-${attempt}.log"
         : >"$log"
         "$dpipe_bin" "$vde_plug_bin" "$local_sock" = \
-            ssh -F "$ssh_config" dniv-bastion socat \
-            "UNIX-CONNECT:$relay_sock" STDIO >>"$log" 2>&1 &
+            ssh -F "$ssh_config" dniv-bastion \
+            "for _ in \$(seq 1 75); do if [ -S '$relay_sock' ]; then echo DNIV_RELAY_READY >&2; exec socat 'UNIX-CONNECT:$relay_sock' STDIO; fi; sleep 1; done; echo DNIV_RELAY_TIMEOUT >&2; exit 111" \
+            >>"$log" 2>&1 &
         bridge_pid=$!
-        sleep 1
-        if kill -0 "$bridge_pid" 2>/dev/null; then
+        ready_seen=0
+        for _ in $(seq 1 90); do
+            if grep -Fxq 'DNIV_RELAY_READY' "$log"; then
+                ready_seen=1
+                break
+            fi
+            kill -0 "$bridge_pid" 2>/dev/null || break
+            sleep 1
+        done
+        if (( ready_seen == 1 )) && kill -0 "$bridge_pid" 2>/dev/null; then
             current_bridge_log=$log
             return 0
         fi
@@ -402,6 +411,11 @@ start_bridge() {
         if grep -Eqi 'Permission denied|Authentication failed|Host key verification failed|REMOTE HOST IDENTIFICATION HAS CHANGED' "$log"; then
             cat "$log" >&2 || true
             echo "vde2-cross: direct socat bridge SSH authentication/verification failed" >&2
+            return 1
+        fi
+        if grep -Fxq 'DNIV_RELAY_TIMEOUT' "$log"; then
+            cat "$log" >&2 || true
+            echo "vde2-cross: server socat relay did not become ready" >&2
             return 1
         fi
         sleep 2
