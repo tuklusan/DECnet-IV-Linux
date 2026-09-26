@@ -492,8 +492,24 @@ stop_bridge() {
         bridge_pid=
     fi
 }
+wait_bridge_frame() {
+    local token=$1
+    for _ in $(seq 1 3); do
+        if "$work/vde-frame-echo" client "vde://$local_sock" "$token" >/dev/null; then
+            return 0
+        fi
+        kill -0 "$bridge_pid" 2>/dev/null || {
+            cat "$work/bridge.log" >&2 || true
+            echo "vde2-cross: VDE-over-SSH bridge exited during frame readiness" >&2
+            return 1
+        }
+        sleep 1
+    done
+    echo "vde2-cross: VDE-over-SSH bridge did not become frame-ready" >&2
+    return 1
+}
 start_bridge
-"$work/vde-frame-echo" client "vde://$local_sock" 1 >/dev/null
+wait_bridge_frame 1
 
 git init -q "$work/pydecnet"
 git -C "$work/pydecnet" remote add origin https://github.com/tuklusan/pydecnet.git
