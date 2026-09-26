@@ -27,4 +27,4 @@ This is the stable resume entry point for DECnet-IV-Linux.
 
 Repository files are authoritative. Do not reconstruct current state from chat history or stale workflow runs.
 
-Phase 7 is complete. Resume Phase 8 from the final `Next action` entries in `docs/PROJECT_STATE.md` and `scratch/RESUME.md`; repository state remains authoritative.
+Phase 8 is complete on exact fully green candidate `9b73e61bbd0f95b82410276f7b5dc3db94e219ba`. Resume Phase 9 from the final `Next action` entries in `docs/PROJECT_STATE.md` and `scratch/RESUME.md`; repository state remains authoritative.

@@ -28,6 +28,9 @@ on:
           - e2
           - e3
           - e4
+          - scale4
+          - scale8
+          - scale16
       parent_run_id:
         description: Parent acceptance workflow run ID; blank for direct dispatch
         required: false
@@ -221,6 +224,15 @@ jobs:
               tee "$DNIV_SCRATCH_DIR/two-node.log"
           elif [[ "${DNIV_LAB_MODE}" == e4 ]]; then
             python3 tests/lab/dniv_e4.py "$DNIV_LAB_BASE" "$DNIV_LAB_KERNEL" "$DNIV_LAB_INITRD" 2>&1 | \
+              tee "$DNIV_SCRATCH_DIR/two-node.log"
+          elif [[ "${DNIV_LAB_MODE}" == scale4 ]]; then
+            python3 tests/lab/dniv_scale.py "$DNIV_LAB_BASE" "$DNIV_LAB_KERNEL" "$DNIV_LAB_INITRD" --nodes 4 2>&1 | \
+              tee "$DNIV_SCRATCH_DIR/two-node.log"
+          elif [[ "${DNIV_LAB_MODE}" == scale8 ]]; then
+            python3 tests/lab/dniv_scale.py "$DNIV_LAB_BASE" "$DNIV_LAB_KERNEL" "$DNIV_LAB_INITRD" --nodes 8 2>&1 | \
+              tee "$DNIV_SCRATCH_DIR/two-node.log"
+          elif [[ "${DNIV_LAB_MODE}" == scale16 ]]; then
+            python3 tests/lab/dniv_scale.py "$DNIV_LAB_BASE" "$DNIV_LAB_KERNEL" "$DNIV_LAB_INITRD" --nodes 16 2>&1 | \
               tee "$DNIV_SCRATCH_DIR/two-node.log"
           else
             python3 tests/lab/dniv_lab.py "$DNIV_LAB_BASE" "$DNIV_LAB_KERNEL" "$DNIV_LAB_INITRD" 2>&1 | \

@@ -103,3 +103,5 @@ Status: complete on exact candidate `9b73e61bbd0f95b82410276f7b5dc3db94e219ba`. 
 Deliver 4/8/16-node routed topologies across one or more runners, both CPU architectures and mixed directions, maintained distro portability, HECnet and real DEC peers, physical mixed-CPU testing, self-booting QCOW2/RAW images, checksums and reproducible manifests.
 
 Exit criteria: the release candidate passes `docs/PRE_PRODUCTION_TEST.md`, including all applicable external conformance, virtual/distributed topology, VDE2/MULTINET transport, positive/negative, stress/endurance, false-green, real-peer and upgrade/rollback gates.
+
+Status: active. Phase 8 closed fully green on `9b73e61bbd0f95b82410276f7b5dc3db94e219ba`. The first Phase 9 increment adds an exact-candidate 4/8/16 routed-scale controller and promotes the 4-node x86_64/aarch64 topology into full acceptance; 8/16-node promotion follows only after the 4-node gate is green.

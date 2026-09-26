@@ -347,6 +347,12 @@ jobs:
             done
           fi
 
+          if [[ "$profile" == full ]]; then
+            printf 'VM_SCALE_4=vm-lab.yml:scale4\n' >> "$DNIV_SCRATCH_DIR/dispatch.env"
+            dispatch_and_record VM_SCALE_4 vm-lab.yml \
+              -f lab_mode=scale4 -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
+          fi
+
           dispatch_and_record INTEROP interop.yml \
             -f profile="$profile" -f scope="$scope" \
             -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
