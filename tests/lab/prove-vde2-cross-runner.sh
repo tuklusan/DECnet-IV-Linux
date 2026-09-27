@@ -382,7 +382,7 @@ start_bridge() {
         : >"$log"
         "$dpipe_bin" "$vde_plug_bin" "$local_sock" = \
             ssh -F "$ssh_config" dniv-bastion \
-            "for _ in \$(seq 1 75); do if [ -S '$relay_sock' ]; then echo DNIV_RELAY_READY >&2; exec socat 'UNIX-CONNECT:$relay_sock' STDIO; fi; sleep 1; done; echo DNIV_RELAY_TIMEOUT >&2; exit 111" \
+            "for _ in \$(seq 1 300); do if [ -S '$relay_sock' ]; then echo DNIV_RELAY_READY >&2; exec socat 'UNIX-CONNECT:$relay_sock' STDIO; fi; sleep 1; done; echo DNIV_RELAY_TIMEOUT >&2; exit 111" \
             >>"$log" 2>&1 &
         bridge_pid=$!
         ready_seen=0
