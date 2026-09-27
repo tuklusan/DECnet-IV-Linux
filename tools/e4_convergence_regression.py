@@ -50,6 +50,9 @@ required_scale = (
     'scale-16: 16 simultaneous independent guests live',
     'lab.pause(a)',
     'lab.resume(endpoint)',
+    'DNIV_SCALE_CMA_ZERO',
+    'virtio-balloon-pci,id=balloon0',
+    'lab.balloon(a, balloon_target)',
 )
 for marker in required_scale:
     if marker not in SCALE:

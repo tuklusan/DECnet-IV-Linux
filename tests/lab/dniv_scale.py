@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import os
 from pathlib import Path
 import platform
@@ -165,6 +166,9 @@ class Lab:
             f"dniv.session={self.session} dniv.peer={guest.peer_mac} "
             f"dniv.peer_node={guest.peer_node} dniv.dest_node={guest.dest_node}"
         )
+        if (self.arch == "aarch64" and
+                os.environ.get("DNIV_SCALE_CMA_ZERO") == "1"):
+            cmdline += " cma=0"
         if guest.hold_after_pass:
             cmdline += " dniv.hold_after_pass=1"
         if guest.probe_count:
@@ -192,7 +196,8 @@ class Lab:
             cmd += ["-netdev",
                     f"tap,id=lan{index},ifname={tap},script=no,downscript=no",
                     "-device", f"virtio-net-pci,netdev=lan{index},mac={mac}"]
-        cmd += ["-qmp", f"unix:{guest.qmp},server=on,wait=off",
+        cmd += ["-device", "virtio-balloon-pci,id=balloon0",
+                "-qmp", f"unix:{guest.qmp},server=on,wait=off",
                 "-display", "none", "-monitor", "none",
                 "-serial", f"file:{guest.log}", "-no-reboot"]
         return cmd
@@ -201,23 +206,64 @@ class Lab:
         guest.process = subprocess.Popen(self.command(guest))
         self.guests.append(guest)
 
-    def qmp_execute(self, guest: Guest, command: str) -> None:
+    def qmp_execute(self, guest: Guest, command: str,
+                    arguments: dict[str, int] | None = None) -> dict:
         if not guest.process or guest.process.poll() is not None:
             raise RuntimeError(f"scale QMP target is not live: {guest.name}")
+
+        def receive(stream) -> dict:
+            while True:
+                raw = stream.readline()
+                if not raw:
+                    raise RuntimeError(f"scale QMP closed for {guest.name}")
+                message = json.loads(raw.decode())
+                if "return" in message or "error" in message:
+                    return message
+
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
-            sock.settimeout(1)
+            sock.settimeout(2)
             sock.connect(str(guest.qmp))
-            sock.recv(65536)
-            sock.sendall(b'{"execute":"qmp_capabilities"}\r\n')
-            sock.recv(65536)
-            sock.sendall((f'{{"execute":"{command}"}}\r\n').encode())
-            sock.recv(65536)
+            stream = sock.makefile("rwb", buffering=0)
+            greeting = json.loads(stream.readline().decode())
+            if "QMP" not in greeting:
+                raise RuntimeError(f"scale QMP greeting missing for {guest.name}")
+            stream.write(b'{"execute":"qmp_capabilities"}\r\n')
+            caps = receive(stream)
+            if "error" in caps:
+                raise RuntimeError(f"scale QMP capabilities failed for {guest.name}: {caps}")
+            request: dict[str, object] = {"execute": command}
+            if arguments:
+                request["arguments"] = arguments
+            stream.write((json.dumps(request) + "\r\n").encode())
+            response = receive(stream)
+            if "error" in response:
+                raise RuntimeError(
+                    f"scale QMP {command} failed for {guest.name}: {response}")
+            result = response.get("return")
+            return result if isinstance(result, dict) else {}
 
     def pause(self, guest: Guest) -> None:
         self.qmp_execute(guest, "stop")
 
     def resume(self, guest: Guest) -> None:
         self.qmp_execute(guest, "cont")
+
+    def balloon(self, guest: Guest, target_mb: int) -> None:
+        target = target_mb * 1024 * 1024
+        self.qmp_execute(guest, "balloon", {"value": target})
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            result = self.qmp_execute(guest, "query-balloon")
+            actual = int(result.get("actual", 0))
+            if actual and actual <= target + (16 * 1024 * 1024):
+                print(
+                    f"scale-16: ballooned {guest.name} "
+                    f"actual={actual // (1024 * 1024)}MiB")
+                return
+            time.sleep(0.5)
+        raise RuntimeError(
+            f"scale-16 balloon did not converge for {guest.name} "
+            f"target={target_mb}MiB")
 
     def stop(self, guest: Guest) -> None:
         if not guest.process or guest.process.poll() is not None:
@@ -337,6 +383,8 @@ def run_multi_area(args: argparse.Namespace, work: Path, session: str,
         os.environ["DNIV_SCALE_GUEST_MB"] = (
             "352" if platform.machine() == "aarch64" else "256"
         )
+    if args.nodes == 16 and platform.machine() == "aarch64":
+        os.environ.setdefault("DNIV_SCALE_CMA_ZERO", "1")
     suffix = hashlib.sha256(session.encode()).hexdigest()[:4]
     lab = Lab(args.base, args.kernel, args.initrd, work, session, 3)
     l1a_mac = decnet_mac(31, 72)
@@ -406,6 +454,9 @@ def run_multi_area(args: argparse.Namespace, work: Path, session: str,
                     [a, b], "DNIV-E4-PASS", session, min(timeout, 450),
                     routers + started_endpoints)
                 started_endpoints.extend([a, b])
+                balloon_target = 224 if lab.arch == "aarch64" else 192
+                lab.balloon(a, balloon_target)
+                lab.balloon(b, balloon_target)
                 lab.pause(a)
                 lab.pause(b)
             for endpoint in started_endpoints:
