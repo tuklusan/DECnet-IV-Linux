@@ -182,8 +182,10 @@ done
 
 run_id=${GITHUB_RUN_ID:-manual}
 run_id=${run_id//[^A-Za-z0-9_.-]/_}
-server_sock="/tmp/dniv-vde-cross-${run_id}.ctl"
-relay_sock="/tmp/dniv-vde-relay-${run_id}.sock"
+run_attempt=${GITHUB_RUN_ATTEMPT:-1}
+run_attempt=${run_attempt//[^A-Za-z0-9_.-]/_}
+server_sock="/tmp/dniv-vde-cross-${run_id}-${run_attempt}.ctl"
+relay_sock="/tmp/dniv-vde-relay-${run_id}-${run_attempt}.sock"
 work=$(mktemp -d /tmp/dniv-vde-cross.XXXXXX)
 key_file="$work/bastion.key"
 known_hosts="$work/known_hosts"
