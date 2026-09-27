@@ -36,29 +36,53 @@ jobs:
   portability:
     strategy:
       fail-fast: false
-      max-parallel: 4
+      max-parallel: 8
       matrix:
         include:
           - runner: ubuntu-24.04
             arch: amd64
             distro: debian13
             image: debian:13
+            compiler: gcc
+          - runner: ubuntu-24.04
+            arch: amd64
+            distro: debian13
+            image: debian:13
+            compiler: clang
           - runner: ubuntu-24.04-arm
             arch: arm64
             distro: debian13
             image: debian:13
+            compiler: gcc
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+            distro: debian13
+            image: debian:13
+            compiler: clang
           - runner: ubuntu-24.04
             arch: amd64
             distro: fedora42
             image: fedora:42
+            compiler: gcc
+          - runner: ubuntu-24.04
+            arch: amd64
+            distro: fedora42
+            image: fedora:42
+            compiler: clang
           - runner: ubuntu-24.04-arm
             arch: arm64
             distro: fedora42
             image: fedora:42
+            compiler: gcc
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+            distro: fedora42
+            image: fedora:42
+            compiler: clang
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     env:
-      DNIV_SCRATCH_DIR: ${{ github.workspace }}/scratch/runtime/${{ github.run_id }}/${{ github.run_attempt }}/portability-${{ matrix.distro }}-${{ matrix.arch }}
+      DNIV_SCRATCH_DIR: ${{ github.workspace }}/scratch/runtime/${{ github.run_id }}/${{ github.run_attempt }}/portability-${{ matrix.distro }}-${{ matrix.arch }}-${{ matrix.compiler }}
     steps:
       - name: Check out exact repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -73,8 +97,8 @@ jobs:
           candidate=$(git rev-parse HEAD)
           if [[ -n '${{ inputs.expected_sha }}' ]]; then test "$candidate" = '${{ inputs.expected_sha }}'; fi
           python3 tools/scratch_state.py init --dir "$DNIV_SCRATCH_DIR" \
-            --workflow portability --job "${{ matrix.distro }}" --arch '${{ matrix.arch }}' \
-            --mode '${{ matrix.distro }}' --source-sha "$candidate" \
+            --workflow portability --job "${{ matrix.distro }}-${{ matrix.compiler }}" --arch '${{ matrix.arch }}' \
+            --mode '${{ matrix.distro }}-${{ matrix.compiler }}' --source-sha "$candidate" \
             --parent-run-id '${{ inputs.parent_run_id }}' --expected-sha '${{ inputs.expected_sha }}'
           tools/workflow_guard.sh "$DNIV_SCRATCH_DIR" "$candidate" main
 
@@ -85,24 +109,27 @@ jobs:
           image='${{ matrix.image }}'
           distro='${{ matrix.distro }}'
           arch='${{ matrix.arch }}'
+          compiler='${{ matrix.compiler }}'
           docker pull "$image"
           docker run --rm \
-            -e DNIV_DISTRO="$distro" -e DNIV_ARCH="$arch" \
+            -e DNIV_DISTRO="$distro" -e DNIV_ARCH="$arch" -e DNIV_COMPILER="$compiler" \
             -v "$PWD:/src" -w /src "$image" bash -ceu '
               if [[ "$DNIV_DISTRO" == debian13 ]]; then
                 export DEBIAN_FRONTEND=noninteractive
                 apt-get update
                 if [[ "$DNIV_ARCH" == amd64 ]]; then kh=linux-headers-amd64; else kh=linux-headers-arm64; fi
-                apt-get install -y build-essential python3 "$kh"
+                apt-get install -y build-essential clang python3 "$kh"
                 KDIR=$(find /usr/src -maxdepth 1 -type d -name "linux-headers-*" ! -name "*-common" | sort -V | tail -1)
               else
-                dnf -y install gcc make python3 kernel-devel findutils
+                dnf -y install gcc clang make python3 kernel-devel findutils
                 KDIR=$(find /usr/src/kernels -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
               fi
               test -n "$KDIR"
+              case "$DNIV_COMPILER" in gcc) cc=gcc ;; clang) cc=clang ;; *) exit 2 ;; esac
+              "$cc" --version | head -1
               make clean KDIR="$KDIR" >/dev/null 2>&1 || true
-              make all
-              make kernel KDIR="$KDIR"
+              make all CC="$cc"
+              make kernel KDIR="$KDIR" CC="$cc"
             ' 2>&1 | tee "$DNIV_SCRATCH_DIR/portability.log"
 
       - name: Verify exact tree
@@ -118,7 +145,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: scratch-portability-${{ matrix.distro }}-${{ matrix.arch }}-${{ github.run_id }}
+          name: scratch-portability-${{ matrix.distro }}-${{ matrix.arch }}-${{ matrix.compiler }}-${{ github.run_id }}
           path: ${{ env.DNIV_SCRATCH_DIR }}/
           if-no-files-found: warn
           retention-days: 30
