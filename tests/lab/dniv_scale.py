@@ -408,8 +408,8 @@ def run_multi_area(args: argparse.Namespace, work: Path, session: str,
 
     side_a: list[Guest] = []
     side_b: list[Guest] = []
-    hold_endpoints = args.nodes == 16
-    endpoint_probes = 30 if hold_endpoints else 0
+    hold_endpoints = args.nodes >= 8
+    endpoint_probes = 30 if args.nodes == 16 else 0
     for index, node in enumerate(endpoint_nodes):
         side_a.append(guest(
             lab, suffix, f"A31{node}", 31, node, "A", "e4", [(0, index)],
