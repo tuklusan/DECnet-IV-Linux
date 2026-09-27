@@ -48,6 +48,8 @@ required_scale = (
     'endpoint_probes = 30 if hold_endpoints else 0',
     'hold_after_pass=hold_endpoints, probe_count=endpoint_probes',
     'scale-16: 16 simultaneous independent guests live',
+    'lab.pause(a)',
+    'lab.resume(endpoint)',
 )
 for marker in required_scale:
     if marker not in SCALE:

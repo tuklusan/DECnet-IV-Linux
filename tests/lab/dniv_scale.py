@@ -201,18 +201,30 @@ class Lab:
         guest.process = subprocess.Popen(self.command(guest))
         self.guests.append(guest)
 
+    def qmp_execute(self, guest: Guest, command: str) -> None:
+        if not guest.process or guest.process.poll() is not None:
+            raise RuntimeError(f"scale QMP target is not live: {guest.name}")
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+            sock.settimeout(1)
+            sock.connect(str(guest.qmp))
+            sock.recv(65536)
+            sock.sendall(b'{"execute":"qmp_capabilities"}\r\n')
+            sock.recv(65536)
+            sock.sendall((f'{{"execute":"{command}"}}\r\n').encode())
+            sock.recv(65536)
+
+    def pause(self, guest: Guest) -> None:
+        self.qmp_execute(guest, "stop")
+
+    def resume(self, guest: Guest) -> None:
+        self.qmp_execute(guest, "cont")
+
     def stop(self, guest: Guest) -> None:
         if not guest.process or guest.process.poll() is not None:
             return
         try:
-            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
-                sock.settimeout(.5)
-                sock.connect(str(guest.qmp))
-                sock.recv(65536)
-                sock.sendall(b'{"execute":"qmp_capabilities"}\r\n')
-                sock.recv(65536)
-                sock.sendall(b'{"execute":"quit"}\r\n')
-        except OSError:
+            self.qmp_execute(guest, "quit")
+        except (OSError, RuntimeError):
             pass
         try:
             guest.process.wait(timeout=3)
@@ -394,6 +406,11 @@ def run_multi_area(args: argparse.Namespace, work: Path, session: str,
                     [a, b], "DNIV-E4-PASS", session, min(timeout, 300),
                     routers + started_endpoints)
                 started_endpoints.extend([a, b])
+                lab.pause(a)
+                lab.pause(b)
+            for endpoint in started_endpoints:
+                lab.resume(endpoint)
+            time.sleep(2)
             live = routers + started_endpoints
             if len(live) != 16 or any(
                     g.process is None or g.process.poll() is not None for g in live):
