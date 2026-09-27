@@ -109,8 +109,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git clean -fdx
-          tools/workflow_guard.sh "$DNIV_SCRATCH_DIR" "$GITHUB_SHA" main
+          python3 tools/integrity_scan.py --rev "$GITHUB_SHA" --pass-id final \
+            --baseline "$DNIV_SCRATCH_DIR/integrity/pass-1.json" \
+            --output "$DNIV_SCRATCH_DIR/integrity/final.json"
           python3 tools/scratch_state.py verify --dir "$DNIV_SCRATCH_DIR"
 
       - name: Preserve evidence
