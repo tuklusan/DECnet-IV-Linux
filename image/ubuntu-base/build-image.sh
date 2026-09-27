@@ -56,7 +56,11 @@ raw="$work/root.raw"
 mnt="$work/root"
 mkdir -p "$mnt" "$boot_dir" "$(dirname "$output")"
 
+loopdev=
+root_dev=
+esp_dev=
 mounted=0
+esp_mounted=0
 chroot_mounted=0
 cleanup() {
     set +e
@@ -65,8 +69,14 @@ cleanup() {
         sudo umount "$mnt/sys" 2>/dev/null || true
         sudo umount "$mnt/proc" 2>/dev/null || true
     fi
+    if (( esp_mounted )); then
+        sudo umount "$mnt/boot/efi" 2>/dev/null || true
+    fi
     if (( mounted )); then
         sudo umount "$mnt" 2>/dev/null || true
+    fi
+    if [[ -n "${loopdev:-}" ]]; then
+        sudo losetup -d "$loopdev" 2>/dev/null || true
     fi
     rm -rf "$work"
 }
@@ -85,10 +95,32 @@ normalize_ext4() {
     fi
 }
 
+for cmd in parted mkfs.vfat losetup; do
+    command -v "$cmd" >/dev/null || { echo "build-image: missing $cmd" >&2; exit 2; }
+done
 truncate -s "$disk_bytes" "$raw"
-mkfs.ext4 -q -F -E lazy_itable_init=0,lazy_journal_init=0 -L dniv-root "$raw"
-sudo mount -o loop "$raw" "$mnt"
+sudo parted -s "$raw" mklabel gpt
+sudo parted -s "$raw" mkpart ESP fat32 1MiB 65MiB
+sudo parted -s "$raw" set 1 esp on
+sudo parted -s "$raw" mkpart dniv-root ext4 65MiB 100%
+loopdev=$(sudo losetup --find --show --partscan "$raw")
+esp_dev="${loopdev}p1"
+root_dev="${loopdev}p2"
+for _ in $(seq 1 50); do
+    [[ -b "$esp_dev" && -b "$root_dev" ]] && break
+    sleep 0.1
+done
+[[ -b "$esp_dev" && -b "$root_dev" ]] || {
+    echo "build-image: partition devices did not appear" >&2
+    exit 1
+}
+sudo mkfs.vfat -F 32 -n DNIVESP "$esp_dev" >/dev/null
+sudo mkfs.ext4 -q -F -E lazy_itable_init=0,lazy_journal_init=0 -L dniv-root "$root_dev"
+sudo mount "$root_dev" "$mnt"
 mounted=1
+sudo mkdir -p "$mnt/boot/efi"
+sudo mount "$esp_dev" "$mnt/boot/efi"
+esp_mounted=1
 sudo tar --numeric-owner --xattrs --acls -xpf "$base_tar" -C "$mnt"
 
 sudo mkdir -p "$mnt/usr/src/decnet-iv-linux" "$mnt/usr/local/sbin" \
@@ -103,7 +135,7 @@ printf '%s\n' "$source_commit" | \
 
 sudo rm -f "$mnt/etc/resolv.conf"
 sudo cp -L /etc/resolv.conf "$mnt/etc/resolv.conf"
-printf 'LABEL=dniv-root / ext4 defaults 0 1\n' | sudo tee "$mnt/etc/fstab" >/dev/null
+printf 'LABEL=dniv-root / ext4 defaults 0 1\nLABEL=DNIVESP /boot/efi vfat umask=0077 0 2\n' | sudo tee "$mnt/etc/fstab" >/dev/null
 printf 'dniv\n' | sudo tee "$mnt/etc/hostname" >/dev/null
 
 sudo mount -t proc proc "$mnt/proc"
@@ -129,8 +161,14 @@ apt-get -o Acquire::https::Verify-Peer=false --snapshot "$UBUNTU_APT_SNAPSHOT" u
 apt-get -o Acquire::https::Verify-Peer=false --snapshot "$UBUNTU_APT_SNAPSHOT" install -y --no-install-recommends ca-certificates
 update-ca-certificates --fresh
 apt-get --snapshot "$UBUNTU_APT_SNAPSHOT" update
+arch=$(dpkg --print-architecture)
+case "$arch" in
+    amd64) grub_pkg=grub-efi-amd64-bin; grub_target=x86_64-efi ;;
+    arm64) grub_pkg=grub-efi-arm64-bin; grub_target=arm64-efi ;;
+    *) echo "unsupported guest architecture for EFI boot: $arch" >&2; exit 2 ;;
+esac
 apt-get --snapshot "$UBUNTU_APT_SNAPSHOT" install -y --no-install-recommends \
-    systemd-sysv kmod iproute2 build-essential initramfs-tools \
+    systemd-sysv kmod iproute2 build-essential initramfs-tools grub2-common "$grub_pkg" \
     linux-image-virtual-hwe-26.04 linux-headers-virtual-hwe-26.04
 krel=$(ls -1 /lib/modules | sort -V | tail -1)
 test -n "$krel"
@@ -143,6 +181,8 @@ make -C /usr/src/decnet-iv-linux/kernel/decnet KDIR="/lib/modules/$krel/build" c
 install -D -m 0644 /usr/src/decnet-iv-linux/kernel/decnet/decnet_iv.ko \
     "/lib/modules/$krel/extra/decnet_iv.ko"
 depmod "$krel"
+grub-install --target="$grub_target" --efi-directory=/boot/efi --boot-directory=/boot \
+    --removable --no-nvram
 apt-get purge -y build-essential linux-headers-virtual-hwe-26.04 || true
 apt-get autoremove -y --purge || true
 apt-get clean
@@ -159,6 +199,46 @@ sudo touch "$mnt/etc/machine-id"
 # disposable. Removing it makes canonical guest-content manifests compare the
 # durable release filesystem rather than a runtime cache that ldconfig rebuilds.
 sudo rm -f "$mnt/var/cache/ldconfig/aux-cache"
+
+if [[ "$arch" == amd64 ]]; then
+    serial_console=ttyS0
+else
+    serial_console=ttyAMA0
+fi
+krel=$(ls -1 "$mnt/lib/modules" | sort -V | tail -1)
+sudo mkdir -p "$mnt/boot/grub"
+sudo tee "$mnt/boot/grub/grub.cfg" >/dev/null <<EOF_GRUB
+set timeout=0
+set default=0
+search --no-floppy --label dniv-root --set=root
+menuentry 'DECnet-IV-Linux' {
+    linux /boot/vmlinuz-$krel root=LABEL=dniv-root ro console=$serial_console,115200
+    initrd /boot/initrd.img-$krel
+}
+EOF_GRUB
+
+sudo tee "$mnt/usr/local/sbin/dniv-release-boot-check" >/dev/null <<'EOF_BOOT_CHECK'
+#!/bin/sh
+set -eu
+source_sha=$(cat /usr/src/decnet-iv-linux/.source-commit)
+printf 'DNIV_RELEASE_BOOT_PASS source=%s\n' "$source_sha"
+EOF_BOOT_CHECK
+sudo chmod 0755 "$mnt/usr/local/sbin/dniv-release-boot-check"
+sudo tee "$mnt/etc/systemd/system/dniv-release-boot.service" >/dev/null <<'EOF_BOOT_UNIT'
+[Unit]
+Description=DECnet-IV-Linux release image boot identity
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/dniv-release-boot-check
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target
+EOF_BOOT_UNIT
+sudo systemctl --root="$mnt" enable dniv-release-boot.service >/dev/null
 
 smoke_script_source="$mnt/usr/src/decnet-iv-linux/tests/lab/dniv-smoke.sh"
 smoke_unit_source="$mnt/usr/src/decnet-iv-linux/tests/lab/dniv-smoke.service"
@@ -206,9 +286,13 @@ sudo umount -R "$mnt/dev"
 sudo umount "$mnt/sys"
 sudo umount "$mnt/proc"
 chroot_mounted=0
+sudo umount "$mnt/boot/efi"
+esp_mounted=0
 sudo umount "$mnt"
 mounted=0
-normalize_ext4 "$raw"
+normalize_ext4 "$root_dev"
+sudo losetup -d "$loopdev"
+loopdev=
 
 # Acceptance correctness wins over file-size optimization. Keep the image
 # uncompressed, validate qcow2 structure, then compare guest-visible logical

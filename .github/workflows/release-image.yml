@@ -40,8 +40,14 @@ jobs:
         include:
           - runner: ubuntu-24.04
             arch: amd64
+            qemu: qemu-system-x86_64
+            firmware_pkg: ovmf
+            firmware: /usr/share/OVMF/OVMF_CODE.fd
           - runner: ubuntu-24.04-arm
             arch: arm64
+            qemu: qemu-system-aarch64
+            firmware_pkg: qemu-efi-aarch64
+            firmware: /usr/share/AAVMF/AAVMF_CODE.fd
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 75
     env:
@@ -52,6 +58,7 @@ jobs:
         with:
           ref: ${{ inputs.expected_sha || github.sha }}
           fetch-depth: 0
+          lfs: true
 
       - name: Initialize exact candidate
         shell: bash
@@ -70,7 +77,8 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y qemu-utils e2fsprogs curl zstd
+          sudo apt-get install -y qemu-utils e2fsprogs curl zstd parted dosfstools \
+            ${{ matrix.qemu }} ${{ matrix.firmware_pkg }}
 
       - name: Download pinned Ubuntu Base
         shell: bash
@@ -123,6 +131,33 @@ jobs:
           printf 'source_sha=%s\narch=%s\nbase=%s\n' "$(git rev-parse HEAD)" '${{ matrix.arch }}' "$(basename "$DNIV_BASE_TARBALL")" \
             > "$DNIV_SCRATCH_DIR/release/build.env"
 
+      - name: Boot exact self-contained release image
+        shell: bash
+        run: |
+          set -euo pipefail
+          firmware='${{ matrix.firmware }}'
+          test -r "$firmware"
+          log="$DNIV_SCRATCH_DIR/release/firmware-boot.log"
+          if [[ '${{ matrix.arch }}' == amd64 ]]; then
+            timeout -k 5 180 qemu-system-x86_64 \
+              -machine q35 -accel tcg -m 768 -nographic -monitor none \
+              -bios "$firmware" \
+              -drive file="$RUNNER_TEMP/release-a/dniv.qcow2",format=qcow2,if=virtio \
+              -net none >"$log" 2>&1 || rc=$?
+          else
+            timeout -k 5 240 qemu-system-aarch64 \
+              -machine virt -cpu max -accel tcg -m 1024 -nographic -monitor none \
+              -bios "$firmware" \
+              -drive if=none,file="$RUNNER_TEMP/release-a/dniv.qcow2",format=qcow2,id=root \
+              -device virtio-blk-pci,drive=root \
+              -net none >"$log" 2>&1 || rc=$?
+          fi
+          if grep -Fq "DNIV_RELEASE_BOOT_PASS source=$(git rev-parse HEAD)" "$log"; then
+            exit 0
+          fi
+          cat "$log" >&2
+          exit "${rc:-1}"
+
       - name: Verify exact tree
         shell: bash
         run: |
@@ -141,4 +176,22 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
           compression-level: 6
+          overwrite: true
+
+      - name: Preserve exact bootable release artifacts
+        if: ${{ success() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: decnet-iv-linux-release-${{ matrix.arch }}-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/release-a/dniv.qcow2
+            ${{ runner.temp }}/release-a/dniv.raw
+            ${{ runner.temp }}/release-a/boot/vmlinuz
+            ${{ runner.temp }}/release-a/boot/initrd.img
+            ${{ env.DNIV_SCRATCH_DIR }}/release/rootfs.manifest
+            ${{ env.DNIV_SCRATCH_DIR }}/release/SHA256SUMS
+            ${{ env.DNIV_SCRATCH_DIR }}/release/build.env
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 1
           overwrite: true
