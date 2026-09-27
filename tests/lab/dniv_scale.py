@@ -145,8 +145,9 @@ class Lab:
             sudo("ip", "link", "add", bridge, "type", "bridge")
             sudo("ip", "link", "set", bridge, "up")
             for tap in taps:
-                sudo("ip", "tuntap", "add", "dev", tap, "mode", "tap",
-                     "user", str(os.getuid()))
+                if not Path(f"/sys/class/net/{tap}").exists():
+                    sudo("ip", "tuntap", "add", "dev", tap, "mode", "tap",
+                         "user", str(os.getuid()))
                 sudo("ip", "link", "set", tap, "master", bridge)
                 sudo("ip", "link", "set", tap, "up")
             proc = subprocess.Popen(

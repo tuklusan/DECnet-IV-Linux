@@ -354,9 +354,9 @@ jobs:
             printf 'VM_SCALE_8=vm-lab.yml:scale8\n' >> "$DNIV_SCRATCH_DIR/dispatch.env"
             dispatch_and_record VM_SCALE_8 vm-lab.yml \
               -f lab_mode=scale8 -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
-            printf 'VM_SCALE_16=vm-lab.yml:scale16\n' >> "$DNIV_SCRATCH_DIR/dispatch.env"
-            dispatch_and_record VM_SCALE_16 vm-lab.yml \
-              -f lab_mode=scale16 -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
+            printf 'VM_SCALE_16=scale16-distributed.yml\n' >> "$DNIV_SCRATCH_DIR/dispatch.env"
+            dispatch_and_record VM_SCALE_16 scale16-distributed.yml \
+              -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
           fi
 
           dispatch_and_record INTEROP interop.yml \
