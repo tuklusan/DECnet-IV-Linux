@@ -135,7 +135,7 @@ printf '%s\n' "$source_commit" | \
 
 sudo rm -f "$mnt/etc/resolv.conf"
 sudo cp -L /etc/resolv.conf "$mnt/etc/resolv.conf"
-printf 'LABEL=dniv-root / ext4 defaults 0 1\n/dev/vda1 /boot/efi vfat umask=0077 0 2\n' | sudo tee "$mnt/etc/fstab" >/dev/null
+printf 'LABEL=dniv-root / ext4 defaults 0 1\n/dev/vda1 /boot/efi vfat noauto,nofail,umask=0077 0 0\n' | sudo tee "$mnt/etc/fstab" >/dev/null
 printf 'dniv\n' | sudo tee "$mnt/etc/hostname" >/dev/null
 
 sudo mount -t proc proc "$mnt/proc"
