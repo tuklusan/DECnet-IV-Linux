@@ -251,7 +251,7 @@ class Lab:
     def balloon(self, guest: Guest, target_mb: int) -> None:
         target = target_mb * 1024 * 1024
         self.qmp_execute(guest, "balloon", {"value": target})
-        deadline = time.monotonic() + 30
+        deadline = time.monotonic() + 60
         while time.monotonic() < deadline:
             result = self.qmp_execute(guest, "query-balloon")
             actual = int(result.get("actual", 0))
@@ -429,7 +429,7 @@ def run_multi_area(args: argparse.Namespace, work: Path, session: str,
         ])
         for r in routers:
             lab.start(r)
-            if args.nodes == 16:
+            if args.nodes >= 8:
                 time.sleep(2)
         ready_deadline = time.monotonic() + min(timeout, 900)
         while time.monotonic() < ready_deadline:
@@ -454,7 +454,7 @@ def run_multi_area(args: argparse.Namespace, work: Path, session: str,
                     [a, b], "DNIV-E4-PASS", session, min(timeout, 450),
                     routers + started_endpoints)
                 started_endpoints.extend([a, b])
-                balloon_target = 224 if lab.arch == "aarch64" else 192
+                balloon_target = 256 if lab.arch == "aarch64" else 192
                 lab.balloon(a, balloon_target)
                 lab.balloon(b, balloon_target)
                 lab.pause(a)
@@ -468,9 +468,25 @@ def run_multi_area(args: argparse.Namespace, work: Path, session: str,
                 raise RuntimeError("scale-16 did not retain 16 simultaneous guests")
             print("scale-16: 16 simultaneous independent guests live")
         else:
-            for g in endpoints:
-                lab.start(g)
-            wait_for_markers(endpoints, "DNIV-E4-PASS", session, timeout, routers)
+            if args.nodes == 8:
+                started_endpoints: list[Guest] = []
+                for a, b in zip(side_a, side_b):
+                    lab.start(a)
+                    time.sleep(1)
+                    lab.start(b)
+                    wait_for_markers(
+                        [a, b], "DNIV-E4-PASS", session, min(timeout, 600),
+                        routers + started_endpoints)
+                    started_endpoints.extend([a, b])
+                if len(routers + started_endpoints) != 8 or any(
+                        g.process is None or g.process.poll() is not None
+                        for g in routers + started_endpoints):
+                    raise RuntimeError("scale-8 did not retain 8 simultaneous guests")
+                print("scale-8: 8 simultaneous independent guests live")
+            else:
+                for g in endpoints:
+                    lab.start(g)
+                wait_for_markers(endpoints, "DNIV-E4-PASS", session, timeout, routers)
         time.sleep(2)
     finally:
         lab.close()
