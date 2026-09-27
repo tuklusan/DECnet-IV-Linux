@@ -335,7 +335,7 @@ def run_multi_area(args: argparse.Namespace, work: Path, session: str,
     endpoint_nodes = [70, 71] if args.nodes == 8 else [70, 71, 74, 75, 76, 77]
     if args.nodes == 16 and "DNIV_SCALE_GUEST_MB" not in os.environ:
         os.environ["DNIV_SCALE_GUEST_MB"] = (
-            "352" if platform.machine() == "aarch64" else "320"
+            "352" if platform.machine() == "aarch64" else "256"
         )
     suffix = hashlib.sha256(session.encode()).hexdigest()[:4]
     lab = Lab(args.base, args.kernel, args.initrd, work, session, 3)
