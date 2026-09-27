@@ -379,6 +379,11 @@ jobs:
               -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
           fi
 
+          if [[ "$profile" == full ]]; then
+            dispatch_and_record RELEASE_IMAGE release-image.yml \
+              -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
+          fi
+
           if [[ "$GITHUB_EVENT_NAME" == issues ]]; then
             issue_number=$(jq -r '.issue.number' "$GITHUB_EVENT_PATH")
             {

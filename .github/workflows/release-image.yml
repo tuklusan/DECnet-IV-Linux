@@ -1,0 +1,144 @@
+# ============================================================================
+# Copyright (c) 2026 Supratim Sanyal of SANYALnet Labs.
+# Proprietary rights reserved except as expressly licensed herein.
+#
+# DECnet-IV-Linux
+# This file is governed by the SANYALnet Labs Non-Commercial License in the
+# root LICENSE file. Non-Commercial use is permitted; Commercial Use and use
+# for AI/ML model training are prohibited unless separately authorized.
+#
+# Attribution is required: "Based on original work by Supratim Sanyal of
+# SANYALnet Labs." See LICENSE for full terms, warranty disclaimer, termination,
+# patent, trademark, and governing-law provisions.
+# ============================================================================
+
+name: Release Image Reproducibility
+
+on:
+  workflow_dispatch:
+    inputs:
+      parent_run_id:
+        required: false
+        type: string
+      expected_sha:
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.sha }}
+  queue: max
+  cancel-in-progress: false
+
+jobs:
+  release-image:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    env:
+      DNIV_SCRATCH_DIR: ${{ github.workspace }}/scratch/runtime/${{ github.run_id }}/${{ github.run_attempt }}/release-image-${{ matrix.arch }}
+    steps:
+      - name: Check out exact repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.expected_sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Initialize exact candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate=$(git rev-parse HEAD)
+          if [[ -n '${{ inputs.expected_sha }}' ]]; then test "$candidate" = '${{ inputs.expected_sha }}'; fi
+          python3 tools/scratch_state.py init --dir "$DNIV_SCRATCH_DIR" \
+            --workflow release-image --job release-image --arch '${{ matrix.arch }}' \
+            --mode reproducibility --source-sha "$candidate" \
+            --parent-run-id '${{ inputs.parent_run_id }}' --expected-sha '${{ inputs.expected_sha }}'
+          tools/workflow_guard.sh "$DNIV_SCRATCH_DIR" "$candidate" main
+
+      - name: Install image tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y qemu-utils e2fsprogs curl zstd
+
+      - name: Download pinned Ubuntu Base
+        shell: bash
+        run: |
+          set -euo pipefail
+          . image/ubuntu-base/images.env
+          if [[ '${{ matrix.arch }}' == amd64 ]]; then
+            file=$UBUNTU_BASE_AMD64
+            sha=$UBUNTU_BASE_AMD64_SHA256
+          else
+            file=$UBUNTU_BASE_ARM64
+            sha=$UBUNTU_BASE_ARM64_SHA256
+          fi
+          curl -fL "$UBUNTU_BASE_URL/$file" -o "$RUNNER_TEMP/$file"
+          echo "$sha  $RUNNER_TEMP/$file" | sha256sum -c -
+          echo "DNIV_BASE_TARBALL=$RUNNER_TEMP/$file" >> "$GITHUB_ENV"
+
+      - name: Build exact release image twice
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/release-a/boot" "$RUNNER_TEMP/release-b/boot" "$DNIV_SCRATCH_DIR/release"
+          DNIV_IMAGE_MANIFEST="$DNIV_SCRATCH_DIR/release/rootfs-a.manifest" \
+            image/ubuntu-base/build-image.sh '${{ matrix.arch }}' "$DNIV_BASE_TARBALL" \
+            "$RUNNER_TEMP/release-a/dniv.qcow2" "$RUNNER_TEMP/release-a/boot"
+          DNIV_IMAGE_MANIFEST="$DNIV_SCRATCH_DIR/release/rootfs-b.manifest" \
+            image/ubuntu-base/build-image.sh '${{ matrix.arch }}' "$DNIV_BASE_TARBALL" \
+            "$RUNNER_TEMP/release-b/dniv.qcow2" "$RUNNER_TEMP/release-b/boot"
+
+      - name: Verify reproducible release content and checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmp "$DNIV_SCRATCH_DIR/release/rootfs-a.manifest" "$DNIV_SCRATCH_DIR/release/rootfs-b.manifest"
+          cmp "$RUNNER_TEMP/release-a/boot/vmlinuz" "$RUNNER_TEMP/release-b/boot/vmlinuz"
+          cmp "$RUNNER_TEMP/release-a/boot/initrd.img" "$RUNNER_TEMP/release-b/boot/initrd.img"
+          qemu-img check -f qcow2 "$RUNNER_TEMP/release-a/dniv.qcow2"
+          qemu-img check -f qcow2 "$RUNNER_TEMP/release-b/dniv.qcow2"
+          qemu-img convert -f qcow2 -O raw "$RUNNER_TEMP/release-a/dniv.qcow2" "$RUNNER_TEMP/release-a/dniv.raw"
+          qemu-img compare -f qcow2 -F raw "$RUNNER_TEMP/release-a/dniv.qcow2" "$RUNNER_TEMP/release-a/dniv.raw"
+          {
+            sha256sum "$RUNNER_TEMP/release-a/dniv.qcow2"
+            sha256sum "$RUNNER_TEMP/release-a/dniv.raw"
+            sha256sum "$RUNNER_TEMP/release-a/boot/vmlinuz"
+            sha256sum "$RUNNER_TEMP/release-a/boot/initrd.img"
+            sha256sum "$DNIV_SCRATCH_DIR/release/rootfs-a.manifest"
+          } | sed "s#$RUNNER_TEMP/release-a/#release/#; s#$DNIV_SCRATCH_DIR/release/rootfs-a.manifest#release/rootfs.manifest#" \
+            > "$DNIV_SCRATCH_DIR/release/SHA256SUMS"
+          cp "$DNIV_SCRATCH_DIR/release/rootfs-a.manifest" "$DNIV_SCRATCH_DIR/release/rootfs.manifest"
+          printf 'source_sha=%s\narch=%s\nbase=%s\n' "$(git rev-parse HEAD)" '${{ matrix.arch }}' "$(basename "$DNIV_BASE_TARBALL")" \
+            > "$DNIV_SCRATCH_DIR/release/build.env"
+
+      - name: Verify exact tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/integrity_scan.py --rev "$GITHUB_SHA" --pass-id final \
+            --baseline "$DNIV_SCRATCH_DIR/integrity/pass-1.json" \
+            --output "$DNIV_SCRATCH_DIR/integrity/final.json"
+          python3 tools/scratch_state.py verify --dir "$DNIV_SCRATCH_DIR"
+
+      - name: Preserve reproducibility evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: release-image-evidence-${{ matrix.arch }}-${{ github.run_id }}
+          path: ${{ env.DNIV_SCRATCH_DIR }}/
+          if-no-files-found: warn
+          retention-days: 30
+          compression-level: 6
+          overwrite: true

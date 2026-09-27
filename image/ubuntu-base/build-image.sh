@@ -48,6 +48,8 @@ if [[ ! -f "$base_tar" ]]; then
     exit 2
 fi
 source_commit=$(git -C "$repo_root" rev-parse --verify 'HEAD^{commit}')
+source_epoch=$(git -C "$repo_root" show -s --format=%ct "$source_commit")
+manifest_output=${DNIV_IMAGE_MANIFEST:-}
 
 work=$(mktemp -d)
 raw="$work/root.raw"
@@ -116,7 +118,7 @@ exit 101
 EOF_POLICY
 sudo chmod 0755 "$mnt/usr/sbin/policy-rc.d"
 
-sudo chroot "$mnt" /usr/bin/env UBUNTU_APT_SNAPSHOT="$snapshot" /bin/bash -euxc '
+sudo chroot "$mnt" /usr/bin/env UBUNTU_APT_SNAPSHOT="$snapshot" SOURCE_DATE_EPOCH="$source_epoch" /bin/bash -euxc '
 export DEBIAN_FRONTEND=noninteractive
 # Ubuntu Base has no usable certificate bundle yet. Bootstrap only the
 # certificate package with TLS peer verification disabled; repository
@@ -146,6 +148,7 @@ apt-get autoremove -y --purge || true
 apt-get clean
 rm -rf /var/lib/apt/lists/*
 rm -f /usr/sbin/policy-rc.d
+rm -f /var/log/apt/* /var/log/dpkg.log /var/log/alternatives.log
 '
 
 # Package scripts may create a machine identity. Clear it only after all
@@ -171,6 +174,12 @@ sudo test -L "$mnt/etc/systemd/system/multi-user.target.wants/dniv-smoke.service
 sudo cmp -s "$smoke_script_source" "$smoke_script_dest"
 sudo cmp -s "$smoke_unit_source" "$smoke_unit_dest"
 sudo chroot "$mnt" systemd-analyze verify /etc/systemd/system/dniv-smoke.service
+
+if [[ -n "$manifest_output" ]]; then
+    mkdir -p "$(dirname "$manifest_output")"
+    sudo python3 "$script_dir/image-manifest.py" "$mnt" "$manifest_output"
+    sudo chown "$(id -u):$(id -g)" "$manifest_output"
+fi
 
 kernel=$(find "$mnt/boot" -maxdepth 1 -type f -name 'vmlinuz-*' | sort -V | tail -1)
 initrd=$(find "$mnt/boot" -maxdepth 1 -type f -name 'initrd.img-*' | sort -V | tail -1)
