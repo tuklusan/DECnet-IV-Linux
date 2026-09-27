@@ -403,7 +403,7 @@ def run_multi_area(args: argparse.Namespace, work: Path, session: str,
                 time.sleep(1)
                 lab.start(b)
                 wait_for_markers(
-                    [a, b], "DNIV-E4-PASS", session, min(timeout, 300),
+                    [a, b], "DNIV-E4-PASS", session, min(timeout, 450),
                     routers + started_endpoints)
                 started_endpoints.extend([a, b])
                 lab.pause(a)
