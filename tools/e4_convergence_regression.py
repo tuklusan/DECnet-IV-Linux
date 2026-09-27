@@ -45,7 +45,9 @@ if SMOKE.count('probe_count=${probe_override:-180}') != 1:
     raise SystemExit("E4-CONVERGENCE: endpoint probe window is ambiguous")
 
 required_scale = (
-    'endpoint_probes = 30 if hold_endpoints else 0',
+    'hold_endpoints = args.nodes >= 8',
+    'endpoint_probes = 30 if args.nodes == 16 else 0',
+    'scale-8: 8 simultaneous independent guests live',
     'hold_after_pass=hold_endpoints, probe_count=endpoint_probes',
     'scale-16: 16 simultaneous independent guests live',
     'lab.pause(a)',
