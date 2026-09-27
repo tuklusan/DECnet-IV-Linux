@@ -31,12 +31,8 @@ def ssh_sync(config: Path, token: str, side: str) -> None:
     mine = f"/tmp/dniv-scale16-{token}-{side}.ready"
     peer_side = "b" if side == "a" else "a"
     peer = f"/tmp/dniv-scale16-{token}-{peer_side}.ready"
-    cleanup = (
-        f"rm -f {mine} {peer}; " if side == "a" else ""
-    )
     remote = (
-        cleanup
-        + f": > {mine}; "
+        f": > {mine}; "
         + f"for i in $(seq 1 600); do [ -f {peer} ] && exit 0; sleep 1; done; "
         + "exit 111"
     )
@@ -122,8 +118,15 @@ def run_partition(args: argparse.Namespace, work: Path, session: str) -> None:
         else:
             raise RuntimeError("scale-16 distributed routers did not become ready")
 
+        ssh_sync(
+            args.ssh_config, f"{args.sync_token}-routers", side)
+
         started = []
         for endpoint in endpoints:
+            ssh_sync(
+                args.ssh_config,
+                f"{args.sync_token}-node{endpoint.node}",
+                side)
             lab.start(endpoint)
             wait_for_markers(
                 [endpoint], "DNIV-E4-PASS", session, 600, [l1, l2] + started)
@@ -135,7 +138,8 @@ def run_partition(args: argparse.Namespace, work: Path, session: str) -> None:
             raise RuntimeError(
                 f"scale-16 distributed side {side} did not retain 8 guests")
         print(f"scale-16-distributed: side={side} 8 independent guests live")
-        ssh_sync(args.ssh_config, args.sync_token, side)
+        ssh_sync(
+            args.ssh_config, f"{args.sync_token}-final", side)
         time.sleep(3)
     finally:
         lab.close()
