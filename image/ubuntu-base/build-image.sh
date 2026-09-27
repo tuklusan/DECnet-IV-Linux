@@ -290,6 +290,23 @@ sudo umount "$mnt/boot/efi"
 esp_mounted=0
 sudo umount "$mnt"
 mounted=0
+# Reattach the completed raw disk before the offline filesystem check. On
+# hosted runners the just-unmounted partition can remain transiently marked
+# in-use on the original loop mapping; a fresh mapping gives e2fsck an
+# unambiguously offline block device without weakening the check.
+sudo losetup -d "$loopdev"
+loopdev=
+sudo udevadm settle
+loopdev=$(sudo losetup --find --show --partscan "$raw")
+root_dev="${loopdev}p2"
+for _ in $(seq 1 50); do
+    [[ -b "$root_dev" ]] && break
+    sleep 0.1
+done
+[[ -b "$root_dev" ]] || {
+    echo "build-image: root partition did not reappear for normalization" >&2
+    exit 1
+}
 normalize_ext4 "$root_dev"
 sudo losetup -d "$loopdev"
 loopdev=

@@ -41,11 +41,13 @@ jobs:
           - runner: ubuntu-24.04
             arch: amd64
             qemu: qemu-system-x86_64
+            qemu_pkg: qemu-system-x86
             firmware_pkg: ovmf
             firmware: /usr/share/OVMF/OVMF_CODE.fd
           - runner: ubuntu-24.04-arm
             arch: arm64
             qemu: qemu-system-aarch64
+            qemu_pkg: qemu-system-arm
             firmware_pkg: qemu-efi-aarch64
             firmware: /usr/share/AAVMF/AAVMF_CODE.fd
     runs-on: ${{ matrix.runner }}
@@ -78,7 +80,7 @@ jobs:
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y qemu-utils e2fsprogs curl zstd parted dosfstools \
-            ${{ matrix.qemu }} ${{ matrix.firmware_pkg }}
+            ${{ matrix.qemu_pkg }} ${{ matrix.firmware_pkg }}
 
       - name: Download pinned Ubuntu Base
         shell: bash
