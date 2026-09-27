@@ -43,7 +43,7 @@ jobs:
             qemu: qemu-system-x86_64
             qemu_pkg: qemu-system-x86
             firmware_pkg: ovmf
-            firmware: /usr/share/OVMF/OVMF_CODE.fd
+            firmware: /usr/share/OVMF/OVMF_CODE_4M.fd
           - runner: ubuntu-24.04-arm
             arch: arm64
             qemu: qemu-system-aarch64
