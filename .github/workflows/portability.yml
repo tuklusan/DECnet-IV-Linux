@@ -1,0 +1,125 @@
+# ============================================================================
+# Copyright (c) 2026 Supratim Sanyal of SANYALnet Labs.
+# Proprietary rights reserved except as expressly licensed herein.
+#
+# DECnet-IV-Linux
+# This file is governed by the SANYALnet Labs Non-Commercial License in the
+# root LICENSE file. Non-Commercial use is permitted; Commercial Use and use
+# for AI/ML model training are prohibited unless separately authorized.
+#
+# Attribution is required: "Based on original work by Supratim Sanyal of
+# SANYALnet Labs." See LICENSE for full terms, warranty disclaimer, termination,
+# patent, trademark, and governing-law provisions.
+# ============================================================================
+
+name: Distro Portability
+
+on:
+  workflow_dispatch:
+    inputs:
+      parent_run_id:
+        required: false
+        type: string
+      expected_sha:
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.sha }}
+  queue: max
+  cancel-in-progress: false
+
+jobs:
+  portability:
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: amd64
+            distro: debian13
+            image: debian:13
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+            distro: debian13
+            image: debian:13
+          - runner: ubuntu-24.04
+            arch: amd64
+            distro: fedora42
+            image: fedora:42
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+            distro: fedora42
+            image: fedora:42
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    env:
+      DNIV_SCRATCH_DIR: ${{ github.workspace }}/scratch/runtime/${{ github.run_id }}/${{ github.run_attempt }}/portability-${{ matrix.distro }}-${{ matrix.arch }}
+    steps:
+      - name: Check out exact repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.expected_sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Initialize exact candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate=$(git rev-parse HEAD)
+          if [[ -n '${{ inputs.expected_sha }}' ]]; then test "$candidate" = '${{ inputs.expected_sha }}'; fi
+          python3 tools/scratch_state.py init --dir "$DNIV_SCRATCH_DIR" \
+            --workflow portability --job "${{ matrix.distro }}" --arch '${{ matrix.arch }}' \
+            --mode '${{ matrix.distro }}' --source-sha "$candidate" \
+            --parent-run-id '${{ inputs.parent_run_id }}' --expected-sha '${{ inputs.expected_sha }}'
+          tools/workflow_guard.sh "$DNIV_SCRATCH_DIR" "$candidate" main
+
+      - name: Build and test in distro container
+        shell: bash
+        run: |
+          set -euo pipefail
+          image='${{ matrix.image }}'
+          distro='${{ matrix.distro }}'
+          arch='${{ matrix.arch }}'
+          docker pull "$image"
+          docker run --rm \
+            -e DNIV_DISTRO="$distro" -e DNIV_ARCH="$arch" \
+            -v "$PWD:/src" -w /src "$image" bash -ceu '
+              if [[ "$DNIV_DISTRO" == debian13 ]]; then
+                export DEBIAN_FRONTEND=noninteractive
+                apt-get update
+                if [[ "$DNIV_ARCH" == amd64 ]]; then kh=linux-headers-amd64; else kh=linux-headers-arm64; fi
+                apt-get install -y build-essential python3 "$kh"
+                KDIR=$(find /usr/src -maxdepth 1 -type d -name "linux-headers-*" ! -name "*-common" | sort -V | tail -1)
+              else
+                dnf -y install gcc make python3 kernel-devel findutils
+                KDIR=$(find /usr/src/kernels -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
+              fi
+              test -n "$KDIR"
+              make clean KDIR="$KDIR" >/dev/null 2>&1 || true
+              make all
+              make kernel KDIR="$KDIR"
+            ' 2>&1 | tee "$DNIV_SCRATCH_DIR/portability.log"
+
+      - name: Verify exact tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clean -fdx
+          tools/workflow_guard.sh "$DNIV_SCRATCH_DIR" "$GITHUB_SHA" main
+          python3 tools/scratch_state.py verify --dir "$DNIV_SCRATCH_DIR"
+
+      - name: Preserve evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: scratch-portability-${{ matrix.distro }}-${{ matrix.arch }}-${{ github.run_id }}
+          path: ${{ env.DNIV_SCRATCH_DIR }}/
+          if-no-files-found: warn
+          retention-days: 30
+          compression-level: 6
+          overwrite: true
