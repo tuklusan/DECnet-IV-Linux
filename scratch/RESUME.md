@@ -1461,3 +1461,6 @@ Full acceptance on exact candidate `7cb1c8028a620987c727dbada9ceceaf119092ed` is
 
 
 Repository Policy run `36337518001` stopped the first release-image increment before acceptance because the new workflow declared a 90-minute job timeout above the repository's voluntary 75-minute ceiling. The release-image job is now bounded at 75 minutes; image/reproducibility behavior is unchanged. Next: repeat exact-SHA fast acceptance.
+
+
+Full acceptance release-image run `36338314403` on exact candidate `2cedaba4920ecd0cb111c08fe8223c1aab42f586` built both release images successfully on amd64 and arm64 but the duplicate canonical manifests differed at exactly one file on each architecture: `/var/cache/ldconfig/aux-cache`. Artifact comparison confirmed all other 54,386 amd64 entries and 60,429 arm64 entries were identical. The ldconfig auxiliary cache is rebuildable runtime state and carries nondeterministic metadata, so the image builder now removes it before canonical manifest generation. Durable image contents and protocol behavior are unchanged. Next: exact-SHA fast acceptance, then full acceptance including dual-architecture release-image reproducibility.

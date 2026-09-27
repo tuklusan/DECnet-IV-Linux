@@ -155,6 +155,10 @@ rm -f /var/log/apt/* /var/log/dpkg.log /var/log/alternatives.log
 # package work so every QCOW2 overlay creates its own identity on first boot.
 sudo rm -f "$mnt/etc/machine-id" "$mnt/var/lib/dbus/machine-id"
 sudo touch "$mnt/etc/machine-id"
+# ldconfig's auxiliary cache embeds host/build-time metadata and is strictly
+# disposable. Removing it makes canonical guest-content manifests compare the
+# durable release filesystem rather than a runtime cache that ldconfig rebuilds.
+sudo rm -f "$mnt/var/cache/ldconfig/aux-cache"
 
 smoke_script_source="$mnt/usr/src/decnet-iv-linux/tests/lab/dniv-smoke.sh"
 smoke_unit_source="$mnt/usr/src/decnet-iv-linux/tests/lab/dniv-smoke.service"
