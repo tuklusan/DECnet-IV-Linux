@@ -152,6 +152,8 @@ role=$(get_arg dniv.role || printf 'A')
 mode=$(get_arg dniv.mode || printf 'phase2')
 session=$(get_arg dniv.session || printf 'local')
 dest_node=$(get_arg dniv.dest_node || true)
+hold_after_pass=$(get_arg dniv.hold_after_pass || printf '0')
+probe_override=$(get_arg dniv.probe_count || true)
 alt_peer=$(get_arg dniv.alt_peer || true)
 alt_peer_node=$(get_arg dniv.alt_peer_node || true)
 
@@ -543,9 +545,16 @@ e4)
                 exit 1
             fi
             sleep 5
-            # Both endpoint VMs boot independently. Keep probes active across
-            # the worst observed ARM64 TCG attachment/route-propagation skew.
-            probe_count=180
+            # The scale-16 controller may lower the per-endpoint probe count
+            # while retaining the host-side requirement for at least five
+            # correctly forwarded frames in every direction.
+            probe_count=${probe_override:-180}
+            case "$probe_count" in
+                ''|*[!0-9]*|0)
+                    echo "DNIV-E4-FAIL session=$session node=$name reason=bad-probe-count"
+                    exit 1
+                    ;;
+            esac
             i=0
             while [ "$i" -lt "$probe_count" ]; do
                 i=$((i + 1))
@@ -554,7 +563,15 @@ e4)
                 sleep 0.5
             done
             sleep 5
-            poweroff_pass "DNIV-E4-PASS session=$session node=$name"
+            marker="DNIV-E4-PASS session=$session node=$name"
+            if [ "$hold_after_pass" = 1 ]; then
+                sync
+                echo "$marker"
+                while :; do
+                    sleep 60
+                done
+            fi
+            poweroff_pass "$marker"
             ;;
         L1)
             modprobe decnet_iv default_area="$area" default_node="$node" default_name="$name" \

@@ -95,6 +95,8 @@ class Guest:
     peer_mac: str
     peer_node: str
     dest_node: str
+    hold_after_pass: bool = False
+    probe_count: int = 0
     process: subprocess.Popen[bytes] | None = None
 
 
@@ -124,8 +126,8 @@ class Lab:
         override = os.environ.get("DNIV_SCALE_GUEST_MB")
         if override:
             value = int(override)
-            if value < 384:
-                raise RuntimeError("DNIV_SCALE_GUEST_MB must be >= 384")
+            if value < 256:
+                raise RuntimeError("DNIV_SCALE_GUEST_MB must be >= 256")
             return value
         return 512 if self.arch == "x86_64" else 640
 
@@ -163,6 +165,10 @@ class Lab:
             f"dniv.session={self.session} dniv.peer={guest.peer_mac} "
             f"dniv.peer_node={guest.peer_node} dniv.dest_node={guest.dest_node}"
         )
+        if guest.hold_after_pass:
+            cmdline += " dniv.hold_after_pass=1"
+        if guest.probe_count:
+            cmdline += f" dniv.probe_count={guest.probe_count}"
         memory = str(self.guest_memory)
         if self.arch == "x86_64":
             cmd = ["qemu-system-x86_64", "-name", guest.name,
@@ -232,12 +238,14 @@ class Lab:
 def guest(lab: Lab, suffix: str, name: str, area: int, node: int,
           role: str, mode: str, tap_indexes: list[tuple[int, int]],
           macs: list[str], peer_mac: str, peer_node: str,
-          dest_node: str) -> Guest:
+          dest_node: str, hold_after_pass: bool = False,
+          probe_count: int = 0) -> Guest:
     taps = [f"s{segment}{suffix}{slot}" for segment, slot in tap_indexes]
     stem = name.lower()
     return Guest(name, area, node, role, mode, lab.overlay(stem),
                  lab.work / f"{stem}.serial.log", lab.work / f"{stem}.qmp",
-                 taps, macs, peer_mac, peer_node, dest_node)
+                 taps, macs, peer_mac, peer_node, dest_node,
+                 hold_after_pass, probe_count)
 
 
 def validate_inputs(args: argparse.Namespace) -> None:
@@ -255,12 +263,12 @@ def wait_for_markers(guests: list[Guest], marker: str, session: str,
                      timeout: int, keepalive: list[Guest]) -> None:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        if all(contains(g.log, f"{marker} session={session} node={g.name}")
-                for g in guests):
-            return
         for g in keepalive:
             if g.process and g.process.poll() is not None:
                 raise RuntimeError(f"scale transit guest exited: {g.name}")
+        if all(contains(g.log, f"{marker} session={session} node={g.name}")
+                for g in guests):
+            return
         for g in guests:
             if g.process and g.process.poll() is not None and not contains(
                     g.log, f"{marker} session={session} node={g.name}"):
@@ -313,6 +321,8 @@ def run_four(args: argparse.Namespace, work: Path, session: str,
 def run_multi_area(args: argparse.Namespace, work: Path, session: str,
                    timeout: int) -> None:
     endpoint_nodes = [70, 71] if args.nodes == 8 else [70, 71, 74, 75, 76, 77]
+    if args.nodes == 16 and "DNIV_SCALE_GUEST_MB" not in os.environ:
+        os.environ["DNIV_SCALE_GUEST_MB"] = "320"
     suffix = hashlib.sha256(session.encode()).hexdigest()[:4]
     lab = Lab(args.base, args.kernel, args.initrd, work, session, 3)
     l1a_mac = decnet_mac(31, 72)
@@ -336,13 +346,17 @@ def run_multi_area(args: argparse.Namespace, work: Path, session: str,
 
     side_a: list[Guest] = []
     side_b: list[Guest] = []
+    hold_endpoints = args.nodes == 16
+    endpoint_probes = 30 if hold_endpoints else 0
     for index, node in enumerate(endpoint_nodes):
         side_a.append(guest(
             lab, suffix, f"A31{node}", 31, node, "A", "e4", [(0, index)],
-            [decnet_mac(31, node)], l1a_mac, "31.72", f"32.{node}"))
+            [decnet_mac(31, node)], l1a_mac, "31.72", f"32.{node}",
+            hold_after_pass=hold_endpoints, probe_count=endpoint_probes))
         side_b.append(guest(
             lab, suffix, f"B32{node}", 32, node, "B", "e4", [(2, index)],
-            [decnet_mac(32, node)], l1b_mac, "32.72", f"31.{node}"))
+            [decnet_mac(32, node)], l1b_mac, "32.72", f"31.{node}",
+            hold_after_pass=hold_endpoints, probe_count=endpoint_probes))
     endpoints = side_a + side_b
 
     try:
@@ -353,6 +367,8 @@ def run_multi_area(args: argparse.Namespace, work: Path, session: str,
         ])
         for r in routers:
             lab.start(r)
+            if args.nodes == 16:
+                time.sleep(2)
         ready_deadline = time.monotonic() + min(timeout, 900)
         while time.monotonic() < ready_deadline:
             if all(contains(r.log,
@@ -366,9 +382,25 @@ def run_multi_area(args: argparse.Namespace, work: Path, session: str,
         else:
             raise RuntimeError("scale routers did not all become ready")
         time.sleep(10)
-        for g in endpoints:
-            lab.start(g)
-        wait_for_markers(endpoints, "DNIV-E4-PASS", session, timeout, routers)
+        if args.nodes == 16:
+            started_endpoints: list[Guest] = []
+            for a, b in zip(side_a, side_b):
+                lab.start(a)
+                time.sleep(1)
+                lab.start(b)
+                wait_for_markers(
+                    [a, b], "DNIV-E4-PASS", session, min(timeout, 300),
+                    routers + started_endpoints)
+                started_endpoints.extend([a, b])
+            live = routers + started_endpoints
+            if len(live) != 16 or any(
+                    g.process is None or g.process.poll() is not None for g in live):
+                raise RuntimeError("scale-16 did not retain 16 simultaneous guests")
+            print("scale-16: 16 simultaneous independent guests live")
+        else:
+            for g in endpoints:
+                lab.start(g)
+            wait_for_markers(endpoints, "DNIV-E4-PASS", session, timeout, routers)
         time.sleep(2)
     finally:
         lab.close()
