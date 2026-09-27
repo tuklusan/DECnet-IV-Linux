@@ -19,9 +19,10 @@ from pathlib import Path
 
 SMOKE = Path("tests/lab/dniv-smoke.sh").read_text(encoding="utf-8")
 E4 = Path("tests/lab/dniv_e4.py").read_text(encoding="utf-8")
+SCALE = Path("tests/lab/dniv_scale.py").read_text(encoding="utf-8")
 
 required_smoke = (
-    'probe_count=180',
+    'probe_count=${probe_override:-180}',
     'reason=l1-not-ready',
     'reason=local-l1-not-ready',
     'reason=remote-l2-not-ready',
@@ -40,7 +41,16 @@ for marker in required_controller:
     if marker not in E4:
         raise SystemExit(f"E4-CONVERGENCE: missing controller guard: {marker}")
 
-if SMOKE.count('probe_count=180') != 1:
+if SMOKE.count('probe_count=${probe_override:-180}') != 1:
     raise SystemExit("E4-CONVERGENCE: endpoint probe window is ambiguous")
+
+required_scale = (
+    'endpoint_probes = 30 if hold_endpoints else 0',
+    'hold_after_pass=hold_endpoints, probe_count=endpoint_probes',
+    'scale-16: 16 simultaneous independent guests live',
+)
+for marker in required_scale:
+    if marker not in SCALE:
+        raise SystemExit(f"E4-CONVERGENCE: missing scale16 guard: {marker}")
 
 print("E4-CONVERGENCE: pass")
