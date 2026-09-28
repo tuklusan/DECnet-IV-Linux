@@ -131,7 +131,7 @@ jobs:
               make clean KDIR="$KDIR" >/dev/null 2>&1 || true
               make all CC="$cc"
               if [[ "$DNIV_COMPILER" == clang && "$DNIV_DISTRO" == fedora42 ]]; then
-                # Fedora's shipped kernel-devel tree is configured for GCC and
+                # Fedora packaged kernel-devel tree is configured for GCC and
                 # therefore carries GCC-only KBUILD_CFLAGS.  Validate the exact
                 # Fedora kernel ABI/API in the paired GCC job, and validate this
                 # module with Clang against the same upstream kernel base version
