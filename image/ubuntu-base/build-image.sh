@@ -157,17 +157,17 @@ export DEBIAN_FRONTEND=noninteractive
 # signatures still authenticate snapshot metadata and packages. Immediately
 # refresh package-owned trust and prove ordinary verified snapshot access
 # before installing anything else.
-apt-get -o Acquire::https::Verify-Peer=false --snapshot "$UBUNTU_APT_SNAPSHOT" update
-apt-get -o Acquire::https::Verify-Peer=false --snapshot "$UBUNTU_APT_SNAPSHOT" install -y --no-install-recommends ca-certificates
+apt-get -o Acquire::Languages=none -o Acquire::Retries=5 -o Acquire::https::Verify-Peer=false --snapshot "$UBUNTU_APT_SNAPSHOT" update
+apt-get -o Acquire::Languages=none -o Acquire::Retries=5 -o Acquire::https::Verify-Peer=false --snapshot "$UBUNTU_APT_SNAPSHOT" install -y --no-install-recommends ca-certificates
 update-ca-certificates --fresh
-apt-get --snapshot "$UBUNTU_APT_SNAPSHOT" update
+apt-get -o Acquire::Languages=none -o Acquire::Retries=5 --snapshot "$UBUNTU_APT_SNAPSHOT" update
 arch=$(dpkg --print-architecture)
 case "$arch" in
     amd64) grub_pkg=grub-efi-amd64-bin; grub_target=x86_64-efi ;;
     arm64) grub_pkg=grub-efi-arm64-bin; grub_target=arm64-efi ;;
     *) echo "unsupported guest architecture for EFI boot: $arch" >&2; exit 2 ;;
 esac
-apt-get --snapshot "$UBUNTU_APT_SNAPSHOT" install -y --no-install-recommends \
+apt-get -o Acquire::Languages=none -o Acquire::Retries=5 --snapshot "$UBUNTU_APT_SNAPSHOT" install -y --no-install-recommends \
     systemd-sysv kmod iproute2 build-essential initramfs-tools grub2-common "$grub_pkg" \
     linux-image-virtual-hwe-26.04 linux-headers-virtual-hwe-26.04
 krel=$(ls -1 /lib/modules | sort -V | tail -1)
