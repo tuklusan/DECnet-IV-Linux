@@ -118,10 +118,10 @@ jobs:
                 export DEBIAN_FRONTEND=noninteractive
                 apt-get update
                 if [[ "$DNIV_ARCH" == amd64 ]]; then kh=linux-headers-amd64; else kh=linux-headers-arm64; fi
-                apt-get install -y build-essential clang python3 "$kh"
+                apt-get install -y build-essential clang llvm lld python3 "$kh"
                 KDIR=$(find /usr/src -maxdepth 1 -type d -name "linux-headers-*" ! -name "*-common" | sort -V | tail -1)
               else
-                dnf -y install gcc clang make python3 kernel-devel findutils
+                dnf -y install gcc clang llvm lld make python3 kernel-devel findutils
                 KDIR=$(find /usr/src/kernels -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
               fi
               test -n "$KDIR"
@@ -129,7 +129,11 @@ jobs:
               "$cc" --version | head -1
               make clean KDIR="$KDIR" >/dev/null 2>&1 || true
               make all CC="$cc"
-              make kernel KDIR="$KDIR" CC="$cc"
+              if [[ "$DNIV_COMPILER" == clang ]]; then
+                make kernel KDIR="$KDIR" LLVM=1
+              else
+                make kernel KDIR="$KDIR" CC="$cc"
+              fi
             ' 2>&1 | tee "$DNIV_SCRATCH_DIR/portability.log"
 
       - name: Verify exact tree
