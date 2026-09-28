@@ -436,7 +436,7 @@ static inline int dniv_wire_router_adjacency_state(
 
     if (!hello || !hello->is_router || !state)
         return -1;
-    if (dniv_wire_router_lists(hello, local_address, &listed_priority, 0)) {
+    if (dniv_wire_router_lists(hello, local_address, &listed_priority, (__u8 *)0)) {
         if (listed_priority != local_priority)
             return -1;
         *state = DNIV_ADJ_STATE_UP;
