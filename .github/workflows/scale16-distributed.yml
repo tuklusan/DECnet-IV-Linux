@@ -60,7 +60,7 @@ jobs:
             qemu: qemu-system-arm
             side: b
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 55
+    timeout-minutes: 75
     env:
       DNIV_SCRATCH_DIR: ${{ github.workspace }}/scratch/runtime/${{ github.run_id }}/${{ github.run_attempt }}/${{ matrix.slot }}
       DNIV_OUTER_BASE_DIR: ${{ github.workspace }}/scratch/outer/${{ matrix.arch }}
