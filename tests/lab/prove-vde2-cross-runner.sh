@@ -320,7 +320,9 @@ EOF
         log="$work/server-bridge-${session}.log"
         : >"$log"
         started=$SECONDS
-        timeout -k 5 300 "$dpipe_bin" "$vde_plug_bin" "$server_sock" = \
+        session_timeout=300
+        (( session == 1 )) && session_timeout=900
+        timeout -k 5 "$session_timeout" "$dpipe_bin" "$vde_plug_bin" "$server_sock" = \
             ssh -F "$ssh_config" dniv-bastion socat \
             "UNIX-LISTEN:$relay_sock,unlink-early,unlink-close" STDIO \
             >>"$log" 2>&1 &
@@ -384,11 +386,11 @@ start_bridge() {
         : >"$log"
         "$dpipe_bin" "$vde_plug_bin" "$local_sock" = \
             ssh -F "$ssh_config" dniv-bastion \
-            "for _ in \$(seq 1 300); do if [ -S '$relay_sock' ]; then echo DNIV_RELAY_READY >&2; exec socat 'UNIX-CONNECT:$relay_sock' STDIO; fi; sleep 1; done; echo DNIV_RELAY_TIMEOUT >&2; exit 111" \
+            "for _ in \$(seq 1 900); do if [ -S '$relay_sock' ]; then echo DNIV_RELAY_READY >&2; exec socat 'UNIX-CONNECT:$relay_sock' STDIO; fi; sleep 1; done; echo DNIV_RELAY_TIMEOUT >&2; exit 111" \
             >>"$log" 2>&1 &
         bridge_pid=$!
         ready_seen=0
-        for _ in $(seq 1 315); do
+        for _ in $(seq 1 915); do
             if grep -Fxq 'DNIV_RELAY_READY' "$log"; then
                 ready_seen=1
                 break
