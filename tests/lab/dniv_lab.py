@@ -192,7 +192,7 @@ class QmpClient:
 
 class Lab:
     def __init__(self, base: Path, kernel: Path, initrd: Path, work: Path, mode: str, session: str,
-                 nic_model: str, vcpus: int):
+                 nic_model: str, vcpus: int, diagnostics: str):
         self.base = base.resolve()
         self.kernel = kernel.resolve()
         self.initrd = initrd.resolve()
@@ -201,6 +201,7 @@ class Lab:
         self.session = session
         self.nic_model = nic_model
         self.vcpus = vcpus
+        self.diagnostics = diagnostics
         self.host_arch = platform.machine()
         self.guests: list[Guest] = []
         self.tcpdump: subprocess.Popen[bytes] | None = None
@@ -246,6 +247,8 @@ class Lab:
             f"dniv.peer={guest.peer_mac} dniv.peer_node={area}.{guest.peer_node} "
             f"dniv.role={guest.role} dniv.session={self.session}"
         )
+        if self.diagnostics == "kfence":
+            common += " dniv.diag=kfence kfence.sample_interval=100 panic_on_warn=1 oops=panic"
         if self.host_arch == "x86_64":
             cmd = ["qemu-system-x86_64", "-name", guest.name, "-accel", self.accel, "-m", "512",
                    "-smp", str(self.vcpus)]
@@ -328,12 +331,15 @@ def main() -> int:
     timeout = int(os.environ.get("DNIV_LAB_TIMEOUT_SECONDS", "240"))
     nic_model = os.environ.get("DNIV_LAB_NIC_MODEL", "virtio-net-pci")
     vcpus = int(os.environ.get("DNIV_LAB_VCPUS", "1"))
+    diagnostics = os.environ.get("DNIV_LAB_DIAGNOSTICS", "none")
     if timeout < 1:
         raise SystemExit("python-lab: timeout must be positive")
     if nic_model not in {"virtio-net-pci", "e1000"}:
         raise SystemExit(f"python-lab: unsupported NIC model: {nic_model}")
     if vcpus not in {1, 2, 4, 8}:
         raise SystemExit(f"python-lab: unsupported vCPU count: {vcpus}")
+    if diagnostics not in {"none", "kfence"}:
+        raise SystemExit(f"python-lab: unsupported diagnostics mode: {diagnostics}")
     validate_args(args.base, args.kernel, args.initrd, mode, session)
 
     env = read_env(Path(__file__).with_name("test-addresses.env"))
@@ -359,7 +365,7 @@ def main() -> int:
         nic_a, nic_b = lab_mac(area, node_a), lab_mac(area, node_b)
         changed_a, changed_b = lab_mac(area, node_a, True), lab_mac(area, node_b, True)
 
-    lab = Lab(args.base, args.kernel, args.initrd, work, mode, session, nic_model, vcpus)
+    lab = Lab(args.base, args.kernel, args.initrd, work, mode, session, nic_model, vcpus, diagnostics)
     guest_a = Guest(name_a, node_a, node_b, mac_b, "A", nic_a, f"da{suffix}", lab.create_overlay("node-a"),
                     work / "node-a.serial.log", work / "node-a.qmp")
     guest_b = Guest(name_b, node_b, node_a, mac_a, "B", nic_b, f"db{suffix}", lab.create_overlay("node-b"),
@@ -392,6 +398,11 @@ def main() -> int:
             if guest.log.exists():
                 print("\n".join(guest.log.read_text(errors="replace").splitlines()[-160:]), file=sys.stderr)
         return 1
+
+    if diagnostics == "kfence":
+        for guest in (guest_a, guest_b):
+            if not contains(guest.log, f"DNIV-DIAG-KFENCE session={session}"):
+                raise SystemExit(f"python-lab: missing KFENCE runtime marker from {guest.name}")
 
     frames = pcap_count(lab.pcap, "ether proto 0x6003")
     if frames < 2:
@@ -438,7 +449,7 @@ def main() -> int:
             raise SystemExit("python-lab: E1 initial INIT state was not observed")
         if not (contains(guest_a.log, f"DNIV-E1-RESTART-INIT session={session}") or contains(guest_b.log, f"DNIV-E1-RESTART-INIT session={session}")):
             raise SystemExit("python-lab: E1 restart INIT state was not observed")
-        print(f"python-lab: E1 pass on {lab.host_arch} nic={lab.nic_model} vcpus={lab.vcpus} "
+        print(f"python-lab: E1 pass on {lab.host_arch} nic={lab.nic_model} vcpus={lab.vcpus} diagnostics={lab.diagnostics} "
               f"for {area}.{node_a}/{area}.{node_b}, captured {frames} DECnet frames")
     else:
         print(f"python-lab: Phase 2 pass on {lab.host_arch} nic={lab.nic_model} vcpus={lab.vcpus} "

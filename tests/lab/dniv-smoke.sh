@@ -156,6 +156,35 @@ hold_after_pass=$(get_arg dniv.hold_after_pass || printf '0')
 probe_override=$(get_arg dniv.probe_count || true)
 alt_peer=$(get_arg dniv.alt_peer || true)
 alt_peer_node=$(get_arg dniv.alt_peer_node || true)
+diagnostics=$(get_arg dniv.diag || printf 'none')
+
+case "$diagnostics" in
+none|'')
+    ;;
+kfence)
+    i=0
+    while [ "$i" -lt 100 ] && [ ! -r /sys/module/kfence/parameters/sample_interval ]; do
+        i=$((i + 1))
+        sleep 0.1
+    done
+    if [ ! -r /sys/module/kfence/parameters/sample_interval ]; then
+        echo "DNIV-LAB-FAIL session=$session node=$name reason=kfence-unavailable"
+        exit 1
+    fi
+    kfence_interval=$(cat /sys/module/kfence/parameters/sample_interval 2>/dev/null || true)
+    case "$kfence_interval" in
+        ''|*[!0-9]*|0)
+            echo "DNIV-LAB-FAIL session=$session node=$name reason=kfence-inactive"
+            exit 1
+            ;;
+    esac
+    echo "DNIV-DIAG-KFENCE session=$session node=$name interval=$kfence_interval"
+    ;;
+*)
+    echo "DNIV-LAB-FAIL session=$session node=$name reason=bad-diagnostics"
+    exit 1
+    ;;
+esac
 
 iface=$(find_iface || true)
 if [ -z "$iface" ]; then
