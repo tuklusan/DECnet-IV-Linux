@@ -26,6 +26,8 @@
 #include "decnet_iv_ethernet.h"
 #include "decnet_iv_nsp.h"
 
+#define DNIV_NSP_MAX_REPLY_WIRE 16U
+
 struct dniv_nsp_retransmit {
     struct list_head link;
     __u16 sequence;
@@ -1042,7 +1044,7 @@ int dniv_nsp_receive(__u16 remote_node, const __u8 *wire, __u16 wire_len)
     struct dniv_nsp_connection *conn;
     unsigned long flags;
     struct dniv_nsp_packet reply;
-    __u8 reply_wire[DNIV_NSP_MAX_WIRE];
+    __u8 reply_wire[DNIV_NSP_MAX_REPLY_WIRE];
     __u16 reply_node = 0U;
     __u16 notify_link = 0U;
     __u16 shutdown_reason = 0U;
