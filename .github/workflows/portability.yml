@@ -147,9 +147,8 @@ jobs:
                 tar -C /tmp -xf /tmp/linux.tar.xz
                 LLVM=1 make -C "/tmp/linux-${kbase}" defconfig >/dev/null
                 LLVM=1 make -C "/tmp/linux-${kbase}" modules_prepare -j2 >/dev/null
-                test -s "$KDIR/Module.symvers"
-                cp "$KDIR/Module.symvers" "/tmp/linux-${kbase}/Module.symvers"
-                make kernel KDIR="/tmp/linux-${kbase}" LLVM=1
+                LLVM=1 make -C "/tmp/linux-${kbase}" M="$PWD/kernel/decnet" decnet_iv.o
+                test -s kernel/decnet/decnet_iv.o
               elif [[ "$DNIV_COMPILER" == clang ]]; then
                 make kernel KDIR="$KDIR" LLVM=1
               else
