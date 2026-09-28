@@ -101,17 +101,23 @@ def read_path(path: str, staged: bool, tree: str | None) -> tuple[str, str]:
 
 def install_tokens(text: str) -> set[str]:
     lines = text.splitlines()
-    for index, line in enumerate(lines):
+    tokens: set[str] = set()
+    found = False
+    for start, line in enumerate(lines):
         stripped = line.lstrip()
         if not stripped.startswith("apt-get ") or INSTALL_SIGNATURE not in stripped:
             continue
+        found = True
+        index = start
         block = [line]
         while block[-1].rstrip().endswith("\\"):
             index += 1
             if index >= len(lines):
                 raise SystemExit("image-builder gate: unterminated package install block")
             block.append(lines[index])
-        return set(" ".join(block).replace("\\", " ").split())
+        tokens.update(" ".join(block).replace("\\", " ").split())
+    if found:
+        return tokens
     raise SystemExit("image-builder gate: pinned package install block not found")
 
 

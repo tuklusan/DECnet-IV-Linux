@@ -1548,3 +1548,6 @@ Full release-image run `36493915229` on exact candidate `6f0058cac930216c9b008b8
 
 
 Fast Repository Policy run `36498502347` on `b46ade7aeaada440747bc7e2c8039f98e3cea93a` correctly caught that the image-builder regression gate encoded the old option-free APT install prefix and therefore rejected the new snapshot retry/language options before acceptance dispatch. The gate now recognizes the invariant snapshot install signature while permitting bounded APT transport options before it, so it continues to verify required pinned release/foundation packages without freezing incidental option ordering. No image contents or protocol behavior change. Next: repeat exact-SHA fast acceptance, then full acceptance.
+
+
+Repository Policy run `36498670639` on `f75f58440874c26479fe8820a24004295df4b770` exposed a second image-gate assumption: the parser stopped at the first pinned snapshot install, which is now the CA bootstrap, so it never saw the later release kernel/initrd package block. The gate now unions tokens across all pinned snapshot install commands before checking required packages. This preserves strict package-presence validation while allowing the bootstrap and main install to coexist. No release image or protocol behavior changes. Next: repeat exact-SHA fast acceptance, then full acceptance.
