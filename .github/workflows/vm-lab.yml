@@ -39,9 +39,25 @@ on:
         description: Exact parent candidate SHA; blank for direct dispatch
         required: false
         type: string
+      nic_model:
+        description: QEMU Ethernet device model
+        required: true
+        default: virtio-net-pci
+        type: choice
+        options:
+          - virtio-net-pci
+          - e1000
+      vcpus:
+        description: Guest vCPU count
+        required: true
+        default: "1"
+        type: choice
+        options:
+          - "1"
+          - "4"
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.sha }}-${{ inputs.lab_mode }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.sha }}-${{ inputs.lab_mode }}-${{ inputs.nic_model }}-${{ inputs.vcpus }}
   queue: max
   cancel-in-progress: false
 
@@ -67,15 +83,17 @@ jobs:
             lab_timeout: 420
     runs-on: ${{ matrix.runner }}
     concurrency:
-      group: dniv-vm-${{ github.run_id }}-${{ matrix.slot }}-${{ inputs.lab_mode }}
+      group: dniv-vm-${{ github.run_id }}-${{ matrix.slot }}-${{ inputs.lab_mode }}-${{ inputs.nic_model }}-${{ inputs.vcpus }}
       queue: max
       cancel-in-progress: false
     timeout-minutes: 55
     env:
       DNIV_SCRATCH_DIR: ${{ github.workspace }}/scratch/runtime/${{ github.run_id }}/${{ github.run_attempt }}/${{ github.job }}-${{ matrix.arch }}
       DNIV_LAB_MODE: ${{ inputs.lab_mode }}
+      DNIV_LAB_NIC_MODEL: ${{ inputs.nic_model }}
+      DNIV_LAB_VCPUS: ${{ inputs.vcpus }}
       DNIV_LAB_TIMEOUT_SECONDS: ${{ matrix.lab_timeout }}
-      DNIV_LAB_SESSION_ID: run-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.arch }}-${{ inputs.lab_mode }}
+      DNIV_LAB_SESSION_ID: run-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.arch }}-${{ inputs.lab_mode }}-${{ inputs.nic_model }}-${{ inputs.vcpus }}vcpu
       DNIV_LAB_ARCH: ${{ matrix.arch }}
       DNIV_LAB_SOURCE_SHA: ${{ github.sha }}
       DNIV_OUTER_BASE_DIR: ${{ github.workspace }}/scratch/outer/${{ matrix.arch }}
@@ -92,7 +110,7 @@ jobs:
           set -euo pipefail
           python3 tools/scratch_state.py init --dir "$DNIV_SCRATCH_DIR" \
             --workflow vm-lab --job "$GITHUB_JOB" --arch '${{ matrix.arch }}' \
-            --mode '${{ inputs.lab_mode }}' --source-sha "$GITHUB_SHA" \
+            --mode '${{ inputs.lab_mode }}-${{ inputs.nic_model }}-${{ inputs.vcpus }}vcpu' --source-sha "$GITHUB_SHA" \
             --parent-run-id '${{ inputs.parent_run_id }}' \
             --expected-sha '${{ inputs.expected_sha }}'
           tools/workflow_guard.sh "$DNIV_SCRATCH_DIR" "$GITHUB_SHA" main
@@ -272,7 +290,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: scratch-vm-lab-evidence-${{ matrix.arch }}-${{ github.run_id }}
+          name: scratch-vm-lab-evidence-${{ matrix.arch }}-${{ inputs.nic_model }}-${{ inputs.vcpus }}vcpu-${{ github.run_id }}
           path: |
             ${{ env.DNIV_SCRATCH_DIR }}/
             !${{ env.DNIV_SCRATCH_DIR }}/lab/**/*.qcow2

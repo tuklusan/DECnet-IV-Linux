@@ -335,6 +335,13 @@ jobs:
           dispatch_and_record VM_LAB_E1 vm-lab.yml \
             -f lab_mode=e1 -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
 
+          if [[ "$profile" == full ]]; then
+            printf 'VM_LAB_E1_SECONDARY=vm-lab.yml:e1:e1000:4vcpu\n' >> "$DNIV_SCRATCH_DIR/dispatch.env"
+            dispatch_and_record VM_LAB_E1_SECONDARY vm-lab.yml \
+              -f lab_mode=e1 -f nic_model=e1000 -f vcpus=4 \
+              -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
+          fi
+
           if [[ "$profile" == consolidated ]]; then
             printf 'VM_LAB_E4=vm-lab.yml:e4\n' >> "$DNIV_SCRATCH_DIR/dispatch.env"
             dispatch_and_record VM_LAB_E4 vm-lab.yml \

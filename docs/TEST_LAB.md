@@ -38,7 +38,7 @@ The Python two-node controller receives that disposable candidate image as its i
 
 `tests/lab/dniv_lab.py` owns VM lifecycle for the Phase 2/E1 gate. It creates fresh qcow2 node overlays, a Linux bridge, two TAP devices, DECnet packet capture and one QMP socket per guest, launches QEMU directly, waits for guest acceptance markers, validates captured wire behavior and removes host networking on exit.
 
-VM runtime files live under a deliberately short `/tmp/dniv-*` path so QMP UNIX sockets remain below the Linux pathname limit. Compact serial/pcap evidence is copied into `scratch/runtime/`; qcow2 overlays and QMP sockets are discarded and never uploaded.
+VM runtime files live under a deliberately short `/tmp/dniv-*` path so QMP UNIX sockets remain below the Linux pathname limit. Compact serial/pcap evidence is copied into `scratch/runtime/`; qcow2 overlays and QMP sockets are discarded and never uploaded. The E1 controller accepts `DNIV_LAB_NIC_MODEL` (`virtio-net-pci` or `e1000`) and `DNIV_LAB_VCPUS` (1 or 4). Full acceptance runs the established virtio/1-vCPU case plus a second e1000/4-vCPU case on both hosted architectures; both retain identical wire/state assertions.
 
 ## Architectures
 
