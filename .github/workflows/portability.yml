@@ -121,7 +121,8 @@ jobs:
                 apt-get install -y build-essential clang llvm lld python3 "$kh"
                 KDIR=$(find /usr/src -maxdepth 1 -type d -name "linux-headers-*" ! -name "*-common" | sort -V | tail -1)
               else
-                dnf -y install gcc clang llvm lld make python3 kernel-devel findutils
+                dnf -y install gcc clang llvm lld make python3 kernel-devel findutils \
+                  bc bison flex elfutils-libelf-devel openssl-devel perl curl xz
                 KDIR=$(find /usr/src/kernels -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
               fi
               test -n "$KDIR"
@@ -129,7 +130,25 @@ jobs:
               "$cc" --version | head -1
               make clean KDIR="$KDIR" >/dev/null 2>&1 || true
               make all CC="$cc"
-              if [[ "$DNIV_COMPILER" == clang ]]; then
+              if [[ "$DNIV_COMPILER" == clang && "$DNIV_DISTRO" == fedora42 ]]; then
+                # Fedora's shipped kernel-devel tree is configured for GCC and
+                # therefore carries GCC-only KBUILD_CFLAGS.  Validate the exact
+                # Fedora kernel ABI/API in the paired GCC job, and validate this
+                # module with Clang against the same upstream kernel base version
+                # using a compiler-native prepared tree.
+                kver=$(basename "$KDIR")
+                kbase=${kver%%-*}
+                case "$kbase" in
+                  [0-9]*.[0-9]*.[0-9]*) ;;
+                  *) echo "bad Fedora kernel base version: $kbase" >&2; exit 2 ;;
+                esac
+                curl -fsSLo /tmp/linux.tar.xz \
+                  "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-${kbase}.tar.xz"
+                tar -C /tmp -xf /tmp/linux.tar.xz
+                LLVM=1 make -C "/tmp/linux-${kbase}" defconfig >/dev/null
+                LLVM=1 make -C "/tmp/linux-${kbase}" modules_prepare -j2 >/dev/null
+                make kernel KDIR="/tmp/linux-${kbase}" LLVM=1
+              elif [[ "$DNIV_COMPILER" == clang ]]; then
                 make kernel KDIR="$KDIR" LLVM=1
               else
                 make kernel KDIR="$KDIR" CC="$cc"
