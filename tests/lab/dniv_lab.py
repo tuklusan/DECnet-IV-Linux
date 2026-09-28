@@ -332,7 +332,7 @@ def main() -> int:
         raise SystemExit("python-lab: timeout must be positive")
     if nic_model not in {"virtio-net-pci", "e1000"}:
         raise SystemExit(f"python-lab: unsupported NIC model: {nic_model}")
-    if vcpus not in {1, 4}:
+    if vcpus not in {1, 2, 4, 8}:
         raise SystemExit(f"python-lab: unsupported vCPU count: {vcpus}")
     validate_args(args.base, args.kernel, args.initrd, mode, session)
 
