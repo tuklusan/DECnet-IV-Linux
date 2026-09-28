@@ -249,6 +249,8 @@ class Lab:
         )
         if self.diagnostics == "kfence":
             common += " dniv.diag=kfence kfence.sample_interval=100 panic_on_warn=1 oops=panic"
+        elif self.diagnostics == "ubsan":
+            common += " dniv.diag=ubsan panic_on_warn=1 oops=panic"
         if self.host_arch == "x86_64":
             cmd = ["qemu-system-x86_64", "-name", guest.name, "-accel", self.accel, "-m", "512",
                    "-smp", str(self.vcpus)]
@@ -338,7 +340,7 @@ def main() -> int:
         raise SystemExit(f"python-lab: unsupported NIC model: {nic_model}")
     if vcpus not in {1, 2, 4, 8}:
         raise SystemExit(f"python-lab: unsupported vCPU count: {vcpus}")
-    if diagnostics not in {"none", "kfence"}:
+    if diagnostics not in {"none", "kfence", "ubsan"}:
         raise SystemExit(f"python-lab: unsupported diagnostics mode: {diagnostics}")
     validate_args(args.base, args.kernel, args.initrd, mode, session)
 
@@ -403,6 +405,12 @@ def main() -> int:
         for guest in (guest_a, guest_b):
             if not contains(guest.log, f"DNIV-DIAG-KFENCE session={session}"):
                 raise SystemExit(f"python-lab: missing KFENCE runtime marker from {guest.name}")
+    elif diagnostics == "ubsan":
+        for guest in (guest_a, guest_b):
+            if not contains(guest.log, f"DNIV-DIAG-UBSAN session={session}"):
+                raise SystemExit(f"python-lab: missing UBSAN runtime marker from {guest.name}")
+            if contains(guest.log, "UBSAN:") or contains(guest.log, "runtime error:"):
+                raise SystemExit(f"python-lab: UBSAN finding reported by {guest.name}")
 
     frames = pcap_count(lab.pcap, "ether proto 0x6003")
     if frames < 2:

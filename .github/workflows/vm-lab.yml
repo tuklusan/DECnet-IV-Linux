@@ -65,6 +65,7 @@ on:
         options:
           - none
           - kfence
+          - ubsan
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}-${{ github.sha }}-${{ inputs.lab_mode }}-${{ inputs.nic_model }}-${{ inputs.vcpus }}-${{ inputs.diagnostics }}
