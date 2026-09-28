@@ -28,7 +28,7 @@ FOUNDATION_BUILDER = "image/ubuntu-base/build-foundation.sh"
 ARM64_NORMALIZER = "image/ubuntu-base/normalize-arm64-kernel.sh"
 CANDIDATE_BUILDER = "tests/lab/prepare-candidate-image.sh"
 REFERENCE_BUILDER = "tests/lab/prepare-reference-image.sh"
-INSTALL_PREFIX = 'apt-get --snapshot "$UBUNTU_APT_SNAPSHOT" install -y --no-install-recommends'
+INSTALL_SIGNATURE = '--snapshot "$UBUNTU_APT_SNAPSHOT" install -y --no-install-recommends'
 INITRD_CHECK = 'test -s "/boot/initrd.img-$krel"'
 HOST_RAW_CMP = 'cmp -s "$raw"'
 EXT4_NORMALIZE_CALL = 'normalize_ext4 "$raw"'
@@ -102,7 +102,8 @@ def read_path(path: str, staged: bool, tree: str | None) -> tuple[str, str]:
 def install_tokens(text: str) -> set[str]:
     lines = text.splitlines()
     for index, line in enumerate(lines):
-        if not line.startswith(INSTALL_PREFIX):
+        stripped = line.lstrip()
+        if not stripped.startswith("apt-get ") or INSTALL_SIGNATURE not in stripped:
             continue
         block = [line]
         while block[-1].rstrip().endswith("\\"):
