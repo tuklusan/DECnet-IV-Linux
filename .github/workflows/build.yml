@@ -89,7 +89,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update 2>&1 | tee "$DNIV_SCRATCH_DIR/apt-update.log"
-          sudo apt-get install -y build-essential linux-headers-generic 2>&1 | \
+          sudo apt-get install -y build-essential linux-headers-generic sparse 2>&1 | \
             tee "$DNIV_SCRATCH_DIR/apt-install.log"
 
       - name: Build userspace and run unit tests
@@ -106,6 +106,16 @@ jobs:
           test -n "$KDIR"
           printf 'KDIR=%s\n' "$KDIR" > "$DNIV_SCRATCH_DIR/kernel-build.env"
           make kernel KDIR="$KDIR" 2>&1 | tee "$DNIV_SCRATCH_DIR/make-kernel.log"
+
+      - name: Run kernel warning and sparse diagnostics
+        shell: bash
+        run: |
+          set -euo pipefail
+          . "$DNIV_SCRATCH_DIR/kernel-build.env"
+          make -C "$KDIR" M="$GITHUB_WORKSPACE/kernel/decnet" clean >/dev/null
+          make -C "$KDIR" M="$GITHUB_WORKSPACE/kernel/decnet" \
+            W=1 C=1 CHECK='sparse -Wsparse-error' modules 2>&1 | \
+            tee "$DNIV_SCRATCH_DIR/kernel-diagnostics.log"
 
       - name: Verify exact tree after build
         shell: bash
