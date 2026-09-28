@@ -293,9 +293,20 @@ jobs:
             local key=$1 workflow=$2
             shift 2
             local before="$DNIV_SCRATCH_DIR/run-ids-before-${key}.txt"
-            gh run list --repo "$GITHUB_REPOSITORY" --workflow "$workflow" \
-              --event workflow_dispatch --limit 100 --json databaseId \
-              --jq '.[].databaseId' | sort -n > "$before"
+            local before_raw="$DNIV_SCRATCH_DIR/run-ids-before-${key}.raw"
+            local listed=0
+            for attempt in {1..5}; do
+              if gh run list --repo "$GITHUB_REPOSITORY" --workflow "$workflow" \
+                --event workflow_dispatch --limit 100 --json databaseId \
+                --jq '.[].databaseId' > "$before_raw"; then
+                listed=1
+                break
+              fi
+              echo "transient failure listing $workflow runs (attempt $attempt/5)" >&2
+              sleep $((attempt * 2))
+            done
+            test "$listed" -eq 1
+            sort -n "$before_raw" > "$before"
             gh workflow run "$workflow" --repo "$GITHUB_REPOSITORY" --ref main "$@"
             local run_id=""
             for _ in {1..30}; do
