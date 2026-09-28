@@ -54,7 +54,9 @@ on:
         type: choice
         options:
           - "1"
+          - "2"
           - "4"
+          - "8"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}-${{ github.sha }}-${{ inputs.lab_mode }}-${{ inputs.nic_model }}-${{ inputs.vcpus }}
