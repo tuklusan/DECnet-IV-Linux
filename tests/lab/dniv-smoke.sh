@@ -323,6 +323,8 @@ e1)
     i=0
     while [ "$i" -lt 40 ]; do
         i=$((i + 1))
+        iface=$(find_iface || true)
+        [ -n "$iface" ] || { echo "DNIV-E1-FAIL session=$session node=$name reason=no-interface-unicast"; exit 1; }
         /usr/local/sbin/dnraw "$iface" "$peer" "DNIV-E1-UCAST-$session-$name-$i"
         sleep 0.25
     done
