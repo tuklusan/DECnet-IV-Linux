@@ -260,6 +260,8 @@ e1)
             default_node_type=3 hello_interval=2
         /usr/local/sbin/dnctl set "$area.$node" "$name"
         /usr/local/sbin/dnctl reset-stats
+        iface=$(find_iface || true)
+        [ -n "$iface" ] || { echo "DNIV-E1-FAIL session=$session node=$name reason=no-interface-bootstrap"; exit 1; }
         ip link set "$iface" up
         if ! wait_adjacency_up "$peer_node" DNIV-E1-BOOTSTRAP 120; then
             echo "DNIV-E1-FAIL session=$session node=$name reason=bootstrap-peer"
@@ -272,6 +274,8 @@ e1)
         default_node_type=2 router_priority=64 hello_interval=2
     /usr/local/sbin/dnctl set "$area.$node" "$name"
     /usr/local/sbin/dnctl reset-stats
+    iface=$(find_iface || true)
+    [ -n "$iface" ] || { echo "DNIV-E1-FAIL session=$session node=$name reason=no-interface-router-up"; exit 1; }
     ip link set "$iface" up
 
     if ! wait_adjacency_up "$peer_node" DNIV-E1-INIT 120; then
@@ -359,6 +363,8 @@ e1)
             default_node_type=2 router_priority=64 hello_interval=2
         /usr/local/sbin/dnctl set "$area.$node" "$name"
         /usr/local/sbin/dnctl reset-stats
+        iface=$(find_iface || true)
+        [ -n "$iface" ] || { echo "DNIV-E1-FAIL session=$session node=$name reason=no-interface-restart"; exit 1; }
         ip link set "$iface" up
         if ! wait_adjacency_up "$peer_node" DNIV-E1-RESTART-INIT 120; then
             echo "DNIV-E1-FAIL session=$session node=$name reason=recovery-adjacency"
