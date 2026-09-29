@@ -58,6 +58,12 @@ rm -rf "$output/src/.git"
 cp "$base_config" "$output/build/.config"
 make -s -C "$output/src" O="$output/build" ARCH="$karch" olddefconfig
 
+# This diagnostic kernel boots a fixed QEMU device set and loads only the
+# candidate DECnet module. Drop inherited distro =m selections so a bounded
+# in-tree modules pass can emit Module.symvers without compiling the distro's
+# entire module catalog; required boot paths are forced built-in below.
+sed -Ei 's/^(CONFIG_[A-Za-z0-9_]+)=m$/# \1 is not set/' "$output/build/.config"
+
 config="$output/src/scripts/config"
 "$config" --file "$output/build/.config" --set-str LOCALVERSION "-dniv-$profile"
 "$config" --file "$output/build/.config" --disable LOCALVERSION_AUTO
@@ -117,6 +123,11 @@ export KBUILD_BUILD_HOST=diagnostic
 export KBUILD_BUILD_VERSION=1
 export KBUILD_BUILD_TIMESTAMP="Sun Apr 12 20:48:06 UTC 2026"
 make -C "$output/src" O="$output/build" ARCH="$karch" -j"$jobs" "$image_target"
+make -C "$output/src" O="$output/build" ARCH="$karch" -j"$jobs" modules
+[[ -s "$output/build/Module.symvers" ]] || {
+    echo "build-diagnostic-kernel: missing Module.symvers after bounded modules pass" >&2
+    exit 1
+}
 
 # A complete kernel image build already produces the generated headers and
 # symbol state required for external-module builds. Re-running modules_prepare
