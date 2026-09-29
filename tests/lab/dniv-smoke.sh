@@ -288,8 +288,14 @@ e1)
     address=$((area * 1024 + node))
     changed_mac=$(printf '52:54:01:00:%02x:%02x' \
         "$((address & 255))" "$(((address >> 8) & 255))")
+    iface=$(find_iface || true)
+    [ -n "$iface" ] || { echo "DNIV-E1-FAIL session=$session node=$name reason=no-interface-before-changeaddr"; exit 1; }
     ip link set dev "$iface" down
+    iface=$(find_iface || true)
+    [ -n "$iface" ] || { echo "DNIV-E1-FAIL session=$session node=$name reason=no-interface-during-changeaddr"; exit 1; }
     ip link set dev "$iface" address "$changed_mac"
+    iface=$(find_iface || true)
+    [ -n "$iface" ] || { echo "DNIV-E1-FAIL session=$session node=$name reason=no-interface-after-address"; exit 1; }
     ip link set dev "$iface" up
     echo "DNIV-E1-CHANGEADDR session=$session node=$name mac=$changed_mac"
     if ! wait_post_change_hello "$peer_node" "$change_hello_before" 80; then

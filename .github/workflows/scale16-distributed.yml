@@ -213,28 +213,55 @@ jobs:
           dpipe="$RUNNER_TEMP/vde2-build/src/dpipe"
           plug="$RUNNER_TEMP/vde2-build/src/vde_plug2tap"
           log="$DNIV_SCRATCH_DIR/cross-cable.log"
-          if [[ "$side" == a ]]; then
-            "$dpipe" sudo "$plug" -s - "$tap" =               ssh -F "$DNIV_SCALE_SSH_CONFIG" dniv-bastion               "echo DNIV_CABLE_LISTENING >&2; exec socat 'UNIX-LISTEN:$relay,unlink-early,unlink-close' STDIO"               >"$log" 2>&1 &
-            cable_marker=DNIV_CABLE_LISTENING
-          else
-            "$dpipe" sudo "$plug" -s - "$tap" =               ssh -F "$DNIV_SCALE_SSH_CONFIG" dniv-bastion               "for i in \$(seq 1 2100); do if [ -S '$relay' ]; then echo DNIV_CABLE_READY >&2; exec socat 'UNIX-CONNECT:$relay' STDIO; fi; sleep 1; done; exit 111"               >"$log" 2>&1 &
-            cable_marker=DNIV_CABLE_READY
-          fi
-          cable_pid=$!
-          trap 'kill "$cable_pid" 2>/dev/null || true; wait "$cable_pid" 2>/dev/null || true' EXIT
-          for i in $(seq 1 100); do
-            [[ -e "/sys/class/net/$tap" ]] && break
-            kill -0 "$cable_pid" 2>/dev/null || { cat "$log" >&2; exit 1; }
-            sleep .2
-          done
-          [[ -e "/sys/class/net/$tap" ]] || { cat "$log" >&2; exit 1; }
+          cable_pid=
+          start_cable() {
+            : >"$log"
+            if [[ "$side" == a ]]; then
+              "$dpipe" sudo "$plug" -s - "$tap" = ssh -F "$DNIV_SCALE_SSH_CONFIG" dniv-bastion \
+                "echo DNIV_CABLE_LISTENING >&2; exec socat 'UNIX-LISTEN:$relay,unlink-early,unlink-close' STDIO" \
+                >"$log" 2>&1 &
+              cable_marker=DNIV_CABLE_LISTENING
+            else
+              "$dpipe" sudo "$plug" -s - "$tap" = ssh -F "$DNIV_SCALE_SSH_CONFIG" dniv-bastion \
+                "for i in \$(seq 1 2100); do if [ -S '$relay' ]; then echo DNIV_CABLE_READY >&2; exec socat 'UNIX-CONNECT:$relay' STDIO; fi; sleep 1; done; exit 111" \
+                >"$log" 2>&1 &
+              cable_marker=DNIV_CABLE_READY
+            fi
+            cable_pid=$!
+          }
+          trap '[[ -z "${cable_pid:-}" ]] || kill "$cable_pid" 2>/dev/null || true; [[ -z "${cable_pid:-}" ]] || wait "$cable_pid" 2>/dev/null || true' EXIT
 
+          attached=0
+          for attempt in $(seq 1 8); do
+            start_cable
+            for i in $(seq 1 100); do
+              if [[ -e "/sys/class/net/$tap" ]]; then
+                attached=1
+                break
+              fi
+              kill -0 "$cable_pid" 2>/dev/null || break
+              sleep .2
+            done
+            [[ "$attached" -eq 1 ]] && break
+            wait "$cable_pid" 2>/dev/null || true
+            cable_pid=
+            sleep $((attempt * 2))
+          done
+          [[ "$attached" -eq 1 ]] || { cat "$log" >&2; exit 1; }
+
+          marker_seen=0
           for i in $(seq 1 2115); do
-            grep -Fqx "$cable_marker" "$log" && break
-            kill -0 "$cable_pid" 2>/dev/null || { cat "$log" >&2; exit 1; }
+            if grep -Fqx "$cable_marker" "$log"; then
+              marker_seen=1
+              break
+            fi
+            kill -0 "$cable_pid" 2>/dev/null || break
             sleep 1
           done
-          grep -Fqx "$cable_marker" "$log" || { cat "$log" >&2; exit 1; }
+          if [[ "$marker_seen" -ne 1 ]]; then
+            cat "$log" >&2 || true
+            exit 1
+          fi
 
           cable_ready="/tmp/dniv-scale16-${GITHUB_RUN_ID}-${arch}-cable-${side}.ready"
           peer_side=a
