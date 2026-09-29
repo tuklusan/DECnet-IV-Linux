@@ -242,8 +242,9 @@ class Lab:
         raise RuntimeError("packet capture did not become ready")
 
     def qemu_command(self, guest: Guest, area: int) -> list[str]:
+        root_device = "LABEL=dniv-root" if self.initrd is not None else "/dev/vda"
         common = (
-            f"root=LABEL=dniv-root rootfstype=ext4 rw dniv.smoke=1 dniv.mode={self.mode} "
+            f"root={root_device} rootfstype=ext4 rw dniv.smoke=1 dniv.mode={self.mode} "
             f"dniv.area={area} dniv.node={guest.node} dniv.name={guest.name} "
             f"dniv.peer={guest.peer_mac} dniv.peer_node={area}.{guest.peer_node} "
             f"dniv.role={guest.role} dniv.session={self.session}"
