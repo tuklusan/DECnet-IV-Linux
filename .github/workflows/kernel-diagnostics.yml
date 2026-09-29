@@ -70,7 +70,7 @@ jobs:
       DNIV_LAB_NIC_MODEL: virtio-net-pci
       DNIV_LAB_VCPUS: "4"
       DNIV_LAB_DIAGNOSTICS: ${{ inputs.profile }}
-      DNIV_LAB_MEMORY_MB: "2048"
+      DNIV_LAB_MEMORY_MB: "2560"
       DNIV_LAB_TIMEOUT_SECONDS: ${{ matrix.lab_timeout }}
       DNIV_LAB_SESSION_ID: run-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.arch }}-${{ inputs.profile }}
       DNIV_LAB_ARCH: ${{ matrix.arch }}
