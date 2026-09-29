@@ -296,6 +296,11 @@ e1)
         echo "DNIV-E1-FAIL session=$session node=$name reason=changeaddr-hello"
         exit 1
     fi
+    iface=$(find_iface || true)
+    if [ -z "$iface" ]; then
+        echo "DNIV-E1-FAIL session=$session node=$name reason=no-interface-after-changeaddr"
+        exit 1
+    fi
 
     snapshot=$(stats_snapshot 8) || {
         echo "DNIV-E1-FAIL session=$session node=$name reason=bad-stats"

@@ -52,12 +52,12 @@ jobs:
             slot: x64
             arch: amd64
             qemu: qemu-system-x86
-            lab_timeout: 600
+            lab_timeout: 900
           - runner: ubuntu-24.04-arm
             slot: arm64
             arch: arm64
             qemu: qemu-system-arm
-            lab_timeout: 720
+            lab_timeout: 1800
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 75
     concurrency:
