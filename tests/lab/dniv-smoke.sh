@@ -286,6 +286,14 @@ e1)
             echo "DNIV-E1-FAIL session=$session node=$name reason=bootstrap-peer"
             exit 1
         fi
+        if [ "$direct_init" -eq 1 ]; then
+            # Under arm64 KASAN+TCG the peer can be CPU-starved immediately
+            # after the first UP sample. Keep DN70 in endnode bootstrap for
+            # one bounded DR-election window so the already-live, equal-
+            # priority higher-address DN71 settles as DR before DN70 joins
+            # the router election.
+            sleep 8
+        fi
         modprobe -r decnet_iv
     fi
 
