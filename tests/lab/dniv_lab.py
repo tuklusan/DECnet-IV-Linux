@@ -191,17 +191,18 @@ class QmpClient:
 
 
 class Lab:
-    def __init__(self, base: Path, kernel: Path, initrd: Path, work: Path, mode: str, session: str,
-                 nic_model: str, vcpus: int, diagnostics: str):
+    def __init__(self, base: Path, kernel: Path, initrd: Path | None, work: Path, mode: str, session: str,
+                 nic_model: str, vcpus: int, diagnostics: str, memory_mb: int):
         self.base = base.resolve()
         self.kernel = kernel.resolve()
-        self.initrd = initrd.resolve()
+        self.initrd = initrd.resolve() if initrd is not None else None
         self.work = work
         self.mode = mode
         self.session = session
         self.nic_model = nic_model
         self.vcpus = vcpus
         self.diagnostics = diagnostics
+        self.memory_mb = memory_mb
         self.host_arch = platform.machine()
         self.guests: list[Guest] = []
         self.tcpdump: subprocess.Popen[bytes] | None = None
@@ -251,21 +252,26 @@ class Lab:
             common += " dniv.diag=kfence kfence.sample_interval=100 panic_on_warn=1 oops=panic"
         elif self.diagnostics == "ubsan":
             common += " dniv.diag=ubsan panic_on_warn=1 oops=panic"
+        elif self.diagnostics == "kasan":
+            common += " dniv.diag=kasan panic_on_warn=1 oops=panic"
         if self.host_arch == "x86_64":
-            cmd = ["qemu-system-x86_64", "-name", guest.name, "-accel", self.accel, "-m", "512",
-                   "-smp", str(self.vcpus)]
+            cmd = ["qemu-system-x86_64", "-name", guest.name, "-accel", self.accel,
+                   "-m", str(self.memory_mb), "-smp", str(self.vcpus)]
             console = "console=ttyS0"
         elif self.host_arch == "aarch64":
             accel = self.accel
             cpu = "host" if accel == "kvm" else "max"
             machine = "virt,gic-version=host" if accel == "kvm" else "virt,gic-version=3"
             cmd = ["qemu-system-aarch64", "-name", guest.name, "-machine", machine, "-accel", accel,
-                   "-cpu", cpu, "-m", "1024", "-smp", str(self.vcpus)]
+                   "-cpu", cpu, "-m", str(self.memory_mb), "-smp", str(self.vcpus)]
             console = "earlycon=pl011,0x09000000 console=ttyAMA0"
         else:
             raise RuntimeError(f"unsupported host architecture: {self.host_arch}")
+        cmd += ["-kernel", str(self.kernel)]
+        if self.initrd is not None:
+            cmd += ["-initrd", str(self.initrd)]
         cmd += [
-            "-kernel", str(self.kernel), "-initrd", str(self.initrd), "-append", f"{common} {console}",
+            "-append", f"{common} {console}",
             "-drive", f"file={guest.disk},if=virtio,format=qcow2",
             "-netdev", f"tap,id=lan,ifname={guest.tap},script=no,downscript=no",
             "-device", f"{self.nic_model},netdev=lan,mac={guest.nic_mac}",
@@ -308,10 +314,12 @@ class Lab:
         sudo("ip", "link", "del", self.bridge, check=False)
 
 
-def validate_args(base: Path, kernel: Path, initrd: Path, mode: str, session: str) -> None:
-    for path in (base, kernel, initrd):
+def validate_args(base: Path, kernel: Path, initrd: Path | None, mode: str, session: str) -> None:
+    for path in (base, kernel):
         if not path.is_file():
             raise SystemExit(f"python-lab: missing {path}")
+    if initrd is not None and not initrd.is_file():
+        raise SystemExit(f"python-lab: missing {initrd}")
     if mode not in {"phase2", "e1"}:
         raise SystemExit(f"python-lab: invalid mode: {mode}")
     if not re.fullmatch(r"[A-Za-z0-9._-]+", session):
@@ -325,8 +333,9 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("base", type=Path)
     parser.add_argument("kernel", type=Path)
-    parser.add_argument("initrd", type=Path)
+    parser.add_argument("initrd")
     args = parser.parse_args()
+    initrd = None if args.initrd == "-" else Path(args.initrd)
 
     mode = os.environ.get("DNIV_LAB_MODE", "phase2")
     session = os.environ.get("DNIV_LAB_SESSION_ID", f"local-{int(time.time())}-{os.getpid()}")
@@ -334,15 +343,19 @@ def main() -> int:
     nic_model = os.environ.get("DNIV_LAB_NIC_MODEL", "virtio-net-pci")
     vcpus = int(os.environ.get("DNIV_LAB_VCPUS", "1"))
     diagnostics = os.environ.get("DNIV_LAB_DIAGNOSTICS", "none")
+    default_memory = "1024" if platform.machine() == "aarch64" else "512"
+    memory_mb = int(os.environ.get("DNIV_LAB_MEMORY_MB", default_memory))
     if timeout < 1:
         raise SystemExit("python-lab: timeout must be positive")
     if nic_model not in {"virtio-net-pci", "e1000"}:
         raise SystemExit(f"python-lab: unsupported NIC model: {nic_model}")
     if vcpus not in {1, 2, 4, 8}:
         raise SystemExit(f"python-lab: unsupported vCPU count: {vcpus}")
-    if diagnostics not in {"none", "kfence", "ubsan"}:
+    if diagnostics not in {"none", "kfence", "ubsan", "kasan"}:
         raise SystemExit(f"python-lab: unsupported diagnostics mode: {diagnostics}")
-    validate_args(args.base, args.kernel, args.initrd, mode, session)
+    if not 256 <= memory_mb <= 4096:
+        raise SystemExit(f"python-lab: unsupported guest memory size: {memory_mb}")
+    validate_args(args.base, args.kernel, initrd, mode, session)
 
     env = read_env(Path(__file__).with_name("test-addresses.env"))
     area = int(env["DECNET_TEST_AREA"])
@@ -367,7 +380,7 @@ def main() -> int:
         nic_a, nic_b = lab_mac(area, node_a), lab_mac(area, node_b)
         changed_a, changed_b = lab_mac(area, node_a, True), lab_mac(area, node_b, True)
 
-    lab = Lab(args.base, args.kernel, args.initrd, work, mode, session, nic_model, vcpus, diagnostics)
+    lab = Lab(args.base, args.kernel, initrd, work, mode, session, nic_model, vcpus, diagnostics, memory_mb)
     guest_a = Guest(name_a, node_a, node_b, mac_b, "A", nic_a, f"da{suffix}", lab.create_overlay("node-a"),
                     work / "node-a.serial.log", work / "node-a.qmp")
     guest_b = Guest(name_b, node_b, node_a, mac_a, "B", nic_b, f"db{suffix}", lab.create_overlay("node-b"),
@@ -411,6 +424,12 @@ def main() -> int:
                 raise SystemExit(f"python-lab: missing UBSAN runtime marker from {guest.name}")
             if contains(guest.log, "UBSAN:") or contains(guest.log, "runtime error:"):
                 raise SystemExit(f"python-lab: UBSAN finding reported by {guest.name}")
+    elif diagnostics == "kasan":
+        for guest in (guest_a, guest_b):
+            if not contains(guest.log, f"DNIV-DIAG-KASAN session={session}"):
+                raise SystemExit(f"python-lab: missing KASAN runtime marker from {guest.name}")
+            if contains(guest.log, "BUG: KASAN:"):
+                raise SystemExit(f"python-lab: KASAN finding reported by {guest.name}")
 
     frames = pcap_count(lab.pcap, "ether proto 0x6003")
     if frames < 2:

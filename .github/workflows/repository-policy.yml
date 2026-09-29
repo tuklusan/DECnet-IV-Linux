@@ -370,6 +370,9 @@ jobs:
             dispatch_and_record VM_LAB_E1_UBSAN vm-lab.yml \
               -f lab_mode=e1 -f nic_model=virtio-net-pci -f vcpus=4 -f diagnostics=ubsan \
               -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
+            printf 'KERNEL_KASAN=kernel-diagnostics.yml:kasan\n' >> "$DNIV_SCRATCH_DIR/dispatch.env"
+            dispatch_and_record KERNEL_KASAN kernel-diagnostics.yml \
+              -f profile=kasan -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
           fi
 
           if [[ "$profile" == consolidated ]]; then

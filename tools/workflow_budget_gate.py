@@ -38,6 +38,7 @@ ACTION_PINS = {
 }
 CHILD_WORKFLOWS = {
     "build.yml", "project-state.yml", "reference-baselines.yml", "vm-lab.yml", "interop.yml",
+    "kernel-diagnostics.yml",
 }
 JOB_RE = re.compile(r"^  ([A-Za-z0-9_-]+):\s*$")
 TIMEOUT_RE = re.compile(r"^    timeout-minutes:\s*([0-9]+)\s*$")
