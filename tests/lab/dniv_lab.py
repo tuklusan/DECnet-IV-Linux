@@ -255,6 +255,8 @@ class Lab:
             common += " dniv.diag=ubsan panic_on_warn=1 oops=panic"
         elif self.diagnostics == "kasan":
             common += " dniv.diag=kasan panic_on_warn=1 oops=panic net.ifnames=0 systemd.mask=systemd-udev-trigger.service"
+            if self.host_arch == "aarch64":
+                common += " init=/usr/local/sbin/dniv-smoke"
         if self.host_arch == "x86_64":
             cmd = ["qemu-system-x86_64", "-name", guest.name, "-accel", self.accel,
                    "-m", str(self.memory_mb), "-smp", str(self.vcpus)]
