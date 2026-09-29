@@ -50,6 +50,11 @@ git -C "$output/src" fetch --depth=1 origin "$linux_commit"
 git -C "$output/src" checkout -q --detach FETCH_HEAD
 test "$(git -C "$output/src" rev-parse HEAD)" = "$linux_commit"
 
+# The exact source commit is verified above. Drop SCM metadata before invoking
+# Kbuild so scripts/setlocalversion cannot append an environment-dependent '+'
+# merely because the shallow pinned checkout does not contain the v7.0 tag.
+rm -rf "$output/src/.git"
+
 cp "$base_config" "$output/build/.config"
 make -s -C "$output/src" O="$output/build" ARCH="$karch" olddefconfig
 
@@ -128,6 +133,5 @@ cp "$output/build/.config" "$output/config"
 printf '%s\n' "$krel" > "$output/kernelrelease"
 printf '%s\n' "$linux_commit" > "$output/linux-commit"
 test -s "$output/vmlinuz"
-rm -rf "$output/src/.git"
 
 echo "build-diagnostic-kernel: arch=$arch profile=$profile release=$krel source=$linux_commit"
