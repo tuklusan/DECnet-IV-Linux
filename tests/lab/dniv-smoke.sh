@@ -21,7 +21,7 @@ set -eu
 # smoke harness and module tooling require; the controller terminates QEMU
 # after both explicit pass markers are observed.
 direct_init=0
-if [ "$" -eq 1 ]; then
+if [ "${PPID:-1}" -eq 0 ]; then
     direct_init=1
     mkdir -p /proc /sys /run
     mount -t proc proc /proc
