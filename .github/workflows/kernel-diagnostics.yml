@@ -52,11 +52,13 @@ jobs:
             slot: x64
             arch: amd64
             qemu: qemu-system-x86
+            vcpus: 4
             lab_timeout: 900
           - runner: ubuntu-24.04-arm
             slot: arm64
             arch: arm64
             qemu: qemu-system-arm
+            vcpus: 2
             lab_timeout: 3000
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 75
@@ -68,7 +70,7 @@ jobs:
       DNIV_SCRATCH_DIR: ${{ github.workspace }}/scratch/runtime/${{ github.run_id }}/${{ github.run_attempt }}/${{ github.job }}-${{ matrix.arch }}
       DNIV_LAB_MODE: e1
       DNIV_LAB_NIC_MODEL: virtio-net-pci
-      DNIV_LAB_VCPUS: "4"
+      DNIV_LAB_VCPUS: ${{ matrix.vcpus }}
       DNIV_LAB_DIAGNOSTICS: ${{ inputs.profile }}
       DNIV_LAB_MEMORY_MB: "2560"
       DNIV_LAB_TIMEOUT_SECONDS: ${{ matrix.lab_timeout }}
