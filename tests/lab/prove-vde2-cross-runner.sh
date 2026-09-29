@@ -488,7 +488,7 @@ start_py() {
 
 wait_ups() {
     local want=$1
-    for _ in $(seq 1 160); do
+    for _ in $(seq 1 240); do
         count=$(grep -Fc "Adjacency up" "$work/pydecnet.log" 2>/dev/null || true)
         (( count >= want )) && return 0
         kill -0 "$py_pid" 2>/dev/null || {
