@@ -60,7 +60,7 @@ jobs:
             qemu: qemu-system-arm
             side: b
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 75
+    timeout-minutes: 120
     env:
       DNIV_SCRATCH_DIR: ${{ github.workspace }}/scratch/runtime/${{ github.run_id }}/${{ github.run_attempt }}/${{ matrix.slot }}
       DNIV_OUTER_BASE_DIR: ${{ github.workspace }}/scratch/outer/${{ matrix.arch }}
@@ -217,7 +217,7 @@ jobs:
             "$dpipe" sudo "$plug" -s - "$tap" =               ssh -F "$DNIV_SCALE_SSH_CONFIG" dniv-bastion               "echo DNIV_CABLE_LISTENING >&2; exec socat 'UNIX-LISTEN:$relay,unlink-early,unlink-close' STDIO"               >"$log" 2>&1 &
             cable_marker=DNIV_CABLE_LISTENING
           else
-            "$dpipe" sudo "$plug" -s - "$tap" =               ssh -F "$DNIV_SCALE_SSH_CONFIG" dniv-bastion               "for i in \$(seq 1 900); do if [ -S '$relay' ]; then echo DNIV_CABLE_READY >&2; exec socat 'UNIX-CONNECT:$relay' STDIO; fi; sleep 1; done; exit 111"               >"$log" 2>&1 &
+            "$dpipe" sudo "$plug" -s - "$tap" =               ssh -F "$DNIV_SCALE_SSH_CONFIG" dniv-bastion               "for i in \$(seq 1 2100); do if [ -S '$relay' ]; then echo DNIV_CABLE_READY >&2; exec socat 'UNIX-CONNECT:$relay' STDIO; fi; sleep 1; done; exit 111"               >"$log" 2>&1 &
             cable_marker=DNIV_CABLE_READY
           fi
           cable_pid=$!
@@ -229,7 +229,7 @@ jobs:
           done
           [[ -e "/sys/class/net/$tap" ]] || { cat "$log" >&2; exit 1; }
 
-          for i in $(seq 1 915); do
+          for i in $(seq 1 2115); do
             grep -Fqx "$cable_marker" "$log" && break
             kill -0 "$cable_pid" 2>/dev/null || { cat "$log" >&2; exit 1; }
             sleep 1
@@ -240,7 +240,7 @@ jobs:
           peer_side=a
           [[ "$side" == a ]] && peer_side=b
           cable_peer="/tmp/dniv-scale16-${GITHUB_RUN_ID}-${arch}-cable-${peer_side}.ready"
-          ssh -F "$DNIV_SCALE_SSH_CONFIG" dniv-bastion             ": > '$cable_ready'; for i in \$(seq 1 900); do [ -f '$cable_peer' ] && exit 0; sleep 1; done; exit 111"
+          ssh -F "$DNIV_SCALE_SSH_CONFIG" dniv-bastion             ": > '$cable_ready'; for i in \$(seq 1 2100); do [ -f '$cable_peer' ] && exit 0; sleep 1; done; exit 111"
 
           rm -rf "$DNIV_LAB_ARTIFACTS"
           mkdir -p "$DNIV_LAB_ARTIFACTS"

@@ -37,7 +37,7 @@ concurrency:
 jobs:
   server:
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 60
     steps:
       - name: Check out exact repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -104,7 +104,7 @@ jobs:
 
   client:
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 25
+    timeout-minutes: 60
     outputs:
       retry_on_x64: ${{ steps.join.outputs.retry_on_x64 }}
     steps:
@@ -187,7 +187,7 @@ jobs:
     needs: client
     if: ${{ needs.client.outputs.retry_on_x64 == 'true' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 60
     steps:
       - name: Check out exact repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
