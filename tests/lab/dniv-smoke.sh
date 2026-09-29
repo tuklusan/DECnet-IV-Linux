@@ -287,12 +287,14 @@ e1)
             exit 1
         fi
         if [ "$direct_init" -eq 1 ]; then
-            # Under arm64 KASAN+TCG the peer can be CPU-starved immediately
-            # after the first UP sample. Keep DN70 in endnode bootstrap for
-            # one bounded DR-election window so the already-live, equal-
-            # priority higher-address DN71 settles as DR before DN70 joins
-            # the router election.
-            sleep 8
+            # Keep the bootstrap interface quiescent across the role change.
+            # With two arm64 KASAN+TCG guests, leaving it UP lets DN70 begin
+            # its local DR delay while DN71 can be CPU-starved, creating a
+            # brief false dual-DR window. Bring DN70 back only after DN71 has
+            # had one bounded election window with the host CPU to itself.
+            iface=$(find_iface || true)
+            [ -n "$iface" ] || { echo "DNIV-E1-FAIL session=$session node=$name reason=no-interface-bootstrap-down"; exit 1; }
+            ip link set "$iface" down
         fi
         modprobe -r decnet_iv
     fi
@@ -301,6 +303,9 @@ e1)
         default_node_type=2 router_priority=64 hello_interval=2
     /usr/local/sbin/dnctl set "$area.$node" "$name"
     /usr/local/sbin/dnctl reset-stats
+    if [ "$direct_init" -eq 1 ] && [ "$role" = A ]; then
+        sleep 8
+    fi
     iface=$(find_iface || true)
     [ -n "$iface" ] || { echo "DNIV-E1-FAIL session=$session node=$name reason=no-interface-router-up"; exit 1; }
     ip link set "$iface" up
