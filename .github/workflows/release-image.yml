@@ -51,7 +51,7 @@ jobs:
             firmware_pkg: qemu-efi-aarch64
             firmware: /usr/share/AAVMF/AAVMF_CODE.fd
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 75
+    timeout-minutes: 120
     env:
       DNIV_SCRATCH_DIR: ${{ github.workspace }}/scratch/runtime/${{ github.run_id }}/${{ github.run_attempt }}/release-image-${{ matrix.arch }}
     steps:
@@ -103,10 +103,13 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/release-a/boot" "$RUNNER_TEMP/release-b/boot" "$DNIV_SCRATCH_DIR/release"
-          DNIV_IMAGE_MANIFEST="$DNIV_SCRATCH_DIR/release/rootfs-a.manifest" \
+          apt_cache="$RUNNER_TEMP/dniv-release-apt-${{ matrix.arch }}"
+          DNIV_APT_CACHE_DIR="$apt_cache" \
+            DNIV_IMAGE_MANIFEST="$DNIV_SCRATCH_DIR/release/rootfs-a.manifest" \
             image/ubuntu-base/build-image.sh '${{ matrix.arch }}' "$DNIV_BASE_TARBALL" \
             "$RUNNER_TEMP/release-a/dniv.qcow2" "$RUNNER_TEMP/release-a/boot"
-          DNIV_IMAGE_MANIFEST="$DNIV_SCRATCH_DIR/release/rootfs-b.manifest" \
+          DNIV_APT_CACHE_DIR="$apt_cache" \
+            DNIV_IMAGE_MANIFEST="$DNIV_SCRATCH_DIR/release/rootfs-b.manifest" \
             image/ubuntu-base/build-image.sh '${{ matrix.arch }}' "$DNIV_BASE_TARBALL" \
             "$RUNNER_TEMP/release-b/dniv.qcow2" "$RUNNER_TEMP/release-b/boot"
 

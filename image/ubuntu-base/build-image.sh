@@ -50,6 +50,7 @@ fi
 source_commit=$(git -C "$repo_root" rev-parse --verify 'HEAD^{commit}')
 source_epoch=$(git -C "$repo_root" show -s --format=%ct "$source_commit")
 manifest_output=${DNIV_IMAGE_MANIFEST:-}
+apt_cache_dir=${DNIV_APT_CACHE_DIR:-}
 
 work=$(mktemp -d)
 raw="$work/root.raw"
@@ -62,8 +63,17 @@ esp_dev=
 mounted=0
 esp_mounted=0
 chroot_mounted=0
+apt_archives_mounted=0
+apt_lists_mounted=0
+apt_cache_active=0
 cleanup() {
     set +e
+    if (( apt_lists_mounted )); then
+        sudo umount "$mnt/var/lib/apt/lists" 2>/dev/null || true
+    fi
+    if (( apt_archives_mounted )); then
+        sudo umount "$mnt/var/cache/apt/archives" 2>/dev/null || true
+    fi
     if (( chroot_mounted )); then
         sudo umount -R "$mnt/dev" 2>/dev/null || true
         sudo umount "$mnt/sys" 2>/dev/null || true
@@ -144,13 +154,23 @@ sudo mount --rbind /dev "$mnt/dev"
 sudo mount --make-rslave "$mnt/dev"
 chroot_mounted=1
 
+if [[ -n "$apt_cache_dir" ]]; then
+    sudo mkdir -p "$apt_cache_dir/archives/partial" "$apt_cache_dir/lists/partial"
+    sudo mkdir -p "$mnt/var/cache/apt/archives" "$mnt/var/lib/apt/lists"
+    sudo mount --bind "$apt_cache_dir/archives" "$mnt/var/cache/apt/archives"
+    apt_archives_mounted=1
+    sudo mount --bind "$apt_cache_dir/lists" "$mnt/var/lib/apt/lists"
+    apt_lists_mounted=1
+    apt_cache_active=1
+fi
+
 sudo tee "$mnt/usr/sbin/policy-rc.d" >/dev/null <<'EOF_POLICY'
 #!/bin/sh
 exit 101
 EOF_POLICY
 sudo chmod 0755 "$mnt/usr/sbin/policy-rc.d"
 
-sudo chroot "$mnt" /usr/bin/env UBUNTU_APT_SNAPSHOT="$snapshot" SOURCE_DATE_EPOCH="$source_epoch" /bin/bash -euxc '
+sudo chroot "$mnt" /usr/bin/env UBUNTU_APT_SNAPSHOT="$snapshot" SOURCE_DATE_EPOCH="$source_epoch" DNIV_APT_CACHE_ACTIVE="$apt_cache_active" /bin/bash -euxc '
 export DEBIAN_FRONTEND=noninteractive
 # Ubuntu Base has no usable certificate bundle yet. Bootstrap only the
 # certificate package with TLS peer verification disabled; repository
@@ -185,11 +205,29 @@ grub-install --target="$grub_target" --efi-directory=/boot/efi --boot-directory=
     --removable --no-nvram
 apt-get purge -y build-essential linux-headers-virtual-hwe-26.04 || true
 apt-get autoremove -y --purge || true
-apt-get clean
-rm -rf /var/lib/apt/lists/*
+if [[ "$DNIV_APT_CACHE_ACTIVE" != 1 ]]; then
+    apt-get clean
+    rm -rf /var/lib/apt/lists/*
+fi
 rm -f /usr/sbin/policy-rc.d
 rm -f /var/log/apt/* /var/log/dpkg.log /var/log/alternatives.log
 '
+
+# A reproducibility job may bind host-side snapshot caches into the guest during
+# package installation. Detach them before manifesting the release filesystem,
+# then restore the same empty runtime-cache shape produced by apt-get clean.
+if (( apt_lists_mounted )); then
+    sudo umount "$mnt/var/lib/apt/lists"
+    apt_lists_mounted=0
+    sudo rm -rf "$mnt/var/lib/apt/lists"
+    sudo mkdir -p "$mnt/var/lib/apt/lists/partial"
+fi
+if (( apt_archives_mounted )); then
+    sudo umount "$mnt/var/cache/apt/archives"
+    apt_archives_mounted=0
+    sudo rm -rf "$mnt/var/cache/apt/archives"
+    sudo mkdir -p "$mnt/var/cache/apt/archives/partial"
+fi
 
 # Package scripts may create a machine identity. Clear it only after all
 # package work so every QCOW2 overlay creates its own identity on first boot.
