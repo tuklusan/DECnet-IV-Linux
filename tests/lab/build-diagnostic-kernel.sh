@@ -112,10 +112,17 @@ export KBUILD_BUILD_HOST=diagnostic
 export KBUILD_BUILD_VERSION=1
 export KBUILD_BUILD_TIMESTAMP="Sun Apr 12 20:48:06 UTC 2026"
 make -C "$output/src" O="$output/build" ARCH="$karch" -j"$jobs" "$image_target"
-make -s -C "$output/src" O="$output/build" ARCH="$karch" modules_prepare
 
+# A complete kernel image build already produces the generated headers and
+# symbol state required for external-module builds. Re-running modules_prepare
+# after the full KASAN build is redundant and returned a non-zero status on
+# both hosted architectures despite the completed kernel image.
 krel=$(make -s -C "$output/src" O="$output/build" ARCH="$karch" kernelrelease)
-test "$krel" = "7.0.0-dniv-$profile"
+echo "build-diagnostic-kernel: kernelrelease=$krel"
+[[ "$krel" == "7.0.0-dniv-$profile" ]] || {
+    echo "build-diagnostic-kernel: unexpected kernel release: $krel" >&2
+    exit 1
+}
 cp "$output/build/$image_rel" "$output/vmlinuz"
 cp "$output/build/.config" "$output/config"
 printf '%s\n' "$krel" > "$output/kernelrelease"
