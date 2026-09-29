@@ -233,6 +233,12 @@ fi
 # package work so every QCOW2 overlay creates its own identity on first boot.
 sudo rm -f "$mnt/etc/machine-id" "$mnt/var/lib/dbus/machine-id"
 sudo touch "$mnt/etc/machine-id"
+# APT's binary package caches are derived from the package-list state and may
+# encode build-local ordering even when every package/source input is pinned.
+# They are disposable runtime caches, so keep them out of release identity just
+# like the already-normalized ldconfig auxiliary cache.
+sudo rm -f "$mnt/var/cache/apt/pkgcache.bin" "$mnt/var/cache/apt/srcpkgcache.bin"
+
 # ldconfig's auxiliary cache embeds host/build-time metadata and is strictly
 # disposable. Removing it makes canonical guest-content manifests compare the
 # durable release filesystem rather than a runtime cache that ldconfig rebuilds.
