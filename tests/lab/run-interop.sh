@@ -301,6 +301,47 @@ wait_candidate_marker() {
     return 1
 }
 
+pcap_source_marker_count() {
+    local capture=$1 source_text=$2 marker_text=$3
+    python3 - "$capture" "$source_text" "$marker_text" <<'PY'
+import struct
+import sys
+from pathlib import Path
+
+path, source_text, marker_text = sys.argv[1:]
+source = bytes.fromhex(source_text.replace(":", ""))
+marker = marker_text.encode("ascii")
+try:
+    data = Path(path).read_bytes()
+except FileNotFoundError:
+    print(0)
+    raise SystemExit(0)
+if len(data) < 24:
+    print(0)
+    raise SystemExit(0)
+magic = data[:4]
+if magic in (b"\xd4\xc3\xb2\xa1", b"\x4d\x3c\xb2\xa1"):
+    order = "<"
+elif magic in (b"\xa1\xb2\xc3\xd4", b"\xa1\xb2\x3c\x4d"):
+    order = ">"
+else:
+    print(0)
+    raise SystemExit(0)
+pos = 24
+count = 0
+while pos + 16 <= len(data):
+    _sec, _frac, incl, _orig = struct.unpack_from(order + "IIII", data, pos)
+    pos += 16
+    if pos + incl > len(data):
+        break
+    frame = data[pos:pos + incl]
+    pos += incl
+    if len(frame) >= 14 and frame[6:12] == source and marker in frame:
+        count += 1
+print(count)
+PY
+}
+
 start_reference "$ref1_disk" "$ref1_log" & REFERENCE_PID=$!
 reference_ready_marker="DNIV-REF-READY session=$session reference=$reference sha=$expected_sha scenario=$scenario"
 if [[ "$reference" == pydecnet ]]; then
@@ -685,13 +726,28 @@ if [[ "$reference" == pydecnet ]]; then
     LOSS_QDISC=1
     sudo tc filter add dev "$tap_reference" ingress protocol all pref 10 flower \
         src_mac "$reference_mac" dst_mac "$candidate_mac" action drop
-    printf 'fault=reference-unicast-drop duration=8s source=%s destination=%s\n' \
+    printf 'fault=reference-unicast-drop until=candidate-retransmit max=60s source=%s destination=%s\n' \
         "$reference_mac" "$candidate_mac" >> "$loss_fault_log"
-    sleep 8
+    loss_probe_count=0
+    loss_retransmit_seen=0
+    loss_deadline=$((SECONDS + 60))
+    while (( SECONDS < loss_deadline )); do
+        loss_probe_count=$(pcap_source_marker_count "$pcap" "$candidate_mac" "DNIV-LOSS-PROBE")
+        if (( loss_probe_count >= 2 )); then
+            loss_retransmit_seen=1
+            break
+        fi
+        sleep 1
+    done
     loss_stats=$(sudo tc -s filter show dev "$tap_reference" ingress)
-    printf '%s\n' "$loss_stats" >> "$loss_fault_log"
+    printf 'candidate_loss_probes=%s\n%s\n' "$loss_probe_count" "$loss_stats" >> "$loss_fault_log"
     if ! printf '%s\n' "$loss_stats" | grep -Eq 'Sent [0-9]+ bytes [1-9][0-9]* pkt'; then
         echo "interop: NSP loss injector matched no frames" >&2
+        cat "$loss_fault_log" >&2
+        exit 1
+    fi
+    if (( loss_retransmit_seen != 1 )); then
+        echo "interop: NSP loss injector did not hold through candidate retransmission" >&2
         cat "$loss_fault_log" >&2
         exit 1
     fi
