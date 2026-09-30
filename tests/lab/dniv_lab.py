@@ -533,6 +533,8 @@ def main() -> int:
         mode == "e1" and diagnostics in {"kasan", "kcsan"} and
         lab.host_arch == "aarch64" and lab.accel == "tcg"
     )
+    startup_a_paused = False
+    startup_released = not diagnostic_fault
     fault_started = False
     fault_a_paused = False
     fault_b_paused = False
@@ -548,6 +550,28 @@ def main() -> int:
         while time.monotonic() < deadline:
             pass_a = contains(guest_a.log, f"{marker} session={session} node={name_a}")
             pass_b = contains(guest_b.log, f"{marker} session={session} node={name_b}")
+
+            if diagnostic_fault and not startup_released:
+                quiesced_a = contains(
+                    guest_a.log,
+                    f"DNIV-E1-BOOTSTRAP-QUIESCED session={session} node={name_a}",
+                )
+                if quiesced_a and not startup_a_paused:
+                    # Keep DN70 unloaded and its virtual clock stopped while
+                    # DN71 completes the deliberately expensive diagnostic
+                    # module reload. Cross-guest sleeps cannot order this
+                    # lifecycle under two instrumented TCG guests.
+                    lab.pause_guest(guest_a)
+                    startup_a_paused = True
+
+                reload_done_b = contains(
+                    guest_b.log,
+                    f"DNIV-E1-DIAG-RELOAD-DONE session={session} node={name_b}",
+                )
+                if startup_a_paused and reload_done_b:
+                    lab.resume_guest(guest_a)
+                    startup_a_paused = False
+                    startup_released = True
 
             if diagnostic_fault and not fault_started:
                 ready_b = contains(
@@ -616,6 +640,8 @@ def main() -> int:
                 break
             time.sleep(0.1 if diagnostic_fault else 1)
     finally:
+        if startup_a_paused:
+            lab.resume_guest(guest_a)
         if fault_b_paused:
             lab.resume_guest(guest_b)
         if fault_a_paused and not fault_restored:

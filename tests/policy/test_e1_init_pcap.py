@@ -81,6 +81,21 @@ def main():
         assert LAB.pcap_router_hello_count(p, B) == 1
 
     source = (ROOT / "tests/lab/dniv_lab.py").read_text(encoding="utf-8")
+    smoke = (ROOT / "tests/lab/dniv-smoke.sh").read_text(encoding="utf-8")
+    for marker in (
+        'DNIV-E1-BOOTSTRAP-QUIESCED session=$session node=$name',
+        'DNIV-E1-DIAG-RELOAD-DONE session=$session node=$name',
+    ):
+        if marker not in smoke:
+            raise SystemExit(f"e1 INIT PCAP regression: missing diagnostic startup marker: {marker}")
+    for marker in (
+        "startup_a_paused = False",
+        "startup_released = not diagnostic_fault",
+        'f"DNIV-E1-BOOTSTRAP-QUIESCED session={session} node={name_a}"',
+        'f"DNIV-E1-DIAG-RELOAD-DONE session={session} node={name_b}"',
+    ):
+        if marker not in source:
+            raise SystemExit(f"e1 INIT PCAP regression: missing host-ordered diagnostic startup: {marker}")
     if "routers_a_now - routers_a_before >= 5" not in source:
         raise SystemExit("e1 INIT PCAP regression: missing guest-clock KASAN expiry handoff")
     if ('if not QmpClient(guest.qmp).execute("stop"):' not in source or

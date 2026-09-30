@@ -316,6 +316,9 @@ e1)
             ip link set "$iface" down
         fi
         modprobe -r decnet_iv
+        if [ "$direct_init" -eq 1 ]; then
+            echo "DNIV-E1-BOOTSTRAP-QUIESCED session=$session node=$name"
+        fi
     fi
 
     if [ "$direct_init" -eq 1 ] && [ "$role" = A ]; then
@@ -347,6 +350,7 @@ e1)
         iface=$(find_iface || true)
         [ -n "$iface" ] || { echo "DNIV-E1-FAIL session=$session node=$name reason=no-interface-diag-reload"; exit 1; }
         ip link set "$iface" up
+        echo "DNIV-E1-DIAG-RELOAD-DONE session=$session node=$name"
     fi
 
     if ! wait_adjacency_up "$peer_node" DNIV-E1-INIT 120; then
