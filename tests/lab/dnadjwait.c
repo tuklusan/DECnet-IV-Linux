@@ -1,5 +1,3 @@
-#define _POSIX_C_SOURCE 200809L
-
 // ============================================================================
 // Copyright (c) 2026 Supratim Sanyal of SANYALnet Labs.
 // Proprietary rights reserved except as expressly licensed herein.
@@ -13,6 +11,8 @@
 // SANYALnet Labs." See LICENSE for full terms, warranty disclaimer, termination,
 // patent, trademark, and governing-law provisions.
 // ============================================================================
+
+#define _POSIX_C_SOURCE 200809L
 
 #include <errno.h>
 #include <fcntl.h>

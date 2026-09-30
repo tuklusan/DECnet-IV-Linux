@@ -1645,3 +1645,6 @@ Exact-SHA full acceptance on `27d75b0b2af13ec05eaf1b55c863f576ce4ec662` again is
 
 
 Full acceptance on `b2c1462fca1138847ab498e98f2adfc1a6e6b654` stopped in candidate-image construction before protocol execution: the new test-only `dnadjwait` helper used `clock_gettime`, `CLOCK_MONOTONIC` and `nanosleep` under strict C11 without exposing POSIX declarations, so VM jobs failed compilation with implicit-declaration errors. Define `_POSIX_C_SOURCE=200809L` before the helper's headers; no runtime or protocol behavior changes. Next: exact-SHA full acceptance, requiring candidate-image construction, dual-architecture KASAN and the complete Phase 9 matrix green before advancing to KCSAN/lockdep/kmemleak.
+
+
+Repository Policy run `36719515662` on `b8b95737bc59acbf38a8056ee11dc971ded76022` correctly rejected the adjacency-waiter compile follow-up because the POSIX feature-test macro had been placed before the mandatory canonical project header. Move the macro below the complete license header and before system includes; helper behavior is unchanged. Next: exact-SHA full acceptance requiring repository policy, candidate-image construction, dual-architecture KASAN and the complete Phase 9 matrix green before advancing to KCSAN/lockdep/kmemleak.
