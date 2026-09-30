@@ -409,34 +409,48 @@ e1)
     # listener expiry plus DRDELAY. A correct DN70 must therefore never emit an
     # All-Endnodes hello before DN71 returns.
     if [ "$role" = B ]; then
-        sleep 1
         if [ "$direct_init" -eq 1 ]; then
-            # The direct-init KASAN path already exercised module unload/reload
-            # before router convergence. Use link loss for the seven-second
-            # silence window so its duration is not contaminated by a slow
-            # instrumented module reload. This keeps the fault strictly between
-            # listener expiry (6.2 s) and DR eligibility (11.2 s).
-            iface=$(find_iface || true)
-            [ -n "$iface" ] || { echo "DNIV-E1-FAIL session=$session node=$name reason=no-interface-silence-down"; exit 1; }
-            ip link set "$iface" down
-        else
-            modprobe -r decnet_iv
+            # Two KASAN+TCG guests do not advance guest time at a stable ratio.
+            # Let the host controller hold this peer off the bridge until DN70
+            # proves listener expiry, then restore DN71 while DN70 is paused.
+            # The host resumes DN70 only after a fresh DN71 router hello is on
+            # the wire, so the diagnostic gate keeps the strict no-false-DR
+            # assertion without relying on cross-guest sleep duration.
+            echo "DNIV-E1-HOST-SILENCE-READY session=$session node=$name"
+            seen_host_expired=0
+            i=0
+            while [ "$i" -lt 480 ]; do
+                output=$(/usr/local/sbin/dnctl adjacencies 2>/dev/null || true)
+                printf '%s\n' "$output"
+                if ! printf '%s\n' "$output" | grep -Fq "$peer_node via "; then
+                    if [ "$seen_host_expired" -eq 0 ]; then
+                        seen_host_expired=1
+                        echo "DNIV-E1-HOST-SILENCE-EXPIRED session=$session node=$name peer=$peer_node"
+                    fi
+                elif [ "$seen_host_expired" -eq 1 ] && \
+                     printf '%s\n' "$output" | grep -F "$peer_node via " | grep -Fq ' UP '; then
+                    echo "DNIV-E1-RECOVERED session=$session node=$name peer=$peer_node"
+                    sleep 5
+                    poweroff_pass "DNIV-E1-PASS session=$session node=$name"
+                fi
+                i=$((i + 1))
+                sleep 0.25
+            done
+            echo "DNIV-E1-FAIL session=$session node=$name reason=no-host-silence-recovery"
+            exit 1
         fi
+
+        sleep 1
+        modprobe -r decnet_iv
         echo "DNIV-E1-SILENT session=$session node=$name"
         sleep 7
-        if [ "$direct_init" -eq 1 ]; then
-            iface=$(find_iface || true)
-            [ -n "$iface" ] || { echo "DNIV-E1-FAIL session=$session node=$name reason=no-interface-silence-up"; exit 1; }
-            ip link set "$iface" up
-        else
-            modprobe decnet_iv default_area="$area" default_node="$node" default_name="$name" \
-                default_node_type=2 router_priority=64 hello_interval=2
-            /usr/local/sbin/dnctl set "$area.$node" "$name"
-            /usr/local/sbin/dnctl reset-stats
-            iface=$(find_iface || true)
-            [ -n "$iface" ] || { echo "DNIV-E1-FAIL session=$session node=$name reason=no-interface-restart"; exit 1; }
-            ip link set "$iface" up
-        fi
+        modprobe decnet_iv default_area="$area" default_node="$node" default_name="$name" \
+            default_node_type=2 router_priority=64 hello_interval=2
+        /usr/local/sbin/dnctl set "$area.$node" "$name"
+        /usr/local/sbin/dnctl reset-stats
+        iface=$(find_iface || true)
+        [ -n "$iface" ] || { echo "DNIV-E1-FAIL session=$session node=$name reason=no-interface-restart"; exit 1; }
+        ip link set "$iface" up
         if ! wait_adjacency_up "$peer_node" DNIV-E1-RESTART-INIT 120; then
             echo "DNIV-E1-FAIL session=$session node=$name reason=recovery-adjacency"
             exit 1

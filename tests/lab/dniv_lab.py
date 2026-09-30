@@ -406,6 +406,14 @@ def main() -> int:
 
     marker = "DNIV-E1-PASS" if mode == "e1" else "DNIV-LAB-PASS"
     pass_a = pass_b = False
+    diagnostic_fault = (
+        mode == "e1" and diagnostics == "kasan" and
+        lab.host_arch == "aarch64" and lab.accel == "tcg"
+    )
+    fault_started = False
+    fault_a_paused = False
+    fault_restored = False
+    routers_b_before = 0
     try:
         lab.create_network([guest_a.tap, guest_b.tap])
         lab.start(guest_a, area)
@@ -414,6 +422,47 @@ def main() -> int:
         while time.monotonic() < deadline:
             pass_a = contains(guest_a.log, f"{marker} session={session} node={name_a}")
             pass_b = contains(guest_b.log, f"{marker} session={session} node={name_b}")
+
+            if diagnostic_fault and not fault_started:
+                ready_b = contains(
+                    guest_b.log,
+                    f"DNIV-E1-HOST-SILENCE-READY session={session} node={name_b}",
+                )
+                initial_a = contains(
+                    guest_a.log,
+                    f"DNIV-E1-INITIAL session={session} node={name_a}",
+                )
+                if ready_b and initial_a:
+                    routers_b_before = pcap_count(
+                        lab.pcap,
+                        f"ether proto 0x6003 and ether dst {ROUTERS} and ether src {mac_b}",
+                    )
+                    sudo("ip", "link", "set", guest_b.tap, "down")
+                    fault_started = True
+
+            if diagnostic_fault and fault_started and not fault_a_paused:
+                expired_a = contains(
+                    guest_a.log,
+                    f"DNIV-E1-EXPIRED session={session} node={name_a}",
+                )
+                expired_b = contains(
+                    guest_b.log,
+                    f"DNIV-E1-HOST-SILENCE-EXPIRED session={session} node={name_b}",
+                )
+                if expired_a and expired_b:
+                    QmpClient(guest_a.qmp).execute("stop")
+                    fault_a_paused = True
+                    sudo("ip", "link", "set", guest_b.tap, "up")
+
+            if diagnostic_fault and fault_a_paused and not fault_restored:
+                routers_b_now = pcap_count(
+                    lab.pcap,
+                    f"ether proto 0x6003 and ether dst {ROUTERS} and ether src {mac_b}",
+                )
+                if routers_b_now > routers_b_before:
+                    QmpClient(guest_a.qmp).execute("cont")
+                    fault_restored = True
+
             if pass_a and pass_b:
                 time.sleep(3)
                 break
@@ -421,8 +470,10 @@ def main() -> int:
                 break
             if guest_b.process is not None and guest_b.process.poll() is not None and not pass_b:
                 break
-            time.sleep(1)
+            time.sleep(0.1 if diagnostic_fault else 1)
     finally:
+        if fault_a_paused and not fault_restored:
+            QmpClient(guest_a.qmp).execute("cont")
         lab.close()
 
     if not (pass_a and pass_b):
