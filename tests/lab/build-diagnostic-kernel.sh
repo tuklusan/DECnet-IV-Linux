@@ -115,6 +115,11 @@ case "$profile" in
         "$config" --file "$output/build/.config" --enable KCSAN_EARLY_ENABLE
         "$config" --file "$output/build/.config" --enable KCSAN_SELFTEST
         "$config" --file "$output/build/.config" --enable KCSAN_INTERRUPT_WATCHER
+        # Virtio device DMA is intentionally not compiler-instrumented and
+        # generates unknown-origin KCSAN reports in the generic virtqueue
+        # core.  Keep two-sided instrumented race detection strict while
+        # excluding that non-candidate device-noise class.
+        "$config" --file "$output/build/.config" --disable KCSAN_REPORT_RACE_UNKNOWN_ORIGIN
         ;;
 esac
 
@@ -129,6 +134,7 @@ case "$profile" in
         grep -q '^CONFIG_KCSAN_EARLY_ENABLE=y$' "$output/build/.config"
         grep -q '^CONFIG_KCSAN_SELFTEST=y$' "$output/build/.config"
         grep -q '^CONFIG_KCSAN_INTERRUPT_WATCHER=y$' "$output/build/.config"
+        grep -q '^# CONFIG_KCSAN_REPORT_RACE_UNKNOWN_ORIGIN is not set$' "$output/build/.config"
         ;;
 esac
 grep -q '^CONFIG_MODULES=y$' "$output/build/.config"

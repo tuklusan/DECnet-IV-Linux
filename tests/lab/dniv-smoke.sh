@@ -307,7 +307,7 @@ e1)
         fi
         if [ "$direct_init" -eq 1 ]; then
             # Keep the bootstrap interface quiescent across the role change.
-            # With two arm64 KASAN+TCG guests, leaving it UP lets DN70 begin
+            # With two heavily instrumented arm64 TCG guests, leaving it UP lets DN70 begin
             # its local DR delay while DN71 can be CPU-starved, creating a
             # brief false dual-DR window. Bring DN70 back only after DN71 has
             # had one bounded election window with the host CPU to itself.
@@ -334,7 +334,7 @@ e1)
     ip link set "$iface" up
 
     if [ "$direct_init" -eq 1 ] && [ "$role" = B ]; then
-        # Exercise the KASAN router unload/reload lifecycle while DN70 is still
+        # Exercise the diagnostic router unload/reload lifecycle while DN70 is still
         # a bootstrap endnode. A heavily instrumented TCG module reload can
         # consume far more than the later DR-delay window, so keep that cost
         # outside the timing-sensitive router-silence proof.

@@ -517,7 +517,7 @@ def main() -> int:
                         f"ether proto 0x6003 and ether dst {ROUTERS} and ether src {mac_b}",
                     )
                     # Run DN70 alone while it ages DN71 out. Under arm64
-                    # KASAN+TCG, leaving both guests runnable can starve the
+                    # instrumented TCG, leaving both guests runnable can starve the
                     # host controller past DN70's local DR-delay boundary.
                     lab.pause_guest(guest_b)
                     fault_b_paused = True
@@ -649,7 +649,7 @@ def main() -> int:
             raise SystemExit("python-lab: E1 initial INIT state was not observed")
         if diagnostic_fault:
             if not contains(guest_b.log, f"DNIV-E1-DIAG-RELOAD session={session}"):
-                raise SystemExit("python-lab: KASAN direct-init module reload was not observed")
+                raise SystemExit("python-lab: diagnostic direct-init module reload was not observed")
         elif not (contains(guest_a.log, f"DNIV-E1-RESTART-INIT session={session}") or
                   contains(guest_b.log, f"DNIV-E1-RESTART-INIT session={session}")):
             raise SystemExit("python-lab: E1 restart INIT state was not observed")

@@ -256,6 +256,7 @@ jobs:
               grep -q '^CONFIG_KCSAN=y$' "$DNIV_DIAG_DIR/config"
               grep -q '^CONFIG_KCSAN_EARLY_ENABLE=y$' "$DNIV_DIAG_DIR/config"
               grep -q '^CONFIG_KCSAN_INTERRUPT_WATCHER=y$' "$DNIV_DIAG_DIR/config"
+              grep -q '^# CONFIG_KCSAN_REPORT_RACE_UNKNOWN_ORIGIN is not set$' "$DNIV_DIAG_DIR/config"
               ;;
             *)
               echo "kernel-diagnostics: unsupported profile" >&2
