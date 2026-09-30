@@ -200,6 +200,8 @@ def contains(path: Path, needle: str) -> bool:
 KCSAN_IGNORED_REPORTS = frozenset({
     "BUG: KCSAN: data-race in memchr_inv / mod_node_state",
     "BUG: KCSAN: data-race in mod_node_state / memchr_inv",
+    "BUG: KCSAN: data-race in __mem_cgroup_flush_stats / tick_do_update_jiffies64",
+    "BUG: KCSAN: data-race in tick_do_update_jiffies64 / __mem_cgroup_flush_stats",
 })
 
 

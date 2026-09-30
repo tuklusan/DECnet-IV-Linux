@@ -66,6 +66,8 @@ required_lab = (
     'dniv.diag=kcsan kcsan.skip_watch=1000 panic_on_warn=0 oops=panic',
     'BUG: KCSAN: data-race in memchr_inv / mod_node_state',
     'BUG: KCSAN: data-race in mod_node_state / memchr_inv',
+    'BUG: KCSAN: data-race in __mem_cgroup_flush_stats / tick_do_update_jiffies64',
+    'BUG: KCSAN: data-race in tick_do_update_jiffies64 / __mem_cgroup_flush_stats',
     'kcsan_unapproved_findings',
     'len(guest_cpus) >= 2 * self.vcpus',
     'len(guest_cpus) >= self.vcpus + 1',
