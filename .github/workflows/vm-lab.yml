@@ -132,8 +132,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get update 2>&1 | tee "$DNIV_SCRATCH_DIR/apt-update.log"
-          sudo apt-get install -y ${{ matrix.qemu }} qemu-utils e2fsprogs tcpdump curl 2>&1 | \
+          if [[ -f /etc/apt/apt-mirrors.txt ]]; then
+            sudo sed -i 's#http://azure.archive.ubuntu.com/ubuntu#https://archive.ubuntu.com/ubuntu#g' \
+              /etc/apt/apt-mirrors.txt
+          fi
+          apt_opts=(-o Acquire::Retries=5 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
+          timeout 600s sudo apt-get "${apt_opts[@]}" update 2>&1 | tee "$DNIV_SCRATCH_DIR/apt-update.log"
+          timeout 600s sudo apt-get "${apt_opts[@]}" install -y ${{ matrix.qemu }} qemu-utils e2fsprogs tcpdump curl 2>&1 | \
             tee "$DNIV_SCRATCH_DIR/apt-install.log"
 
       - name: Compute stable architecture foundation identity
