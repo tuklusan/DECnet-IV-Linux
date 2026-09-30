@@ -314,6 +314,22 @@ e1)
     [ -n "$iface" ] || { echo "DNIV-E1-FAIL session=$session node=$name reason=no-interface-router-up"; exit 1; }
     ip link set "$iface" up
 
+    if [ "$direct_init" -eq 1 ] && [ "$role" = B ]; then
+        # Exercise the KASAN router unload/reload lifecycle while DN70 is still
+        # a bootstrap endnode. A heavily instrumented TCG module reload can
+        # consume far more than the later DR-delay window, so keep that cost
+        # outside the timing-sensitive router-silence proof.
+        modprobe -r decnet_iv
+        echo "DNIV-E1-DIAG-RELOAD session=$session node=$name"
+        modprobe decnet_iv default_area="$area" default_node="$node" default_name="$name" \
+            default_node_type=2 router_priority=64 hello_interval=2
+        /usr/local/sbin/dnctl set "$area.$node" "$name"
+        /usr/local/sbin/dnctl reset-stats
+        iface=$(find_iface || true)
+        [ -n "$iface" ] || { echo "DNIV-E1-FAIL session=$session node=$name reason=no-interface-diag-reload"; exit 1; }
+        ip link set "$iface" up
+    fi
+
     if ! wait_adjacency_up "$peer_node" DNIV-E1-INIT 120; then
         echo "DNIV-E1-FAIL session=$session node=$name reason=initial-adjacency"
         exit 1
@@ -394,16 +410,33 @@ e1)
     # All-Endnodes hello before DN71 returns.
     if [ "$role" = B ]; then
         sleep 1
-        modprobe -r decnet_iv
+        if [ "$direct_init" -eq 1 ]; then
+            # The direct-init KASAN path already exercised module unload/reload
+            # before router convergence. Use link loss for the seven-second
+            # silence window so its duration is not contaminated by a slow
+            # instrumented module reload. This keeps the fault strictly between
+            # listener expiry (6.2 s) and DR eligibility (11.2 s).
+            iface=$(find_iface || true)
+            [ -n "$iface" ] || { echo "DNIV-E1-FAIL session=$session node=$name reason=no-interface-silence-down"; exit 1; }
+            ip link set "$iface" down
+        else
+            modprobe -r decnet_iv
+        fi
         echo "DNIV-E1-SILENT session=$session node=$name"
         sleep 7
-        modprobe decnet_iv default_area="$area" default_node="$node" default_name="$name" \
-            default_node_type=2 router_priority=64 hello_interval=2
-        /usr/local/sbin/dnctl set "$area.$node" "$name"
-        /usr/local/sbin/dnctl reset-stats
-        iface=$(find_iface || true)
-        [ -n "$iface" ] || { echo "DNIV-E1-FAIL session=$session node=$name reason=no-interface-restart"; exit 1; }
-        ip link set "$iface" up
+        if [ "$direct_init" -eq 1 ]; then
+            iface=$(find_iface || true)
+            [ -n "$iface" ] || { echo "DNIV-E1-FAIL session=$session node=$name reason=no-interface-silence-up"; exit 1; }
+            ip link set "$iface" up
+        else
+            modprobe decnet_iv default_area="$area" default_node="$node" default_name="$name" \
+                default_node_type=2 router_priority=64 hello_interval=2
+            /usr/local/sbin/dnctl set "$area.$node" "$name"
+            /usr/local/sbin/dnctl reset-stats
+            iface=$(find_iface || true)
+            [ -n "$iface" ] || { echo "DNIV-E1-FAIL session=$session node=$name reason=no-interface-restart"; exit 1; }
+            ip link set "$iface" up
+        fi
         if ! wait_adjacency_up "$peer_node" DNIV-E1-RESTART-INIT 120; then
             echo "DNIV-E1-FAIL session=$session node=$name reason=recovery-adjacency"
             exit 1
