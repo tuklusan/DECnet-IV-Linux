@@ -412,6 +412,7 @@ def main() -> int:
     )
     fault_started = False
     fault_a_paused = False
+    fault_b_paused = False
     fault_b_restored = False
     fault_restored = False
     routers_b_before = 0
@@ -438,6 +439,11 @@ def main() -> int:
                         lab.pcap,
                         f"ether proto 0x6003 and ether dst {ROUTERS} and ether src {mac_b}",
                     )
+                    # Run DN70 alone while it ages DN71 out. Under arm64
+                    # KASAN+TCG, leaving both guests runnable can starve the
+                    # host controller past DN70's local DR-delay boundary.
+                    QmpClient(guest_b.qmp).execute("stop")
+                    fault_b_paused = True
                     sudo("ip", "link", "set", guest_b.tap, "down")
                     fault_started = True
 
@@ -449,6 +455,12 @@ def main() -> int:
                 if expired_a:
                     QmpClient(guest_a.qmp).execute("stop")
                     fault_a_paused = True
+                    # DN70 is frozen before its five-second DR delay can
+                    # complete. Let isolated DN71 run alone so it can
+                    # independently prove expiry of DN70.
+                    if fault_b_paused:
+                        QmpClient(guest_b.qmp).execute("cont")
+                        fault_b_paused = False
 
             if diagnostic_fault and fault_a_paused and not fault_b_restored:
                 expired_b = contains(
@@ -477,6 +489,8 @@ def main() -> int:
                 break
             time.sleep(0.1 if diagnostic_fault else 1)
     finally:
+        if fault_b_paused:
+            QmpClient(guest_b.qmp).execute("cont")
         if fault_a_paused and not fault_restored:
             QmpClient(guest_a.qmp).execute("cont")
         lab.close()
