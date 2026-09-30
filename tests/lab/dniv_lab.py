@@ -412,6 +412,7 @@ def main() -> int:
     )
     fault_started = False
     fault_a_paused = False
+    fault_b_restored = False
     fault_restored = False
     routers_b_before = 0
     try:
@@ -445,16 +446,20 @@ def main() -> int:
                     guest_a.log,
                     f"DNIV-E1-EXPIRED session={session} node={name_a}",
                 )
+                if expired_a:
+                    QmpClient(guest_a.qmp).execute("stop")
+                    fault_a_paused = True
+
+            if diagnostic_fault and fault_a_paused and not fault_b_restored:
                 expired_b = contains(
                     guest_b.log,
                     f"DNIV-E1-HOST-SILENCE-EXPIRED session={session} node={name_b}",
                 )
-                if expired_a and expired_b:
-                    QmpClient(guest_a.qmp).execute("stop")
-                    fault_a_paused = True
+                if expired_b:
                     sudo("ip", "link", "set", guest_b.tap, "up")
+                    fault_b_restored = True
 
-            if diagnostic_fault and fault_a_paused and not fault_restored:
+            if diagnostic_fault and fault_b_restored and not fault_restored:
                 routers_b_now = pcap_count(
                     lab.pcap,
                     f"ether proto 0x6003 and ether dst {ROUTERS} and ether src {mac_b}",
