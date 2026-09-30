@@ -66,10 +66,10 @@ required_lab = (
     'len(guest_cpus) >= 2 * self.vcpus',
     'len(guest_cpus) >= self.vcpus + 1',
     'guest_cpus[-self.vcpus:]',
-    '"arm64 KASAN TCG requires one reserved host CPU plus "',
+    '"arm64 diagnostic TCG requires one reserved host CPU plus "',
 )
 for marker in required_lab:
     if marker not in LAB:
-        raise SystemExit(f"E4-CONVERGENCE: missing KASAN host-CPU guard: {marker}")
+        raise SystemExit(f"E4-CONVERGENCE: missing diagnostic host-CPU guard: {marker}")
 
 print("E4-CONVERGENCE: pass")
