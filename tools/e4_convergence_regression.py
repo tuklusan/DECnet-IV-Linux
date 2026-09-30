@@ -68,6 +68,10 @@ required_lab = (
     'BUG: KCSAN: data-race in mod_node_state / memchr_inv',
     'BUG: KCSAN: data-race in __mem_cgroup_flush_stats / tick_do_update_jiffies64',
     'BUG: KCSAN: data-race in tick_do_update_jiffies64 / __mem_cgroup_flush_stats',
+    'BUG: KCSAN: data-race in tick_nohz_handler / tick_nohz_idle_got_tick',
+    'BUG: KCSAN: data-race in tick_nohz_idle_got_tick / tick_nohz_handler',
+    'if not QmpClient(guest.qmp).execute("stop"):',
+    'if not QmpClient(guest.qmp).execute("cont"):',
     'kcsan_unapproved_findings',
     'len(guest_cpus) >= 2 * self.vcpus',
     'len(guest_cpus) >= self.vcpus + 1',
@@ -77,5 +81,8 @@ required_lab = (
 for marker in required_lab:
     if marker not in LAB:
         raise SystemExit(f"E4-CONVERGENCE: missing diagnostic host-CPU guard: {marker}")
+
+if 'signal.SIGSTOP' in LAB or 'signal.SIGCONT' in LAB:
+    raise SystemExit("E4-CONVERGENCE: diagnostic pause must preserve QEMU virtual clock through QMP")
 
 print("E4-CONVERGENCE: pass")

@@ -29,7 +29,6 @@ from pathlib import Path
 import platform
 import re
 import shutil
-import signal
 import socket
 import struct
 import subprocess
@@ -202,11 +201,13 @@ KCSAN_IGNORED_REPORTS = frozenset({
     "BUG: KCSAN: data-race in mod_node_state / memchr_inv",
     "BUG: KCSAN: data-race in __mem_cgroup_flush_stats / tick_do_update_jiffies64",
     "BUG: KCSAN: data-race in tick_do_update_jiffies64 / __mem_cgroup_flush_stats",
+    "BUG: KCSAN: data-race in tick_nohz_handler / tick_nohz_idle_got_tick",
+    "BUG: KCSAN: data-race in tick_nohz_idle_got_tick / tick_nohz_handler",
 })
 
 
 def kcsan_unapproved_findings(path: Path) -> list[str]:
-    """Return KCSAN report summaries except the vetted generic vmstat race."""
+    """Return KCSAN report summaries except exact vetted upstream kernel races."""
     try:
         lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
     except FileNotFoundError:
@@ -238,23 +239,44 @@ class QmpClient:
     def __init__(self, path: Path):
         self.path = path
 
-    def execute(self, command: str) -> None:
+    @staticmethod
+    def _wait_reply(sock: socket.socket) -> bool:
+        deadline = time.monotonic() + 2.0
+        data = b""
+        while time.monotonic() < deadline:
+            try:
+                chunk = sock.recv(65536)
+            except socket.timeout:
+                continue
+            if not chunk:
+                return False
+            data += chunk
+            if b'"error"' in data:
+                return False
+            if b'"return"' in data:
+                return True
+        return False
+
+    def execute(self, command: str) -> bool:
         deadline = time.monotonic() + 2.0
         while time.monotonic() < deadline and not self.path.exists():
             time.sleep(0.05)
         if not self.path.exists():
-            return
+            return False
         try:
             with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
-                sock.settimeout(1.0)
+                sock.settimeout(0.25)
                 sock.connect(str(self.path))
-                sock.recv(65536)
+                if not sock.recv(65536):
+                    return False
                 sock.sendall(b'{"execute":"qmp_capabilities"}\r\n')
-                sock.recv(65536)
+                if not self._wait_reply(sock):
+                    return False
                 payload = ('{"execute":"' + command + '"}\r\n').encode("ascii")
                 sock.sendall(payload)
+                return self._wait_reply(sock)
         except (OSError, TimeoutError):
-            return
+            return False
 
 
 class Lab:
@@ -394,12 +416,14 @@ class Lab:
     @staticmethod
     def pause_guest(guest: Guest) -> None:
         if guest.process is not None and guest.process.poll() is None:
-            guest.process.send_signal(signal.SIGSTOP)
+            if not QmpClient(guest.qmp).execute("stop"):
+                raise RuntimeError(f"QMP stop failed for {guest.name}")
 
     @staticmethod
     def resume_guest(guest: Guest) -> None:
         if guest.process is not None and guest.process.poll() is None:
-            guest.process.send_signal(signal.SIGCONT)
+            if not QmpClient(guest.qmp).execute("cont"):
+                raise RuntimeError(f"QMP cont failed for {guest.name}")
 
     def stop_guest(self, guest: Guest) -> None:
         proc = guest.process
@@ -632,7 +656,7 @@ def main() -> int:
                 )
             if any(contains(guest.log, allowed) for allowed in KCSAN_IGNORED_REPORTS):
                 print(
-                    f"python-lab: ignored vetted upstream vmstat KCSAN race from {guest.name}"
+                    f"python-lab: ignored vetted upstream KCSAN race from {guest.name}"
                 )
 
     frames = pcap_count(lab.pcap, "ether proto 0x6003")
