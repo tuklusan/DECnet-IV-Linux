@@ -1,0 +1,201 @@
+# ============================================================================
+# Copyright (c) 2026 Supratim Sanyal of SANYALnet Labs.
+# Proprietary rights reserved except as expressly licensed herein.
+#
+# DECnet-IV-Linux
+# This file is governed by the SANYALnet Labs Non-Commercial License in the
+# root LICENSE file. Non-Commercial use is permitted; Commercial Use and use
+# for AI/ML model training are prohibited unless separately authorized.
+#
+# Attribution is required: "Based on original work by Supratim Sanyal of
+# SANYALnet Labs." See LICENSE for full terms, warranty disclaimer, termination,
+# patent, trademark, and governing-law provisions.
+# ============================================================================
+
+name: Area-31 Interoperability
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact main candidate SHA supplied by the acceptance dispatcher
+        required: true
+        type: string
+      parent_run_id:
+        description: Acceptance dispatcher run ID
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dniv-area31-interop
+  queue: max
+  cancel-in-progress: false
+
+jobs:
+  area31:
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            slot: x64
+            arch: amd64
+            qemu_package: qemu-system-x86
+          - runner: ubuntu-24.04-arm
+            slot: arm64
+            arch: arm64
+            qemu_package: qemu-system-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    env:
+      DNIV_OUTER_BASE_DIR: ${{ github.workspace }}/scratch/outer/${{ matrix.arch }}
+      DNIV_AREA31_ARCH: ${{ matrix.arch }}
+    steps:
+      - name: Check out exact repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.expected_sha }}
+          fetch-depth: 0
+
+      - name: Bind exact candidate and provisional Area-31 identities
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          seed=$((16#${EXPECTED_SHA:0:8} % 124))
+          gateway_num=$((900 + seed))
+          linux_num=$((900 + ((seed + 1) % 124)))
+          printf 'DNIV_AREA31_SEED=%s\n' "$seed" >> "$GITHUB_ENV"
+          printf 'DNIV_AREA31_GATEWAY_NODE=31.%s\n' "$gateway_num" >> "$GITHUB_ENV"
+          printf 'DNIV_AREA31_GATEWAY_NAME=DG%04d\n' "$gateway_num" >> "$GITHUB_ENV"
+          printf 'DNIV_AREA31_LINUX_NODE=31.%s\n' "$linux_num" >> "$GITHUB_ENV"
+          printf 'DNIV_AREA31_LINUX_NAME=DL%04d\n' "$linux_num" >> "$GITHUB_ENV"
+          printf 'DNIV_QCOCAL_NODE=\n' >> "$GITHUB_ENV"
+
+      - name: Verify Area-31 secret prerequisites and provisional identities
+        shell: bash
+        env:
+          MULTINET_REMOTE_HOST: ${{ secrets.MULTINET_REMOTE_HOST }}
+          MULTINET_REMOTE_PORT: ${{ secrets.MULTINET_REMOTE_PORT }}
+          VAX_ADDR: ${{ secrets.VAX_ADDR }}
+          VAX_USERNAME: ${{ secrets.VAX_USERNAME }}
+          VAX_PASSWORD: ${{ secrets.VAX_PASSWORD }}
+        run: |
+          set -euo pipefail
+          required=(MULTINET_REMOTE_HOST MULTINET_REMOTE_PORT VAX_ADDR VAX_USERNAME VAX_PASSWORD)
+          missing=()
+          for name in "${required[@]}"; do
+            value=${!name:-}
+            if [[ -z "$value" ]]; then
+              missing+=("$name")
+            else
+              printf '::add-mask::%s\n' "$value"
+            fi
+          done
+          if (( ${#missing[@]} )); then
+            printf 'missing required Area-31 secret: %s\n' "${missing[@]}" >&2
+            exit 2
+          fi
+          tests/lab/prove-area31.sh --preflight-only
+
+      - name: Install Area-31 proof dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y python3-venv libpcap-dev vde2 libvdeplug-dev iproute2 \
+            ${{ matrix.qemu_package }} qemu-utils e2fsprogs curl build-essential
+
+      - name: Compute stable amd64 foundation identity
+        id: foundation-id
+        shell: bash
+        run: |
+          set -euo pipefail
+          fingerprint=$(cat image/ubuntu-base/images.env image/ubuntu-base/build-foundation.sh | sha256sum | cut -c1-16)
+          session="outer-v2-${{ matrix.arch }}-$fingerprint"
+          echo "DNIV_FOUNDATION_FINGERPRINT=$fingerprint" >> "$GITHUB_ENV"
+          echo "DNIV_OUTER_SESSION_ID=$session" >> "$GITHUB_ENV"
+          echo "session_id=$session" >> "$GITHUB_OUTPUT"
+
+      - name: Restore immutable amd64 foundation
+        id: outer-base
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ${{ env.DNIV_OUTER_BASE_DIR }}
+          key: ${{ steps.foundation-id.outputs.session_id }}
+
+      - name: Download pinned Ubuntu Base on foundation miss
+        if: ${{ steps.outer-base.outputs.cache-hit != 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          . image/ubuntu-base/images.env
+          if [[ '${{ matrix.arch }}' == amd64 ]]; then
+            file=$UBUNTU_BASE_AMD64
+            sha=$UBUNTU_BASE_AMD64_SHA256
+          else
+            file=$UBUNTU_BASE_ARM64
+            sha=$UBUNTU_BASE_ARM64_SHA256
+          fi
+          curl -fL "$UBUNTU_BASE_URL/$file" -o "$RUNNER_TEMP/$file"
+          echo "$sha  $RUNNER_TEMP/$file" | sha256sum -c -
+          echo "UBUNTU_BASE_TARBALL=$RUNNER_TEMP/$file" >> "$GITHUB_ENV"
+
+      - name: Build immutable amd64 foundation on cache miss
+        if: ${{ steps.outer-base.outputs.cache-hit != 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo -v
+          rm -rf "$DNIV_OUTER_BASE_DIR"
+          mkdir -p "$DNIV_OUTER_BASE_DIR/boot"
+          image/ubuntu-base/build-foundation.sh '${{ matrix.arch }}' "$UBUNTU_BASE_TARBALL" \
+            "$DNIV_OUTER_BASE_DIR/base.qcow2" "$DNIV_OUTER_BASE_DIR/boot"
+          . image/ubuntu-base/images.env
+          cat >"$DNIV_OUTER_BASE_DIR/session.env" <<EOF_SESSION
+          FORMAT=2
+          SESSION_ID=$DNIV_OUTER_SESSION_ID
+          ARCH=${{ matrix.arch }}
+          FOUNDATION_FINGERPRINT=$DNIV_FOUNDATION_FINGERPRINT
+          UBUNTU_BASE_RELEASE=$UBUNTU_BASE_RELEASE
+          UBUNTU_APT_SNAPSHOT=$UBUNTU_APT_SNAPSHOT
+          EOF_SESSION
+          (cd "$DNIV_OUTER_BASE_DIR" && sha256sum base.qcow2 boot/vmlinuz boot/initrd.img session.env >SHA256SUMS)
+
+      - name: Save immutable amd64 foundation
+        if: ${{ steps.outer-base.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ${{ env.DNIV_OUTER_BASE_DIR }}
+          key: ${{ steps.foundation-id.outputs.session_id }}
+
+      - name: Verify foundation and prepare exact candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd "$DNIV_OUTER_BASE_DIR" && sha256sum -c SHA256SUMS)
+          qemu-img check -q -f qcow2 "$DNIV_OUTER_BASE_DIR/base.qcow2"
+          candidate="$RUNNER_TEMP/area31-candidate-${{ matrix.arch }}.qcow2"
+          tests/lab/prepare-candidate-image.sh "$DNIV_OUTER_BASE_DIR/base.qcow2" "$candidate"
+          echo "DNIV_AREA31_CANDIDATE_IMAGE=$candidate" >> "$GITHUB_ENV"
+          echo "DNIV_AREA31_KERNEL=$DNIV_OUTER_BASE_DIR/boot/vmlinuz" >> "$GITHUB_ENV"
+          echo "DNIV_AREA31_INITRD=$DNIV_OUTER_BASE_DIR/boot/initrd.img" >> "$GITHUB_ENV"
+
+      - name: Prove native Linux path through MULTINET to VAX
+        shell: bash
+        env:
+          MULTINET_REMOTE_HOST: ${{ secrets.MULTINET_REMOTE_HOST }}
+          MULTINET_REMOTE_PORT: ${{ secrets.MULTINET_REMOTE_PORT }}
+          VAX_ADDR: ${{ secrets.VAX_ADDR }}
+          VAX_USERNAME: ${{ secrets.VAX_USERNAME }}
+          VAX_PASSWORD: ${{ secrets.VAX_PASSWORD }}
+        run: |
+          set -euo pipefail
+          tests/lab/prove-area31.sh
