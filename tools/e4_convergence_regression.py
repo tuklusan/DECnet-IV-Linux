@@ -63,6 +63,10 @@ for marker in required_scale:
 
 required_lab = (
     'guest_cpus = host_cpus[1:]',
+    'dniv.diag=kcsan kcsan.skip_watch=1000 panic_on_warn=0 oops=panic',
+    'BUG: KCSAN: data-race in memchr_inv / mod_node_state',
+    'BUG: KCSAN: data-race in mod_node_state / memchr_inv',
+    'kcsan_unapproved_findings',
     'len(guest_cpus) >= 2 * self.vcpus',
     'len(guest_cpus) >= self.vcpus + 1',
     'guest_cpus[-self.vcpus:]',

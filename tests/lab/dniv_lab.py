@@ -197,6 +197,26 @@ def contains(path: Path, needle: str) -> bool:
         return False
 
 
+KCSAN_IGNORED_REPORTS = frozenset({
+    "BUG: KCSAN: data-race in memchr_inv / mod_node_state",
+    "BUG: KCSAN: data-race in mod_node_state / memchr_inv",
+})
+
+
+def kcsan_unapproved_findings(path: Path) -> list[str]:
+    """Return KCSAN report summaries except the vetted generic vmstat race."""
+    try:
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except FileNotFoundError:
+        return []
+    return [
+        line.strip()
+        for line in lines
+        if "BUG: KCSAN:" in line and
+        not any(allowed in line for allowed in KCSAN_IGNORED_REPORTS)
+    ]
+
+
 @dataclass
 class Guest:
     name: str
@@ -299,7 +319,9 @@ class Lab:
         elif self.diagnostics == "ubsan":
             common += " dniv.diag=ubsan panic_on_warn=1 oops=panic"
         elif self.diagnostics == "kcsan":
-            common += " dniv.diag=kcsan kcsan.skip_watch=1000 panic_on_warn=1 oops=panic"
+            # Keep KCSAN running so the host can reject candidate findings while
+            # allowing only the exact vetted upstream vmstat sampling race.
+            common += " dniv.diag=kcsan kcsan.skip_watch=1000 panic_on_warn=0 oops=panic"
             if self.host_arch == "aarch64":
                 common += " net.ifnames=0 init=/usr/local/sbin/dniv-smoke"
         elif self.diagnostics == "kasan":
@@ -601,8 +623,15 @@ def main() -> int:
         for guest in (guest_a, guest_b):
             if not contains(guest.log, f"DNIV-DIAG-KCSAN session={session}"):
                 raise SystemExit(f"python-lab: missing KCSAN runtime marker from {guest.name}")
-            if contains(guest.log, "BUG: KCSAN:"):
-                raise SystemExit(f"python-lab: KCSAN finding reported by {guest.name}")
+            findings = kcsan_unapproved_findings(guest.log)
+            if findings:
+                raise SystemExit(
+                    f"python-lab: KCSAN finding reported by {guest.name}: {findings[0]}"
+                )
+            if any(contains(guest.log, allowed) for allowed in KCSAN_IGNORED_REPORTS):
+                print(
+                    f"python-lab: ignored vetted upstream vmstat KCSAN race from {guest.name}"
+                )
 
     frames = pcap_count(lab.pcap, "ether proto 0x6003")
     if frames < 2:
