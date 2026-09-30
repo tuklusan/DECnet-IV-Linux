@@ -89,6 +89,50 @@ def pcap_count(path: Path, expression: str) -> int:
 
 
 
+def pcap_router_hello_count(path: Path, source_mac: str, destination_mac: str = ROUTERS) -> int:
+    """Count complete router-hello frames in a live or completed PCAP."""
+    try:
+        data = path.read_bytes()
+    except FileNotFoundError:
+        return 0
+    if len(data) < 24:
+        return 0
+    magic = data[:4]
+    if magic == b"\xd4\xc3\xb2\xa1":
+        endian = "<"
+    elif magic == b"\xa1\xb2\xc3\xd4":
+        endian = ">"
+    else:
+        raise RuntimeError(f"unsupported pcap magic in {path}")
+
+    source = bytes(int(part, 16) for part in source_mac.split(":"))
+    destination = bytes(int(part, 16) for part in destination_mac.split(":"))
+    count = 0
+    off = 24
+    while off + 16 <= len(data):
+        _, _, incl, _ = struct.unpack_from(endian + "IIII", data, off)
+        off += 16
+        if incl > len(data) - off:
+            break
+        frame = data[off:off + incl]
+        off += incl
+        if (len(frame) < 17 or frame[0:6] != destination or
+                frame[6:12] != source or frame[12:14] != b"\x60\x03"):
+            continue
+        plen = int.from_bytes(frame[14:16], "little")
+        if 16 + plen > len(frame):
+            continue
+        route = frame[16:16 + plen]
+        if route and route[0] & 0x80:
+            pad = route[0] & 0x7f
+            if pad == 0 or pad >= len(route):
+                continue
+            route = route[pad:]
+        if len(route) >= 27 and route[0] == 0x0b:
+            count += 1
+    return count
+
+
 def pcap_router_init_seen(path: Path, mac_a: str, mac_b: str) -> bool:
     """Require an unlisted router hello followed later by a reciprocal listing."""
     data = path.read_bytes()
@@ -431,6 +475,7 @@ def main() -> int:
     fault_b_paused = False
     fault_b_restored = False
     fault_restored = False
+    routers_a_before = 0
     routers_b_before = 0
     try:
         lab.create_network([guest_a.tap, guest_b.tap])
@@ -451,6 +496,7 @@ def main() -> int:
                     f"DNIV-E1-INITIAL session={session} node={name_a}",
                 )
                 if ready_b and initial_a:
+                    routers_a_before = pcap_router_hello_count(lab.pcap, mac_a)
                     routers_b_before = pcap_count(
                         lab.pcap,
                         f"ether proto 0x6003 and ether dst {ROUTERS} and ether src {mac_b}",
@@ -464,16 +510,18 @@ def main() -> int:
                     fault_started = True
 
             if diagnostic_fault and fault_started and not fault_a_paused:
-                expired_a = contains(
-                    guest_a.log,
-                    f"DNIV-E1-EXPIRED session={session} node={name_a}",
-                )
-                if expired_a:
+                routers_a_now = pcap_router_hello_count(lab.pcap, mac_a)
+                # Five post-isolation two-second router hellos put DN70
+                # 8-10 guest seconds into the silence window: safely beyond
+                # the 6.2-second listener lifetime but before the 11.2-second
+                # listener-plus-DR-delay boundary.  Use this guest-clock wire
+                # evidence rather than an asynchronously flushed serial marker.
+                if routers_a_now - routers_a_before >= 5:
                     QmpClient(guest_a.qmp).execute("stop")
                     fault_a_paused = True
-                    # DN70 is frozen before its five-second DR delay can
-                    # complete. Let isolated DN71 run alone so it can
-                    # independently prove expiry of DN70.
+                    # Let isolated DN71 run alone so it can independently
+                    # prove expiry of DN70 before the higher-address router is
+                    # restored to the wire.
                     if fault_b_paused:
                         QmpClient(guest_b.qmp).execute("cont")
                         fault_b_paused = False

@@ -71,6 +71,18 @@ def main():
         assert LAB.pcap_router_init_seen(p, A, B)
         write_pcap(p, [hello(b, a, False), hello(b, a, True)])
         assert LAB.pcap_router_init_seen(p, A, B)
+        write_pcap(p, [
+            hello(a, b, False),
+            hello(b, a, False),
+            hello(a, b, True),
+            hello(a, b, False),
+        ])
+        assert LAB.pcap_router_hello_count(p, A) == 3
+        assert LAB.pcap_router_hello_count(p, B) == 1
+
+    source = (ROOT / "tests/lab/dniv_lab.py").read_text(encoding="utf-8")
+    if "routers_a_now - routers_a_before >= 5" not in source:
+        raise SystemExit("e1 INIT PCAP regression: missing guest-clock KASAN expiry handoff")
     print("e1 INIT PCAP regression passed")
     return 0
 
