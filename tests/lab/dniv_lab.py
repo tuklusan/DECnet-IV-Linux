@@ -270,6 +270,21 @@ class Lab:
             console = "earlycon=pl011,0x09000000 console=ttyAMA0"
         else:
             raise RuntimeError(f"unsupported host architecture: {self.host_arch}")
+
+        if self.diagnostics == "kasan" and self.host_arch == "aarch64" and self.accel == "tcg":
+            host_cpus = sorted(os.sched_getaffinity(0))
+            split = len(host_cpus) // 2
+            affinity = host_cpus[:split] if guest.role == "A" else host_cpus[split:]
+            if len(affinity) < self.vcpus:
+                raise RuntimeError(
+                    "arm64 KASAN TCG requires disjoint host CPU sets "
+                    f"for two {self.vcpus}-vCPU guests, available={host_cpus}"
+                )
+            if shutil.which("taskset") is None:
+                raise RuntimeError("arm64 KASAN TCG requires taskset")
+            cpu_list = ",".join(str(cpu) for cpu in affinity)
+            cmd = ["taskset", "--cpu-list", cpu_list, *cmd]
+
         cmd += ["-kernel", str(self.kernel)]
         if self.initrd is not None:
             cmd += ["-initrd", str(self.initrd)]
