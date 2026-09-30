@@ -83,6 +83,8 @@ def main():
     source = (ROOT / "tests/lab/dniv_lab.py").read_text(encoding="utf-8")
     if "routers_a_now - routers_a_before >= 5" not in source:
         raise SystemExit("e1 INIT PCAP regression: missing guest-clock KASAN expiry handoff")
+    if "guest.process.send_signal(signal.SIGSTOP)" not in source or "guest.process.send_signal(signal.SIGCONT)" not in source:
+        raise SystemExit("e1 INIT PCAP regression: missing synchronous host QEMU pause/resume")
     if 'if diagnostic_fault:' not in source or 'DNIV-E1-DIAG-RELOAD session={session}' not in source:
         raise SystemExit("e1 INIT PCAP regression: missing direct-init reload evidence validator")
     print("e1 INIT PCAP regression passed")

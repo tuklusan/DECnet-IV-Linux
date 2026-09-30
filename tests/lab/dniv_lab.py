@@ -29,6 +29,7 @@ from pathlib import Path
 import platform
 import re
 import shutil
+import signal
 import socket
 import struct
 import subprocess
@@ -362,6 +363,16 @@ class Lab:
         guest.process = subprocess.Popen(self.qemu_command(guest, area))
         self.guests.append(guest)
 
+    @staticmethod
+    def pause_guest(guest: Guest) -> None:
+        if guest.process is not None and guest.process.poll() is None:
+            guest.process.send_signal(signal.SIGSTOP)
+
+    @staticmethod
+    def resume_guest(guest: Guest) -> None:
+        if guest.process is not None and guest.process.poll() is None:
+            guest.process.send_signal(signal.SIGCONT)
+
     def stop_guest(self, guest: Guest) -> None:
         proc = guest.process
         if proc is None or proc.poll() is not None:
@@ -504,7 +515,7 @@ def main() -> int:
                     # Run DN70 alone while it ages DN71 out. Under arm64
                     # KASAN+TCG, leaving both guests runnable can starve the
                     # host controller past DN70's local DR-delay boundary.
-                    QmpClient(guest_b.qmp).execute("stop")
+                    lab.pause_guest(guest_b)
                     fault_b_paused = True
                     sudo("ip", "link", "set", guest_b.tap, "down")
                     fault_started = True
@@ -517,13 +528,13 @@ def main() -> int:
                 # listener-plus-DR-delay boundary.  Use this guest-clock wire
                 # evidence rather than an asynchronously flushed serial marker.
                 if routers_a_now - routers_a_before >= 5:
-                    QmpClient(guest_a.qmp).execute("stop")
+                    lab.pause_guest(guest_a)
                     fault_a_paused = True
                     # Let isolated DN71 run alone so it can independently
                     # prove expiry of DN70 before the higher-address router is
                     # restored to the wire.
                     if fault_b_paused:
-                        QmpClient(guest_b.qmp).execute("cont")
+                        lab.resume_guest(guest_b)
                         fault_b_paused = False
 
             if diagnostic_fault and fault_a_paused and not fault_b_restored:
@@ -541,7 +552,7 @@ def main() -> int:
                     f"ether proto 0x6003 and ether dst {ROUTERS} and ether src {mac_b}",
                 )
                 if routers_b_now > routers_b_before:
-                    QmpClient(guest_a.qmp).execute("cont")
+                    lab.resume_guest(guest_a)
                     fault_restored = True
 
             if pass_a and pass_b:
@@ -554,9 +565,9 @@ def main() -> int:
             time.sleep(0.1 if diagnostic_fault else 1)
     finally:
         if fault_b_paused:
-            QmpClient(guest_b.qmp).execute("cont")
+            lab.resume_guest(guest_b)
         if fault_a_paused and not fault_restored:
-            QmpClient(guest_a.qmp).execute("cont")
+            lab.resume_guest(guest_a)
         lab.close()
 
     if not (pass_a and pass_b):
