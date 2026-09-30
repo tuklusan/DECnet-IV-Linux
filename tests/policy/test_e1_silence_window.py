@@ -64,6 +64,11 @@ def main() -> int:
         "DR delay",
     )
 
+    if SMOKE.count('/usr/local/sbin/dnadjwait gone "$peer_node" 120000') != 2:
+        raise SystemExit("e1-silence regression: direct-init expiry must use persistent ioctl waiter")
+    if SMOKE.count('/usr/local/sbin/dnadjwait up "$peer_node" 120000') != 2:
+        raise SystemExit("e1-silence regression: direct-init recovery must use persistent ioctl waiter")
+
     expiry_seconds = hello_seconds * listen_multiplier_ms / 1000.0
     dr_eligible_seconds = expiry_seconds + dr_delay_seconds
 

@@ -158,6 +158,8 @@ cc -O2 -std=c11 -Wall -Wextra -Werror \
 cc -O2 -std=c11 -Wall -Wextra -Werror \
     -o /usr/local/sbin/dnraw /usr/src/decnet-iv-linux/tests/lab/dnraw.c
 cc -I/usr/src/decnet-iv-linux/include/uapi -O2 -std=c11 -Wall -Wextra -Werror \
+    -o /usr/local/sbin/dnadjwait /usr/src/decnet-iv-linux/tests/lab/dnadjwait.c
+cc -I/usr/src/decnet-iv-linux/include/uapi -O2 -std=c11 -Wall -Wextra -Werror \
     -o /usr/local/sbin/dnmrr /usr/src/decnet-iv-linux/tests/lab/dnmrr.c
 cc -I/usr/src/decnet-iv-linux/include/uapi -O2 -std=c11 -Wall -Wextra -Werror \
     -o /usr/local/sbin/dnloss /usr/src/decnet-iv-linux/tests/lab/dnloss.c
@@ -273,6 +275,7 @@ sudo test -s "$mnt/usr/local/sbin/dnobject"
 sudo test -s "$mnt/usr/local/sbin/dnhttpd"
 sudo test -s "$mnt/usr/local/bin/dnlynx"
 sudo test -s "$mnt/usr/local/sbin/dnraw"
+sudo test -s "$mnt/usr/local/sbin/dnadjwait"
 sudo test -s "$mnt/usr/local/sbin/dnmrr"
 sudo test -s "$mnt/usr/local/sbin/dnloss"
 sudo test -s "$mnt/usr/local/sbin/dndrain"
