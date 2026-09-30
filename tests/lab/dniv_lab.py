@@ -205,6 +205,18 @@ KCSAN_IGNORED_REPORTS = frozenset({
     "BUG: KCSAN: data-race in tick_nohz_idle_got_tick / tick_nohz_handler",
 })
 
+LOCKDEP_FAILURE_MARKERS = (
+    "possible circular locking dependency detected",
+    "inconsistent lock state",
+    "bad unlock balance detected",
+    "possible recursive locking detected",
+    "possible irq lock inversion dependency detected",
+    "BUG: sleeping function called from invalid context",
+    "BUG: MAX_LOCKDEP",
+    "INFO: trying to register non-static key",
+    "suspicious RCU usage",
+)
+
 
 def kcsan_unapproved_findings(path: Path) -> list[str]:
     """Return KCSAN report summaries except exact vetted upstream kernel races."""
@@ -344,8 +356,12 @@ class Lab:
             common += " dniv.diag=ubsan panic_on_warn=1 oops=panic"
         elif self.diagnostics == "kcsan":
             # Keep KCSAN running so the host can reject candidate findings while
-            # allowing only the exact vetted upstream vmstat sampling race.
+            # allowing only the exact vetted upstream races.
             common += " dniv.diag=kcsan kcsan.skip_watch=1000 panic_on_warn=0 oops=panic"
+            if self.host_arch == "aarch64":
+                common += " net.ifnames=0 init=/usr/local/sbin/dniv-smoke"
+        elif self.diagnostics == "lockdep":
+            common += " dniv.diag=lockdep panic_on_warn=1 oops=panic"
             if self.host_arch == "aarch64":
                 common += " net.ifnames=0 init=/usr/local/sbin/dniv-smoke"
         elif self.diagnostics == "kasan":
@@ -366,11 +382,11 @@ class Lab:
         else:
             raise RuntimeError(f"unsupported host architecture: {self.host_arch}")
 
-        if self.diagnostics in {"kasan", "kcsan"} and self.host_arch == "aarch64" and self.accel == "tcg":
+        if self.diagnostics in {"kasan", "kcsan", "lockdep"} and self.host_arch == "aarch64" and self.accel == "tcg":
             host_cpus = sorted(os.sched_getaffinity(0))
             # Keep one schedulable CPU out of both TCG process masks so the
             # host controller, QMP and capture path cannot be starved behind
-            # two KASAN guests.  On a four-CPU runner the two 2-vCPU guest
+            # two heavy diagnostic guests.  On a four-CPU runner the two 2-vCPU guest
             # masks intentionally overlap one CPU; guest SMP coverage remains
             # intact while CPU 0 stays available to host orchestration.
             guest_cpus = host_cpus[1:]
@@ -492,7 +508,7 @@ def main() -> int:
         raise SystemExit(f"python-lab: unsupported NIC model: {nic_model}")
     if vcpus not in {1, 2, 4, 8}:
         raise SystemExit(f"python-lab: unsupported vCPU count: {vcpus}")
-    if diagnostics not in {"none", "kfence", "ubsan", "kasan", "kcsan"}:
+    if diagnostics not in {"none", "kfence", "ubsan", "kasan", "kcsan", "lockdep"}:
         raise SystemExit(f"python-lab: unsupported diagnostics mode: {diagnostics}")
     if not 256 <= memory_mb <= 4096:
         raise SystemExit(f"python-lab: unsupported guest memory size: {memory_mb}")
@@ -530,7 +546,7 @@ def main() -> int:
     marker = "DNIV-E1-PASS" if mode == "e1" else "DNIV-LAB-PASS"
     pass_a = pass_b = False
     diagnostic_fault = (
-        mode == "e1" and diagnostics in {"kasan", "kcsan"} and
+        mode == "e1" and diagnostics in {"kasan", "kcsan", "lockdep"} and
         lab.host_arch == "aarch64" and lab.accel == "tcg"
     )
     startup_a_paused = False
@@ -684,6 +700,17 @@ def main() -> int:
                 print(
                     f"python-lab: ignored vetted upstream KCSAN race from {guest.name}"
                 )
+    elif diagnostics == "lockdep":
+        for guest in (guest_a, guest_b):
+            if not contains(guest.log, f"DNIV-DIAG-LOCKDEP session={session}"):
+                raise SystemExit(f"python-lab: missing lockdep runtime marker from {guest.name}")
+            if not contains(guest.log, f"DNIV-DIAG-LOCKDEP-FINAL session={session}"):
+                raise SystemExit(f"python-lab: lockdep disabled before completion on {guest.name}")
+            for finding in LOCKDEP_FAILURE_MARKERS:
+                if contains(guest.log, finding):
+                    raise SystemExit(
+                        f"python-lab: lockdep finding reported by {guest.name}: {finding}"
+                    )
 
     frames = pcap_count(lab.pcap, "ether proto 0x6003")
     if frames < 2:

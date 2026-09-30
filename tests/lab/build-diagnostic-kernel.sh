@@ -31,7 +31,7 @@ case "$arch" in
     *) echo "build-diagnostic-kernel: unsupported architecture: $arch" >&2; exit 2 ;;
 esac
 case "$profile" in
-    kasan|kcsan) ;;
+    kasan|kcsan|lockdep) ;;
     *) echo "build-diagnostic-kernel: unsupported profile: $profile" >&2; exit 2 ;;
 esac
 [[ -r "$base_config" ]] || {
@@ -121,6 +121,15 @@ case "$profile" in
         # excluding that non-candidate device-noise class.
         "$config" --file "$output/build/.config" --disable KCSAN_REPORT_RACE_UNKNOWN_ORIGIN
         ;;
+    lockdep)
+        "$config" --file "$output/build/.config" --disable KASAN
+        "$config" --file "$output/build/.config" --disable KCSAN
+        "$config" --file "$output/build/.config" --enable DEBUG_KERNEL
+        "$config" --file "$output/build/.config" --enable PROVE_LOCKING
+        "$config" --file "$output/build/.config" --enable LOCKDEP
+        "$config" --file "$output/build/.config" --enable DEBUG_LOCK_ALLOC
+        "$config" --file "$output/build/.config" --enable DEBUG_ATOMIC_SLEEP
+        ;;
 esac
 
 make -s -C "$output/src" O="$output/build" ARCH="$karch" olddefconfig
@@ -135,6 +144,13 @@ case "$profile" in
         grep -q '^CONFIG_KCSAN_SELFTEST=y$' "$output/build/.config"
         grep -q '^CONFIG_KCSAN_INTERRUPT_WATCHER=y$' "$output/build/.config"
         grep -q '^# CONFIG_KCSAN_REPORT_RACE_UNKNOWN_ORIGIN is not set$' "$output/build/.config"
+        ;;
+    lockdep)
+        grep -q '^CONFIG_LOCKDEP=y$' "$output/build/.config"
+        grep -q '^CONFIG_PROVE_LOCKING=y$' "$output/build/.config"
+        grep -q '^CONFIG_DEBUG_LOCK_ALLOC=y$' "$output/build/.config"
+        grep -q '^CONFIG_DEBUG_ATOMIC_SLEEP=y$' "$output/build/.config"
+        grep -q '^CONFIG_TRACE_IRQFLAGS=y$' "$output/build/.config"
         ;;
 esac
 grep -q '^CONFIG_MODULES=y$' "$output/build/.config"

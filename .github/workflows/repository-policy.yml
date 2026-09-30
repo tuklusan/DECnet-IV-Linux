@@ -376,6 +376,9 @@ jobs:
             printf 'KERNEL_KCSAN=kernel-diagnostics.yml:kcsan\n' >> "$DNIV_SCRATCH_DIR/dispatch.env"
             dispatch_and_record KERNEL_KCSAN kernel-diagnostics.yml \
               -f profile=kcsan -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
+            printf 'KERNEL_LOCKDEP=kernel-diagnostics.yml:lockdep\n' >> "$DNIV_SCRATCH_DIR/dispatch.env"
+            dispatch_and_record KERNEL_LOCKDEP kernel-diagnostics.yml \
+              -f profile=lockdep -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
           fi
 
           if [[ "$profile" == consolidated ]]; then

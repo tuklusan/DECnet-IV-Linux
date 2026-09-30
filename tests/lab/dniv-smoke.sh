@@ -15,7 +15,7 @@
 
 set -eu
 
-# The arm64 KASAN gate can run so slowly under hosted TCG that systemd's
+# The arm64 heavy diagnostic gates can run so slowly under hosted TCG that systemd's
 # generator sandbox handshake expires before the DECnet smoke test starts.
 # When invoked directly as PID 1, establish only the pseudo-filesystems the
 # smoke harness and module tooling require; the controller terminates QEMU
@@ -143,8 +143,24 @@ wait_post_change_hello() {
     return 1
 }
 
+lockdep_debug_locks() {
+    [ -r /proc/lockdep_stats ] || return 1
+    awk '$1 == "debug_locks:" { print $2; exit }' /proc/lockdep_stats
+}
+
+lockdep_final_check() {
+    [ "${diagnostics:-none}" = lockdep ] || return 0
+    lockdep_state=$(lockdep_debug_locks || true)
+    if [ "$lockdep_state" != 1 ]; then
+        echo "DNIV-LAB-FAIL session=$session node=$name reason=lockdep-disabled"
+        return 1
+    fi
+    echo "DNIV-DIAG-LOCKDEP-FINAL session=$session node=$name debug_locks=$lockdep_state"
+}
+
 poweroff_pass() {
     marker=$1
+    lockdep_final_check || exit 1
     sync
     echo "$marker"
     sleep 2
@@ -233,6 +249,19 @@ kcsan)
             ;;
     esac
     echo "DNIV-DIAG-KCSAN session=$session node=$name skip_watch=$kcsan_skip_watch"
+    ;;
+lockdep)
+    config="/boot/config-$(uname -r)"
+    if [ ! -r "$config" ] || ! grep -q '^CONFIG_LOCKDEP=y$' "$config" || ! grep -q '^CONFIG_PROVE_LOCKING=y$' "$config"; then
+        echo "DNIV-LAB-FAIL session=$session node=$name reason=lockdep-unavailable"
+        exit 1
+    fi
+    lockdep_state=$(lockdep_debug_locks || true)
+    if [ "$lockdep_state" != 1 ]; then
+        echo "DNIV-LAB-FAIL session=$session node=$name reason=lockdep-runtime-inactive"
+        exit 1
+    fi
+    echo "DNIV-DIAG-LOCKDEP session=$session node=$name debug_locks=$lockdep_state"
     ;;
 *)
     echo "DNIV-LAB-FAIL session=$session node=$name reason=bad-diagnostics"
