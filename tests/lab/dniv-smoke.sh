@@ -299,13 +299,17 @@ e1)
         modprobe -r decnet_iv
     fi
 
+    if [ "$direct_init" -eq 1 ] && [ "$role" = A ]; then
+        # Leave DN70 fully unloaded and quiescent while DN71 completes its
+        # election window. Sleeping after loading router mode lets DN70's own
+        # DR timer expire while the interface is down, making it transiently
+        # DR as soon as the link returns.
+        sleep 8
+    fi
     modprobe decnet_iv default_area="$area" default_node="$node" default_name="$name" \
         default_node_type=2 router_priority=64 hello_interval=2
     /usr/local/sbin/dnctl set "$area.$node" "$name"
     /usr/local/sbin/dnctl reset-stats
-    if [ "$direct_init" -eq 1 ] && [ "$role" = A ]; then
-        sleep 8
-    fi
     iface=$(find_iface || true)
     [ -n "$iface" ] || { echo "DNIV-E1-FAIL session=$session node=$name reason=no-interface-router-up"; exit 1; }
     ip link set "$iface" up
