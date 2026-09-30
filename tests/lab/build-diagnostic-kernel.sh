@@ -31,7 +31,7 @@ case "$arch" in
     *) echo "build-diagnostic-kernel: unsupported architecture: $arch" >&2; exit 2 ;;
 esac
 case "$profile" in
-    kasan) ;;
+    kasan|kcsan) ;;
     *) echo "build-diagnostic-kernel: unsupported profile: $profile" >&2; exit 2 ;;
 esac
 [[ -r "$base_config" ]] || {
@@ -100,14 +100,37 @@ else
     "$config" --file "$output/build/.config" --enable SERIAL_AMBA_PL011
     "$config" --file "$output/build/.config" --enable SERIAL_AMBA_PL011_CONSOLE
 fi
-"$config" --file "$output/build/.config" --enable KASAN
-"$config" --file "$output/build/.config" --enable KASAN_GENERIC
-"$config" --file "$output/build/.config" --enable KASAN_OUTLINE
-"$config" --file "$output/build/.config" --enable KASAN_VMALLOC
+case "$profile" in
+    kasan)
+        "$config" --file "$output/build/.config" --disable KCSAN
+        "$config" --file "$output/build/.config" --enable KASAN
+        "$config" --file "$output/build/.config" --enable KASAN_GENERIC
+        "$config" --file "$output/build/.config" --enable KASAN_OUTLINE
+        "$config" --file "$output/build/.config" --enable KASAN_VMALLOC
+        ;;
+    kcsan)
+        "$config" --file "$output/build/.config" --disable KASAN
+        "$config" --file "$output/build/.config" --enable DEBUG_KERNEL
+        "$config" --file "$output/build/.config" --enable KCSAN
+        "$config" --file "$output/build/.config" --enable KCSAN_EARLY_ENABLE
+        "$config" --file "$output/build/.config" --enable KCSAN_SELFTEST
+        "$config" --file "$output/build/.config" --enable KCSAN_INTERRUPT_WATCHER
+        ;;
+esac
 
 make -s -C "$output/src" O="$output/build" ARCH="$karch" olddefconfig
-grep -q '^CONFIG_KASAN=y$' "$output/build/.config"
-grep -q '^CONFIG_KASAN_GENERIC=y$' "$output/build/.config"
+case "$profile" in
+    kasan)
+        grep -q '^CONFIG_KASAN=y$' "$output/build/.config"
+        grep -q '^CONFIG_KASAN_GENERIC=y$' "$output/build/.config"
+        ;;
+    kcsan)
+        grep -q '^CONFIG_KCSAN=y$' "$output/build/.config"
+        grep -q '^CONFIG_KCSAN_EARLY_ENABLE=y$' "$output/build/.config"
+        grep -q '^CONFIG_KCSAN_SELFTEST=y$' "$output/build/.config"
+        grep -q '^CONFIG_KCSAN_INTERRUPT_WATCHER=y$' "$output/build/.config"
+        ;;
+esac
 grep -q '^CONFIG_MODULES=y$' "$output/build/.config"
 grep -q '^# CONFIG_MODVERSIONS is not set$' "$output/build/.config"
 grep -q '^CONFIG_VIRTIO_BLK=y$' "$output/build/.config"

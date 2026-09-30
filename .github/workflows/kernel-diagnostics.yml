@@ -24,6 +24,7 @@ on:
         type: choice
         options:
           - kasan
+          - kcsan
       parent_run_id:
         description: Parent acceptance workflow run ID; blank for direct dispatch
         required: false
@@ -247,7 +248,20 @@ jobs:
           test -s "$DNIV_DIAG_DIR/config"
           test -s "$DNIV_DIAG_DIR/kernelrelease"
           test -d "$DNIV_DIAG_DIR/build"
-          grep -q '^CONFIG_KASAN=y$' "$DNIV_DIAG_DIR/config"
+          case '${{ inputs.profile }}' in
+            kasan)
+              grep -q '^CONFIG_KASAN=y$' "$DNIV_DIAG_DIR/config"
+              ;;
+            kcsan)
+              grep -q '^CONFIG_KCSAN=y$' "$DNIV_DIAG_DIR/config"
+              grep -q '^CONFIG_KCSAN_EARLY_ENABLE=y$' "$DNIV_DIAG_DIR/config"
+              grep -q '^CONFIG_KCSAN_INTERRUPT_WATCHER=y$' "$DNIV_DIAG_DIR/config"
+              ;;
+            *)
+              echo "kernel-diagnostics: unsupported profile" >&2
+              exit 2
+              ;;
+          esac
           krel=$(cat "$DNIV_DIAG_DIR/kernelrelease")
           test "$krel" = "7.0.0-dniv-${{ inputs.profile }}"
           printf 'CACHE_HIT=%s\nKERNEL_RELEASE=%s\n' \

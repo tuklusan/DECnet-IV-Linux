@@ -298,6 +298,10 @@ class Lab:
             common += " dniv.diag=kfence kfence.sample_interval=100 panic_on_warn=1 oops=panic"
         elif self.diagnostics == "ubsan":
             common += " dniv.diag=ubsan panic_on_warn=1 oops=panic"
+        elif self.diagnostics == "kcsan":
+            common += " dniv.diag=kcsan kcsan.skip_watch=1000 panic_on_warn=1 oops=panic"
+            if self.host_arch == "aarch64":
+                common += " net.ifnames=0 init=/usr/local/sbin/dniv-smoke"
         elif self.diagnostics == "kasan":
             common += " dniv.diag=kasan panic_on_warn=1 oops=panic net.ifnames=0 systemd.mask=systemd-udev-trigger.service"
             if self.host_arch == "aarch64":
@@ -316,7 +320,7 @@ class Lab:
         else:
             raise RuntimeError(f"unsupported host architecture: {self.host_arch}")
 
-        if self.diagnostics == "kasan" and self.host_arch == "aarch64" and self.accel == "tcg":
+        if self.diagnostics in {"kasan", "kcsan"} and self.host_arch == "aarch64" and self.accel == "tcg":
             host_cpus = sorted(os.sched_getaffinity(0))
             # Keep one schedulable CPU out of both TCG process masks so the
             # host controller, QMP and capture path cannot be starved behind
@@ -338,11 +342,11 @@ class Lab:
                 )
             else:
                 raise RuntimeError(
-                    "arm64 KASAN TCG requires one reserved host CPU plus "
+                    "arm64 diagnostic TCG requires one reserved host CPU plus "
                     f"two {self.vcpus}-vCPU guest affinity sets, available={host_cpus}"
                 )
             if shutil.which("taskset") is None:
-                raise RuntimeError("arm64 KASAN TCG requires taskset")
+                raise RuntimeError("arm64 diagnostic TCG requires taskset")
             cpu_list = ",".join(str(cpu) for cpu in affinity)
             cmd = ["taskset", "--cpu-list", cpu_list, *cmd]
 
@@ -440,7 +444,7 @@ def main() -> int:
         raise SystemExit(f"python-lab: unsupported NIC model: {nic_model}")
     if vcpus not in {1, 2, 4, 8}:
         raise SystemExit(f"python-lab: unsupported vCPU count: {vcpus}")
-    if diagnostics not in {"none", "kfence", "ubsan", "kasan"}:
+    if diagnostics not in {"none", "kfence", "ubsan", "kasan", "kcsan"}:
         raise SystemExit(f"python-lab: unsupported diagnostics mode: {diagnostics}")
     if not 256 <= memory_mb <= 4096:
         raise SystemExit(f"python-lab: unsupported guest memory size: {memory_mb}")
@@ -478,7 +482,7 @@ def main() -> int:
     marker = "DNIV-E1-PASS" if mode == "e1" else "DNIV-LAB-PASS"
     pass_a = pass_b = False
     diagnostic_fault = (
-        mode == "e1" and diagnostics == "kasan" and
+        mode == "e1" and diagnostics in {"kasan", "kcsan"} and
         lab.host_arch == "aarch64" and lab.accel == "tcg"
     )
     fault_started = False
@@ -593,6 +597,12 @@ def main() -> int:
                 raise SystemExit(f"python-lab: missing KASAN runtime marker from {guest.name}")
             if contains(guest.log, "BUG: KASAN:"):
                 raise SystemExit(f"python-lab: KASAN finding reported by {guest.name}")
+    elif diagnostics == "kcsan":
+        for guest in (guest_a, guest_b):
+            if not contains(guest.log, f"DNIV-DIAG-KCSAN session={session}"):
+                raise SystemExit(f"python-lab: missing KCSAN runtime marker from {guest.name}")
+            if contains(guest.log, "BUG: KCSAN:"):
+                raise SystemExit(f"python-lab: KCSAN finding reported by {guest.name}")
 
     frames = pcap_count(lab.pcap, "ether proto 0x6003")
     if frames < 2:

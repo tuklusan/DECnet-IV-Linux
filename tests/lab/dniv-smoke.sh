@@ -215,6 +215,25 @@ kasan)
     fi
     echo "DNIV-DIAG-KASAN session=$session node=$name enabled=1"
     ;;
+kcsan)
+    config="/boot/config-$(uname -r)"
+    if [ ! -r "$config" ] || ! grep -q '^CONFIG_KCSAN=y$' "$config"; then
+        echo "DNIV-LAB-FAIL session=$session node=$name reason=kcsan-unavailable"
+        exit 1
+    fi
+    if [ ! -r /sys/module/kcsan/parameters/skip_watch ]; then
+        echo "DNIV-LAB-FAIL session=$session node=$name reason=kcsan-runtime-unavailable"
+        exit 1
+    fi
+    kcsan_skip_watch=$(cat /sys/module/kcsan/parameters/skip_watch 2>/dev/null || true)
+    case "$kcsan_skip_watch" in
+        ''|*[!0-9]*)
+            echo "DNIV-LAB-FAIL session=$session node=$name reason=kcsan-runtime-inactive"
+            exit 1
+            ;;
+    esac
+    echo "DNIV-DIAG-KCSAN session=$session node=$name skip_watch=$kcsan_skip_watch"
+    ;;
 *)
     echo "DNIV-LAB-FAIL session=$session node=$name reason=bad-diagnostics"
     exit 1
