@@ -626,7 +626,11 @@ def main() -> int:
                        contains(guest_b.log, f"DNIV-E1-INIT session={session}"))
         if not init_logged and not pcap_router_init_seen(lab.pcap, mac_a, mac_b):
             raise SystemExit("python-lab: E1 initial INIT state was not observed")
-        if not (contains(guest_a.log, f"DNIV-E1-RESTART-INIT session={session}") or contains(guest_b.log, f"DNIV-E1-RESTART-INIT session={session}")):
+        if diagnostic_fault:
+            if not contains(guest_b.log, f"DNIV-E1-DIAG-RELOAD session={session}"):
+                raise SystemExit("python-lab: KASAN direct-init module reload was not observed")
+        elif not (contains(guest_a.log, f"DNIV-E1-RESTART-INIT session={session}") or
+                  contains(guest_b.log, f"DNIV-E1-RESTART-INIT session={session}")):
             raise SystemExit("python-lab: E1 restart INIT state was not observed")
         print(f"python-lab: E1 pass on {lab.host_arch} nic={lab.nic_model} vcpus={lab.vcpus} diagnostics={lab.diagnostics} "
               f"for {area}.{node_a}/{area}.{node_b}, captured {frames} DECnet frames")
