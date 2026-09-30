@@ -273,12 +273,28 @@ class Lab:
 
         if self.diagnostics == "kasan" and self.host_arch == "aarch64" and self.accel == "tcg":
             host_cpus = sorted(os.sched_getaffinity(0))
-            split = len(host_cpus) // 2
-            affinity = host_cpus[:split] if guest.role == "A" else host_cpus[split:]
-            if len(affinity) < self.vcpus:
+            # Keep one schedulable CPU out of both TCG process masks so the
+            # host controller, QMP and capture path cannot be starved behind
+            # two KASAN guests.  On a four-CPU runner the two 2-vCPU guest
+            # masks intentionally overlap one CPU; guest SMP coverage remains
+            # intact while CPU 0 stays available to host orchestration.
+            guest_cpus = host_cpus[1:]
+            if len(guest_cpus) >= 2 * self.vcpus:
+                affinity = (
+                    guest_cpus[:self.vcpus]
+                    if guest.role == "A"
+                    else guest_cpus[self.vcpus:2 * self.vcpus]
+                )
+            elif len(guest_cpus) >= self.vcpus + 1:
+                affinity = (
+                    guest_cpus[:self.vcpus]
+                    if guest.role == "A"
+                    else guest_cpus[-self.vcpus:]
+                )
+            else:
                 raise RuntimeError(
-                    "arm64 KASAN TCG requires disjoint host CPU sets "
-                    f"for two {self.vcpus}-vCPU guests, available={host_cpus}"
+                    "arm64 KASAN TCG requires one reserved host CPU plus "
+                    f"two {self.vcpus}-vCPU guest affinity sets, available={host_cpus}"
                 )
             if shutil.which("taskset") is None:
                 raise RuntimeError("arm64 KASAN TCG requires taskset")

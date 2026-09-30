@@ -20,6 +20,7 @@ from pathlib import Path
 SMOKE = Path("tests/lab/dniv-smoke.sh").read_text(encoding="utf-8")
 E4 = Path("tests/lab/dniv_e4.py").read_text(encoding="utf-8")
 SCALE = Path("tests/lab/dniv_scale.py").read_text(encoding="utf-8")
+LAB = Path("tests/lab/dniv_lab.py").read_text(encoding="utf-8")
 
 required_smoke = (
     'probe_count=${probe_override:-180}',
@@ -59,5 +60,16 @@ required_scale = (
 for marker in required_scale:
     if marker not in SCALE:
         raise SystemExit(f"E4-CONVERGENCE: missing scale16 guard: {marker}")
+
+required_lab = (
+    'guest_cpus = host_cpus[1:]',
+    'len(guest_cpus) >= 2 * self.vcpus',
+    'len(guest_cpus) >= self.vcpus + 1',
+    'guest_cpus[-self.vcpus:]',
+    '"arm64 KASAN TCG requires one reserved host CPU plus "',
+)
+for marker in required_lab:
+    if marker not in LAB:
+        raise SystemExit(f"E4-CONVERGENCE: missing KASAN host-CPU guard: {marker}")
 
 print("E4-CONVERGENCE: pass")
