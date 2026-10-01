@@ -164,9 +164,43 @@ lockdebug_final_check() {
     echo "DNIV-DIAG-LOCKDEBUG-FINAL session=$session node=$name"
 }
 
+kmemleak_final_check() {
+    [ "${diagnostics:-none}" = kmemleak ] || return 0
+    kmemleak_path=/sys/kernel/debug/kmemleak
+    if [ ! -w "$kmemleak_path" ]; then
+        echo "DNIV-LAB-FAIL session=$session node=$name reason=kmemleak-runtime-missing"
+        return 1
+    fi
+    if [ -d /sys/module/decnet_iv ]; then
+        if ! modprobe -r decnet_iv; then
+            echo "DNIV-LAB-FAIL session=$session node=$name reason=kmemleak-module-unload"
+            return 1
+        fi
+    fi
+    sync
+    sleep 6
+    if ! printf 'scan\n' > "$kmemleak_path"; then
+        echo "DNIV-LAB-FAIL session=$session node=$name reason=kmemleak-scan"
+        return 1
+    fi
+    if ! report=$(cat "$kmemleak_path"); then
+        echo "DNIV-LAB-FAIL session=$session node=$name reason=kmemleak-read"
+        return 1
+    fi
+    if [ -n "$report" ]; then
+        echo "DNIV-DIAG-KMEMLEAK-REPORT-BEGIN session=$session node=$name"
+        printf '%s\n' "$report"
+        echo "DNIV-DIAG-KMEMLEAK-REPORT-END session=$session node=$name"
+        echo "DNIV-LAB-FAIL session=$session node=$name reason=kmemleak-finding"
+        return 1
+    fi
+    echo "DNIV-DIAG-KMEMLEAK-FINAL session=$session node=$name"
+}
+
 poweroff_pass() {
     marker=$1
     lockdebug_final_check || exit 1
+    kmemleak_final_check || exit 1
     sync
     echo "$marker"
     sleep 2
@@ -262,6 +296,44 @@ lockdebug)
         exit 1
     fi
     echo "DNIV-DIAG-LOCKDEBUG session=$session node=$name"
+    ;;
+kmemleak)
+    config="/boot/config-$(uname -r)"
+    if [ ! -r "$config" ] || ! grep -q '^CONFIG_DEBUG_KMEMLEAK=y$' "$config"; then
+        echo "DNIV-LAB-FAIL session=$session node=$name reason=kmemleak-unavailable"
+        exit 1
+    fi
+    mkdir -p /sys/kernel/debug
+    if ! grep -q ' /sys/kernel/debug debugfs ' /proc/mounts; then
+        if ! mount -t debugfs nodev /sys/kernel/debug; then
+            echo "DNIV-LAB-FAIL session=$session node=$name reason=kmemleak-debugfs"
+            exit 1
+        fi
+    fi
+    kmemleak_path=/sys/kernel/debug/kmemleak
+    i=0
+    while [ "$i" -lt 100 ] && [ ! -w "$kmemleak_path" ]; do
+        i=$((i + 1))
+        sleep 0.1
+    done
+    if [ ! -w "$kmemleak_path" ]; then
+        echo "DNIV-LAB-FAIL session=$session node=$name reason=kmemleak-runtime-unavailable"
+        exit 1
+    fi
+    if ! printf 'scan=off\n' > "$kmemleak_path"; then
+        echo "DNIV-LAB-FAIL session=$session node=$name reason=kmemleak-scan-disable"
+        exit 1
+    fi
+    sleep 6
+    if ! printf 'scan\n' > "$kmemleak_path"; then
+        echo "DNIV-LAB-FAIL session=$session node=$name reason=kmemleak-baseline-scan"
+        exit 1
+    fi
+    if ! printf 'clear\n' > "$kmemleak_path"; then
+        echo "DNIV-LAB-FAIL session=$session node=$name reason=kmemleak-baseline-clear"
+        exit 1
+    fi
+    echo "DNIV-DIAG-KMEMLEAK session=$session node=$name enabled=1"
     ;;
 
 *)

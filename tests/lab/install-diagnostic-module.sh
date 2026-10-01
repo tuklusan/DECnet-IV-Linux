@@ -30,7 +30,7 @@ profile=$5
     exit 2
 }
 case "$profile" in
-    kasan|kcsan|lockdebug) ;;
+    kasan|kcsan|lockdebug|kmemleak) ;;
     *) echo "install-diagnostic-module: unsupported profile: $profile" >&2; exit 2 ;;
 esac
 [[ "$krel" == "7.0.0-dniv-$profile" ]] || {

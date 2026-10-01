@@ -64,6 +64,8 @@ for marker in required_scale:
 required_lab = (
     'guest_cpus = host_cpus[1:]',
     'dniv.diag=kcsan kcsan.skip_watch=1000 panic_on_warn=0 oops=panic net.ifnames=0',
+    'dniv.diag=kmemleak kmemleak=on panic_on_warn=1 oops=panic',
+    'diagnostics in {"kasan", "kcsan", "lockdebug", "kmemleak"}',
     'BUG: KCSAN: data-race in memchr_inv / mod_node_state',
     'BUG: KCSAN: data-race in mod_node_state / memchr_inv',
     'BUG: KCSAN: data-race in __mem_cgroup_flush_stats / tick_do_update_jiffies64',

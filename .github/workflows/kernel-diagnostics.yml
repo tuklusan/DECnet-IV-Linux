@@ -26,6 +26,7 @@ on:
           - kasan
           - kcsan
           - lockdebug
+          - kmemleak
       parent_run_id:
         description: Parent acceptance workflow run ID; blank for direct dispatch
         required: false
@@ -74,7 +75,7 @@ jobs:
       DNIV_LAB_NIC_MODEL: virtio-net-pci
       DNIV_LAB_VCPUS: ${{ matrix.vcpus }}
       DNIV_LAB_DIAGNOSTICS: ${{ inputs.profile }}
-      DNIV_LAB_MEMORY_MB: "2560"
+      DNIV_LAB_MEMORY_MB: ${{ inputs.profile == 'kmemleak' && '1024' || '2560' }}
       DNIV_LAB_TIMEOUT_SECONDS: ${{ matrix.lab_timeout }}
       DNIV_LAB_SESSION_ID: run-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.arch }}-${{ inputs.profile }}
       DNIV_LAB_ARCH: ${{ matrix.arch }}
@@ -267,6 +268,11 @@ jobs:
               grep -q '^# CONFIG_PROVE_LOCKING is not set$' "$DNIV_DIAG_DIR/config"
               grep -q '^# CONFIG_DEBUG_LOCK_ALLOC is not set$' "$DNIV_DIAG_DIR/config"
               ! grep -q '^CONFIG_LOCKDEP=y$' "$DNIV_DIAG_DIR/config"
+              ;;
+            kmemleak)
+              grep -q '^CONFIG_DEBUG_KMEMLEAK=y$' "$DNIV_DIAG_DIR/config"
+              grep -q '^# CONFIG_DEBUG_KMEMLEAK_AUTO_SCAN is not set$' "$DNIV_DIAG_DIR/config"
+              ! grep -q '^CONFIG_DEBUG_KMEMLEAK_DEFAULT_OFF=y$' "$DNIV_DIAG_DIR/config"
               ;;
             *)
               echo "kernel-diagnostics: unsupported profile" >&2

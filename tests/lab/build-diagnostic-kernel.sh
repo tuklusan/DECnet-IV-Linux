@@ -31,7 +31,7 @@ case "$arch" in
     *) echo "build-diagnostic-kernel: unsupported architecture: $arch" >&2; exit 2 ;;
 esac
 case "$profile" in
-    kasan|kcsan|lockdebug) ;;
+    kasan|kcsan|lockdebug|kmemleak) ;;
     *) echo "build-diagnostic-kernel: unsupported profile: $profile" >&2; exit 2 ;;
 esac
 [[ -r "$base_config" ]] || {
@@ -121,6 +121,14 @@ case "$profile" in
         # excluding that non-candidate device-noise class.
         "$config" --file "$output/build/.config" --disable KCSAN_REPORT_RACE_UNKNOWN_ORIGIN
         ;;
+    kmemleak)
+        "$config" --file "$output/build/.config" --disable KASAN
+        "$config" --file "$output/build/.config" --disable KCSAN
+        "$config" --file "$output/build/.config" --enable DEBUG_KERNEL
+        "$config" --file "$output/build/.config" --enable DEBUG_KMEMLEAK
+        "$config" --file "$output/build/.config" --disable DEBUG_KMEMLEAK_DEFAULT_OFF
+        "$config" --file "$output/build/.config" --disable DEBUG_KMEMLEAK_AUTO_SCAN
+        ;;
     lockdebug)
         "$config" --file "$output/build/.config" --disable KASAN
         "$config" --file "$output/build/.config" --disable KCSAN
@@ -162,6 +170,11 @@ case "$profile" in
         grep -q '^# CONFIG_PROVE_LOCKING is not set$' "$output/build/.config"
         grep -q '^# CONFIG_DEBUG_LOCK_ALLOC is not set$' "$output/build/.config"
         ! grep -q '^CONFIG_LOCKDEP=y$' "$output/build/.config"
+        ;;
+    kmemleak)
+        grep -q '^CONFIG_DEBUG_KMEMLEAK=y$' "$output/build/.config"
+        grep -q '^# CONFIG_DEBUG_KMEMLEAK_AUTO_SCAN is not set$' "$output/build/.config"
+        ! grep -q '^CONFIG_DEBUG_KMEMLEAK_DEFAULT_OFF=y$' "$output/build/.config"
         ;;
 esac
 grep -q '^CONFIG_MODULES=y$' "$output/build/.config"

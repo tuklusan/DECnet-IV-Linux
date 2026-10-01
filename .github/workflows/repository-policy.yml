@@ -379,6 +379,9 @@ jobs:
             printf 'KERNEL_LOCKDEBUG=kernel-diagnostics.yml:lockdebug\n' >> "$DNIV_SCRATCH_DIR/dispatch.env"
             dispatch_and_record KERNEL_LOCKDEBUG kernel-diagnostics.yml \
               -f profile=lockdebug -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
+            printf 'KERNEL_KMEMLEAK=kernel-diagnostics.yml:kmemleak\n' >> "$DNIV_SCRATCH_DIR/dispatch.env"
+            dispatch_and_record KERNEL_KMEMLEAK kernel-diagnostics.yml \
+              -f profile=kmemleak -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
           fi
 
           if [[ "$profile" == consolidated ]]; then
