@@ -37,6 +37,9 @@ for file in "$base" "$ref_base" "$kernel" "$initrd" "$bundle/manifest.env" "$bun
 done
 
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+fault_evidence() {
+    python3 "$script_dir/../../tools/evidence_guard.py" fault "$@"
+}
 # shellcheck disable=SC1091
 . "$script_dir/../reference/refs.env"
 case "$reference" in
@@ -746,6 +749,7 @@ if [[ "$reference" == pydecnet ]]; then
         cat "$loss_fault_log" >&2
         exit 1
     fi
+    fault_evidence --path "$loss_fault_log" --name reference-unicast-drop --require-tc-active
     if (( loss_retransmit_seen != 1 )); then
         echo "interop: NSP loss injector did not hold through candidate retransmission" >&2
         cat "$loss_fault_log" >&2
@@ -788,6 +792,7 @@ if [[ "$reference" == pydecnet ]]; then
         cat "$drain_fault_log" >&2
         exit 1
     fi
+    fault_evidence --path "$drain_fault_log" --name reference-unicast-drop-clean-drain --require-tc-active
     sudo tc qdisc del dev "$tap_reference" clsact
     unset LOSS_QDISC
     if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-DRAIN-PASS session=$session scenario=$scenario" 30 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
@@ -818,7 +823,7 @@ if [[ "$reference" == pydecnet ]]; then
             "$reference_mac" "$candidate_mac" >> "$flow_fault_log"
         if ! timeout 40s sudo python3 "$script_dir/inject-nsp-flow.py" \
             "$bridge" "$bridge" "$candidate_mac" \
-            "$ref_area.$ref_node" "$area.$node"; then
+            "$ref_area.$ref_node" "$area.$node" 2>&1 | tee -a "$flow_fault_log"; then
             tail -340 "$candidate_log" >&2 || true
             tail -280 "$ref1_log" >&2 || true
             sudo tc -s filter show dev "$tap_reference" ingress >> "$flow_fault_log" 2>&1 || true
@@ -832,6 +837,8 @@ if [[ "$reference" == pydecnet ]]; then
             cat "$flow_fault_log" >&2
             exit 1
         fi
+        fault_evidence --path "$flow_fault_log" --name reference-unicast-drop-flow-xoff \
+            --require-tc-active --require-marker "flow-inject: pass"
         sudo tc qdisc del dev "$tap_reference" clsact
         unset LOSS_QDISC
         if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-FLOW-PASS session=$session scenario=$scenario" 20 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
@@ -861,7 +868,7 @@ if [[ "$reference" == pydecnet ]]; then
             "$reference_mac" "$candidate_mac" >> "$ackrange_fault_log"
         if ! timeout 30s sudo python3 "$script_dir/inject-nsp-ackrange.py" \
             "$bridge" "$bridge" "$candidate_mac" \
-            "$ref_area.$ref_node" "$area.$node"; then
+            "$ref_area.$ref_node" "$area.$node" 2>&1 | tee -a "$ackrange_fault_log"; then
             tail -380 "$candidate_log" >&2 || true
             tail -320 "$ref1_log" >&2 || true
             sudo tc -s filter show dev "$tap_reference" ingress >> "$ackrange_fault_log" 2>&1 || true
@@ -875,6 +882,8 @@ if [[ "$reference" == pydecnet ]]; then
             cat "$ackrange_fault_log" >&2
             exit 1
         fi
+        fault_evidence --path "$ackrange_fault_log" --name reference-unicast-drop-ackrange \
+            --require-tc-active --require-marker "ack-range-inject: pass"
         sudo tc qdisc del dev "$tap_reference" clsact
         unset LOSS_QDISC
         if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-ACKRANGE-PASS session=$session scenario=$scenario" 20 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
@@ -904,7 +913,7 @@ if [[ "$reference" == pydecnet ]]; then
             "$reference_mac" "$candidate_mac" >> "$intloss_fault_log"
         if ! timeout 30s sudo python3 "$script_dir/inject-nsp-intloss.py" \
             "$bridge" "$bridge" "$candidate_mac" \
-            "$ref_area.$ref_node" "$area.$node"; then
+            "$ref_area.$ref_node" "$area.$node" 2>&1 | tee -a "$intloss_fault_log"; then
             tail -420 "$candidate_log" >&2 || true
             tail -360 "$ref1_log" >&2 || true
             sudo tc -s filter show dev "$tap_reference" ingress >> "$intloss_fault_log" 2>&1 || true
@@ -918,6 +927,8 @@ if [[ "$reference" == pydecnet ]]; then
             cat "$intloss_fault_log" >&2
             exit 1
         fi
+        fault_evidence --path "$intloss_fault_log" --name reference-unicast-drop-interrupt-ack \
+            --require-tc-active --require-marker "intloss-inject: pass"
         sudo tc qdisc del dev "$tap_reference" clsact
         unset LOSS_QDISC
         if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-INTLOSS-PASS session=$session scenario=$scenario" 25 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
@@ -937,13 +948,17 @@ if [[ "$reference" == pydecnet ]]; then
             tail -380 "$ref1_log" >&2 || true
             exit 1
         fi
+        intflow_fault_log="$work/nsp-intflow-fault.log"
+        printf 'fault=raw-interrupt-credit-flow\n' > "$intflow_fault_log"
         if ! timeout 35s sudo python3 "$script_dir/inject-nsp-intflow.py" \
             "$bridge" "$bridge" "$candidate_mac" \
-            "$ref_area.$ref_node" "$area.$node"; then
+            "$ref_area.$ref_node" "$area.$node" 2>&1 | tee -a "$intflow_fault_log"; then
             tail -460 "$candidate_log" >&2 || true
             tail -400 "$ref1_log" >&2 || true
             exit 1
         fi
+        fault_evidence --path "$intflow_fault_log" --name raw-interrupt-credit-flow \
+            --require-marker "intflow-inject: pass"
         if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-INTFLOW-PASS session=$session scenario=$scenario" 25 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
             tail -460 "$candidate_log" >&2 || true
             tail -400 "$ref1_log" >&2 || true
@@ -977,7 +992,7 @@ if [[ "$reference" == pydecnet ]]; then
         printf 'fault=reference-unicast-drop-cc-ack source=%s destination=%s\n' \
             "$reference_mac" "$candidate_mac" >> "$cc_retry_fault_log"
         if ! timeout 20s sudo python3 "$script_dir/observe-nsp-ccretry.py" \
-            "$bridge" "$candidate_mac" "$reference_mac"; then
+            "$bridge" "$candidate_mac" "$reference_mac" 2>&1 | tee -a "$cc_retry_fault_log"; then
             sudo tc -s filter show dev "$tap_reference" ingress >> "$cc_retry_fault_log" 2>&1 || true
             cat "$cc_retry_peer_log" >&2 || true
             cat "$cc_retry_fault_log" >&2 || true
@@ -992,6 +1007,8 @@ if [[ "$reference" == pydecnet ]]; then
             cat "$cc_retry_fault_log" >&2
             exit 1
         fi
+        fault_evidence --path "$cc_retry_fault_log" --name reference-unicast-drop-cc-ack \
+            --require-tc-active --require-marker "ccretry-observe: pass"
         sudo tc qdisc del dev "$tap_reference" clsact
         unset LOSS_QDISC
         if ! wait "$CCRETRY_PID"; then
@@ -1023,7 +1040,7 @@ if [[ "$reference" == pydecnet ]]; then
         printf 'fault=reference-unicast-drop-dc source=%s destination=%s\n' \
             "$reference_mac" "$candidate_mac" >> "$di_loss_fault_log"
         if ! timeout 20s sudo python3 "$script_dir/observe-nsp-diloss.py" \
-            "$bridge" "$candidate_mac" "$reference_mac"; then
+            "$bridge" "$candidate_mac" "$reference_mac" 2>&1 | tee -a "$di_loss_fault_log"; then
             sudo tc -s filter show dev "$tap_reference" ingress >> "$di_loss_fault_log" 2>&1 || true
             cat "$di_loss_fault_log" >&2 || true
             tail -540 "$candidate_log" >&2 || true
@@ -1037,6 +1054,8 @@ if [[ "$reference" == pydecnet ]]; then
             cat "$di_loss_fault_log" >&2
             exit 1
         fi
+        fault_evidence --path "$di_loss_fault_log" --name reference-unicast-drop-dc \
+            --require-tc-active --require-marker "diloss-observe: pass"
         sudo tc qdisc del dev "$tap_reference" clsact
         unset LOSS_QDISC
         if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-DILOSS-PASS session=$session scenario=$scenario" 30 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
@@ -1073,6 +1092,8 @@ if [[ "$reference" == pydecnet ]]; then
             cat "$di_exhaust_fault_log" >&2
             exit 1
         fi
+        fault_evidence --path "$di_exhaust_fault_log" \
+            --name reference-unicast-drop-until-di-retry-exhaustion --require-tc-active
         sudo tc qdisc del dev "$tap_reference" clsact
         unset LOSS_QDISC
         if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-DIEXHAUST-PASS session=$session scenario=$scenario" 20 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
@@ -1130,6 +1151,8 @@ if [[ "$reference" == pydecnet ]]; then
             cat "$window_fault_log" >&2
             exit 1
         fi
+        fault_evidence --path "$window_fault_log" --name reference-unicast-drop-full-window \
+            --require-tc-active
         sudo tc qdisc del dev "$tap_reference" clsact
         unset LOSS_QDISC
         if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-WINDOW-PASS session=$session scenario=$scenario" 45 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
@@ -1169,6 +1192,8 @@ if [[ "$reference" == pydecnet ]]; then
         cat "$exhaust_fault_log" >&2
         exit 1
     fi
+    fault_evidence --path "$exhaust_fault_log" \
+        --name reference-unicast-drop-until-retry-exhaustion --require-tc-active
     sudo tc qdisc del dev "$tap_reference" clsact
     unset LOSS_QDISC
 
@@ -1206,6 +1231,8 @@ if [[ "$reference" == pydecnet ]]; then
         cat "$ci_fault_log" >&2
         exit 1
     fi
+    fault_evidence --path "$ci_fault_log" \
+        --name reference-unicast-drop-until-ci-retry-exhaustion --require-tc-active
     sudo tc qdisc del dev "$tap_reference" clsact
     unset LOSS_QDISC
     if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-CI-EXHAUST-PASS session=$session scenario=$scenario" 30 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
@@ -1225,13 +1252,17 @@ if [[ "$reference" == pydecnet ]]; then
             tail -300 "$ref1_log" >&2 || true
             exit 1
         fi
+        cr_timeout_fault_log="$work/nsp-cr-timeout-fault.log"
+        printf 'fault=pydecnet-connect-timeout\n' > "$cr_timeout_fault_log"
         if ! timeout 60s env PYTHONPATH="$host_pydecnet/pydecnet" python3 \
             "$script_dir/pydecnet-timeout.py" "$host_pydecnet_api" \
-            "$area.$node" "$ref_name"; then
+            "$area.$node" "$ref_name" 2>&1 | tee -a "$cr_timeout_fault_log"; then
             tail -380 "$candidate_log" >&2 || true
             tail -320 "$ref1_log" >&2 || true
             exit 1
         fi
+        fault_evidence --path "$cr_timeout_fault_log" --name pydecnet-connect-timeout \
+            --require-marker "pydecnet-timeout: pass"
         if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-CR-TIMEOUT-PASS session=$session scenario=$scenario" 20 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
             tail -380 "$candidate_log" >&2 || true
             tail -320 "$ref1_log" >&2 || true
@@ -1376,12 +1407,16 @@ if [[ "$reserved_proof" == 1 ]]; then
     # replies and immediately confirming each rejected CI, which would recycle
     # connection slots before the bounded table can actually be exhausted.
     # Bridge capture still sees candidate replies before this TAP egress drop.
+    reserved_fault_log="$work/nsp-reserved-fault.log"
+    printf 'fault=reference-egress-drop-reserved source=%s destination=%s\n' \
+        "$candidate_mac" "$reference_mac" > "$reserved_fault_log"
     sudo tc qdisc add dev "$tap_reference" clsact
     RESERVED_QDISC=1
     sudo tc filter add dev "$tap_reference" egress protocol all pref 20 flower \
         src_mac "$candidate_mac" dst_mac "$reference_mac" action drop
 
-    if ! sudo python3 "$script_dir/inject-nsp-reserved.py" "$bridge" "$candidate_mac" "$ref_area.$ref_node" "$area.$node"; then
+    if ! sudo python3 "$script_dir/inject-nsp-reserved.py" "$bridge" "$candidate_mac" "$ref_area.$ref_node" "$area.$node" \
+        2>&1 | tee -a "$reserved_fault_log"; then
         tail -320 "$candidate_log" >&2 || true
         tail -260 "$ref1_log" >&2 || true
         exit 1
@@ -1392,11 +1427,14 @@ if [[ "$reserved_proof" == 1 ]]; then
         exit 1
     fi
     reserved_stats=$(sudo tc -s filter show dev "$tap_reference" egress)
+    printf '%s\n' "$reserved_stats" >> "$reserved_fault_log"
     if ! printf '%s\n' "$reserved_stats" | grep -Eq 'Sent [0-9]+ bytes [1-9][0-9]* pkt'; then
         echo "interop: reserved-port peer-isolation filter matched no replies" >&2
         printf '%s\n' "$reserved_stats" >&2
         exit 1
     fi
+    fault_evidence --path "$reserved_fault_log" --name reference-egress-drop-reserved \
+        --require-tc-active --require-marker "reserved-inject: pass"
     sudo tc qdisc del dev "$tap_reference" clsact
     unset RESERVED_QDISC
 fi

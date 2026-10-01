@@ -165,6 +165,51 @@ def verify(root: Path, manifest_path: Path) -> None:
 
 
 
+
+def verify_fault_evidence(
+    path: Path,
+    name: str,
+    require_tc_active: bool,
+    markers: list[str],
+) -> None:
+    try:
+        if path.is_symlink() or not path.is_file():
+            die(f"fault evidence missing or non-regular: {path}")
+        if path.stat().st_size <= 0:
+            die(f"fault evidence is empty: {path}")
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        die(f"cannot read fault evidence {path}: {exc}")
+
+    declarations = [
+        line for line in text.splitlines()
+        if line.startswith("fault=")
+    ]
+    if len(declarations) != 1:
+        die(
+            f"fault evidence declaration count={len(declarations)} "
+            f"expected=1: {path}"
+        )
+    actual = declarations[0].split(None, 1)[0][len("fault="):]
+    if actual != name:
+        die(f"fault evidence name mismatch: have={actual} expected={name}")
+
+    if require_tc_active:
+        packets = [
+            int(value)
+            for value in re.findall(
+                r"\bSent\s+\d+\s+bytes\s+(\d+)\s+pkt\b",
+                text,
+            )
+        ]
+        if not packets or max(packets) <= 0:
+            die(f"fault evidence injector inactive: {name}")
+
+    for marker in markers:
+        if marker not in text:
+            die(f"fault evidence missing proof marker for {name}: {marker}")
+
+
 FOUNDATION_MEMBERS = ("base.qcow2", "boot/vmlinuz", "boot/initrd.img", "session.env")
 FOUNDATION_KEYS = (
     "FORMAT",
@@ -292,6 +337,12 @@ def main() -> int:
     p.add_argument("--root", type=Path, required=True)
     p.add_argument("--manifest", type=Path, required=True)
 
+    p = sub.add_parser("fault")
+    p.add_argument("--path", type=Path, required=True)
+    p.add_argument("--name", required=True)
+    p.add_argument("--require-tc-active", action="store_true")
+    p.add_argument("--require-marker", action="append", default=[])
+
     p = sub.add_parser("foundation")
     p.add_argument("--root", type=Path, required=True)
     p.add_argument("--session-id", required=True)
@@ -312,6 +363,14 @@ def main() -> int:
     elif args.command == "verify":
         verify(args.root, args.manifest)
         print("evidence-guard: verification passed")
+    elif args.command == "fault":
+        verify_fault_evidence(
+            args.path,
+            args.name,
+            args.require_tc_active,
+            args.require_marker,
+        )
+        print(f"evidence-guard: fault verification passed name={args.name}")
     else:
         verify_foundation(
             args.root,

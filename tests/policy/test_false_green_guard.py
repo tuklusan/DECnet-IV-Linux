@@ -265,6 +265,67 @@ def main() -> int:
         expect_failure(result, "cannot create evidence directory", "unavailable evidence directory")
 
 
+
+        non_e1_fault = root / "non-e1-fault.log"
+        valid_fault = (
+            "fault=reference-unicast-drop-flow-xoff source=aa destination=bb\n"
+            "Sent 128 bytes 2 pkt (dropped 2, overlimits 0 requeues 0)\n"
+            "flow-inject: pass xoff=1 resumed=1\n"
+        )
+        non_e1_fault.write_text(valid_fault, encoding="utf-8")
+        fault_args = (
+            sys.executable, str(EVIDENCE_GUARD), "fault",
+            "--path", str(non_e1_fault),
+            "--name", "reference-unicast-drop-flow-xoff",
+            "--require-tc-active",
+            "--require-marker", "flow-inject: pass",
+        )
+        run(root, *fault_args)
+
+        non_e1_fault.write_text(valid_fault.replace("2 pkt", "0 pkt"), encoding="utf-8")
+        result = run(root, *fault_args, check=False)
+        expect_failure(result, "fault evidence injector inactive", "inactive non-E1 injector")
+
+        non_e1_fault.write_text(
+            valid_fault.replace(
+                "fault=reference-unicast-drop-flow-xoff",
+                "fault=wrong-fault",
+            ),
+            encoding="utf-8",
+        )
+        result = run(root, *fault_args, check=False)
+        expect_failure(result, "fault evidence name mismatch", "corrupt non-E1 fault manifest")
+
+        non_e1_fault.write_text(
+            valid_fault + "fault=reference-unicast-drop-flow-xoff duplicate=1\n",
+            encoding="utf-8",
+        )
+        result = run(root, *fault_args, check=False)
+        expect_failure(result, "fault evidence declaration count=2", "duplicate non-E1 fault manifest")
+
+        non_e1_fault.write_text(
+            valid_fault.replace("flow-inject: pass xoff=1 resumed=1\n", ""),
+            encoding="utf-8",
+        )
+        result = run(root, *fault_args, check=False)
+        expect_failure(result, "fault evidence missing proof marker", "missing non-E1 injector proof")
+
+        non_e1_fault.unlink()
+        result = run(root, *fault_args, check=False)
+        expect_failure(result, "fault evidence missing or non-regular", "missing non-E1 fault evidence")
+
+        interop = (ROOT / "tests/lab/run-interop.sh").read_text(encoding="utf-8")
+        for safeguard in (
+            "evidence_guard.py\" fault",
+            "raw-interrupt-credit-flow",
+            "pydecnet-connect-timeout",
+            "reference-egress-drop-reserved",
+            "reference-unicast-drop-until-di-retry-exhaustion",
+            "reference-unicast-drop-until-ci-retry-exhaustion",
+        ):
+            if safeguard not in interop:
+                raise SystemExit(f"interop fault evidence safeguard missing: {safeguard}")
+
         # Persistent architecture foundations are the repository's only
         # checkpoint-like resume input. Reject corruption, missing members,
         # stale identity metadata and accidental candidate-source coupling.
