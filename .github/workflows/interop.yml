@@ -316,11 +316,11 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: scratch-interop-${{ matrix.arch }}-${{ matrix.suite }}-${{ github.run_id }}
+          name: scratch-interop-${{ matrix.arch }}-${{ matrix.suite }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ env.DNIV_SCRATCH_DIR }}/
             !${{ env.DNIV_SCRATCH_DIR }}/interop/**/*.qcow2
           if-no-files-found: error
           retention-days: 30
           compression-level: 6
-          overwrite: true
+          overwrite: false

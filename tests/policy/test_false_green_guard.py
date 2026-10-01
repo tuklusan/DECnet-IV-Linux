@@ -17,6 +17,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import subprocess
@@ -28,6 +29,13 @@ ROOT = Path(__file__).resolve().parents[2]
 INTEGRITY = ROOT / "tools" / "integrity_scan.py"
 SCRATCH = ROOT / "tools" / "scratch_state.py"
 WORKFLOW_GUARD = ROOT / "tools" / "workflow_guard.sh"
+EVIDENCE_GUARD = ROOT / "tools" / "evidence_guard.py"
+
+SPEC = importlib.util.spec_from_file_location("dniv_lab_false_green", ROOT / "tests/lab/dniv_lab.py")
+assert SPEC and SPEC.loader
+LAB = importlib.util.module_from_spec(SPEC)
+sys.modules[SPEC.name] = LAB
+SPEC.loader.exec_module(LAB)
 
 
 def run(root: Path, *args: str, check: bool = True, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
@@ -127,6 +135,85 @@ def main() -> int:
         env["GITHUB_REF"] = "refs/heads/main"
         result = run(root, "bash", str(WORKFLOW_GUARD), str(state), parent, "main", check=False, env=env)
         expect_failure(result, "does not match requested", "wrong requested revision")
+
+        # Guest pass-like text must never substitute for independent wire proof.
+        valid_wire = {
+            "routersA": 2, "routersB": 2, "endnodesA": 0, "endnodesB": 1,
+            "nicHelloA": 0, "nicHelloB": 0,
+            "changedNicHelloA": 0, "changedNicHelloB": 0,
+            "ucastAB": 3, "ucastBA": 3,
+        }
+        LAB.validate_e1_wire_values(valid_wire)
+        suppressed = dict(valid_wire)
+        suppressed["ucastBA"] = 0
+        try:
+            LAB.validate_e1_wire_values(suppressed)
+        except SystemExit as exc:
+            if "wire evidence incomplete" not in str(exc):
+                raise
+        else:
+            raise SystemExit("false-green regression accepted pass markers with suppressed wire traffic")
+
+        class DeadCapture:
+            @staticmethod
+            def poll() -> int:
+                return 1
+
+        fake = object.__new__(LAB.Lab)
+        fake.tcpdump = DeadCapture()
+        try:
+            fake.require_capture_running()
+        except RuntimeError as exc:
+            if "packet capture exited" not in str(exc):
+                raise
+        else:
+            raise SystemExit("false-green regression accepted a dead packet capture")
+
+        faults = root / "fault-events.log"
+        try:
+            LAB.require_fault_event(faults, "requested-injector")
+        except SystemExit as exc:
+            if "requested fault event" not in str(exc):
+                raise
+        else:
+            raise SystemExit("false-green regression accepted an inactive requested injector")
+        LAB.record_fault_event(faults, "requested-injector")
+        LAB.require_fault_event(faults, "requested-injector")
+
+        evidence = root / "evidence"
+        run(root, sys.executable, str(EVIDENCE_GUARD), "preflight",
+            "--root", str(evidence), "--min-free-bytes", "1", "--min-free-inodes", "1")
+        evlog = evidence / "run.log"
+        evstate = evidence / "state.json"
+        evlog.write_text("wire proof\n", encoding="utf-8")
+        evstate.write_text('{"status":"success"}\n', encoding="utf-8")
+        manifest = evidence / "manifest.json"
+        run(root, sys.executable, str(EVIDENCE_GUARD), "manifest",
+            "--root", str(evidence), "--output", str(manifest),
+            "--require", "run.log", "--require", "state.json")
+        run(root, sys.executable, str(EVIDENCE_GUARD), "verify",
+            "--root", str(evidence), "--manifest", str(manifest))
+
+        evlog.write_text("truncated\n", encoding="utf-8")
+        result = run(root, sys.executable, str(EVIDENCE_GUARD), "verify",
+            "--root", str(evidence), "--manifest", str(manifest), check=False)
+        expect_failure(result, "evidence size mismatch", "truncated evidence")
+
+        result = run(root, sys.executable, str(EVIDENCE_GUARD), "preflight",
+            "--root", str(evidence), "--min-free-bytes", str(1 << 62), "--min-free-inodes", "1",
+            check=False)
+        expect_failure(result, "insufficient free evidence bytes", "exhausted evidence bytes")
+        result = run(root, sys.executable, str(EVIDENCE_GUARD), "preflight",
+            "--root", str(evidence), "--min-free-bytes", "1", "--min-free-inodes", str(1 << 62),
+            check=False)
+        expect_failure(result, "insufficient free evidence inodes", "exhausted evidence inodes")
+
+        blocked = root / "blocked-evidence"
+        blocked.write_text("not a directory\n", encoding="utf-8")
+        result = run(root, sys.executable, str(EVIDENCE_GUARD), "preflight",
+            "--root", str(blocked), "--min-free-bytes", "1", "--min-free-inodes", "1",
+            check=False)
+        expect_failure(result, "cannot create evidence directory", "unavailable evidence directory")
 
     print("false-green acceptance-control regression passed")
     return 0

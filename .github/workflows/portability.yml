@@ -169,9 +169,9 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: scratch-portability-${{ matrix.distro }}-${{ matrix.arch }}-${{ matrix.compiler }}-${{ github.run_id }}
+          name: scratch-portability-${{ matrix.distro }}-${{ matrix.arch }}-${{ matrix.compiler }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ env.DNIV_SCRATCH_DIR }}/
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 30
           compression-level: 6
-          overwrite: true
+          overwrite: false

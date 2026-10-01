@@ -44,6 +44,9 @@ CHILD_WORKFLOWS = {
 JOB_RE = re.compile(r"^  ([A-Za-z0-9_-]+):\s*$")
 TIMEOUT_RE = re.compile(r"^    timeout-minutes:\s*([0-9]+)\s*$")
 RETENTION_RE = re.compile(r"^\s+retention-days:\s*([0-9]+)\s*$")
+UPLOAD_NAME_RE = re.compile(r"^\s+name:\s*(.+?)\s*$")
+IF_NO_FILES_RE = re.compile(r"^\s+if-no-files-found:\s*([^\s#]+)\s*$")
+OVERWRITE_RE = re.compile(r"^\s+overwrite:\s*([^\s#]+)\s*$")
 STEP_RE = re.compile(r"^      - name:\s+")
 SCENARIOS_RE = re.compile(r"^\s+scenarios:\s*[\"']?([^\"'#]+?)[\"']?\s*$")
 SCENARIOS_JSON_RE = re.compile(r'"scenarios":"([^"]+)"')
@@ -163,6 +166,17 @@ def check_workflow(path: str, text: str) -> list[str]:
             errors.append(f"{path}: upload-artifact block near line {index + 1} must declare exactly one retention-days")
         elif not 1 <= retention[0] <= MAX_EVIDENCE_DAYS:
             errors.append(f"{path}: artifact retention {retention[0]} days exceeds {MAX_EVIDENCE_DAYS}-day evidence ceiling")
+        names = [m.group(1) for entry in block if (m := UPLOAD_NAME_RE.match(entry))]
+        if len(names) != 1:
+            errors.append(f"{path}: upload-artifact block near line {index + 1} must declare exactly one artifact name")
+        elif "${{ github.run_attempt }}" not in names[0]:
+            errors.append(f"{path}: upload-artifact name near line {index + 1} must include github.run_attempt")
+        if_no_files = [m.group(1) for entry in block if (m := IF_NO_FILES_RE.match(entry))]
+        if if_no_files != ["error"]:
+            errors.append(f"{path}: upload-artifact block near line {index + 1} must fail when evidence is missing")
+        overwrite = [m.group(1) for entry in block if (m := OVERWRITE_RE.match(entry))]
+        if overwrite != ["false"]:
+            errors.append(f"{path}: upload-artifact block near line {index + 1} must preserve prior attempts with overwrite:false")
 
     if name in CHILD_WORKFLOWS:
         for marker in ("expected_sha:", "--expected-sha '${{ inputs.expected_sha }}'"):
@@ -276,7 +290,7 @@ def main() -> int:
         for error in errors:
             print(f"workflow-budget: {error}", file=sys.stderr)
         return 1
-    print(f"workflow-budget: source={source_label} files={len(paths)} jobs<={MAX_JOB_MINUTES}m release-image<={MAX_RELEASE_IMAGE_JOB_MINUTES}m distributed<={MAX_DISTRIBUTED_JOB_MINUTES}m artifacts<={MAX_EVIDENCE_DAYS}d queue=max actions=pinned interop-scenarios/job<={MAX_INTEROP_SCENARIOS_PER_JOB}")
+    print(f"workflow-budget: source={source_label} files={len(paths)} jobs<={MAX_JOB_MINUTES}m release-image<={MAX_RELEASE_IMAGE_JOB_MINUTES}m distributed<={MAX_DISTRIBUTED_JOB_MINUTES}m artifacts<={MAX_EVIDENCE_DAYS}d evidence=fail-closed+attempt-preserved queue=max actions=pinned interop-scenarios/job<={MAX_INTEROP_SCENARIOS_PER_JOB}")
     return 0
 
 

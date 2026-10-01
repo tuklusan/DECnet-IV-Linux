@@ -196,6 +196,51 @@ def contains(path: Path, needle: str) -> bool:
         return False
 
 
+def validate_e1_wire_values(values: dict[str, int]) -> None:
+    required = {
+        "routersA", "routersB", "endnodesA", "endnodesB",
+        "nicHelloA", "nicHelloB", "changedNicHelloA", "changedNicHelloB",
+        "ucastAB", "ucastBA",
+    }
+    if set(values) != required:
+        raise SystemExit(
+            "python-lab: incomplete E1 wire counter set missing="
+            + ",".join(sorted(required - set(values)))
+            + " extra=" + ",".join(sorted(set(values) - required))
+        )
+    if not (
+        values["routersA"] >= 2 and values["routersB"] >= 2
+        and values["endnodesA"] == 0 and values["endnodesB"] >= 1
+        and values["nicHelloA"] == 0 and values["nicHelloB"] == 0
+        and values["changedNicHelloA"] == 0 and values["changedNicHelloB"] == 0
+        and values["ucastAB"] >= 3 and values["ucastBA"] >= 3
+    ):
+        raise SystemExit(
+            "python-lab: E1 wire evidence incomplete "
+            + " ".join(f"{key}={value}" for key, value in values.items())
+        )
+
+
+def record_fault_event(path: Path, event: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(event + "\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+
+
+def require_fault_event(path: Path, event: str, expected: int = 1) -> None:
+    try:
+        events = path.read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError:
+        events = []
+    count = sum(line == event for line in events)
+    if count != expected:
+        raise SystemExit(
+            f"python-lab: requested fault event {event!r} count={count} expected={expected}"
+        )
+
+
 KCSAN_IGNORED_REPORTS = frozenset({
     "BUG: KCSAN: data-race in memchr_inv / mod_node_state",
     "BUG: KCSAN: data-race in mod_node_state / memchr_inv",
@@ -334,6 +379,10 @@ class Lab:
     def accel(self) -> str:
         kvm = Path("/dev/kvm")
         return "kvm" if kvm.exists() and os.access(kvm, os.R_OK | os.W_OK) else "tcg"
+
+    def require_capture_running(self) -> None:
+        if self.tcpdump is None or self.tcpdump.poll() is not None:
+            raise RuntimeError("python-lab: packet capture exited during active lab")
 
     def create_overlay(self, name: str) -> Path:
         target = self.work / f"{name}.qcow2"
@@ -587,6 +636,7 @@ def main() -> int:
         lab.start(guest_b, area)
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
+            lab.require_capture_running()
             pass_a = contains(guest_a.log, f"{marker} session={session} node={name_a}")
             pass_b = contains(guest_b.log, f"{marker} session={session} node={name_b}")
 
@@ -633,6 +683,7 @@ def main() -> int:
                     lab.pause_guest(guest_b)
                     fault_b_paused = True
                     sudo("ip", "link", "set", guest_b.tap, "down")
+                    record_fault_event(work / "fault-events.log", "host-silence-link-down")
                     fault_started = True
 
             if diagnostic_fault and fault_started and not fault_a_paused:
@@ -659,6 +710,7 @@ def main() -> int:
                 )
                 if expired_b:
                     sudo("ip", "link", "set", guest_b.tap, "up")
+                    record_fault_event(work / "fault-events.log", "host-silence-link-up")
                     fault_b_restored = True
 
             if diagnostic_fault and fault_b_restored and not fault_restored:
@@ -672,6 +724,7 @@ def main() -> int:
 
             if pass_a and pass_b:
                 time.sleep(3)
+                lab.require_capture_running()
                 break
             if guest_a.process is not None and guest_a.process.poll() is not None and not pass_a:
                 break
@@ -760,11 +813,7 @@ def main() -> int:
             "ucastAB": pcap_count(lab.pcap, f"ether proto 0x6003 and ether src {changed_a} and ether dst {mac_b}"),
             "ucastBA": pcap_count(lab.pcap, f"ether proto 0x6003 and ether src {changed_b} and ether dst {mac_a}"),
         }
-        if not (values["routersA"] >= 2 and values["routersB"] >= 2 and values["endnodesA"] == 0 and
-                values["endnodesB"] >= 1 and values["nicHelloA"] == 0 and values["nicHelloB"] == 0 and
-                values["changedNicHelloA"] == 0 and values["changedNicHelloB"] == 0 and
-                values["ucastAB"] >= 3 and values["ucastBA"] >= 3):
-            raise SystemExit("python-lab: E1 wire evidence incomplete " + " ".join(f"{k}={v}" for k, v in values.items()))
+        validate_e1_wire_values(values)
         required_a = [
             f"DNIV-E1-CHANGEADDR session={session} node={name_a} mac={changed_a}",
             f"DNIV-E1-UCAST session={session} node={name_a}",
@@ -789,6 +838,8 @@ def main() -> int:
         if diagnostic_fault:
             if not contains(guest_b.log, f"DNIV-E1-DIAG-RELOAD session={session}"):
                 raise SystemExit("python-lab: diagnostic direct-init module reload was not observed")
+            require_fault_event(work / "fault-events.log", "host-silence-link-down")
+            require_fault_event(work / "fault-events.log", "host-silence-link-up")
         elif not (contains(guest_a.log, f"DNIV-E1-RESTART-INIT session={session}") or
                   contains(guest_b.log, f"DNIV-E1-RESTART-INIT session={session}")):
             raise SystemExit("python-lab: E1 restart INIT state was not observed")

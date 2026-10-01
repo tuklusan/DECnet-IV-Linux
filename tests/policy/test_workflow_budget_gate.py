@@ -51,15 +51,19 @@ jobs:
       - name: First artifact
         uses: actions/upload-artifact@{UPLOAD_PIN}
         with:
-          name: first
+          name: first-${{{{ github.run_attempt }}}}
           path: one
+          if-no-files-found: error
           retention-days: 30
+          overwrite: false
       - name: Second artifact
         uses: actions/upload-artifact@{UPLOAD_PIN}
         with:
-          name: second
+          name: second-${{{{ github.run_attempt }}}}
           path: two
+          if-no-files-found: error
           retention-days: 3
+          overwrite: false
 """
 
 INTEROP_GOOD = f"""name: Interop Budget Test
@@ -110,11 +114,13 @@ jobs:
       - name: Preserve evidence
         uses: actions/upload-artifact@{UPLOAD_PIN}
         with:
-          name: scratch-interop-${{{{ matrix.arch }}}}-${{{{ matrix.suite }}}}-${{{{ github.run_id }}}}
+          name: scratch-interop-${{{{ matrix.arch }}}}-${{{{ matrix.suite }}}}-${{{{ github.run_id }}}}-${{{{ github.run_attempt }}}}
           path: |
             ${{{{ env.DNIV_SCRATCH_DIR }}}}/
             !${{{{ env.DNIV_SCRATCH_DIR }}}}/interop/**/*.qcow2
+          if-no-files-found: error
           retention-days: 30
+          overwrite: false
 """
 
 
@@ -187,6 +193,30 @@ def main() -> int:
         result = invoke(root, "--staged")
         if result.returncode == 0 or "actions/cache/restore" not in result.stderr:
             raise SystemExit("workflow budget failed to reject a movable cache action tag")
+
+        missing_attempt = GOOD.replace("-${{ github.run_attempt }}", "", 1)
+        sample.write_text(missing_attempt, encoding="utf-8")
+        run(root, "git", "add", str(sample.relative_to(root)))
+        sample.write_text(GOOD, encoding="utf-8")
+        result = invoke(root, "--staged")
+        if result.returncode == 0 or "github.run_attempt" not in result.stderr:
+            raise SystemExit("workflow budget failed to reject retry-overwriting artifact names")
+
+        warning_only = GOOD.replace("if-no-files-found: error", "if-no-files-found: warn", 1)
+        sample.write_text(warning_only, encoding="utf-8")
+        run(root, "git", "add", str(sample.relative_to(root)))
+        sample.write_text(GOOD, encoding="utf-8")
+        result = invoke(root, "--staged")
+        if result.returncode == 0 or "must fail when evidence is missing" not in result.stderr:
+            raise SystemExit("workflow budget failed to reject warning-only evidence upload")
+
+        overwriting = GOOD.replace("overwrite: false", "overwrite: true", 1)
+        sample.write_text(overwriting, encoding="utf-8")
+        run(root, "git", "add", str(sample.relative_to(root)))
+        sample.write_text(GOOD, encoding="utf-8")
+        result = invoke(root, "--staged")
+        if result.returncode == 0 or "overwrite:false" not in result.stderr:
+            raise SystemExit("workflow budget failed to reject retry-overwriting evidence upload")
 
         run(root, "git", "reset", "-q", "HEAD", "--", str(sample.relative_to(root)))
         interop_bad = INTEROP_GOOD.replace('scenarios: "l1"', 'scenarios: "l1 l2"')

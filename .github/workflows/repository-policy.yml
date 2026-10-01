@@ -120,12 +120,12 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: scratch-repository-policy-${{ github.run_id }}
+          name: scratch-repository-policy-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ env.DNIV_SCRATCH_DIR }}/
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 30
           compression-level: 6
-          overwrite: true
+          overwrite: false
 
   cleanup-branches:
     if: >-
@@ -218,12 +218,12 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: scratch-branch-cleanup-${{ github.run_id }}
+          name: scratch-branch-cleanup-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ env.DNIV_SCRATCH_DIR }}/
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 30
           compression-level: 6
-          overwrite: true
+          overwrite: false
 
   dispatch-acceptance:
     if: >-
@@ -468,9 +468,9 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: scratch-acceptance-dispatch-${{ github.run_id }}
+          name: scratch-acceptance-dispatch-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ env.DNIV_SCRATCH_DIR }}/
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 30
           compression-level: 6
-          overwrite: true
+          overwrite: false

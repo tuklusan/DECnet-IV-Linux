@@ -48,6 +48,8 @@ Phase 9 custom-kernel diagnostics use pinned upstream Linux v7.0 commit `028ef9c
 
 The PP-10 harness false-green track has its own exact-SHA workflow. Its first blocking control-plane increment deliberately presents a mutated tracked checkout, a corrupt integrity baseline, a mismatched parent candidate, stale scratch lineage, a non-main acceptance ref and a wrong requested revision, and requires every case to fail closed. Evidence is retained independently from protocol-lab artifacts so a broken acceptance control cannot be hidden by a guest pass marker.
 
+The PP-10 evidence increment adds `tools/evidence_guard.py` for evidence-directory preflight plus required-file SHA-256 manifests, validates E1 wire counters independently from guest pass-like text, treats capture death as fatal while the lab is active, and records/validates requested diagnostic host-silence fault events. Workflow evidence uploads are attempt-qualified, non-overwriting and error on missing files so bounded retries retain the earlier attempt rather than silently replacing it.
+
 ## Addressing
 
 Ordinary test nodes use area 31, nodes 70 through 79, with names DN70 through DN79 as defined in `tests/lab/test-addresses.env`. DECnet Phase IV protocol MACs are derived from area/node. E1 deliberately gives the emulated NIC a different primary MAC so the test proves protocol-originated frames use the DECnet-derived source MAC and unicast filtering survives later primary-MAC changes.
