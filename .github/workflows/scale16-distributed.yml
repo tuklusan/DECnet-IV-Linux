@@ -267,7 +267,28 @@ jobs:
           peer_side=a
           [[ "$side" == a ]] && peer_side=b
           cable_peer="/tmp/dniv-scale16-${GITHUB_RUN_ID}-${arch}-cable-${peer_side}.ready"
-          ssh -F "$DNIV_SCALE_SSH_CONFIG" dniv-bastion             ": > '$cable_ready'; for i in \$(seq 1 2100); do [ -f '$cable_peer' ] && exit 0; sleep 1; done; exit 111"
+          barrier_log="$DNIV_SCRATCH_DIR/cable-barrier.log"
+          barrier_ok=0
+          for attempt in $(seq 1 8); do
+            : >"$barrier_log"
+            if ssh -F "$DNIV_SCALE_SSH_CONFIG" dniv-bastion \
+              ": > '$cable_ready'; for i in \$(seq 1 2100); do [ -f '$cable_peer' ] && exit 0; sleep 1; done; exit 111" \
+              2>"$barrier_log"; then
+              barrier_ok=1
+              break
+            fi
+            if grep -Eqi 'Permission denied|Authentication failed|Host key verification failed|REMOTE HOST IDENTIFICATION HAS CHANGED' "$barrier_log"; then
+              cat "$barrier_log" >&2 || true
+              exit 1
+            fi
+            if grep -Eqi 'Connection reset by peer|kex_exchange_identification|Connection timed out|banner exchange|Connection refused' "$barrier_log"; then
+              sleep $((attempt * 2))
+              continue
+            fi
+            cat "$barrier_log" >&2 || true
+            exit 1
+          done
+          [[ "$barrier_ok" -eq 1 ]] || { cat "$barrier_log" >&2 || true; exit 1; }
 
           rm -rf "$DNIV_LAB_ARTIFACTS"
           mkdir -p "$DNIV_LAB_ARTIFACTS"
