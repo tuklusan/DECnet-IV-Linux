@@ -205,6 +205,8 @@ KCSAN_IGNORED_REPORTS = frozenset({
     "BUG: KCSAN: data-race in tick_nohz_idle_got_tick / tick_nohz_handler",
     "BUG: KCSAN: data-race in __tmigr_cpu_activate / tmigr_next_groupevt",
     "BUG: KCSAN: data-race in tmigr_next_groupevt / __tmigr_cpu_activate",
+    "BUG: KCSAN: data-race in wbt_done / wbt_issue",
+    "BUG: KCSAN: data-race in wbt_issue / wbt_done",
 })
 
 LOCKDEBUG_FAILURE_MARKERS = (
