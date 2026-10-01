@@ -80,6 +80,7 @@ required_lab = (
     'BUG: KCSAN: data-race in tmigr_next_groupevt / __tmigr_cpu_activate',
     'BUG: KCSAN: data-race in wbt_done / wbt_issue',
     'BUG: KCSAN: data-race in wbt_issue / wbt_done',
+    'BUG: KCSAN: data-race in blk_mq_dispatch_rq_list / blk_mq_dispatch_rq_list',
     'if not QmpClient(guest.qmp).execute("stop"):',
     'if not QmpClient(guest.qmp).execute("cont"):',
     'kcsan_unapproved_findings',
