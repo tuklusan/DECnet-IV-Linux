@@ -334,6 +334,9 @@ jobs:
           if [[ "$profile" == full ]]; then
             dispatch_and_record VDE2_CROSS_RUNNER vde2-cross-runner.yml \
               -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
+            printf 'FALSE_GREEN=false-green.yml\n' >> "$DNIV_SCRATCH_DIR/dispatch.env"
+            dispatch_and_record FALSE_GREEN false-green.yml \
+              -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
           fi
 
           if [[ "$profile" != fast ]]; then

@@ -1,0 +1,95 @@
+# ============================================================================
+# Copyright (c) 2026 Supratim Sanyal of SANYALnet Labs.
+# Proprietary rights reserved except as expressly licensed herein.
+#
+# DECnet-IV-Linux
+# This file is governed by the SANYALnet Labs Non-Commercial License in the
+# root LICENSE file. Non-Commercial use is permitted; Commercial Use and use
+# for AI/ML model training are prohibited unless separately authorized.
+#
+# Attribution is required: "Based on original work by Supratim Sanyal of
+# SANYALnet Labs." See LICENSE for full terms, warranty disclaimer, termination,
+# patent, trademark, and governing-law provisions.
+# ============================================================================
+
+name: Harness False-Green
+
+on:
+  workflow_dispatch:
+    inputs:
+      parent_run_id:
+        required: false
+        type: string
+      expected_sha:
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.sha }}
+  queue: max
+  cancel-in-progress: false
+
+jobs:
+  false-green:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DNIV_SCRATCH_DIR: ${{ github.workspace }}/scratch/runtime/${{ github.run_id }}/${{ github.run_attempt }}/false-green
+    steps:
+      - name: Check out exact repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.expected_sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Initialize exact candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate=$(git rev-parse HEAD)
+          if [[ -n '${{ inputs.expected_sha }}' ]]; then test "$candidate" = '${{ inputs.expected_sha }}'; fi
+          python3 tools/scratch_state.py init --dir "$DNIV_SCRATCH_DIR" \
+            --workflow false-green --job false-green --mode pp10 \
+            --source-sha "$candidate" --parent-run-id '${{ inputs.parent_run_id }}' \
+            --expected-sha '${{ inputs.expected_sha }}'
+          tools/workflow_guard.sh "$DNIV_SCRATCH_DIR" "$candidate" main
+
+      - name: Prove acceptance controls fail closed
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tests/policy/test_false_green_guard.py 2>&1 | \
+            tee "$DNIV_SCRATCH_DIR/false-green-regression.log"
+
+      - name: Verify exact tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/integrity_scan.py --rev "$GITHUB_SHA" --pass-id final \
+            --baseline "$DNIV_SCRATCH_DIR/integrity/pass-1.json" \
+            --output "$DNIV_SCRATCH_DIR/integrity/final.json"
+          python3 tools/scratch_state.py verify --dir "$DNIV_SCRATCH_DIR"
+
+      - name: Record workflow result
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f "$DNIV_SCRATCH_DIR/state.json" ]]; then
+            python3 tools/scratch_state.py mark --dir "$DNIV_SCRATCH_DIR" \
+              --status '${{ job.status }}' --note 'PP-10 acceptance-control false-green regression completed'
+          fi
+
+      - name: Preserve false-green evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: scratch-false-green-${{ github.run_id }}
+          path: ${{ env.DNIV_SCRATCH_DIR }}/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 6
+          overwrite: true

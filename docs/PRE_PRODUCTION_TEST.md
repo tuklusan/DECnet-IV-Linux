@@ -220,6 +220,8 @@ Prove the test system catches a bad system before trusting it. Deliberately corr
 
 Every requested fault records an injection count/event log and the test asserts that the fault actually happened. Production evidence completeness is blocking; warning-only artifact behavior is insufficient for release acceptance.
 
+The repository-tracked PP-10 workflow begins with executable fail-closed acceptance-control regressions: tracked checkout mutation, corrupt integrity manifest, parent-candidate mismatch, stale scratch lineage, non-main execution and wrong requested revision must all be rejected. This is a blocking subset, not completion of PP-10; guest pass-marker forgery, suppressed wire traffic, dead capture/logging, evidence-space exhaustion, truncated artifacts and inactive fault injectors remain explicit follow-on cases until each has an executed regression.
+
 ### PP-11 — stress, performance, soak and endurance
 
 | Level | Minimum production work |

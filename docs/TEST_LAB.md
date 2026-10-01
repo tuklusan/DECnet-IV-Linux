@@ -46,6 +46,8 @@ The hosted matrix remains amd64 on `ubuntu-24.04` with `qemu-system-x86_64`, and
 
 Phase 9 custom-kernel diagnostics use pinned upstream Linux v7.0 commit `028ef9c96e96197026887c0f092424679298aae8` on both architectures. Full acceptance runs KASAN, KCSAN, the license-compatible lockdebug subset and kmemleak. Kmemleak disables automatic scanning, ages/scans/clears a pre-DECnet baseline, exercises the normal E1 lifecycle, unloads `decnet_iv`, waits past the detector's five-second minimum report age, triggers a final manual scan and rejects any remaining leak report.
 
+The PP-10 harness false-green track has its own exact-SHA workflow. Its first blocking control-plane increment deliberately presents a mutated tracked checkout, a corrupt integrity baseline, a mismatched parent candidate, stale scratch lineage, a non-main acceptance ref and a wrong requested revision, and requires every case to fail closed. Evidence is retained independently from protocol-lab artifacts so a broken acceptance control cannot be hidden by a guest pass marker.
+
 ## Addressing
 
 Ordinary test nodes use area 31, nodes 70 through 79, with names DN70 through DN79 as defined in `tests/lab/test-addresses.env`. DECnet Phase IV protocol MACs are derived from area/node. E1 deliberately gives the emulated NIC a different primary MAC so the test proves protocol-originated frames use the DECnet-derived source MAC and unicast filtering survives later primary-MAC changes.
