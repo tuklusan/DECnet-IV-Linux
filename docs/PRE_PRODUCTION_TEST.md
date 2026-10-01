@@ -85,7 +85,7 @@ For each negative test, pass requires all applicable outcomes: bounded/rejected 
 | vCPU | 1 plus representative 2, 4 and 8 vCPU SMP; concurrency stress uses more than one vCPU |
 | VM count | 2, then 4, 8 and 16 independent VMs |
 | Kernel/toolchain | oldest/newest supported maintained kernel lines; GCC and Clang where supported; clean rebuilds |
-| Kernel diagnostics | KASAN, KCSAN, UBSAN, lockdep, kmemleak and KFENCE subsets as applicable |
+| Kernel diagnostics | KASAN, KCSAN, UBSAN, license-compatible lock debugging, kmemleak and KFENCE subsets as applicable |
 | Node role | endnode, Level 1 router, Level 2 router |
 | Transport | native Ethernet; rootless/distributed VDE2 Ethernet; MULTINET TCP gateway |
 | Peer | Linux, pinned Route20, pinned PyDECnet, applicable LinuxDECnet userspace, SIMH-hosted DEC OS, physical DEC peer where available |
@@ -160,7 +160,9 @@ Filter ownership tests must cover coexistence/refcounts: pre-install the same un
 
 Race/failpoint cases include identity change versus RX/timer/stats/device events; unload with open control fd; ioctl/close/unload; receive during unload; unregister during RX/timer work; allocation failure; counter near-wrap and jiffies/timer wrap via test hooks where practical. Exercise `cancel_delayed_work_sync` paths under concurrent scheduling and identity changes.
 
-SMP is mandatory on 2/4/8-vCPU guests with CPU affinity/migration, multiple receive queues/interfaces and CPU hotplug where supported. Diagnostic subsets include KASAN, KCSAN, UBSAN, lockdep, kmemleak and KFENCE.
+SMP is mandatory on 2/4/8-vCPU guests with CPU affinity/migration, multiple receive queues/interfaces and CPU hotplug where supported. Diagnostic subsets include KASAN, KCSAN, UBSAN, license-compatible lock debugging, kmemleak and KFENCE.
+
+Full `CONFIG_PROVE_LOCKING` lockdep is not directly applicable to this non-GPL out-of-tree module on the pinned Linux kernel: `CONFIG_DEBUG_LOCK_ALLOC` maps `mutex_lock()` to the GPL-only `mutex_lock_nested()` interface and brings in other GPL-only lockdep helpers. Acceptance must not relabel the module or weaken kernel export licensing. The applicable locking subset therefore enables `CONFIG_DEBUG_SPINLOCK`, `CONFIG_DEBUG_MUTEXES`, `CONFIG_DEBUG_RWSEMS` and `CONFIG_DEBUG_ATOMIC_SLEEP` with `panic_on_warn=1`; full lockdep remains not applicable unless the licensing boundary changes legitimately.
 
 ### PP-03 — two-node Ethernet adjacency (E1)
 

@@ -143,24 +143,30 @@ wait_post_change_hello() {
     return 1
 }
 
-lockdep_debug_locks() {
-    [ -r /proc/lockdep_stats ] || return 1
-    awk '$1 == "debug_locks:" { print $2; exit }' /proc/lockdep_stats
+lockdebug_config_ok() {
+    config="/boot/config-$(uname -r)"
+    [ -r "$config" ] || return 1
+    grep -q '^CONFIG_DEBUG_SPINLOCK=y$' "$config" &&
+        grep -q '^CONFIG_DEBUG_MUTEXES=y$' "$config" &&
+        grep -q '^CONFIG_DEBUG_RWSEMS=y$' "$config" &&
+        grep -q '^CONFIG_DEBUG_ATOMIC_SLEEP=y$' "$config" &&
+        grep -q '^# CONFIG_PROVE_LOCKING is not set$' "$config" &&
+        grep -q '^# CONFIG_DEBUG_LOCK_ALLOC is not set$' "$config" &&
+        grep -q '^# CONFIG_LOCKDEP is not set$' "$config"
 }
 
-lockdep_final_check() {
-    [ "${diagnostics:-none}" = lockdep ] || return 0
-    lockdep_state=$(lockdep_debug_locks || true)
-    if [ "$lockdep_state" != 1 ]; then
-        echo "DNIV-LAB-FAIL session=$session node=$name reason=lockdep-disabled"
+lockdebug_final_check() {
+    [ "${diagnostics:-none}" = lockdebug ] || return 0
+    if ! lockdebug_config_ok; then
+        echo "DNIV-LAB-FAIL session=$session node=$name reason=lockdebug-inactive"
         return 1
     fi
-    echo "DNIV-DIAG-LOCKDEP-FINAL session=$session node=$name debug_locks=$lockdep_state"
+    echo "DNIV-DIAG-LOCKDEBUG-FINAL session=$session node=$name"
 }
 
 poweroff_pass() {
     marker=$1
-    lockdep_final_check || exit 1
+    lockdebug_final_check || exit 1
     sync
     echo "$marker"
     sleep 2
@@ -250,19 +256,14 @@ kcsan)
     esac
     echo "DNIV-DIAG-KCSAN session=$session node=$name skip_watch=$kcsan_skip_watch"
     ;;
-lockdep)
-    config="/boot/config-$(uname -r)"
-    if [ ! -r "$config" ] || ! grep -q '^CONFIG_LOCKDEP=y$' "$config" || ! grep -q '^CONFIG_PROVE_LOCKING=y$' "$config"; then
-        echo "DNIV-LAB-FAIL session=$session node=$name reason=lockdep-unavailable"
+lockdebug)
+    if ! lockdebug_config_ok; then
+        echo "DNIV-LAB-FAIL session=$session node=$name reason=lockdebug-unavailable"
         exit 1
     fi
-    lockdep_state=$(lockdep_debug_locks || true)
-    if [ "$lockdep_state" != 1 ]; then
-        echo "DNIV-LAB-FAIL session=$session node=$name reason=lockdep-runtime-inactive"
-        exit 1
-    fi
-    echo "DNIV-DIAG-LOCKDEP session=$session node=$name debug_locks=$lockdep_state"
+    echo "DNIV-DIAG-LOCKDEBUG session=$session node=$name"
     ;;
+
 *)
     echo "DNIV-LAB-FAIL session=$session node=$name reason=bad-diagnostics"
     exit 1

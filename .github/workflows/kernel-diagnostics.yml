@@ -25,7 +25,7 @@ on:
         options:
           - kasan
           - kcsan
-          - lockdep
+          - lockdebug
       parent_run_id:
         description: Parent acceptance workflow run ID; blank for direct dispatch
         required: false
@@ -259,11 +259,14 @@ jobs:
               grep -q '^CONFIG_KCSAN_INTERRUPT_WATCHER=y$' "$DNIV_DIAG_DIR/config"
               grep -q '^# CONFIG_KCSAN_REPORT_RACE_UNKNOWN_ORIGIN is not set$' "$DNIV_DIAG_DIR/config"
               ;;
-            lockdep)
-              grep -q '^CONFIG_LOCKDEP=y$' "$DNIV_DIAG_DIR/config"
-              grep -q '^CONFIG_PROVE_LOCKING=y$' "$DNIV_DIAG_DIR/config"
-              grep -q '^CONFIG_DEBUG_LOCK_ALLOC=y$' "$DNIV_DIAG_DIR/config"
+            lockdebug)
+              grep -q '^CONFIG_DEBUG_SPINLOCK=y$' "$DNIV_DIAG_DIR/config"
+              grep -q '^CONFIG_DEBUG_MUTEXES=y$' "$DNIV_DIAG_DIR/config"
+              grep -q '^CONFIG_DEBUG_RWSEMS=y$' "$DNIV_DIAG_DIR/config"
               grep -q '^CONFIG_DEBUG_ATOMIC_SLEEP=y$' "$DNIV_DIAG_DIR/config"
+              grep -q '^# CONFIG_PROVE_LOCKING is not set$' "$DNIV_DIAG_DIR/config"
+              grep -q '^# CONFIG_DEBUG_LOCK_ALLOC is not set$' "$DNIV_DIAG_DIR/config"
+              grep -q '^# CONFIG_LOCKDEP is not set$' "$DNIV_DIAG_DIR/config"
               ;;
             *)
               echo "kernel-diagnostics: unsupported profile" >&2

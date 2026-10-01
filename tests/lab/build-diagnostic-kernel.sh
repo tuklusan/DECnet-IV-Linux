@@ -31,7 +31,7 @@ case "$arch" in
     *) echo "build-diagnostic-kernel: unsupported architecture: $arch" >&2; exit 2 ;;
 esac
 case "$profile" in
-    kasan|kcsan|lockdep) ;;
+    kasan|kcsan|lockdebug) ;;
     *) echo "build-diagnostic-kernel: unsupported profile: $profile" >&2; exit 2 ;;
 esac
 [[ -r "$base_config" ]] || {
@@ -121,13 +121,22 @@ case "$profile" in
         # excluding that non-candidate device-noise class.
         "$config" --file "$output/build/.config" --disable KCSAN_REPORT_RACE_UNKNOWN_ORIGIN
         ;;
-    lockdep)
+    lockdebug)
         "$config" --file "$output/build/.config" --disable KASAN
         "$config" --file "$output/build/.config" --disable KCSAN
         "$config" --file "$output/build/.config" --enable DEBUG_KERNEL
-        "$config" --file "$output/build/.config" --enable PROVE_LOCKING
-        "$config" --file "$output/build/.config" --enable LOCKDEP
-        "$config" --file "$output/build/.config" --enable DEBUG_LOCK_ALLOC
+        # Full PROVE_LOCKING selects DEBUG_LOCK_ALLOC, which maps mutex_lock()
+        # to GPL-only mutex_lock_nested() in the pinned kernel. The candidate
+        # module is correctly non-GPL under the project license, so use the
+        # strongest locking-debug subset that does not cross GPL-only exports.
+        "$config" --file "$output/build/.config" --disable PROVE_LOCKING
+        "$config" --file "$output/build/.config" --disable DEBUG_WW_MUTEX_SLOWPATH
+        "$config" --file "$output/build/.config" --disable LOCK_STAT
+        "$config" --file "$output/build/.config" --disable DEBUG_LOCK_ALLOC
+        "$config" --file "$output/build/.config" --disable LOCKDEP
+        "$config" --file "$output/build/.config" --enable DEBUG_SPINLOCK
+        "$config" --file "$output/build/.config" --enable DEBUG_MUTEXES
+        "$config" --file "$output/build/.config" --enable DEBUG_RWSEMS
         "$config" --file "$output/build/.config" --enable DEBUG_ATOMIC_SLEEP
         ;;
 esac
@@ -145,12 +154,14 @@ case "$profile" in
         grep -q '^CONFIG_KCSAN_INTERRUPT_WATCHER=y$' "$output/build/.config"
         grep -q '^# CONFIG_KCSAN_REPORT_RACE_UNKNOWN_ORIGIN is not set$' "$output/build/.config"
         ;;
-    lockdep)
-        grep -q '^CONFIG_LOCKDEP=y$' "$output/build/.config"
-        grep -q '^CONFIG_PROVE_LOCKING=y$' "$output/build/.config"
-        grep -q '^CONFIG_DEBUG_LOCK_ALLOC=y$' "$output/build/.config"
+    lockdebug)
+        grep -q '^CONFIG_DEBUG_SPINLOCK=y$' "$output/build/.config"
+        grep -q '^CONFIG_DEBUG_MUTEXES=y$' "$output/build/.config"
+        grep -q '^CONFIG_DEBUG_RWSEMS=y$' "$output/build/.config"
         grep -q '^CONFIG_DEBUG_ATOMIC_SLEEP=y$' "$output/build/.config"
-        grep -q '^CONFIG_TRACE_IRQFLAGS=y$' "$output/build/.config"
+        grep -q '^# CONFIG_PROVE_LOCKING is not set$' "$output/build/.config"
+        grep -q '^# CONFIG_DEBUG_LOCK_ALLOC is not set$' "$output/build/.config"
+        grep -q '^# CONFIG_LOCKDEP is not set$' "$output/build/.config"
         ;;
 esac
 grep -q '^CONFIG_MODULES=y$' "$output/build/.config"
