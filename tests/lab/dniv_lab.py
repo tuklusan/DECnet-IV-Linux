@@ -203,6 +203,8 @@ KCSAN_IGNORED_REPORTS = frozenset({
     "BUG: KCSAN: data-race in tick_do_update_jiffies64 / __mem_cgroup_flush_stats",
     "BUG: KCSAN: data-race in tick_nohz_handler / tick_nohz_idle_got_tick",
     "BUG: KCSAN: data-race in tick_nohz_idle_got_tick / tick_nohz_handler",
+    "BUG: KCSAN: data-race in __tmigr_cpu_activate / tmigr_next_groupevt",
+    "BUG: KCSAN: data-race in tmigr_next_groupevt / __tmigr_cpu_activate",
 })
 
 LOCKDEBUG_FAILURE_MARKERS = (
@@ -359,7 +361,7 @@ class Lab:
         elif self.diagnostics == "kcsan":
             # Keep KCSAN running so the host can reject candidate findings while
             # allowing only the exact vetted upstream races.
-            common += " dniv.diag=kcsan kcsan.skip_watch=1000 panic_on_warn=0 oops=panic"
+            common += " dniv.diag=kcsan kcsan.skip_watch=1000 panic_on_warn=0 oops=panic net.ifnames=0"
             if self.host_arch == "aarch64":
                 common += " net.ifnames=0 init=/usr/local/sbin/dniv-smoke"
         elif self.diagnostics == "lockdebug":

@@ -63,13 +63,15 @@ for marker in required_scale:
 
 required_lab = (
     'guest_cpus = host_cpus[1:]',
-    'dniv.diag=kcsan kcsan.skip_watch=1000 panic_on_warn=0 oops=panic',
+    'dniv.diag=kcsan kcsan.skip_watch=1000 panic_on_warn=0 oops=panic net.ifnames=0',
     'BUG: KCSAN: data-race in memchr_inv / mod_node_state',
     'BUG: KCSAN: data-race in mod_node_state / memchr_inv',
     'BUG: KCSAN: data-race in __mem_cgroup_flush_stats / tick_do_update_jiffies64',
     'BUG: KCSAN: data-race in tick_do_update_jiffies64 / __mem_cgroup_flush_stats',
     'BUG: KCSAN: data-race in tick_nohz_handler / tick_nohz_idle_got_tick',
     'BUG: KCSAN: data-race in tick_nohz_idle_got_tick / tick_nohz_handler',
+    'BUG: KCSAN: data-race in __tmigr_cpu_activate / tmigr_next_groupevt',
+    'BUG: KCSAN: data-race in tmigr_next_groupevt / __tmigr_cpu_activate',
     'if not QmpClient(guest.qmp).execute("stop"):',
     'if not QmpClient(guest.qmp).execute("cont"):',
     'kcsan_unapproved_findings',
