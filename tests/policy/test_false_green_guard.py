@@ -154,6 +154,30 @@ def main() -> int:
         else:
             raise SystemExit("false-green regression accepted pass markers with suppressed wire traffic")
 
+        pass_marker = "DNIV-E1-PASS session=forged node=DN70"
+        forged_log = root / "forged.serial.log"
+        forged_log.write_text(pass_marker + "\n", encoding="utf-8")
+        try:
+            LAB.require_guest_log_evidence(
+                forged_log,
+                [pass_marker, "DNIV-E1-RECOVERED session=forged node=DN70"],
+            )
+        except SystemExit as exc:
+            if "guest serial evidence incomplete" not in str(exc):
+                raise
+        else:
+            raise SystemExit("false-green regression accepted a forged guest pass marker")
+
+        dead_log = root / "dead.serial.log"
+        dead_log.touch()
+        try:
+            LAB.require_guest_log_evidence(dead_log, [pass_marker])
+        except SystemExit as exc:
+            if "guest serial evidence missing or empty" not in str(exc):
+                raise
+        else:
+            raise SystemExit("false-green regression accepted dead guest logging")
+
         class DeadCapture:
             @staticmethod
             def poll() -> int:
@@ -179,6 +203,14 @@ def main() -> int:
             raise SystemExit("false-green regression accepted an inactive requested injector")
         LAB.record_fault_event(faults, "requested-injector")
         LAB.require_fault_event(faults, "requested-injector")
+        LAB.record_fault_event(faults, "requested-injector")
+        try:
+            LAB.require_fault_event(faults, "requested-injector")
+        except SystemExit as exc:
+            if "count=2 expected=1" not in str(exc):
+                raise
+        else:
+            raise SystemExit("false-green regression accepted a corrupt fault-event manifest")
 
         evidence = root / "evidence"
         run(root, sys.executable, str(EVIDENCE_GUARD), "preflight",
@@ -194,10 +226,26 @@ def main() -> int:
         run(root, sys.executable, str(EVIDENCE_GUARD), "verify",
             "--root", str(evidence), "--manifest", str(manifest))
 
+        original_log = evlog.read_bytes()
+        corrupt_log = bytearray(original_log)
+        corrupt_log[0] ^= 1
+        evlog.write_bytes(corrupt_log)
+        result = run(root, sys.executable, str(EVIDENCE_GUARD), "verify",
+            "--root", str(evidence), "--manifest", str(manifest), check=False)
+        expect_failure(result, "evidence hash mismatch", "same-size corrupt evidence")
+        evlog.write_bytes(original_log)
+
         evlog.write_text("truncated\n", encoding="utf-8")
         result = run(root, sys.executable, str(EVIDENCE_GUARD), "verify",
             "--root", str(evidence), "--manifest", str(manifest), check=False)
         expect_failure(result, "evidence size mismatch", "truncated evidence")
+        evlog.write_bytes(original_log)
+
+        evstate.unlink()
+        result = run(root, sys.executable, str(EVIDENCE_GUARD), "verify",
+            "--root", str(evidence), "--manifest", str(manifest), check=False)
+        expect_failure(result, "required evidence is missing or non-regular", "omitted required evidence")
+        evstate.write_text('{"status":"success"}\n', encoding="utf-8")
 
         result = run(root, sys.executable, str(EVIDENCE_GUARD), "preflight",
             "--root", str(evidence), "--min-free-bytes", str(1 << 62), "--min-free-inodes", "1",
@@ -214,6 +262,18 @@ def main() -> int:
             "--root", str(blocked), "--min-free-bytes", "1", "--min-free-inodes", "1",
             check=False)
         expect_failure(result, "cannot create evidence directory", "unavailable evidence directory")
+
+        workflow = (ROOT / ".github/workflows/false-green.yml").read_text(encoding="utf-8")
+        for safeguard in (
+            "retry_probe:",
+            "mount -t tmpfs",
+            "gh run download",
+            "inputs.retry_probe && github.run_attempt > 1",
+            "inputs.retry_probe && github.run_attempt == 1",
+            "Seal final false-green evidence",
+        ):
+            if safeguard not in workflow:
+                raise SystemExit(f"false-green workflow missing safeguard: {safeguard}")
 
     print("false-green acceptance-control regression passed")
     return 0

@@ -266,17 +266,28 @@ jobs:
 
           profile=fast
           scope=all
+          pp10_retry_probe=false
           if [[ "$GITHUB_EVENT_NAME" == schedule ]]; then
             profile=full
           else
             body=$(jq -r '.issue.body // ""' "$GITHUB_EVENT_PATH")
             requested_profile=$(printf '%s\n' "$body" | sed -n 's/^PROFILE=//p' | tail -1)
             requested_scope=$(printf '%s\n' "$body" | sed -n 's/^SCOPE=//p' | tail -1)
+            requested_pp10_retry_probe=$(printf '%s\n' "$body" | sed -n 's/^PP10_RETRY_PROBE=//p' | tail -1)
             [[ -z "$requested_profile" ]] || profile=$requested_profile
             [[ -z "$requested_scope" ]] || scope=$requested_scope
+            case "$requested_pp10_retry_probe" in
+              ""|false) ;;
+              true) pp10_retry_probe=true ;;
+              *) echo "bad PP-10 retry probe value: $requested_pp10_retry_probe" >&2; exit 2 ;;
+            esac
           fi
           case "$profile" in fast|consolidated|full) ;; *) echo "bad acceptance profile: $profile" >&2; exit 2 ;; esac
           case "$scope" in all|socket|routing) ;; *) echo "bad acceptance scope: $scope" >&2; exit 2 ;; esac
+          if [[ "$pp10_retry_probe" == true && "$profile" != full ]]; then
+            echo "PP-10 retry probe requires full acceptance" >&2
+            exit 2
+          fi
 
           {
             printf 'PARENT_RUN_ID=%s\n' "$GITHUB_RUN_ID"
@@ -284,6 +295,7 @@ jobs:
             printf 'SOURCE_SHA=%s\n' "$GITHUB_SHA"
             printf 'PROFILE=%s\n' "$profile"
             printf 'SCOPE=%s\n' "$scope"
+            printf 'PP10_RETRY_PROBE=%s\n' "$pp10_retry_probe"
             printf 'BUILD=build.yml\n'
             printf 'PROJECT_STATE=project-state.yml\n'
             printf 'INTEROP=interop.yml\n'
@@ -336,7 +348,8 @@ jobs:
               -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
             printf 'FALSE_GREEN=false-green.yml\n' >> "$DNIV_SCRATCH_DIR/dispatch.env"
             dispatch_and_record FALSE_GREEN false-green.yml \
-              -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
+              -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA" \
+              -f retry_probe="$pp10_retry_probe"
           fi
 
           if [[ "$profile" != fast ]]; then

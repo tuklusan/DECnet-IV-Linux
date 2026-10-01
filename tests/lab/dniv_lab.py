@@ -196,6 +196,20 @@ def contains(path: Path, needle: str) -> bool:
         return False
 
 
+def require_guest_log_evidence(path: Path, required: list[str]) -> None:
+    try:
+        if path.is_symlink() or not path.is_file() or path.stat().st_size <= 0:
+            raise SystemExit(f"python-lab: guest serial evidence missing or empty: {path}")
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        raise SystemExit(f"python-lab: guest serial evidence unreadable: {path}: {exc}") from exc
+    missing = [marker for marker in required if marker not in text]
+    if missing:
+        raise SystemExit(
+            "python-lab: guest serial evidence incomplete missing=" + ",".join(missing)
+        )
+
+
 def validate_e1_wire_values(values: dict[str, int]) -> None:
     required = {
         "routersA", "routersB", "endnodesA", "endnodesB",
@@ -815,22 +829,20 @@ def main() -> int:
         }
         validate_e1_wire_values(values)
         required_a = [
+            f"{marker} session={session} node={name_a}",
             f"DNIV-E1-CHANGEADDR session={session} node={name_a} mac={changed_a}",
             f"DNIV-E1-UCAST session={session} node={name_a}",
             f"DNIV-E1-EXPIRED session={session} node={name_a}",
             f"DNIV-E1-RECOVERED session={session} node={name_a}",
         ]
         required_b = [
+            f"{marker} session={session} node={name_b}",
             f"DNIV-E1-CHANGEADDR session={session} node={name_b} mac={changed_b}",
             f"DNIV-E1-UCAST session={session} node={name_b}",
             f"DNIV-E1-RECOVERED session={session} node={name_b}",
         ]
-        for needle in required_a:
-            if not contains(guest_a.log, needle):
-                raise SystemExit(f"python-lab: missing node A evidence: {needle}")
-        for needle in required_b:
-            if not contains(guest_b.log, needle):
-                raise SystemExit(f"python-lab: missing node B evidence: {needle}")
+        require_guest_log_evidence(guest_a.log, required_a)
+        require_guest_log_evidence(guest_b.log, required_b)
         init_logged = (contains(guest_a.log, f"DNIV-E1-INIT session={session}") or
                        contains(guest_b.log, f"DNIV-E1-INIT session={session}"))
         if not init_logged and not pcap_router_init_seen(lab.pcap, mac_a, mac_b):

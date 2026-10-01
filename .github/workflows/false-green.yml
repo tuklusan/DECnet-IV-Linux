@@ -23,9 +23,15 @@ on:
       expected_sha:
         required: false
         type: string
+      retry_probe:
+        description: Deliberately fail attempt 1 and verify its evidence on retry
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.sha }}
@@ -64,11 +70,138 @@ jobs:
           python3 tools/evidence_guard.py preflight --root "$DNIV_SCRATCH_DIR"
           python3 tests/policy/test_false_green_guard.py 2>&1 | \
             tee "$DNIV_SCRATCH_DIR/false-green-regression.log"
+
+      - name: Prove literal evidence exhaustion fails closed
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp=$(mktemp -d)
+          bytes_root="$tmp/bytes"
+          inodes_root="$tmp/inodes"
+          mkdir -p "$bytes_root" "$inodes_root"
+          cleanup() {
+            set +e
+            mountpoint -q "$bytes_root" && sudo umount "$bytes_root"
+            mountpoint -q "$inodes_root" && sudo umount "$inodes_root"
+            rm -rf "$tmp"
+          }
+          trap cleanup EXIT
+
+          sudo mount -t tmpfs -o size=1m,nr_inodes=256 tmpfs "$bytes_root"
+          sudo chown "$USER:$(id -gn)" "$bytes_root"
+          mkdir "$bytes_root/evidence"
+          python3 - "$bytes_root/fill.bin" <<'PY'
+          import errno
+          import os
+          import sys
+
+          fd = os.open(sys.argv[1], os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+          try:
+              block = b"x" * 65536
+              while True:
+                  try:
+                      os.write(fd, block)
+                  except OSError as exc:
+                      if exc.errno != errno.ENOSPC:
+                          raise
+                      break
+          finally:
+              os.close(fd)
+          PY
+          if python3 tools/evidence_guard.py preflight --root "$bytes_root/evidence" \
+            --min-free-bytes 1 --min-free-inodes 0 \
+            >"$DNIV_SCRATCH_DIR/evidence-byte-exhaustion.log" 2>&1; then
+            echo "false-green: byte-exhausted evidence root was accepted" >&2
+            exit 1
+          fi
+          grep -Eq 'insufficient free evidence bytes|evidence directory write probe failed' \
+            "$DNIV_SCRATCH_DIR/evidence-byte-exhaustion.log"
+          sudo umount "$bytes_root"
+
+          sudo mount -t tmpfs -o size=4m,nr_inodes=32 tmpfs "$inodes_root"
+          sudo chown "$USER:$(id -gn)" "$inodes_root"
+          mkdir "$inodes_root/evidence"
+          python3 - "$inodes_root" <<'PY'
+          import errno
+          import os
+          import sys
+
+          root = sys.argv[1]
+          for index in range(4096):
+              try:
+                  fd = os.open(
+                      os.path.join(root, f"inode-{index}"),
+                      os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+                      0o600,
+                  )
+              except OSError as exc:
+                  if exc.errno != errno.ENOSPC:
+                      raise
+                  break
+              else:
+                  os.close(fd)
+          else:
+              raise SystemExit("failed to exhaust tmpfs inodes")
+          PY
+          if python3 tools/evidence_guard.py preflight --root "$inodes_root/evidence" \
+            --min-free-bytes 0 --min-free-inodes 1 \
+            >"$DNIV_SCRATCH_DIR/evidence-inode-exhaustion.log" 2>&1; then
+            echo "false-green: inode-exhausted evidence root was accepted" >&2
+            exit 1
+          fi
+          grep -q 'insufficient free evidence inodes' \
+            "$DNIV_SCRATCH_DIR/evidence-inode-exhaustion.log"
+
+      - name: Seal PP-10 evidence
+        shell: bash
+        run: |
+          set -euo pipefail
           python3 tools/evidence_guard.py manifest --root "$DNIV_SCRATCH_DIR" \
             --output "$DNIV_SCRATCH_DIR/evidence-manifest.json" \
-            --require state.json --require false-green-regression.log
+            --require false-green-regression.log \
+            --require evidence-byte-exhaustion.log \
+            --require evidence-inode-exhaustion.log
           python3 tools/evidence_guard.py verify --root "$DNIV_SCRATCH_DIR" \
             --manifest "$DNIV_SCRATCH_DIR/evidence-manifest.json"
+
+      - name: Verify first-failure evidence survives retry
+        if: ${{ inputs.retry_probe && github.run_attempt > 1 }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          artifact="scratch-false-green-$GITHUB_RUN_ID-1"
+          found=0
+          for attempt in {1..10}; do
+            if gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?per_page=100" \
+              --jq ".artifacts[] | select(.name == \"$artifact\" and (.expired | not)) | .id" | \
+              grep -q .; then
+              found=1
+              break
+            fi
+            sleep 2
+          done
+          test "$found" -eq 1
+          probe=$(mktemp -d)
+          trap 'rm -rf "$probe"' EXIT
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name "$artifact" --dir "$probe"
+          test -s "$probe/state.json"
+          grep -Fxq 'forced-failure attempt=1' "$probe/retry-probe.txt"
+          python3 tools/evidence_guard.py verify --root "$probe" \
+            --manifest "$probe/evidence-manifest.json"
+          printf 'preserved=%s\n' "$artifact" > "$DNIV_SCRATCH_DIR/retry-preservation.log"
+
+      - name: Inject PP-10 retry probe failure
+        if: ${{ inputs.retry_probe && github.run_attempt == 1 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'forced-failure attempt=%s\n' "$GITHUB_RUN_ATTEMPT" > \
+            "$DNIV_SCRATCH_DIR/retry-probe.txt"
+          echo "PP-10 intentional retry probe failure" >&2
+          exit 86
 
       - name: Verify exact tree
         shell: bash
@@ -88,6 +221,35 @@ jobs:
             python3 tools/scratch_state.py mark --dir "$DNIV_SCRATCH_DIR" \
               --status '${{ job.status }}' --note 'PP-10 acceptance-control false-green regression completed'
           fi
+
+      - name: Seal final false-green evidence
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          required=(
+            state.json
+            false-green-regression.log
+            evidence-byte-exhaustion.log
+            evidence-inode-exhaustion.log
+          )
+          if [[ -f "$DNIV_SCRATCH_DIR/retry-probe.txt" ]]; then
+            required+=(retry-probe.txt)
+          fi
+          if [[ -f "$DNIV_SCRATCH_DIR/retry-preservation.log" ]]; then
+            required+=(retry-preservation.log)
+          fi
+          command=(
+            python3 tools/evidence_guard.py manifest
+            --root "$DNIV_SCRATCH_DIR"
+            --output "$DNIV_SCRATCH_DIR/evidence-manifest.json"
+          )
+          for path in "${required[@]}"; do
+            command+=(--require "$path")
+          done
+          "${command[@]}"
+          python3 tools/evidence_guard.py verify --root "$DNIV_SCRATCH_DIR" \
+            --manifest "$DNIV_SCRATCH_DIR/evidence-manifest.json"
 
       - name: Preserve false-green evidence
         if: ${{ always() }}

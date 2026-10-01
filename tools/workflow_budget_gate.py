@@ -188,9 +188,25 @@ def check_workflow(path: str, text: str) -> list[str]:
             "github.event.issue.title == 'DNIV branch cleanup'",
             "git/matching-refs/heads",
             '-f expected_sha="$GITHUB_SHA"',
+            "PP10_RETRY_PROBE=",
+            '-f retry_probe="$pp10_retry_probe"',
         ):
             if marker not in text:
                 errors.append(f"{path}: missing repository-control safeguard: {marker}")
+
+    if name == "false-green.yml":
+        for marker in (
+            "retry_probe:",
+            "mount -t tmpfs",
+            "gh run download",
+            "inputs.retry_probe && github.run_attempt > 1",
+            "inputs.retry_probe && github.run_attempt == 1",
+            "--require evidence-byte-exhaustion.log",
+            "--require evidence-inode-exhaustion.log",
+            "Seal final false-green evidence",
+        ):
+            if marker not in text:
+                errors.append(f"{path}: missing PP-10 false-green safeguard: {marker}")
 
     if name == "vm-lab.yml":
         required = (

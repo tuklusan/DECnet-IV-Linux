@@ -24,6 +24,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 GATE = ROOT / "tools" / "workflow_budget_gate.py"
+CHECKOUT_PIN = "11d5960a326750d5838078e36cf38b85af677262"
 UPLOAD_PIN = "ea165f8d65b6e75b540449e92b4886f43607fa02"
 CACHE_PIN = "0057852bfaa89a56745cba8c7296529d2fc39830"
 
@@ -118,6 +119,51 @@ jobs:
           path: |
             ${{{{ env.DNIV_SCRATCH_DIR }}}}/
             !${{{{ env.DNIV_SCRATCH_DIR }}}}/interop/**/*.qcow2
+          if-no-files-found: error
+          retention-days: 30
+          overwrite: false
+"""
+
+
+FALSE_GREEN_GOOD = f"""name: False Green Budget Test
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        required: false
+        type: string
+      retry_probe:
+        required: false
+        type: boolean
+        default: false
+concurrency:
+  group: false-green-test
+  queue: max
+  cancel-in-progress: false
+jobs:
+  false-green:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out
+        uses: actions/checkout@{CHECKOUT_PIN}
+      - name: Bind
+        run: python3 tools/scratch_state.py init --expected-sha '${{{{ inputs.expected_sha }}}}'
+      - name: PP-10 controls
+        run: |
+          echo "mount -t tmpfs"
+          echo "gh run download"
+          echo "inputs.retry_probe && github.run_attempt > 1"
+          echo "inputs.retry_probe && github.run_attempt == 1"
+          echo "--require evidence-byte-exhaustion.log"
+          echo "--require evidence-inode-exhaustion.log"
+      - name: Seal final false-green evidence
+        run: echo seal
+      - name: Preserve
+        uses: actions/upload-artifact@{UPLOAD_PIN}
+        with:
+          name: false-green-${{{{ github.run_attempt }}}}
+          path: scratch
           if-no-files-found: error
           retention-days: 30
           overwrite: false
@@ -237,6 +283,21 @@ def main() -> int:
         result = invoke(root, "--staged")
         if result.returncode == 0 or "outer-v1" not in result.stderr:
             raise SystemExit("workflow budget failed to reject source-SHA-keyed full foundations")
+
+        run(root, "git", "reset", "-q", "HEAD", "--", str(interop.relative_to(root)))
+        false_green = workflows / "false-green.yml"
+        false_green.write_text(FALSE_GREEN_GOOD, encoding="utf-8")
+        run(root, "git", "add", str(false_green.relative_to(root)))
+        result = invoke(root, "--staged")
+        if result.returncode != 0:
+            raise SystemExit("workflow budget rejected valid PP-10 retry controls: " + result.stderr)
+
+        missing_retry_proof = FALSE_GREEN_GOOD.replace("gh run download", "gh run fetch", 1)
+        false_green.write_text(missing_retry_proof, encoding="utf-8")
+        run(root, "git", "add", str(false_green.relative_to(root)))
+        result = invoke(root, "--staged")
+        if result.returncode == 0 or "gh run download" not in result.stderr:
+            raise SystemExit("workflow budget failed to reject missing PP-10 retry evidence proof")
 
     print("workflow budget regression tests passed")
     return 0
