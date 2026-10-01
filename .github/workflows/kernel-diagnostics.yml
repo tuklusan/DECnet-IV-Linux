@@ -266,7 +266,7 @@ jobs:
               grep -q '^CONFIG_DEBUG_ATOMIC_SLEEP=y$' "$DNIV_DIAG_DIR/config"
               grep -q '^# CONFIG_PROVE_LOCKING is not set$' "$DNIV_DIAG_DIR/config"
               grep -q '^# CONFIG_DEBUG_LOCK_ALLOC is not set$' "$DNIV_DIAG_DIR/config"
-              grep -q '^# CONFIG_LOCKDEP is not set$' "$DNIV_DIAG_DIR/config"
+              ! grep -q '^CONFIG_LOCKDEP=y$' "$DNIV_DIAG_DIR/config"
               ;;
             *)
               echo "kernel-diagnostics: unsupported profile" >&2

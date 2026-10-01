@@ -161,7 +161,7 @@ case "$profile" in
         grep -q '^CONFIG_DEBUG_ATOMIC_SLEEP=y$' "$output/build/.config"
         grep -q '^# CONFIG_PROVE_LOCKING is not set$' "$output/build/.config"
         grep -q '^# CONFIG_DEBUG_LOCK_ALLOC is not set$' "$output/build/.config"
-        grep -q '^# CONFIG_LOCKDEP is not set$' "$output/build/.config"
+        ! grep -q '^CONFIG_LOCKDEP=y$' "$output/build/.config"
         ;;
 esac
 grep -q '^CONFIG_MODULES=y$' "$output/build/.config"

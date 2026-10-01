@@ -152,7 +152,7 @@ lockdebug_config_ok() {
         grep -q '^CONFIG_DEBUG_ATOMIC_SLEEP=y$' "$config" &&
         grep -q '^# CONFIG_PROVE_LOCKING is not set$' "$config" &&
         grep -q '^# CONFIG_DEBUG_LOCK_ALLOC is not set$' "$config" &&
-        grep -q '^# CONFIG_LOCKDEP is not set$' "$config"
+        ! grep -q '^CONFIG_LOCKDEP=y$' "$config"
 }
 
 lockdebug_final_check() {
