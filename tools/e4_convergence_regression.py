@@ -62,6 +62,10 @@ for marker in required_scale:
         raise SystemExit(f"E4-CONVERGENCE: missing scale16 guard: {marker}")
 
 required_lab = (
+    'self.host_cpus = sorted(os.sched_getaffinity(0))',
+    'self.controller_cpu = self.host_cpus[0]',
+    'os.sched_setaffinity(0, {self.controller_cpu})',
+    'host_cpus = self.host_cpus',
     'guest_cpus = host_cpus[1:]',
     'dniv.diag=kcsan kcsan.skip_watch=1000 panic_on_warn=0 oops=panic net.ifnames=0',
     'dniv.diag=kmemleak kmemleak=on panic_on_warn=1 oops=panic',

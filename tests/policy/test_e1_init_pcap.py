@@ -93,6 +93,10 @@ def main():
         "startup_released = not diagnostic_fault",
         'f"DNIV-E1-BOOTSTRAP-QUIESCED session={session} node={name_a}"',
         'f"DNIV-E1-DIAG-RELOAD-DONE session={session} node={name_b}"',
+        "self.host_cpus = sorted(os.sched_getaffinity(0))",
+        "self.controller_cpu = self.host_cpus[0]",
+        "os.sched_setaffinity(0, {self.controller_cpu})",
+        "host_cpus = self.host_cpus",
     ):
         if marker not in source:
             raise SystemExit(f"e1 INIT PCAP regression: missing host-ordered diagnostic startup: {marker}")

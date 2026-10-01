@@ -309,6 +309,19 @@ class Lab:
         self.diagnostics = diagnostics
         self.memory_mb = memory_mb
         self.host_arch = platform.machine()
+        self.host_cpus = sorted(os.sched_getaffinity(0))
+        self.controller_cpu: int | None = None
+        if (diagnostics in {"kasan", "kcsan", "lockdebug", "kmemleak"} and
+                self.host_arch == "aarch64" and self.accel == "tcg"):
+            if not self.host_cpus:
+                raise RuntimeError("arm64 diagnostic TCG has no schedulable host CPU")
+            # The guest masks below already reserve the first host CPU. Pin the
+            # controller there as well so QMP and the packet-capture child
+            # inherit a CPU that the instrumented TCG guests cannot consume.
+            # Merely excluding this CPU from QEMU does not stop Linux from
+            # migrating the controller onto a saturated guest CPU.
+            self.controller_cpu = self.host_cpus[0]
+            os.sched_setaffinity(0, {self.controller_cpu})
         self.guests: list[Guest] = []
         self.tcpdump: subprocess.Popen[bytes] | None = None
         suffix = hashlib.sha256(session.encode("utf-8")).hexdigest()[:6]
@@ -391,7 +404,7 @@ class Lab:
             raise RuntimeError(f"unsupported host architecture: {self.host_arch}")
 
         if self.diagnostics in {"kasan", "kcsan", "lockdebug", "kmemleak"} and self.host_arch == "aarch64" and self.accel == "tcg":
-            host_cpus = sorted(os.sched_getaffinity(0))
+            host_cpus = self.host_cpus
             # Keep one schedulable CPU out of both TCG process masks so the
             # host controller, QMP and capture path cannot be starved behind
             # two heavy diagnostic guests.  On a four-CPU runner the two 2-vCPU guest
