@@ -224,7 +224,7 @@ The repository-tracked PP-10 workflow begins with executable fail-closed accepta
 
 A full-profile acceptance issue may set `PP10_RETRY_PROBE=true`. That makes the false-green child deliberately fail attempt 1 after writing a unique failure marker. On a failed-job rerun, attempt 2 must find and download the run-attempt-1 artifact, validate the retained failure marker and only then continue to success; attempt 2 is uploaded under its own run-attempt-qualified name.
 
-PP-10 remains open until that failed-job retry proof is executed on an exact candidate and both attempt artifacts are observed retained, then until corrupt/missing checkpoint inputs and the remaining non-E1 fault-manifest/injector cases are exercised.
+The failed-job retry proof is executed green on exact candidate `2bd27dbd0fbfa01a2804961d99b02ffb00f89874`: both run-attempt artifacts are retained and full acceptance issue #860 is closed. The repository's actual persistent resume input is the source-independent architecture-foundation cache, not a candidate VM checkpoint. `tools/evidence_guard.py foundation` now verifies its exact member set, SHA-256 hashes, architecture, session/fingerprint, Ubuntu release/snapshot and source independence before a cached foundation may be reused; PP-10 regressions reject corrupt/missing members, stale architecture metadata, candidate-source contamination and incomplete checksum manifests. Candidate images and overlays remain disposable. PP-10 remains open until these persistent-input guards and the remaining non-E1 fault-manifest/injector cases execute green on an exact candidate.
 
 ### PP-11 — stress, performance, soak and endurance
 

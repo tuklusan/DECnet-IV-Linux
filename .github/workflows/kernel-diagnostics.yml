@@ -183,10 +183,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          (
-            cd "$DNIV_OUTER_BASE_DIR"
-            sha256sum -c SHA256SUMS
-          )
+          . image/ubuntu-base/images.env
+          python3 tools/evidence_guard.py foundation --root "$DNIV_OUTER_BASE_DIR" --session-id "$DNIV_OUTER_SESSION_ID" --arch '${{ matrix.arch }}' --fingerprint "$DNIV_FOUNDATION_FINGERPRINT" --release "$UBUNTU_BASE_RELEASE" --snapshot "$UBUNTU_APT_SNAPSHOT"
           qemu-img check -q -f qcow2 "$DNIV_OUTER_BASE_DIR/base.qcow2"
           raw="$RUNNER_TEMP/foundation-${{ matrix.arch }}.raw"
           mnt="$RUNNER_TEMP/foundation-${{ matrix.arch }}-mnt"

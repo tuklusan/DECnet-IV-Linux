@@ -21,6 +21,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import tempfile
 
@@ -163,6 +164,116 @@ def verify(root: Path, manifest_path: Path) -> None:
             die(f"evidence hash mismatch for {rel}")
 
 
+
+FOUNDATION_MEMBERS = ("base.qcow2", "boot/vmlinuz", "boot/initrd.img", "session.env")
+FOUNDATION_KEYS = (
+    "FORMAT",
+    "SESSION_ID",
+    "ARCH",
+    "FOUNDATION_FINGERPRINT",
+    "UBUNTU_BASE_RELEASE",
+    "UBUNTU_APT_SNAPSHOT",
+)
+
+
+def foundation_member(root: Path, rel: str) -> Path:
+    path = rooted(root, rel)
+    try:
+        if path.is_symlink() or not path.is_file():
+            die(f"foundation member missing or non-regular: {rel}")
+        if path.stat().st_size <= 0:
+            die(f"foundation member is empty: {rel}")
+    except OSError as exc:
+        die(f"cannot stat foundation member {rel}: {exc}")
+    return path
+
+
+def verify_foundation(
+    root: Path,
+    session_id: str,
+    arch: str,
+    fingerprint: str,
+    release: str,
+    snapshot: str,
+) -> None:
+    if root.is_symlink() or not root.is_dir():
+        die(f"foundation root missing or non-directory: {root}")
+
+    members = {rel: foundation_member(root, rel) for rel in FOUNDATION_MEMBERS}
+    sums_path = foundation_member(root, "SHA256SUMS")
+
+    try:
+        env_text = members["session.env"].read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        die(f"invalid foundation session.env: {exc}")
+
+    metadata: dict[str, str] = {}
+    for line in env_text.splitlines():
+        if not line or "=" not in line:
+            die("invalid foundation session.env line")
+        key, value = line.split("=", 1)
+        if not key or key in metadata:
+            die(f"duplicate or invalid foundation metadata key: {key!r}")
+        metadata[key] = value
+
+    if "SOURCE_SHA" in metadata:
+        die("forbidden foundation metadata key: SOURCE_SHA")
+    if set(metadata) != set(FOUNDATION_KEYS):
+        missing = sorted(set(FOUNDATION_KEYS) - set(metadata))
+        extra = sorted(set(metadata) - set(FOUNDATION_KEYS))
+        die(
+            "foundation metadata keys mismatch: "
+            f"missing={','.join(missing) or '-'} extra={','.join(extra) or '-'}"
+        )
+
+    expected = {
+        "FORMAT": "2",
+        "SESSION_ID": session_id,
+        "ARCH": arch,
+        "FOUNDATION_FINGERPRINT": fingerprint,
+        "UBUNTU_BASE_RELEASE": release,
+        "UBUNTU_APT_SNAPSHOT": snapshot,
+    }
+    for key, value in expected.items():
+        if metadata[key] != value:
+            die(
+                f"foundation metadata mismatch {key}: "
+                f"have={metadata[key]} expected={value}"
+            )
+
+    try:
+        sums_text = sums_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        die(f"invalid foundation SHA256SUMS: {exc}")
+
+    recorded: dict[str, str] = {}
+    for line in sums_text.splitlines():
+        match = re.fullmatch(r"([0-9a-f]{64})  ([^\n]+)", line)
+        if match is None:
+            die("malformed foundation SHA256SUMS line")
+        expected_hash, rel = match.groups()
+        if rel in recorded:
+            die(f"duplicate foundation checksum member: {rel}")
+        recorded[rel] = expected_hash
+
+    required = set(FOUNDATION_MEMBERS)
+    if set(recorded) != required:
+        missing = sorted(required - set(recorded))
+        extra = sorted(set(recorded) - required)
+        die(
+            "foundation checksum members mismatch: "
+            f"missing={','.join(missing) or '-'} extra={','.join(extra) or '-'}"
+        )
+
+    for rel in FOUNDATION_MEMBERS:
+        actual = digest(members[rel])
+        if actual != recorded[rel]:
+            die(
+                f"foundation hash mismatch for {rel}: "
+                f"have={actual} expected={recorded[rel]}"
+            )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="command", required=True)
@@ -181,6 +292,14 @@ def main() -> int:
     p.add_argument("--root", type=Path, required=True)
     p.add_argument("--manifest", type=Path, required=True)
 
+    p = sub.add_parser("foundation")
+    p.add_argument("--root", type=Path, required=True)
+    p.add_argument("--session-id", required=True)
+    p.add_argument("--arch", choices=("amd64", "arm64"), required=True)
+    p.add_argument("--fingerprint", required=True)
+    p.add_argument("--release", required=True)
+    p.add_argument("--snapshot", required=True)
+
     args = parser.parse_args()
     if args.command == "preflight":
         if args.min_free_bytes < 0 or args.min_free_inodes < 0:
@@ -190,9 +309,19 @@ def main() -> int:
     elif args.command == "manifest":
         manifest(args.root, args.output, args.require)
         print(f"evidence-guard: manifest={args.output} files={len(args.require)}")
-    else:
+    elif args.command == "verify":
         verify(args.root, args.manifest)
         print("evidence-guard: verification passed")
+    else:
+        verify_foundation(
+            args.root,
+            args.session_id,
+            args.arch,
+            args.fingerprint,
+            args.release,
+            args.snapshot,
+        )
+        print("evidence-guard: foundation verification passed")
     return 0
 
 

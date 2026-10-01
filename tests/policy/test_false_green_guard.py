@@ -17,6 +17,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import os
@@ -262,6 +263,82 @@ def main() -> int:
             "--root", str(blocked), "--min-free-bytes", "1", "--min-free-inodes", "1",
             check=False)
         expect_failure(result, "cannot create evidence directory", "unavailable evidence directory")
+
+
+        # Persistent architecture foundations are the repository's only
+        # checkpoint-like resume input. Reject corruption, missing members,
+        # stale identity metadata and accidental candidate-source coupling.
+        foundation = root / "foundation"
+        (foundation / "boot").mkdir(parents=True)
+        member_bytes = {
+            "base.qcow2": b"qcow2-foundation\n",
+            "boot/vmlinuz": b"kernel-foundation\n",
+            "boot/initrd.img": b"initrd-foundation\n",
+        }
+        for rel, data in member_bytes.items():
+            (foundation / rel).write_bytes(data)
+        session_text = (
+            "FORMAT=2\n"
+            "SESSION_ID=outer-v2-amd64-deadbeef\n"
+            "ARCH=amd64\n"
+            "FOUNDATION_FINGERPRINT=deadbeef\n"
+            "UBUNTU_BASE_RELEASE=26.04.1\n"
+            "UBUNTU_APT_SNAPSHOT=20260901T000000Z\n"
+        )
+        session_path = foundation / "session.env"
+        session_path.write_text(session_text, encoding="utf-8")
+
+        def write_foundation_sums() -> None:
+            entries = []
+            for rel in ("base.qcow2", "boot/vmlinuz", "boot/initrd.img", "session.env"):
+                value = hashlib.sha256((foundation / rel).read_bytes()).hexdigest()
+                entries.append(f"{value}  {rel}\n")
+            (foundation / "SHA256SUMS").write_text("".join(entries), encoding="utf-8")
+
+        foundation_args = (
+            sys.executable, str(EVIDENCE_GUARD), "foundation",
+            "--root", str(foundation),
+            "--session-id", "outer-v2-amd64-deadbeef",
+            "--arch", "amd64",
+            "--fingerprint", "deadbeef",
+            "--release", "26.04.1",
+            "--snapshot", "20260901T000000Z",
+        )
+        write_foundation_sums()
+        run(root, *foundation_args)
+
+        kernel_path = foundation / "boot/vmlinuz"
+        original_kernel = kernel_path.read_bytes()
+        kernel_path.write_bytes(b"X" + original_kernel[1:])
+        result = run(root, *foundation_args, check=False)
+        expect_failure(result, "foundation hash mismatch", "corrupt persistent foundation member")
+        kernel_path.write_bytes(original_kernel)
+
+        initrd_path = foundation / "boot/initrd.img"
+        original_initrd = initrd_path.read_bytes()
+        initrd_path.unlink()
+        result = run(root, *foundation_args, check=False)
+        expect_failure(result, "foundation member missing or non-regular", "missing persistent foundation member")
+        initrd_path.write_bytes(original_initrd)
+
+        session_path.write_text(
+            session_text.replace("ARCH=amd64", "ARCH=arm64"),
+            encoding="utf-8",
+        )
+        result = run(root, *foundation_args, check=False)
+        expect_failure(result, "foundation metadata mismatch ARCH", "wrong persistent foundation architecture")
+
+        session_path.write_text(session_text + "SOURCE_SHA=" + head + "\n", encoding="utf-8")
+        result = run(root, *foundation_args, check=False)
+        expect_failure(result, "forbidden foundation metadata key: SOURCE_SHA", "candidate-coupled persistent foundation")
+
+        session_path.write_text(session_text, encoding="utf-8")
+        write_foundation_sums()
+        sums_path = foundation / "SHA256SUMS"
+        sums = sums_path.read_text(encoding="utf-8").splitlines()
+        sums_path.write_text("\n".join(sums[:-1]) + "\n", encoding="utf-8")
+        result = run(root, *foundation_args, check=False)
+        expect_failure(result, "foundation checksum members mismatch", "missing foundation checkpoint checksum")
 
         workflow = (ROOT / ".github/workflows/false-green.yml").read_text(encoding="utf-8")
         for safeguard in (

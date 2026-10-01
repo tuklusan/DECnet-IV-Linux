@@ -107,7 +107,7 @@ jobs:
       - name: Save outer
         uses: actions/cache/save@{CACHE_PIN}
       - name: Verify source-independent architecture foundation
-        run: "! grep -q '^SOURCE_SHA=' session.env"
+        run: python3 tools/evidence_guard.py foundation --root cache
       - name: Prepare disposable exact-candidate and reference images
         run: |
           tests/lab/prepare-candidate-image.sh base candidate
@@ -272,6 +272,18 @@ def main() -> int:
         result = invoke(root, "--staged")
         if result.returncode == 0 or "2 scenarios" not in result.stderr:
             raise SystemExit("workflow budget failed to reject an oversized staged interop scenario group")
+
+        run(root, "git", "reset", "-q", "HEAD", "--", str(interop.relative_to(root)))
+        unguarded = INTEROP_GOOD.replace(
+            "python3 tools/evidence_guard.py foundation",
+            "python3 tools/evidence_guard.py verify",
+            1,
+        )
+        interop.write_text(unguarded, encoding="utf-8")
+        run(root, "git", "add", str(interop.relative_to(root)))
+        result = invoke(root, "--staged")
+        if result.returncode == 0 or "evidence_guard.py foundation" not in result.stderr:
+            raise SystemExit("workflow budget failed to reject an unverified persistent foundation")
 
         run(root, "git", "reset", "-q", "HEAD", "--", str(interop.relative_to(root)))
         sha_keyed = INTEROP_GOOD.replace(

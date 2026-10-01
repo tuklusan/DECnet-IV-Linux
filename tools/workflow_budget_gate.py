@@ -214,7 +214,7 @@ def check_workflow(path: str, text: str) -> list[str]:
             "build-foundation.sh",
             'session="outer-v2-${{ matrix.arch }}-$fingerprint"',
             "prepare-candidate-image.sh",
-            "! grep -q '^SOURCE_SHA='",
+            "tools/evidence_guard.py foundation",
             "DNIV_LAB_ARTIFACTS=/tmp/dniv-",
             "actions/cache/restore@",
             "actions/cache/save@",
@@ -237,13 +237,27 @@ def check_workflow(path: str, text: str) -> list[str]:
             if marker in text:
                 errors.append(f"{path}: obsolete infrastructure machinery remains: {marker}")
 
+
+    if name in {"kernel-diagnostics.yml", "scale16-distributed.yml"}:
+        for marker in (
+            "build-foundation.sh",
+            'session="outer-v2-${{ matrix.arch }}-$fingerprint"',
+            "tools/evidence_guard.py foundation",
+            "actions/cache/restore@",
+            "actions/cache/save@",
+        ):
+            if marker not in text:
+                errors.append(
+                    f"{path}: missing persistent-foundation verification safeguard: {marker}"
+                )
+
     if name == "interop.yml":
         required = (
             "build-foundation.sh",
             'session="outer-v2-${{ matrix.arch }}-$fingerprint"',
             "prepare-candidate-image.sh",
             "prepare-reference-image.sh",
-            "! grep -q '^SOURCE_SHA='",
+            "tools/evidence_guard.py foundation",
             "actions/cache/restore@",
             "actions/cache/save@",
             "Prepare disposable exact-candidate and reference images",
