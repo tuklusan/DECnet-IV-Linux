@@ -246,7 +246,7 @@ Retain p50/p95/p99 latency, throughput, CPU/memory use, setup and convergence di
 
 ### PP-12 — real peers and exact release image
 
-Use exact pinned SIMH to host available real DEC operating systems and physical DEC systems where available. Prefer more than one DEC OS/version/role when practical. Use the exact hashed release QCOW2/RAW artifact, never a repaired development filesystem.
+Use exact pinned SIMH to host available real DEC operating systems and physical DEC systems where available. QCOCAL and IMPVAX are available SIMH-emulated VAX machines running OpenVMS and are the project's named SIMH/OpenVMS peers for PP-12 and any earlier/later PP case that explicitly requires SIMH machines. Prefer more than one DEC OS/version/role when practical. Use the exact hashed release QCOW2/RAW artifact, never a repaired development filesystem.
 
 Test cold/warm boot, NIC early/late/initially down, configured startup, adjacency/routing, NSP/Session/NICE, every claimed user tool, service/module restart and repeated reboot. Include peer reboot/hard stop during session/transfer, network/circuit/router outage/restoration, wrong credentials/object/node and interrupted transfers.
 

@@ -16,6 +16,8 @@
 
 Area 31 is the project's Internet-connected HECnet lab area. External connectivity is optional test infrastructure, never a substitute for exact-SHA local acceptance.
 
+QCOCAL and IMPVAX are SIMH-emulated VAX systems running OpenVMS. Treat both as available SIMH-hosted real-DEC operating-system peers for future PP stages that require SIMH/OpenVMS machines, especially PP-12, while preserving the existing exact-SHA, secret-safety and evidence rules.
+
 ## Current proof status
 
 - Local/rootless VDE2 is green on exact candidate `5cf52c584e077d841a8a240fc7cf326b1d0b3f6b` at workflow run `36139326492`; the earlier enhanced proof `35959075714` remains the detailed restart/stress baseline.

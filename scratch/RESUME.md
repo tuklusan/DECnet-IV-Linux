@@ -1727,3 +1727,6 @@ PP-10 now closes the remaining non-E1 fault-manifest/injector implementation gap
 
 
 Full PP-10 acceptance issue #863 on exact candidate `6d2aaceda6b28b12542a4504d3cd01151d1d043b` exposed a generic upstream Linux block-layer KCSAN report in amd64 job `110611423260` of run `36934485951`: `blk_mq_dispatch_rq_list / blk_mq_dispatch_rq_list`. Retained artifact `11198531491` contains the failure evidence. Current upstream syzkaller tracks the same exact block-subsystem race as `race:benign`; historical identical reports were also closed/obsoleted upstream. Add only this exact summary to the vetted KCSAN allowlist and lock it into the regression marker set; all other unapproved KCSAN reports remain blocking. Candidate DECnet protocol behavior is unchanged. The failed exact-SHA acceptance must not be promoted; next: fast acceptance on this successor, then a fresh full PP-10 acceptance with `PP10_RETRY_PROBE=true`.
+
+
+Future SIMH/OpenVMS test inventory: QCOCAL and IMPVAX are SIMH-emulated VAX machines running OpenVMS. PP cases that require SIMH-hosted DEC systems should use these named peers where applicable; PP-12 should explicitly include them. This is test-inventory documentation only and does not change candidate behavior or acceptance semantics.
