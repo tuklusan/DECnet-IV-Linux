@@ -167,6 +167,12 @@ lockdebug_final_check() {
 kmemleak_final_check() {
     [ "${diagnostics:-none}" = kmemleak ] || return 0
     kmemleak_path=/sys/kernel/debug/kmemleak
+    if [ "$direct_init" -eq 1 ] && [ "$role" = A ]; then
+        # DN70's own recovery can precede DN71's reciprocal adjacency sample.
+        # Keep DN70 advertising for four hello intervals before unloading it
+        # for the final leak scan, so the peer can complete its recovery proof.
+        sleep 8
+    fi
     if [ ! -w "$kmemleak_path" ]; then
         echo "DNIV-LAB-FAIL session=$session node=$name reason=kmemleak-runtime-missing"
         return 1
