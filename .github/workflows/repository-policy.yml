@@ -422,6 +422,10 @@ jobs:
             printf 'VM_SCALE_16=scale16-distributed.yml\n' >> "$DNIV_SCRATCH_DIR/dispatch.env"
             dispatch_and_record VM_SCALE_16 scale16-distributed.yml \
               -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
+            printf 'VM_LAB_PP11_S1=vm-lab.yml:pp11s1:virtio-net-pci:2vcpu\n' >> "$DNIV_SCRATCH_DIR/dispatch.env"
+            dispatch_and_record VM_LAB_PP11_S1 vm-lab.yml \
+              -f lab_mode=pp11s1 -f nic_model=virtio-net-pci -f vcpus=2 \
+              -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
           fi
 
           dispatch_and_record INTEROP interop.yml \

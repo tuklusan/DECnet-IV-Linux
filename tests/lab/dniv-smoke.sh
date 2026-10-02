@@ -908,6 +908,280 @@ e4)
     esac
     ;;
 
+pp11s1)
+    case "$role" in
+        A|B) ;;
+        *) echo "DNIV-LAB-FAIL session=$session node=$name reason=pp11-bad-role"; exit 1 ;;
+    esac
+    if [ -z "$peer" ] || [ -z "$peer_node" ]; then
+        echo "DNIV-LAB-FAIL session=$session node=$name reason=pp11-missing-peer"
+        exit 1
+    fi
+
+    pp11_state=/var/lib/dniv-pp11-s1
+    mkdir -p "$pp11_state"
+    boot_file="$pp11_state/boot-count"
+    boot_count=0
+    if [ -r "$boot_file" ]; then
+        boot_count=$(cat "$boot_file" 2>/dev/null || printf '0')
+    fi
+    case "$boot_count" in ''|*[!0-9]*) boot_count=0 ;; esac
+    boot_count=$((boot_count + 1))
+    printf '%s\n' "$boot_count" > "$boot_file"
+    sync
+    pp11_app_pid=
+    pp11_mirror_pid=
+
+    pp11_peer_up() {
+        /usr/local/sbin/dnctl adjacencies 2>/dev/null | \
+            grep -F "$peer_node via " | grep -Fq ' L1 router UP '
+    }
+
+    pp11_wait_peer() {
+        tries=$1
+        n=0
+        while [ "$n" -lt "$tries" ]; do
+            pp11_peer_up && return 0
+            n=$((n + 1))
+            sleep 0.25
+        done
+        return 1
+    }
+
+    pp11_resource() {
+        stage=$1
+        links=$(/usr/local/sbin/dnctl links 2>/dev/null | grep -c '^link ' || true)
+        adjs=$(/usr/local/sbin/dnctl adjacencies 2>/dev/null | grep -c ' UP ' || true)
+        routes=$(/usr/local/sbin/dnctl routes 2>/dev/null | grep -c . || true)
+        mem_kb=$(awk '/^MemAvailable:/ {print $2; exit}' /proc/meminfo)
+        slab_kb=$(awk '/^Slab:/ {print $2; exit}' /proc/meminfo)
+        echo "DNIV-PP11-RESOURCE session=$session node=$name stage=$stage links=$links adj=$adjs routes=$routes mem_kb=$mem_kb slab_kb=$slab_kb"
+    }
+
+    pp11_raw_loop() {
+        trap 'exit 0' TERM INT
+        seq=0
+        while :; do
+            seq=$((seq + 1))
+            raw_if=$(find_iface || true)
+            if [ -n "$raw_if" ]; then
+                /usr/local/sbin/dnraw "$raw_if" "$peer" \
+                    "DNIV-PP11-RAW-$session-$name-$seq" >/dev/null 2>&1 || true
+            fi
+            sleep 0.2
+        done
+    }
+
+    pp11_mirror_loop() {
+        child=
+        trap 'if [ -n "$child" ]; then kill "$child" 2>/dev/null || true; wait "$child" 2>/dev/null || true; fi; exit 0' TERM INT
+        while :; do
+            /usr/local/sbin/dnmirror >/dev/null 2>&1 &
+            child=$!
+            if wait "$child"; then :; else :; fi
+            child=
+            sleep 0.1
+        done
+    }
+
+    pp11_app_loop() {
+        child=
+        app_seq=0
+        cpus=$(getconf _NPROCESSORS_ONLN 2>/dev/null || printf '1')
+        case "$cpus" in ''|*[!0-9]*|0) cpus=1 ;; esac
+        if [ "$cpus" -gt 1 ] && ! command -v taskset >/dev/null 2>&1; then
+            echo "DNIV-LAB-FAIL session=$session node=$name reason=pp11-taskset-missing"
+            exit 1
+        fi
+        trap 'if [ -n "$child" ]; then kill "$child" 2>/dev/null || true; wait "$child" 2>/dev/null || true; fi; exit 0' TERM INT
+        while :; do
+            app_seq=$((app_seq + 1))
+            cpu=$((app_seq % cpus))
+            start_ns=$(date +%s%N)
+            if [ "$cpus" -gt 1 ]; then
+                taskset -c "$cpu" /usr/local/sbin/dnmrr "$peer_node" >/dev/null 2>&1 &
+            else
+                /usr/local/sbin/dnmrr "$peer_node" >/dev/null 2>&1 &
+            fi
+            child=$!
+            if wait "$child"; then
+                end_ns=$(date +%s%N)
+                elapsed_ms=$(((end_ns - start_ns) / 1000000))
+                echo "DNIV-PP11-APP-PASS session=$session node=$name seq=$app_seq cpu=$cpu ms=$elapsed_ms bytes=5240"
+            else
+                echo "DNIV-PP11-APP-MISS session=$session node=$name seq=$app_seq cpu=$cpu"
+            fi
+            child=
+            sleep 0.2
+        done
+    }
+
+    pp11_start_apps() {
+        pp11_mirror_loop & pp11_mirror_pid=$!
+        sleep 0.5
+        pp11_app_loop & pp11_app_pid=$!
+    }
+
+    pp11_stop_apps() {
+        if [ -n "$pp11_app_pid" ]; then
+            kill "$pp11_app_pid" 2>/dev/null || true
+            wait "$pp11_app_pid" 2>/dev/null || true
+            pp11_app_pid=
+        fi
+        if [ -n "$pp11_mirror_pid" ]; then
+            kill "$pp11_mirror_pid" 2>/dev/null || true
+            wait "$pp11_mirror_pid" 2>/dev/null || true
+            pp11_mirror_pid=
+        fi
+        sleep 1
+    }
+
+    pp11_load() {
+        modprobe decnet_iv default_area="$area" default_node="$node" default_name="$name" \
+            default_node_type=2 router_priority=64 hello_interval=2
+        /usr/local/sbin/dnctl set "$area.$node" "$name"
+        iface=$(find_iface || true)
+        [ -n "$iface" ] || return 1
+        ip link set "$iface" up
+    }
+
+    pp11_unload() {
+        attempt=0
+        while [ "$attempt" -lt 40 ]; do
+            if modprobe -r decnet_iv 2>/dev/null; then
+                return 0
+            fi
+            attempt=$((attempt + 1))
+            sleep 0.25
+        done
+        return 1
+    }
+
+    pp11_probe() {
+        if ! /usr/local/sbin/dnmrr "$peer_node" >/dev/null 2>&1; then
+            echo "DNIV-LAB-FAIL session=$session node=$name reason=pp11-post-cycle-mirror"
+            exit 1
+        fi
+    }
+
+    pp11_cycle() {
+        kind=$1
+        index=$2
+        echo "DNIV-PP11-CYCLE-BEGIN session=$session node=$name kind=$kind index=$index"
+        pp11_resource "before-$kind-$index"
+        case "$kind" in
+            module|peer-restart)
+                pp11_stop_apps
+                if ! pp11_unload; then
+                    echo "DNIV-LAB-FAIL session=$session node=$name reason=pp11-$kind-unload index=$index"
+                    exit 1
+                fi
+                sleep 9
+                if ! pp11_load; then
+                    echo "DNIV-LAB-FAIL session=$session node=$name reason=pp11-$kind-reload index=$index"
+                    exit 1
+                fi
+                pp11_start_apps
+                ;;
+            interface)
+                iface=$(find_iface || true)
+                [ -n "$iface" ] || { echo "DNIV-LAB-FAIL session=$session node=$name reason=pp11-interface-missing index=$index"; exit 1; }
+                ip link set "$iface" down
+                sleep 9
+                ip link set "$iface" up
+                ;;
+            identity)
+                alt_node=$((node + 10))
+                alt_name="P$role$alt_node"
+                /usr/local/sbin/dnctl set "$area.$alt_node" "$alt_name"
+                sleep 9
+                /usr/local/sbin/dnctl set "$area.$node" "$name"
+                ;;
+            *)
+                echo "DNIV-LAB-FAIL session=$session node=$name reason=pp11-bad-cycle-kind"
+                exit 1
+                ;;
+        esac
+        if ! pp11_wait_peer 600; then
+            echo "DNIV-LAB-FAIL session=$session node=$name reason=pp11-$kind-recovery index=$index"
+            exit 1
+        fi
+        pp11_probe
+        pp11_resource "$kind-$index"
+        echo "DNIV-PP11-CYCLE-PASS session=$session node=$name kind=$kind index=$index"
+        sleep 2
+    }
+
+    pp11_actor() {
+        i=1
+        while [ "$i" -le 5 ]; do pp11_cycle module "$i"; i=$((i + 1)); done
+        i=1
+        while [ "$i" -le 10 ]; do pp11_cycle interface "$i"; i=$((i + 1)); done
+        i=1
+        while [ "$i" -le 10 ]; do pp11_cycle identity "$i"; i=$((i + 1)); done
+        i=1
+        while [ "$i" -le 10 ]; do pp11_cycle peer-restart "$i"; i=$((i + 1)); done
+        echo "DNIV-PP11-ACTOR-DONE session=$session node=$name cycles=35"
+    }
+
+    pp11_observe() {
+        expected=$1
+        count=0
+        down=0
+        if ! pp11_wait_peer 600; then
+            echo "DNIV-LAB-FAIL session=$session node=$name reason=pp11-observer-initial-peer"
+            exit 1
+        fi
+        while [ "$count" -lt "$expected" ]; do
+            if pp11_peer_up; then
+                if [ "$down" -eq 1 ]; then
+                    count=$((count + 1))
+                    down=0
+                    echo "DNIV-PP11-PEER-RECOVERED session=$session node=$name count=$count"
+                fi
+            elif [ "$down" -eq 0 ]; then
+                down=1
+                echo "DNIV-PP11-PEER-LOST session=$session node=$name next=$((count + 1))"
+            fi
+            sleep 0.2
+        done
+        echo "DNIV-PP11-OBSERVER-DONE session=$session node=$name cycles=$count"
+    }
+
+    pp11_load
+    pp11_raw_loop & pp11_raw_pid=$!
+    pp11_start_apps
+    if ! pp11_wait_peer 600; then
+        echo "DNIV-LAB-FAIL session=$session node=$name reason=pp11-initial-adjacency"
+        exit 1
+    fi
+    pp11_resource "boot-$boot_count"
+    echo "DNIV-PP11-BOOT-READY session=$session node=$name boot=$boot_count"
+
+    if [ ! -f "$pp11_state/local-complete" ]; then
+        if [ "$role" = A ]; then
+            sleep 3
+            pp11_actor
+            pp11_observe 35
+        else
+            pp11_observe 35
+            sleep 3
+            pp11_actor
+        fi
+        : > "$pp11_state/local-complete"
+        sync
+    fi
+
+    if ! pp11_wait_peer 600; then
+        echo "DNIV-LAB-FAIL session=$session node=$name reason=pp11-host-ready-adjacency"
+        exit 1
+    fi
+    pp11_probe
+    pp11_resource "host-ready-$boot_count"
+    echo "DNIV-PP11-HOST-READY session=$session node=$name boot=$boot_count"
+    while :; do sleep 60; done
+    ;;
+
 *)
     echo "DNIV-LAB-FAIL session=$session node=$name reason=bad-mode"
     exit 1

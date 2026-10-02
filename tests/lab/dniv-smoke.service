@@ -18,6 +18,7 @@ After=systemd-udev-settle.service
 
 [Service]
 Type=oneshot
+TimeoutStartSec=infinity
 ExecCondition=/usr/bin/grep -Fqw dniv.smoke=1 /proc/cmdline
 ExecStart=/usr/local/sbin/dniv-smoke
 StandardOutput=journal+console

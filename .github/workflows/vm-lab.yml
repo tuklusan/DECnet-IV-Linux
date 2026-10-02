@@ -25,6 +25,7 @@ on:
         options:
           - phase2
           - e1
+          - pp11s1
           - e2
           - e3
           - e4
@@ -87,11 +88,13 @@ jobs:
             arch: amd64
             qemu: qemu-system-x86
             lab_timeout: 300
+            pp11_timeout: 1800
           - runner: ubuntu-24.04-arm
             slot: arm64
             arch: arm64
             qemu: qemu-system-arm
             lab_timeout: 420
+            pp11_timeout: 2400
     runs-on: ${{ matrix.runner }}
     concurrency:
       group: dniv-vm-${{ github.run_id }}-${{ matrix.slot }}-${{ inputs.lab_mode }}-${{ inputs.nic_model }}-${{ inputs.vcpus }}
@@ -105,6 +108,7 @@ jobs:
       DNIV_LAB_VCPUS: ${{ inputs.vcpus }}
       DNIV_LAB_DIAGNOSTICS: ${{ inputs.diagnostics }}
       DNIV_LAB_TIMEOUT_SECONDS: ${{ matrix.lab_timeout }}
+      DNIV_PP11_S1_TIMEOUT_SECONDS: ${{ matrix.pp11_timeout }}
       DNIV_LAB_SESSION_ID: run-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.arch }}-${{ inputs.lab_mode }}-${{ inputs.nic_model }}-${{ inputs.vcpus }}vcpu-${{ inputs.diagnostics }}
       DNIV_LAB_ARCH: ${{ matrix.arch }}
       DNIV_LAB_SOURCE_SHA: ${{ github.sha }}
@@ -240,7 +244,10 @@ jobs:
           set -uo pipefail
           rm -rf "$DNIV_LAB_ARTIFACTS"
           set +e
-          if [[ "${DNIV_LAB_MODE}" == e2 ]]; then
+          if [[ "${DNIV_LAB_MODE}" == pp11s1 ]]; then
+            python3 tests/lab/dniv_pp11_s1.py "$DNIV_LAB_BASE" "$DNIV_LAB_KERNEL" "$DNIV_LAB_INITRD" 2>&1 | \
+              tee "$DNIV_SCRATCH_DIR/two-node.log"
+          elif [[ "${DNIV_LAB_MODE}" == e2 ]]; then
             python3 tests/lab/dniv_e2.py "$DNIV_LAB_BASE" "$DNIV_LAB_KERNEL" "$DNIV_LAB_INITRD" 2>&1 | \
               tee "$DNIV_SCRATCH_DIR/two-node.log"
           elif [[ "${DNIV_LAB_MODE}" == e3 ]]; then
