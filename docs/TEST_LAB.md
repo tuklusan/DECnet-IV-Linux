@@ -117,3 +117,11 @@ Project-owner authorization dated 2026-10-01 marks PP-11 S3, S4, S5 and S6 as no
 ## PP-13 first-release authorization
 
 Project-owner authorization dated 2026-10-01 marks PP-13 completely skipped/non-blocking for the first production release because no N-1 production version exists yet. Do not create synthetic mixed-version, downgrade, rollback, or upgrade evidence. PP-13 becomes relevant only after a real prior production release exists.
+
+## Remaining pre-production owner constraints
+
+The canonical proof index is `docs/PP_EVIDENCE.md`; raw serial/pcap/log/state proof remains in run-attempt-qualified Actions artifacts. Every canonical case must have an explicit result and evidence pointer before it can contribute to release acceptance.
+
+PP-11 S3-S6 remain owner-authorized skips for this release. From and including `## Timing/scheduler tests` in `docs/PRE_PRODUCTION_TEST.md`, execute only practically possible tests. Remote hosts may be used only for user-mode C/C++ test programs, with unavailable requirements recorded exactly as `Not tested in lab environment`. MIM `1.13` is stricter: read-only valid DECnet methods only; no remote writes, program execution, load/stress/endurance/fault testing or state change.
+
+For additional local DEC peers, the lab may install pinned `tuklusan/simh` and create multiple local RSX-11M-PLUS V4.6 instances. Resources may be copied read-only from MIM, but installation and DECnet configuration happen only on project-controlled local systems and the complete acquisition/hash/build/configuration procedure is retained as evidence.

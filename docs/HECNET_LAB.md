@@ -18,6 +18,8 @@ Area 31 is the project's Internet-connected HECnet lab area. External connectivi
 
 QCOCAL and IMPVAX are SIMH-emulated VAX systems running OpenVMS. Treat both as available SIMH-hosted real-DEC operating-system peers for future PP stages that require SIMH/OpenVMS machines, especially PP-12, while preserving the existing exact-SHA, secret-safety and evidence rules.
 
+MIM `1.13` is reachable through PYRTR `31.3`, but it has a stricter canonical boundary than ordinary remote peers: access MIM only read-only with valid DECnet methods. Never install or execute test software there, alter files/configuration, or use it for load, stress, endurance, negative/fault-tolerance or disruptive testing. Required SIMH/RSX-11M-PLUS V4.6 resources may be copied away from MIM read-only and then installed/configured only on project-controlled local systems; retain acquisition hashes and the complete local setup procedure.
+
 ## Current proof status
 
 - Local/rootless VDE2 is green on exact candidate `5cf52c584e077d841a8a240fc7cf326b1d0b3f6b` at workflow run `36139326492`; the earlier enhanced proof `35959075714` remains the detailed restart/stress baseline.
@@ -75,8 +77,8 @@ Remote tests belong in the repository rather than in ad-hoc runner commands. Ful
 5. exercise NSP/MIRROR and Session/object access in both directions;
 6. use `VAX_USERNAME`/`VAX_PASSWORD` only when a VAX-side helper actually must be installed or invoked;
 7. accumulate reusable Linux/VAX pairs under `tests/lab`, including login, DAP/FAL file operations, PHONE, mail, task/object access and management/counter checks as each userspace feature lands;
-8. add failure/reconnect, route withdrawal, gateway/VAX/router restart and sustained-load cases;
-9. only then incorporate Area-31 into 4/8/16-node scale and endurance work.
+8. run failure/reconnect, route withdrawal, restart, sustained-load and endurance cases only on project-controlled local/SIMH systems; remote HECnet peers beyond PYRTR remain non-disruptive observation/traffic peers, and MIM remains strictly read-only;
+9. incorporate only project-controlled local/SIMH systems into 4/8/16-node scale and endurance work; remote Area-31 systems provide non-disruptive interoperability evidence only.
 
 VAX-side scripts/programs should live in a dedicated `tests/lab` subdirectory and be paired with the Linux driver that invokes and validates them. Application experiments such as a small VAX DECnet service plus a `dnlynx` client are welcome after the underlying Session/object and standard DECnet/Linux userspace features are stable; they are supplemental tests, not a shortcut around those layers.
 
@@ -85,4 +87,4 @@ No public HECnet route is advertised from a disposable CI job outside Area 31. D
 
 ## Remote peer safety boundary
 
-PYRTR (31.3) is the hard operational boundary for disruptive testing. Any machine reached on the far side of PYRTR via the MULTINET/HECnet uplink is read/traffic-only for project testing: do not power-cycle, shut down, reboot, pause/resume, hard-stop, reconfigure its operating state, or otherwise cause a remote state transition. PP-12 disruptive restart/power tests must use only project-controlled local systems, disposable lab VMs, or the named local SIMH/OpenVMS peers QCOCAL and IMPVAX when those systems are under project control.
+PYRTR (31.3) is the hard operational boundary for disruptive testing. Any machine reached on the far side of PYRTR via the MULTINET/HECnet uplink is read/traffic-only for project testing: do not power-cycle, shut down, reboot, pause/resume, hard-stop, reconfigure its operating state, or otherwise cause a remote state transition. From `## Timing/scheduler tests` onward, remote-host active probes are limited to user-mode C/C++ programs when the remote host permits that activity; impossible requirements are recorded as `Not tested in lab environment`. MIM `1.13` is stricter and permits read-only valid-DECnet access only, never remote program installation/execution or stress/fault activity. PP-12 disruptive restart/power tests must use only project-controlled local systems, disposable lab VMs, or named SIMH/OpenVMS peers such as QCOCAL and IMPVAX only when those instances are actually under project control and are not being reached as protected remote systems beyond PYRTR.

@@ -250,7 +250,7 @@ The first executable PP-11 increment makes native socket churn count explicit an
 
 ### PP-12 — real peers and exact release image
 
-Use exact pinned SIMH to host available real DEC operating systems and physical DEC systems where available. QCOCAL and IMPVAX are available SIMH-emulated VAX machines running OpenVMS and are the project's named SIMH/OpenVMS peers for PP-12 and any earlier/later PP case that explicitly requires SIMH machines. Prefer more than one DEC OS/version/role when practical. Use the exact hashed release QCOW2/RAW artifact, never a repaired development filesystem.
+Use exact pinned SIMH to host available real DEC operating systems and physical DEC systems where available. QCOCAL and IMPVAX are available SIMH-emulated VAX machines running OpenVMS and are the project's named SIMH/OpenVMS peers for PP-12 and any earlier/later PP case that explicitly requires SIMH machines. Prefer more than one DEC OS/version/role when practical. Local lab hosts may install pinned `tuklusan/simh` and create one or more RSX-11M-PLUS V4.6 instances when that adds useful independent DEC coverage. Required RSX/SIMH resources may be copied from MIM `1.13`, reachable through PYRTR `31.3`, but MIM itself is read-only: use only valid DECnet access methods, make no remote changes, run no load/stress/fault tests against it, and document the complete local acquisition/checksum/install/configuration/DECnet setup procedure. Use the exact hashed release QCOW2/RAW artifact, never a repaired development filesystem.
 
 Test cold/warm boot, NIC early/late/initially down, configured startup, adjacency/routing, NSP/Session/NICE, every claimed user tool, service/module restart and repeated reboot only on project-controlled local/SIMH systems. **Never power-cycle, shut down, reboot, pause, resume, hard-stop, or otherwise change the running state of any machine reached beyond PYRTR (31.3) over the MULTINET/HECnet uplink.** Remote HECnet peers beyond PYRTR are observation/traffic peers only. Include disruptive peer restart/hard-stop tests only on locally controlled peers such as QCOCAL/IMPVAX or disposable lab VMs; retain non-disruptive wrong-credentials/object/node and interrupted-transfer checks against remote peers where safe.
 
@@ -263,6 +263,8 @@ Hard-power/storage recovery is mandatory for the release image: terminate select
 Do not fabricate an N-1 release, synthetic downgrade path, or pretend mixed-version evidence merely to satisfy this stage. Re-enable PP-13 as a blocking stage once a real production release exists and an N-1/N compatibility surface is meaningful.
 
 ## Timing/scheduler tests
+
+**Owner lab-execution rule from this heading onward:** execute only tests that are practically possible in the available lab. On remote hosts, the maximum permitted active test action is writing and executing user-mode C/C++ programs; do not perform kernel modifications, privileged disruptive experiments, host configuration changes, reboot/power operations or other unavailable/inappropriate tests. MIM `1.13` is a stricter exception: it is read-only via valid DECnet methods only, with no program installation/execution, load, stress or fault testing. Any requirement that cannot practically be exercised under these constraints must be recorded exactly as `Not tested in lab environment`; do not fabricate equivalent coverage or silently omit it.
 
 Timers require explicit treatment: listener expiry and DR delay just-before/at/after boundaries; zero/fallback and maximum timers without arithmetic overflow; CPU saturation/workqueue delay during expiry; VM pause/resume; large scheduling stalls; timer cancel/rearm concurrent with unload/identity change/device removal; and jiffies wrap via test hooks where practical. The previously specified S5/S6 long-idle requirement is covered by the owner-authorized S3-S6 lab waiver for this release.
 
@@ -343,6 +345,8 @@ SIMH is a simulator dependency, not a DECnet protocol oracle. At `5b73b1032b52d1
 Current `tests/lab/dniv-smoke.sh` and `run-two-node.sh` implement only the currently automated subset. A future PP case is not green merely because the present harness has no mode for it.
 
 ## Evidence required for every run
+
+`docs/PP_EVIDENCE.md` is the canonical repository-tracked proof index. Every executed canonical PP case must get an entry tying its result to the exact candidate, workflow/run/job and retained artifact/log evidence. Owner-authorized skips and every impossible post-Timing requirement must also appear there explicitly; the ledger never substitutes for the raw artifacts.
 
 Retain exact source commit/tree; reference SHAs; kernel/compiler/configuration/harness version; image/kernel/initrd/module/userspace/overlay hashes; architecture/vCPU/driver/offload/MTU/topology/identity/media; canonical case and stress level; random/fuzz/fault seed; requested and actual injection counts; packet/VDE2/MULTINET traces where transport behavior matters; complete serial/kernel/service/application logs; state/counter/resource snapshots before/during/after fault and after quiescence; fault/topology timeline; duration/packet/session/byte/restart/churn counts; measured distributions; diagnostic output; and explicit pass/fail for every canonical case/applicable negative family.
 
