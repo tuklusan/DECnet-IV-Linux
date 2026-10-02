@@ -24,6 +24,7 @@
 #include <linux/dn.h>
 
 #define WINDOW_COUNT 20U
+#define PRESSURE_PRIME "DNIV-WINDOW-PRIME"
 
 static int parse_node(const char *text, uint16_t *address)
 {
@@ -65,12 +66,22 @@ int main(int argc, char **argv)
     struct timeval timeout = { .tv_sec = 30, .tv_usec = 0 };
     uint16_t address;
     unsigned int i;
+    int pressure = 0;
+    const char *round = NULL;
     int fd = -1;
 
     setvbuf(stdout, NULL, _IONBF, 0);
-    if (argc != 4 || parse_node(argv[1], &address)) {
-        fprintf(stderr, "usage: %s AREA.NODE SESSION SCENARIO\n", argv[0]);
+    if ((argc != 4 && argc != 6) || parse_node(argv[1], &address)) {
+        fprintf(stderr, "usage: %s AREA.NODE SESSION SCENARIO [pressure ROUND]\n", argv[0]);
         return 2;
+    }
+    if (argc == 6) {
+        if (strcmp(argv[4], "pressure")) {
+            fprintf(stderr, "unsupported mode: %s\n", argv[4]);
+            return 2;
+        }
+        pressure = 1;
+        round = argv[5];
     }
     fd = socket(AF_DECnet, SOCK_SEQPACKET, DNPROTO_NSP);
     if (fd < 0)
@@ -87,9 +98,30 @@ int main(int argc, char **argv)
     if (connect(fd, (struct sockaddr *)&peer, sizeof(peer)))
         goto fail;
 
-    printf("DNIV-INTEROP-WINDOW-READY session=%s scenario=%s peer=%s\n",
-           argv[2], argv[3], argv[1]);
-    sleep(3);
+    if (pressure) {
+        unsigned char tx[64], rx[64];
+        size_t len = sizeof(PRESSURE_PRIME);
+        ssize_t sent, got;
+
+        tx[0] = 0U;
+        memcpy(tx + 1U, PRESSURE_PRIME, sizeof(PRESSURE_PRIME) - 1U);
+        sent = send(fd, tx, len, MSG_EOR | MSG_NOSIGNAL);
+        if (sent != (ssize_t)len)
+            goto fail;
+        got = recv(fd, rx, sizeof(rx), 0);
+        if (got != (ssize_t)len || rx[0] != 1U ||
+            memcmp(rx + 1U, tx + 1U, len - 1U)) {
+            errno = EPROTO;
+            goto fail;
+        }
+        printf("DNIV-INTEROP-WINDOW-PRESSURE-PRIMED session=%s scenario=%s peer=%s round=%s\n",
+               argv[2], argv[3], argv[1], round);
+        sleep(5);
+    } else {
+        printf("DNIV-INTEROP-WINDOW-READY session=%s scenario=%s peer=%s\n",
+               argv[2], argv[3], argv[1]);
+        sleep(3);
+    }
     for (i = 0U; i < WINDOW_COUNT; i++)
         if (send_tag(fd, i + 1U, MSG_DONTWAIT))
             goto fail;
@@ -100,16 +132,20 @@ int main(int argc, char **argv)
         fprintf(stderr, "window did not stop ninth segment: errno=%d\n", errno);
         goto fail;
     }
-    printf("DNIV-INTEROP-WINDOW-FULL session=%s scenario=%s peer=%s count=%u\n",
-           argv[2], argv[3], argv[1], WINDOW_COUNT);
+    if (pressure)
+        printf("DNIV-INTEROP-WINDOW-PRESSURE-FULL session=%s scenario=%s peer=%s round=%s count=%u\n",
+               argv[2], argv[3], argv[1], round, WINDOW_COUNT);
+    else
+        printf("DNIV-INTEROP-WINDOW-FULL session=%s scenario=%s peer=%s count=%u\n",
+               argv[2], argv[3], argv[1], WINDOW_COUNT);
 
     if (send_tag(fd, WINDOW_COUNT + 1U, 0))
         goto fail;
     printf("DNIV-INTEROP-WINDOW-RESUMED session=%s scenario=%s peer=%s\n",
            argv[2], argv[3], argv[1]);
     close(fd);
-    printf("dnwindow: pass peer=%s full=%u blocked=1 resumed=1\n",
-           argv[1], WINDOW_COUNT);
+    printf("dnwindow: pass peer=%s full=%u blocked=1 resumed=1%s\n",
+           argv[1], WINDOW_COUNT, pressure ? " pressure" : "");
     return 0;
 
 fail:

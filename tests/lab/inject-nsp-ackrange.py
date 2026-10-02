@@ -144,12 +144,16 @@ def expect_no_link(
 
 
 def main() -> int:
-    if len(sys.argv) != 6:
+    if len(sys.argv) not in (6, 8):
         raise SystemExit(
             f"usage: {sys.argv[0]} SNIFF-IFACE SEND-IFACE CANDIDATE-MAC "
-            "SRC-AREA.NODE DST-AREA.NODE"
+            "SRC-AREA.NODE DST-AREA.NODE [pressure ROUND]"
         )
     sniff_iface, send_iface, candidate_s, src_s, dst_s = sys.argv[1:6]
+    pressure = len(sys.argv) == 8
+    if pressure and sys.argv[6] != "pressure":
+        raise SystemExit(f"unsupported mode: {sys.argv[6]}")
+    pressure_round = sys.argv[7] if pressure else None
     candidate = mac(candidate_s)
     src_node = nodeaddr(src_s)
     dst_node = nodeaddr(dst_s)
@@ -196,6 +200,66 @@ def main() -> int:
         wrong_src_mac = bytes((0xAA, 0x00, 0x04, 0x00,
                                wrong_src_node & 0xFF,
                                (wrong_src_node >> 8) & 0xFF))
+
+        if pressure:
+            malformed = (
+                b"\x04" + local_link + remote_link
+                + struct.pack("<H", 0xC000 | seq),
+                b"\x10" + local_link + remote_link
+                + struct.pack("<H", 1) + b"\x03\x00",
+                b"\x30" + local_link + remote_link
+                + struct.pack("<H", 1),
+            )
+            no_link = (
+                b"\x60" + wrong_local_link + wrong_remote_link
+                + struct.pack("<H", 1) + b"DNIV-NOLINK",
+                b"\x28" + wrong_local_link + wrong_remote_link
+                + b"\x01\x02" + struct.pack("<H", 563),
+                b"\x38" + wrong_local_link + wrong_remote_link
+                + struct.pack("<H", 0),
+                b"\x30" + wrong_local_link + wrong_remote_link
+                + struct.pack("<H", 1) + b"I",
+                b"\x10" + wrong_local_link + wrong_remote_link
+                + struct.pack("<H", 1) + b"\x00\x00",
+            )
+            flood_count = 0
+            for _ in range(12):
+                for probe in malformed + no_link:
+                    send_nsp_probe(
+                        send, candidate, src_mac, src_node, dst_node, probe,
+                    )
+                    flood_count += 1
+            print(
+                f"ack-range-inject: pressure flood round={pressure_round} "
+                f"malformed_control={flood_count}",
+                flush=True,
+            )
+            for future in range(2, 34):
+                probe = (
+                    b"\x10" + local_link + remote_link
+                    + struct.pack("<H", future) + b"\x04\x00"
+                )
+                send_nsp_probe(
+                    send, candidate, src_mac, src_node, dst_node, probe,
+                )
+            print(
+                f"ack-range-inject: pressure future-link-service "
+                f"round={pressure_round} queued=32",
+                flush=True,
+            )
+            time.sleep(5.0)
+            probe = (
+                b"\x10" + local_link + remote_link
+                + struct.pack("<H", 1) + b"\x04\x00"
+            )
+            send_nsp_probe(send, candidate, src_mac, src_node, dst_node, probe)
+            print(
+                f"ack-range-inject: pressure pass round={pressure_round} "
+                "malformed_control=96 rx_future=32 gap_release=1",
+                flush=True,
+            )
+            return 0
+
         sent_at = time.monotonic()
         send_ack(send, candidate, src_mac, src_node, dst_node,
                  local_link, remote_link, cross_forged, 2, 0x14)

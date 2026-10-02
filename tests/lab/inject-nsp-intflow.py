@@ -93,12 +93,16 @@ def send_interrupt_credit(
 
 
 def main() -> int:
-    if len(sys.argv) != 6:
+    if len(sys.argv) not in (6, 8):
         raise SystemExit(
             f"usage: {sys.argv[0]} SNIFF-IFACE SEND-IFACE CANDIDATE-MAC "
-            "SRC-AREA.NODE DST-AREA.NODE"
+            "SRC-AREA.NODE DST-AREA.NODE [pressure ROUND]"
         )
     sniff_iface, send_iface, candidate_s, src_s, dst_s = sys.argv[1:6]
+    pressure = len(sys.argv) == 8
+    if pressure and sys.argv[6] != "pressure":
+        raise SystemExit(f"unsupported mode: {sys.argv[6]}")
+    pressure_round = sys.argv[7] if pressure else None
     candidate = mac(candidate_s)
     src_node = nodeaddr(src_s)
     dst_node = nodeaddr(dst_s)
@@ -111,6 +115,52 @@ def main() -> int:
     send.bind((send_iface, 0))
     sniff.settimeout(15.0)
     try:
+        if pressure:
+            deadline = time.monotonic() + 20.0
+            links = None
+            seen: set[int] = set()
+            while time.monotonic() < deadline:
+                nsp = nsp_payload(sniff.recv(4096))
+                if nsp is None or nsp[0] != 0x30 or b"DNIV-IPR-01" not in nsp or len(nsp) < 7:
+                    continue
+                links = (nsp[3:5], nsp[1:3])
+                seen.add(1)
+                break
+            if links is None:
+                raise RuntimeError("pressure first Interrupt not observed")
+            local_link, remote_link = links
+            send_interrupt_credit(
+                send, candidate, src_mac, src_node, dst_node,
+                local_link, remote_link, 1, 100,
+            )
+            print(
+                f"intflow-inject: pressure credit round={pressure_round} "
+                "seq=1 delta=100",
+                flush=True,
+            )
+            sniff.settimeout(0.25)
+            deadline = time.monotonic() + 10.0
+            while time.monotonic() < deadline and len(seen) < 64:
+                try:
+                    nsp = nsp_payload(sniff.recv(4096))
+                except TimeoutError:
+                    continue
+                if nsp is None or nsp[0] != 0x30:
+                    continue
+                for idx in range(1, 65):
+                    if f"DNIV-IPR-{idx:02d}".encode("ascii") in nsp:
+                        seen.add(idx)
+            if len(seen) != 64:
+                raise RuntimeError(
+                    f"pressure Interrupt set incomplete: observed={len(seen)}"
+                )
+            print(
+                f"intflow-inject: pressure pass round={pressure_round} "
+                "credit=100 interrupts=64",
+                flush=True,
+            )
+            return 0
+
         deadline = time.monotonic() + 15.0
         links = None
         while time.monotonic() < deadline:

@@ -254,6 +254,7 @@ jobs:
           timer_proof=0
           peer_segsize=0
           flow_proof=0
+          pp11_pressure=0
           churn_cycles=16
           if [[ '${{ inputs.scope }}' == socket &&
                 '${{ matrix.suite }}' == py-l1 &&
@@ -265,6 +266,11 @@ jobs:
                 '${{ matrix.suite }}' == py-l1 &&
                 '${{ matrix.arch }}' == amd64 ]]; then
             timer_proof=1
+          fi
+          if [[ '${{ inputs.profile }}' == full &&
+                '${{ matrix.suite }}' == py-l1 ]]; then
+            pp11_pressure=1
+            peer_segsize=128
           fi
           if [[ '${{ inputs.profile }}' == full &&
                 '${{ matrix.suite }}' == py-l1 &&
@@ -279,6 +285,7 @@ jobs:
               DNIV_INTEROP_TIMER_PROOF="$timer_proof" \
               DNIV_INTEROP_PEER_SEGMENT_SIZE="$peer_segsize" \
               DNIV_INTEROP_FLOW_PROOF="$flow_proof" \
+              DNIV_INTEROP_PP11_PRESSURE="$pp11_pressure" \
               DNIV_INTEROP_CHURN_CYCLES="$churn_cycles" \
               tests/lab/run-interop.sh \
               "$DNIV_CANDIDATE_IMAGE" "$DNIV_REFERENCE_IMAGE" \

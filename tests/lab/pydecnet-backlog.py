@@ -26,6 +26,8 @@ OVERFLOW_COUNT = 3
 OVERFLOW_OBJECT = 242
 CLOSE_RACE_OBJECT = 243
 LISTENER_CLOSE_OBJECT = 245
+PRESSURE_COUNT = 65
+PRESSURE_OBJECT = 248
 OBJECT_BUSY = 6
 
 
@@ -43,7 +45,7 @@ def worker(api_socket: str, destination: str, system: str, index: int,
         )
         if connection is None or response.type != "accept":
             reason = getattr(response, "reason", None)
-            if object_number in (OVERFLOW_OBJECT, LISTENER_CLOSE_OBJECT) and reason == OBJECT_BUSY:
+            if object_number in (OVERFLOW_OBJECT, LISTENER_CLOSE_OBJECT, PRESSURE_OBJECT) and reason == OBJECT_BUSY:
                 results[index] = "busy"
                 return
             raise RuntimeError(f"connect {index} rejected: {reason!r}")
@@ -65,17 +67,20 @@ def worker(api_socket: str, destination: str, system: str, index: int,
 def main() -> int:
     if len(sys.argv) not in (4, 5):
         raise SystemExit(
-            f"usage: {sys.argv[0]} API-SOCKET AREA.NODE PYDECNET-SYSTEM [overflow|close-race|listener-close]"
+            f"usage: {sys.argv[0]} API-SOCKET AREA.NODE PYDECNET-SYSTEM [overflow|close-race|listener-close|pressure]"
         )
     api_socket, destination, system = sys.argv[1:4]
     mode = sys.argv[4] if len(sys.argv) == 5 else "queue"
-    if mode not in ("queue", "overflow", "close-race", "listener-close"):
+    if mode not in ("queue", "overflow", "close-race", "listener-close", "pressure"):
         raise SystemExit(f"unsupported backlog mode: {mode}")
     overflow = mode == "overflow"
     close_race = mode == "close-race"
     listener_close = mode == "listener-close"
-    count = OVERFLOW_COUNT if (overflow or listener_close) else QUEUE_COUNT
-    object_number = (OVERFLOW_OBJECT if overflow else
+    pressure = mode == "pressure"
+    count = (PRESSURE_COUNT if pressure else
+             OVERFLOW_COUNT if (overflow or listener_close) else QUEUE_COUNT)
+    object_number = (PRESSURE_OBJECT if pressure else
+                     OVERFLOW_OBJECT if overflow else
                      CLOSE_RACE_OBJECT if close_race else
                      LISTENER_CLOSE_OBJECT if listener_close else QUEUE_OBJECT)
     barrier = threading.Barrier(count)
@@ -95,16 +100,16 @@ def main() -> int:
     for thread in threads:
         thread.start()
     for thread in threads:
-        thread.join(40.0)
+        thread.join(90.0 if pressure else 40.0)
     if any(thread.is_alive() for thread in threads):
         raise RuntimeError("backlog workers timed out")
     if errors:
         raise RuntimeError("; ".join(errors))
-    if overflow or listener_close:
+    if overflow or listener_close or pressure:
         accepted = results.count("accept")
         busy = results.count("busy")
-        wanted_accept = 1 if listener_close else 2
-        wanted_busy = 2 if listener_close else 1
+        wanted_accept = 64 if pressure else (1 if listener_close else 2)
+        wanted_busy = 1 if pressure else (2 if listener_close else 1)
         if accepted != wanted_accept or busy != wanted_busy:
             raise RuntimeError(
                 f"{mode} outcomes unexpected: accepted={accepted} busy={busy} "

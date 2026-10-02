@@ -146,6 +146,155 @@ poweroff_pass() {
     exit 0
 }
 
+pp11_link_count() {
+    /usr/local/sbin/dnctl links 2>/dev/null | awk '/^link / { n++ } END { print n + 0 }'
+}
+
+pp11_snapshot_links() {
+    /usr/local/sbin/dnctl links 2>/dev/null | awk '/^link / { print $2 }' > "$1"
+}
+
+pp11_wait_new_link() {
+    baseline=$1
+    tries=$2
+    i=0
+    while [ "$i" -lt "$tries" ]; do
+        for link in $(/usr/local/sbin/dnctl links 2>/dev/null | awk '/^link / { print $2 }'); do
+            if ! grep -Fxq "$link" "$baseline" 2>/dev/null; then
+                printf '%s\n' "$link"
+                return 0
+            fi
+        done
+        i=$((i + 1))
+        sleep 0.1
+    done
+    return 1
+}
+
+pp11_link_metric() {
+    wanted_link=$1
+    wanted_key=$2
+    /usr/local/sbin/dnctl links 2>/dev/null | awk -v link="$wanted_link" -v key="$wanted_key" '
+        $1 == "link" && $2 == link {
+            for (i = 1; i <= NF; i++) {
+                split($i, part, "=")
+                if (part[1] == key) {
+                    print part[2] + 0
+                    found = 1
+                    exit
+                }
+            }
+        }
+        END { if (!found) print -1 }
+    '
+}
+
+pp11_wait_link_metric_exact() {
+    link=$1
+    key=$2
+    target=$3
+    tries=$4
+    i=0
+    while [ "$i" -lt "$tries" ]; do
+        value=$(pp11_link_metric "$link" "$key")
+        if [ "$value" -gt "$target" ]; then
+            return 2
+        fi
+        if [ "$value" -eq "$target" ]; then
+            return 0
+        fi
+        i=$((i + 1))
+        sleep 0.1
+    done
+    return 1
+}
+
+pp11_wait_link_count_exact() {
+    target=$1
+    tries=$2
+    i=0
+    while [ "$i" -lt "$tries" ]; do
+        value=$(pp11_link_count)
+        if [ "$value" -gt "$target" ]; then
+            return 2
+        fi
+        if [ "$value" -eq "$target" ]; then
+            return 0
+        fi
+        i=$((i + 1))
+        sleep 0.1
+    done
+    return 1
+}
+
+pp11_wait_link_count_le() {
+    target=$1
+    tries=$2
+    i=0
+    while [ "$i" -lt "$tries" ]; do
+        value=$(pp11_link_count)
+        if [ "$value" -le "$target" ]; then
+            return 0
+        fi
+        i=$((i + 1))
+        sleep 0.1
+    done
+    return 1
+}
+
+pp11_slab_bytes() {
+    awk 'NR > 2 { total += $3 * $4 } END { printf "%.0f\n", total + 0 }' /proc/slabinfo
+}
+
+pp11_require_seq_live() {
+    seq_pid=$1
+    seq_log=$2
+    baseline_lines=$3
+    round=$4
+    phase=$5
+    i=0
+    while [ "$i" -lt 80 ]; do
+        kill -0 "$seq_pid" 2>/dev/null || return 1
+        lines=$(wc -l < "$seq_log")
+        if [ "$lines" -gt "$baseline_lines" ]; then
+            echo "DNIV-INTEROP-PP11-MIRROR-LIVE session=$session scenario=$scenario round=$round phase=$phase lines=$lines"
+            return 0
+        fi
+        i=$((i + 1))
+        sleep 0.25
+    done
+    return 1
+}
+
+pp11_wait_round_recovery() {
+    slab_baseline=$1
+    round=$2
+    slab_limit=$((slab_baseline + 67108864))
+    i=0
+    while [ "$i" -lt 1200 ]; do
+        links=$(/usr/local/sbin/dnctl links 2>/dev/null || true)
+        count=$(printf '%s\n' "$links" | awk '/^link / { n++ } END { print n + 0 }')
+        nonzero=$(printf '%s\n' "$links" | awk '
+            /^link / {
+                for (i = 1; i <= NF; i++) {
+                    if ($i ~ /^(tx-data|tx-other|rx)=/ && $i !~ /=0$/)
+                        bad++
+                }
+            }
+            END { print bad + 0 }
+        ')
+        slab_now=$(pp11_slab_bytes)
+        adjacency=$(/usr/local/sbin/dnctl adjacencies 2>/dev/null || true)
+        if [ "$count" -le 8 ] && [ "$nonzero" -eq 0 ] &&            [ "$slab_now" -le "$slab_limit" ] &&            printf '%s\n' "$adjacency" | grep -F "$peer_node via " |                grep -Fq " $peer_kind UP "; then
+            echo "DNIV-INTEROP-PP11-RECOVERED session=$session scenario=$scenario round=$round links=$count slab=$slab_now baseline=$slab_baseline"
+            return 0
+        fi
+        i=$((i + 1))
+        sleep 0.1
+    done
+    return 1
+}
+
 if [ "${1:-}" = --stats-selftest ]; then
     stats_snapshot "${2:-8}"
     exit $?
@@ -161,6 +310,7 @@ session=$(get_arg dniv.session || printf 'local')
 timer_proof=$(get_arg dniv.timer_proof || printf '0')
 reserved_proof=$(get_arg dniv.reserved_proof || printf '0')
 flow_proof=$(get_arg dniv.flow_proof || printf '0')
+pp11_pressure=$(get_arg dniv.pp11_pressure || printf '0')
 churn_cycles=$(get_arg dniv.churn_cycles || printf '16')
 
 case "$reference" in
@@ -174,6 +324,10 @@ esac
 case "$reserved_proof" in
     0|1) ;;
     *) echo "DNIV-INTEROP-FAIL session=$session reason=bad-reserved-proof"; exit 1 ;;
+esac
+case "$pp11_pressure" in
+    0|1) ;;
+    *) echo "DNIV-INTEROP-FAIL session=$session reason=bad-pp11-pressure"; exit 1 ;;
 esac
 case "$churn_cycles" in
     ''|*[!0-9]*) echo "DNIV-INTEROP-FAIL session=$session reason=bad-churn-cycles"; exit 1 ;;
@@ -984,6 +1138,154 @@ EOF_DNIV_SENDMAIL
             exit 1
         fi
         echo "DNIV-INTEROP-TERM-RACE-PASS session=$session scenario=$scenario node=$name peer=$peer_node"
+    fi
+    if [ "$pp11_pressure" = 1 ]; then
+        if [ "$scenario" != l1 ]; then
+            echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=pp11-pressure-scenario"
+            exit 1
+        fi
+        slab_baseline=$(pp11_slab_bytes)
+        round=1
+        while [ "$round" -le 3 ]; do
+            seq_log="/run/dniv-pp11-seqwrap-$round.log"
+            rm -f "$seq_log"
+            /usr/local/sbin/dnseqwrap "$peer_node" pressure "$round" >"$seq_log" 2>&1 &
+            seq_pid=$!
+            i=0
+            while [ "$i" -lt 100 ]; do
+                grep -Fq "DNIV-PP11-SEQWRAP-START round=$round " "$seq_log" 2>/dev/null && break
+                kill -0 "$seq_pid" 2>/dev/null || {
+                    cat "$seq_log" || true
+                    echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=pp11-seqwrap-start"
+                    exit 1
+                }
+                i=$((i + 1))
+                sleep 0.1
+            done
+            if ! grep -Fq "DNIV-PP11-SEQWRAP-START round=$round " "$seq_log"; then
+                echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=pp11-seqwrap-start-timeout"
+                exit 1
+            fi
+            echo "DNIV-INTEROP-PP11-ROUND-START session=$session scenario=$scenario round=$round"
+
+            seq_lines=$(wc -l < "$seq_log")
+            echo "DNIV-INTEROP-PP11-TABLE-READY session=$session scenario=$scenario round=$round"
+            if ! pp11_wait_link_count_exact 256 500; then
+                echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=pp11-table-limit round=$round"
+                exit 1
+            fi
+            echo "DNIV-INTEROP-PP11-TABLE-LIMIT session=$session scenario=$scenario round=$round count=256"
+            if ! pp11_require_seq_live "$seq_pid" "$seq_log" "$seq_lines" "$round" table; then
+                echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=pp11-table-mirror round=$round"
+                exit 1
+            fi
+            if ! pp11_wait_link_count_le 8 800; then
+                echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=pp11-table-recovery round=$round"
+                exit 1
+            fi
+
+            seq_lines=$(wc -l < "$seq_log")
+            rx_before="/run/dniv-pp11-rx-before-$round"
+            pp11_snapshot_links "$rx_before"
+            echo "DNIV-INTEROP-PP11-RX-READY session=$session scenario=$scenario round=$round"
+            sleep 2
+            /usr/local/sbin/dnackrange "$peer_node" "$session" "$scenario" pressure "$round" &
+            rx_pid=$!
+            rx_link=$(pp11_wait_new_link "$rx_before" 100) || {
+                echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=pp11-rx-link round=$round"
+                exit 1
+            }
+            if ! pp11_wait_link_metric_exact "$rx_link" rx 32 160; then
+                echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=pp11-rx-limit round=$round link=$rx_link"
+                exit 1
+            fi
+            echo "DNIV-INTEROP-PP11-RX-LIMIT session=$session scenario=$scenario round=$round link=$rx_link count=32"
+            if ! pp11_require_seq_live "$seq_pid" "$seq_log" "$seq_lines" "$round" rx; then
+                echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=pp11-rx-mirror round=$round"
+                exit 1
+            fi
+            if ! wait "$rx_pid"; then
+                echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=pp11-rx-client round=$round"
+                exit 1
+            fi
+
+            seq_lines=$(wc -l < "$seq_log")
+            /usr/local/sbin/dnbacklog "$peer_node" "$session" "$scenario" pressure "$round" &
+            backlog_pid=$!
+            if ! wait "$backlog_pid"; then
+                echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=pp11-backlog round=$round"
+                exit 1
+            fi
+            echo "DNIV-INTEROP-PP11-BACKLOG-PASS session=$session scenario=$scenario round=$round accepted=64 busy=1"
+            if ! pp11_require_seq_live "$seq_pid" "$seq_log" "$seq_lines" "$round" backlog; then
+                echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=pp11-backlog-mirror round=$round"
+                exit 1
+            fi
+
+            seq_lines=$(wc -l < "$seq_log")
+            window_before="/run/dniv-pp11-window-before-$round"
+            pp11_snapshot_links "$window_before"
+            /usr/local/sbin/dnwindow "$peer_node" "$session" "$scenario" pressure "$round" &
+            window_pid=$!
+            window_link=$(pp11_wait_new_link "$window_before" 100) || {
+                echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=pp11-window-link round=$round"
+                exit 1
+            }
+            echo "DNIV-INTEROP-PP11-WINDOW-LINK session=$session scenario=$scenario round=$round link=$window_link"
+            if ! pp11_wait_link_metric_exact "$window_link" tx-data 20 200; then
+                echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=pp11-window-limit round=$round link=$window_link"
+                exit 1
+            fi
+            echo "DNIV-INTEROP-PP11-WINDOW-LIMIT session=$session scenario=$scenario round=$round link=$window_link count=20"
+            if ! pp11_require_seq_live "$seq_pid" "$seq_log" "$seq_lines" "$round" window; then
+                echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=pp11-window-mirror round=$round"
+                exit 1
+            fi
+            if ! wait "$window_pid"; then
+                echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=pp11-window-client round=$round"
+                exit 1
+            fi
+
+            seq_lines=$(wc -l < "$seq_log")
+            int_before="/run/dniv-pp11-int-before-$round"
+            pp11_snapshot_links "$int_before"
+            echo "DNIV-INTEROP-PP11-INT-READY session=$session scenario=$scenario round=$round"
+            sleep 2
+            /usr/local/sbin/dnintflow "$peer_node" "$session" "$scenario" pressure "$round" &
+            int_pid=$!
+            int_link=$(pp11_wait_new_link "$int_before" 100) || {
+                echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=pp11-int-link round=$round"
+                exit 1
+            }
+            echo "DNIV-INTEROP-PP11-INT-LINK session=$session scenario=$scenario round=$round link=$int_link"
+            if ! pp11_wait_link_metric_exact "$int_link" tx-other 64 200; then
+                echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=pp11-retransmit-limit round=$round link=$int_link"
+                exit 1
+            fi
+            echo "DNIV-INTEROP-PP11-RETRANSMIT-LIMIT session=$session scenario=$scenario round=$round link=$int_link count=64"
+            if ! pp11_require_seq_live "$seq_pid" "$seq_log" "$seq_lines" "$round" retransmit; then
+                echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=pp11-retransmit-mirror round=$round"
+                exit 1
+            fi
+            if ! wait "$int_pid"; then
+                echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=pp11-retransmit-client round=$round"
+                exit 1
+            fi
+
+            if ! wait "$seq_pid"; then
+                cat "$seq_log" || true
+                echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=pp11-seqwrap round=$round"
+                exit 1
+            fi
+            cat "$seq_log"
+            if ! pp11_wait_round_recovery "$slab_baseline" "$round"; then
+                echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=pp11-round-recovery round=$round"
+                exit 1
+            fi
+            echo "DNIV-INTEROP-PP11-ROUND-PASS session=$session scenario=$scenario round=$round malformed_control=96 table=256 rx=32 backlog=64 window=20 retransmit=64"
+            round=$((round + 1))
+        done
+        echo "DNIV-INTEROP-PP11-PRESSURE-PASS session=$session scenario=$scenario rounds=3"
     fi
     if [ "$reserved_proof" = 1 ]; then
         reserved_before=$(nonhello_value || true)

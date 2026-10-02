@@ -27,8 +27,11 @@
 #define OVERFLOW_OBJECT 242U
 #define CLOSE_RACE_OBJECT 243U
 #define LISTENER_CLOSE_OBJECT 245U
+#define PRESSURE_OBJECT 248U
 #define BACKLOG_COUNT 4U
 #define OVERFLOW_BACKLOG 2U
+#define PRESSURE_BACKLOG 64U
+#define MAX_BACKLOG PRESSURE_BACKLOG
 
 static int parse_node(const char *text, uint16_t *address)
 {
@@ -78,18 +81,22 @@ int main(int argc, char **argv)
     unsigned int object = BACKLOG_OBJECT;
     unsigned int backlog = BACKLOG_COUNT;
     unsigned int accept_count = BACKLOG_COUNT;
-    int fds[BACKLOG_COUNT] = { -1, -1, -1, -1 };
+    int fds[MAX_BACKLOG];
     int overflow = 0;
     int close_race = 0;
     int listener_close = 0;
+    int pressure = 0;
+    const char *pressure_round = NULL;
     int listener;
 
     setvbuf(stdout, NULL, _IONBF, 0);
-    if ((argc != 4 && argc != 5) || parse_node(argv[1], &expected_node)) {
-        fprintf(stderr, "usage: %s PEER-AREA.NODE SESSION SCENARIO [overflow|close-race|listener-close]\n", argv[0]);
+    for (i = 0U; i < MAX_BACKLOG; i++)
+        fds[i] = -1;
+    if ((argc < 4 || argc > 6) || parse_node(argv[1], &expected_node)) {
+        fprintf(stderr, "usage: %s PEER-AREA.NODE SESSION SCENARIO [overflow|close-race|listener-close|pressure [ROUND]]\n", argv[0]);
         return 2;
     }
-    if (argc == 5) {
+    if (argc >= 5) {
         if (!strcmp(argv[4], "overflow")) {
             overflow = 1;
             object = OVERFLOW_OBJECT;
@@ -104,10 +111,24 @@ int main(int argc, char **argv)
             object = LISTENER_CLOSE_OBJECT;
             backlog = BACKLOG_COUNT;
             accept_count = 1U;
+        } else if (!strcmp(argv[4], "pressure")) {
+            if (argc != 6) {
+                fprintf(stderr, "pressure backlog requires ROUND\n");
+                return 2;
+            }
+            pressure = 1;
+            pressure_round = argv[5];
+            object = PRESSURE_OBJECT;
+            backlog = PRESSURE_BACKLOG;
+            accept_count = PRESSURE_BACKLOG;
         } else {
             fprintf(stderr, "unsupported backlog mode: %s\n", argv[4]);
             return 2;
         }
+    }
+    if (!pressure && argc == 6) {
+        fprintf(stderr, "ROUND is valid only with pressure mode\n");
+        return 2;
     }
 
     listener = make_listener(object, backlog);
@@ -115,10 +136,14 @@ int main(int argc, char **argv)
         perror("backlog listener");
         return 1;
     }
-    printf("DNIV-INTEROP-%s-READY session=%s scenario=%s count=%u\n",
-           overflow ? "OVERFLOW" : (close_race ? "CLOSE-RACE" :
-               (listener_close ? "LISTENER-CLOSE" : "BACKLOG")),
-           argv[2], argv[3], backlog);
+    if (pressure)
+        printf("DNIV-INTEROP-PRESSURE-BACKLOG-READY session=%s scenario=%s round=%s count=%u\n",
+               argv[2], argv[3], pressure_round, backlog);
+    else
+        printf("DNIV-INTEROP-%s-READY session=%s scenario=%s count=%u\n",
+               overflow ? "OVERFLOW" : (close_race ? "CLOSE-RACE" :
+                   (listener_close ? "LISTENER-CLOSE" : "BACKLOG")),
+               argv[2], argv[3], backlog);
 
     sleep(3);
     if (listener_close) {
@@ -247,14 +272,18 @@ int main(int argc, char **argv)
 done:
     if (listener >= 0)
         close(listener);
-    printf("DNIV-INTEROP-%s-SERVER-PASS session=%s scenario=%s count=%u\n",
-           overflow ? "OVERFLOW" : (close_race ? "CLOSE-RACE" :
-               (listener_close ? "LISTENER-CLOSE" : "BACKLOG")),
-           argv[2], argv[3], accept_count);
+    if (pressure)
+        printf("DNIV-INTEROP-PRESSURE-BACKLOG-SERVER-PASS session=%s scenario=%s round=%s count=%u\n",
+               argv[2], argv[3], pressure_round, accept_count);
+    else
+        printf("DNIV-INTEROP-%s-SERVER-PASS session=%s scenario=%s count=%u\n",
+               overflow ? "OVERFLOW" : (close_race ? "CLOSE-RACE" :
+                   (listener_close ? "LISTENER-CLOSE" : "BACKLOG")),
+               argv[2], argv[3], accept_count);
     return 0;
 
 fail_children:
-    for (i = 0U; i < BACKLOG_COUNT; i++) {
+    for (i = 0U; i < MAX_BACKLOG; i++) {
         if (fds[i] >= 0)
             close(fds[i]);
     }

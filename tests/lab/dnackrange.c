@@ -52,12 +52,22 @@ int main(int argc, char **argv)
     uint16_t address;
     size_t payload_len;
     ssize_t sent, got;
+    int pressure = 0;
+    const char *round = NULL;
     int fd;
 
     setvbuf(stdout, NULL, _IONBF, 0);
-    if (argc != 4 || parse_node(argv[1], &address)) {
-        fprintf(stderr, "usage: %s AREA.NODE SESSION SCENARIO\n", argv[0]);
+    if ((argc != 4 && argc != 6) || parse_node(argv[1], &address)) {
+        fprintf(stderr, "usage: %s AREA.NODE SESSION SCENARIO [pressure ROUND]\n", argv[0]);
         return 2;
+    }
+    if (argc == 6) {
+        if (strcmp(argv[4], "pressure")) {
+            fprintf(stderr, "unsupported mode: %s\n", argv[4]);
+            return 2;
+        }
+        pressure = 1;
+        round = argv[5];
     }
 
     fd = socket(AF_DECnet, SOCK_SEQPACKET, DNPROTO_NSP);
@@ -84,8 +94,12 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    printf("DNIV-INTEROP-ACKRANGE-CONNECTED session=%s scenario=%s peer=%s\n",
-           argv[2], argv[3], argv[1]);
+    if (pressure)
+        printf("DNIV-INTEROP-ACKRANGE-PRESSURE-CONNECTED session=%s scenario=%s peer=%s round=%s\n",
+               argv[2], argv[3], argv[1], round);
+    else
+        printf("DNIV-INTEROP-ACKRANGE-CONNECTED session=%s scenario=%s peer=%s\n",
+               argv[2], argv[3], argv[1]);
     sleep(3);
 
     tx[0] = 0U;
@@ -114,7 +128,30 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    if (pressure) {
+        printf("DNIV-INTEROP-ACKRANGE-PRESSURE-PRIMED session=%s scenario=%s peer=%s round=%s\n",
+               argv[2], argv[3], argv[1], round);
+        sleep(8);
+        sent = send(fd, tx, payload_len, MSG_EOR | MSG_NOSIGNAL);
+        if (sent != (ssize_t)payload_len) {
+            perror("send(MIRROR ack-range pressure recovery)");
+            close(fd);
+            return 1;
+        }
+        got = recv(fd, rx, sizeof(rx), 0);
+        if (got != (ssize_t)payload_len || rx[0] != 1U ||
+            memcmp(rx + 1U, tx + 1U, payload_len - 1U)) {
+            fprintf(stderr, "bad ack-range pressure recovery: got=%zd expected=%zu errno=%d\n",
+                    got, payload_len, errno);
+            close(fd);
+            return 1;
+        }
+        printf("DNIV-INTEROP-ACKRANGE-PRESSURE-PASS session=%s scenario=%s peer=%s round=%s\n",
+               argv[2], argv[3], argv[1], round);
+    }
+
     close(fd);
-    printf("dnackrange: pass peer=%s payload=%s\n", argv[1], ACKRANGE_PAYLOAD);
+    printf("dnackrange: pass peer=%s payload=%s%s\n", argv[1], ACKRANGE_PAYLOAD,
+           pressure ? " pressure" : "");
     return 0;
 }

@@ -91,6 +91,8 @@ peer_segsize=${DNIV_INTEROP_PEER_SEGMENT_SIZE:-0}
 [[ "$peer_segsize" =~ ^[0-9]+$ ]] || { echo "interop: bad peer segment size" >&2; exit 2; }
 flow_proof=${DNIV_INTEROP_FLOW_PROOF:-0}
 [[ "$flow_proof" =~ ^[01]$ ]] || { echo "interop: bad flow-proof selector" >&2; exit 2; }
+pp11_pressure=${DNIV_INTEROP_PP11_PRESSURE:-0}
+[[ "$pp11_pressure" =~ ^[01]$ ]] || { echo "interop: bad PP-11 pressure selector" >&2; exit 2; }
 churn_cycles=${DNIV_INTEROP_CHURN_CYCLES:-16}
 [[ "$churn_cycles" =~ ^[1-9][0-9]*$ ]] || { echo "interop: bad churn-cycle count" >&2; exit 2; }
 (( churn_cycles <= 10000 )) || { echo "interop: churn-cycle count exceeds bound" >&2; exit 2; }
@@ -104,6 +106,21 @@ if [[ "$reference" == pydecnet && "$scenario" == l1 && "$(uname -m)" == x86_64 ]
 fi
 work="$artifacts/$session"
 mkdir -p "$work"
+pressure_env="$work/pp11-pressure.env"
+if [[ "$pp11_pressure" == 1 ]]; then
+    cat > "$pressure_env" <<EOF_PRESSURE
+result=FAIL
+rounds_expected=3
+sequence_modulus=4096
+connection_table_limit=256
+retransmit_queue_limit=64
+rx_queue_limit=32
+data_window_limit=20
+listener_backlog_limit=64
+malformed_control_per_round=96
+slab_envelope_bytes=67108864
+EOF_PRESSURE
+fi
 pcap="$work/lan.pcap"
 candidate_log="$work/candidate.serial.log"
 ref1_log="$work/reference-1.serial.log"
@@ -140,7 +157,8 @@ cleanup() {
     terminate_pid "${REFERENCE_PID:-}"
     terminate_pid "${HOST_PROBE_PID:-}"
     terminate_pid "${CCRETRY_PID:-}"
-    if [[ -n "${LOSS_QDISC:-}" || -n "${RESERVED_QDISC:-}" ]]; then
+    terminate_pid "${PRESSURE_INJECT_PID:-}"
+    if [[ -n "${LOSS_QDISC:-}" || -n "${RESERVED_QDISC:-}" || -n "${PRESSURE_QDISC:-}" ]]; then
         sudo tc qdisc del dev "$tap_reference" clsact 2>/dev/null || true
     fi
     rm -f "${host_pydecnet_api:-}"
@@ -358,7 +376,7 @@ if ! wait_marker "$ref1_log" "$reference_ready_marker" "$reference_ready_seconds
     exit 1
 fi
 
-candidate_common="root=LABEL=dniv-root rootfstype=ext4 rw dniv.interop=1 dniv.reference=$reference dniv.area=$area dniv.node=$node dniv.name=$name dniv.peer_node=$ref_area.$ref_node dniv.scenario=$scenario dniv.session=$session dniv.timer_proof=$timer_proof dniv.reserved_proof=$reserved_proof dniv.flow_proof=$flow_proof dniv.churn_cycles=$churn_cycles"
+candidate_common="root=LABEL=dniv-root rootfstype=ext4 rw dniv.interop=1 dniv.reference=$reference dniv.area=$area dniv.node=$node dniv.name=$name dniv.peer_node=$ref_area.$ref_node dniv.scenario=$scenario dniv.session=$session dniv.timer_proof=$timer_proof dniv.reserved_proof=$reserved_proof dniv.flow_proof=$flow_proof dniv.pp11_pressure=$pp11_pressure dniv.churn_cycles=$churn_cycles"
 start_vm "candidate-$scenario" "$candidate_disk" "$tap_candidate" "$candidate_hw" "$candidate_log" "$candidate_common" & CANDIDATE_PID=$!
 if [[ "$reference" == pydecnet ]]; then
     if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-CTERM-READY session=$session scenario=$scenario" "$timeout_seconds" "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
@@ -1398,6 +1416,221 @@ if [[ "$reference" == pydecnet && "$scenario" != router-endnode ]]; then
         exit 1
     fi
 fi
+if [[ "$pp11_pressure" == 1 ]]; then
+    if [[ "$reference" != pydecnet || "$scenario" != l1 ]]; then
+        echo "interop: PP-11 pressure requires PyDECnet L1" >&2
+        exit 2
+    fi
+    for pressure_round in 1 2 3; do
+        round_prefix="DNIV-INTEROP-PP11"
+        if ! wait_candidate_marker "$candidate_log" "$round_prefix-ROUND-START session=$session scenario=$scenario round=$pressure_round" 60 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+            tail -360 "$candidate_log" >&2 || true
+            exit 1
+        fi
+
+        if ! wait_candidate_marker "$candidate_log" "$round_prefix-TABLE-READY session=$session scenario=$scenario round=$pressure_round" 30 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+            tail -360 "$candidate_log" >&2 || true
+            exit 1
+        fi
+        table_log="$work/pp11-pressure-table-$pressure_round.log"
+        printf 'fault=pp11-control-reply-isolation round=%s\n' "$pressure_round" > "$table_log"
+        sudo tc qdisc add dev "$tap_reference" clsact
+        PRESSURE_QDISC=1
+        for control_flag in 0x28 0x38 0x48; do
+            sudo tc filter add dev "$tap_reference" egress protocol all pref 20 u32 \
+                match u8 "$control_flag" 0xff at 8 action drop
+        done
+        if ! timeout 30s sudo python3 "$script_dir/inject-nsp-reserved.py" \
+            "$bridge" "$candidate_mac" "$ref_area.$ref_node" "$area.$node" \
+            >>"$table_log" 2>&1; then
+            cat "$table_log" >&2 || true
+            exit 1
+        fi
+        if ! wait_candidate_marker "$candidate_log" "$round_prefix-TABLE-LIMIT session=$session scenario=$scenario round=$pressure_round count=256" 30 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+            cat "$table_log" >&2 || true
+            tail -420 "$candidate_log" >&2 || true
+            exit 1
+        fi
+        if ! wait_candidate_marker "$candidate_log" "$round_prefix-MIRROR-LIVE session=$session scenario=$scenario round=$pressure_round phase=table" 15 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+            tail -420 "$candidate_log" >&2 || true
+            exit 1
+        fi
+        table_stats=$(sudo tc -s filter show dev "$tap_reference" egress)
+        printf '%s\n' "$table_stats" >> "$table_log"
+        if ! printf '%s\n' "$table_stats" | grep -Eq 'Sent [0-9]+ bytes [1-9][0-9]* pkt'; then
+            echo "interop: PP-11 table isolation matched no control replies" >&2
+            cat "$table_log" >&2
+            exit 1
+        fi
+        fault_evidence --path "$table_log" --name "pp11-table-$pressure_round" \
+            --require-tc-active --require-marker "reserved-inject: pass"
+        sudo tc qdisc del dev "$tap_reference" clsact
+        unset PRESSURE_QDISC
+
+        if ! wait_candidate_marker "$candidate_log" "$round_prefix-RX-READY session=$session scenario=$scenario round=$pressure_round" 90 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+            tail -440 "$candidate_log" >&2 || true
+            exit 1
+        fi
+        rx_log="$work/pp11-pressure-rx-$pressure_round.log"
+        if ! timeout 35s sudo python3 "$script_dir/inject-nsp-ackrange.py" \
+            "$bridge" "$bridge" "$candidate_mac" "$ref_area.$ref_node" "$area.$node" \
+            pressure "$pressure_round" >"$rx_log" 2>&1; then
+            cat "$rx_log" >&2 || true
+            tail -440 "$candidate_log" >&2 || true
+            exit 1
+        fi
+        cat "$rx_log"
+        grep -Fq "ack-range-inject: pressure pass round=$pressure_round malformed_control=96 rx_future=32 gap_release=1" "$rx_log"
+        if ! wait_candidate_marker "$candidate_log" "$round_prefix-RX-LIMIT session=$session scenario=$scenario round=$pressure_round" 20 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+            tail -460 "$candidate_log" >&2 || true
+            exit 1
+        fi
+        if ! wait_candidate_marker "$candidate_log" "$round_prefix-MIRROR-LIVE session=$session scenario=$scenario round=$pressure_round phase=rx" 15 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+            tail -460 "$candidate_log" >&2 || true
+            exit 1
+        fi
+        fault_evidence --path "$rx_log" --name "pp11-rx-malformed-$pressure_round" \
+            --require-marker "malformed_control=96 rx_future=32 gap_release=1"
+
+        if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-PRESSURE-BACKLOG-READY session=$session scenario=$scenario round=$pressure_round count=64" 30 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+            tail -460 "$candidate_log" >&2 || true
+            exit 1
+        fi
+        backlog_log="$work/pp11-pressure-backlog-$pressure_round.log"
+        if ! timeout 100s env PYTHONPATH="$host_pydecnet/pydecnet" python3 \
+            "$script_dir/pydecnet-backlog.py" "$host_pydecnet_api" \
+            "$area.$node" "$ref_name" pressure >"$backlog_log" 2>&1; then
+            cat "$backlog_log" >&2 || true
+            tail -480 "$candidate_log" >&2 || true
+            exit 1
+        fi
+        cat "$backlog_log"
+        grep -Fq "pydecnet-backlog: pressure pass peer=$area.$node accepted=64 busy=1" "$backlog_log"
+        if ! wait_candidate_marker "$candidate_log" "$round_prefix-BACKLOG-PASS session=$session scenario=$scenario round=$pressure_round accepted=64 busy=1" 90 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+            tail -480 "$candidate_log" >&2 || true
+            exit 1
+        fi
+        if ! wait_candidate_marker "$candidate_log" "$round_prefix-MIRROR-LIVE session=$session scenario=$scenario round=$pressure_round phase=backlog" 15 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+            tail -480 "$candidate_log" >&2 || true
+            exit 1
+        fi
+
+        window_marker="$round_prefix-WINDOW-LINK session=$session scenario=$scenario round=$pressure_round link="
+        if ! wait_candidate_marker "$candidate_log" "$window_marker" 30 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+            tail -500 "$candidate_log" >&2 || true
+            exit 1
+        fi
+        window_line=$(grep -F "$window_marker" "$candidate_log" | tail -1)
+        window_link=${window_line##*link=}
+        [[ "$window_link" =~ ^[0-9]+$ ]] || { echo "interop: invalid PP-11 window link: $window_link" >&2; exit 1; }
+        if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-WINDOW-PRESSURE-PRIMED session=$session scenario=$scenario peer=$ref_area.$ref_node round=$pressure_round" 20 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+            tail -500 "$candidate_log" >&2 || true
+            exit 1
+        fi
+        window_lo=$(printf '0x%02x' $((window_link & 255)))
+        window_hi=$(printf '0x%02x' $(((window_link >> 8) & 255)))
+        window_log="$work/pp11-pressure-window-$pressure_round.log"
+        printf 'fault=pp11-link-selective-reply-drop round=%s link=%s\n' "$pressure_round" "$window_link" > "$window_log"
+        sudo tc qdisc add dev "$tap_reference" clsact
+        PRESSURE_QDISC=1
+        sudo tc filter add dev "$tap_reference" ingress protocol all pref 30 u32 \
+            match u8 "$window_lo" 0xff at 9 \
+            match u8 "$window_hi" 0xff at 10 action drop
+        if ! wait_candidate_marker "$candidate_log" "$round_prefix-WINDOW-LIMIT session=$session scenario=$scenario round=$pressure_round link=$window_link count=20" 30 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+            sudo tc -s filter show dev "$tap_reference" ingress >>"$window_log" 2>&1 || true
+            cat "$window_log" >&2 || true
+            tail -520 "$candidate_log" >&2 || true
+            exit 1
+        fi
+        if ! wait_candidate_marker "$candidate_log" "$round_prefix-MIRROR-LIVE session=$session scenario=$scenario round=$pressure_round phase=window" 15 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+            tail -520 "$candidate_log" >&2 || true
+            exit 1
+        fi
+        window_stats=$(sudo tc -s filter show dev "$tap_reference" ingress)
+        printf '%s\n' "$window_stats" >> "$window_log"
+        if ! printf '%s\n' "$window_stats" | grep -Eq 'Sent [0-9]+ bytes [1-9][0-9]* pkt'; then
+            echo "interop: PP-11 window selective drop matched no replies" >&2
+            cat "$window_log" >&2
+            exit 1
+        fi
+        fault_evidence --path "$window_log" --name "pp11-window-$pressure_round" --require-tc-active
+        sudo tc qdisc del dev "$tap_reference" clsact
+        unset PRESSURE_QDISC
+
+        if ! wait_candidate_marker "$candidate_log" "$round_prefix-INT-READY session=$session scenario=$scenario round=$pressure_round" 30 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+            tail -520 "$candidate_log" >&2 || true
+            exit 1
+        fi
+        int_log="$work/pp11-pressure-retransmit-$pressure_round.log"
+        timeout 45s sudo python3 "$script_dir/inject-nsp-intflow.py" \
+            "$bridge" "$bridge" "$candidate_mac" "$ref_area.$ref_node" "$area.$node" \
+            pressure "$pressure_round" >"$int_log" 2>&1 &
+        PRESSURE_INJECT_PID=$!
+        int_marker="$round_prefix-INT-LINK session=$session scenario=$scenario round=$pressure_round link="
+        if ! wait_candidate_marker "$candidate_log" "$int_marker" 30 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+            terminate_pid "$PRESSURE_INJECT_PID"
+            unset PRESSURE_INJECT_PID
+            tail -540 "$candidate_log" >&2 || true
+            exit 1
+        fi
+        int_line=$(grep -F "$int_marker" "$candidate_log" | tail -1)
+        int_link=${int_line##*link=}
+        [[ "$int_link" =~ ^[0-9]+$ ]] || { echo "interop: invalid PP-11 interrupt link: $int_link" >&2; exit 1; }
+        if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-INTFLOW-PRESSURE-PRIMED session=$session scenario=$scenario peer=$ref_area.$ref_node round=$pressure_round" 20 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+            terminate_pid "$PRESSURE_INJECT_PID"
+            unset PRESSURE_INJECT_PID
+            tail -540 "$candidate_log" >&2 || true
+            exit 1
+        fi
+        int_lo=$(printf '0x%02x' $((int_link & 255)))
+        int_hi=$(printf '0x%02x' $(((int_link >> 8) & 255)))
+        sudo tc qdisc add dev "$tap_reference" clsact
+        PRESSURE_QDISC=1
+        sudo tc filter add dev "$tap_reference" ingress protocol all pref 31 u32 \
+            match u8 "$int_lo" 0xff at 9 \
+            match u8 "$int_hi" 0xff at 10 action drop
+        if ! wait_candidate_marker "$candidate_log" "$round_prefix-RETRANSMIT-LIMIT session=$session scenario=$scenario round=$pressure_round link=$int_link count=64" 30 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+            sudo tc -s filter show dev "$tap_reference" ingress >>"$int_log" 2>&1 || true
+            cat "$int_log" >&2 || true
+            tail -560 "$candidate_log" >&2 || true
+            exit 1
+        fi
+        if ! wait_candidate_marker "$candidate_log" "$round_prefix-MIRROR-LIVE session=$session scenario=$scenario round=$pressure_round phase=retransmit" 15 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+            tail -560 "$candidate_log" >&2 || true
+            exit 1
+        fi
+        if ! wait "$PRESSURE_INJECT_PID"; then
+            unset PRESSURE_INJECT_PID
+            cat "$int_log" >&2 || true
+            tail -560 "$candidate_log" >&2 || true
+            exit 1
+        fi
+        unset PRESSURE_INJECT_PID
+        cat "$int_log"
+        grep -Fq "intflow-inject: pressure pass round=$pressure_round credit=100 interrupts=64" "$int_log"
+        int_stats=$(sudo tc -s filter show dev "$tap_reference" ingress)
+        printf '%s\n' "$int_stats" >> "$int_log"
+        if ! printf '%s\n' "$int_stats" | grep -Eq 'Sent [0-9]+ bytes [1-9][0-9]* pkt'; then
+            echo "interop: PP-11 retransmit selective drop matched no replies" >&2
+            cat "$int_log" >&2
+            exit 1
+        fi
+        fault_evidence --path "$int_log" --name "pp11-retransmit-$pressure_round" \
+            --require-tc-active --require-marker "credit=100 interrupts=64"
+        sudo tc qdisc del dev "$tap_reference" clsact
+        unset PRESSURE_QDISC
+
+        if ! wait_candidate_marker "$candidate_log" "$round_prefix-ROUND-PASS session=$session scenario=$scenario round=$pressure_round malformed_control=96 table=256 rx=32 backlog=64 window=20 retransmit=64" 240 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+            tail -600 "$candidate_log" >&2 || true
+            exit 1
+        fi
+    done
+    if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-PP11-PRESSURE-PASS session=$session scenario=$scenario rounds=3" 30 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
+        tail -620 "$candidate_log" >&2 || true
+        exit 1
+    fi
+    printf 'host_pressure_phases=PASS\n' >> "$pressure_env"
+fi
 if [[ "$reserved_proof" == 1 ]]; then
     if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-RESERVED-READY session=$session scenario=$scenario" 30 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
         tail -320 "$candidate_log" >&2 || true
@@ -1481,6 +1714,9 @@ fi
 if [[ "$reserved_proof" == 1 ]]; then
     validator_args+=(--reserved-proof)
 fi
+if [[ "$pp11_pressure" == 1 ]]; then
+    validator_args+=(--pp11-pressure)
+fi
 if (( peer_segsize != 0 )); then
     validator_args+=(--peer-segsize "$peer_segsize")
 fi
@@ -1490,6 +1726,14 @@ python3 "$script_dir/validate-interop-pcap.py" "$pcap" "$reference" "$scenario" 
 
 if [[ "$reference" == pydecnet ]]; then
     grep -Fq "DNIV-INTEROP-SOCKET-LIFECYCLE session=$session scenario=$scenario node=$name peer=$ref_area.$ref_node cycles=$churn_cycles" "$candidate_log"
+fi
+if [[ "$pp11_pressure" == 1 ]]; then
+    grep -Fq "DNIV-INTEROP-PP11-PRESSURE-PASS session=$session scenario=$scenario rounds=3" "$candidate_log"
+    {
+        grep -v '^result=' "$pressure_env"
+        printf 'validator=PASS\nresult=PASS\n'
+    } > "$pressure_env.tmp"
+    mv "$pressure_env.tmp" "$pressure_env"
 fi
 grep -Fq "DNIV-INTEROP-RECOVERED session=$session scenario=$scenario" "$candidate_log"
 ! grep -Fq 'DNIV-INTEROP-FAIL' "$candidate_log"

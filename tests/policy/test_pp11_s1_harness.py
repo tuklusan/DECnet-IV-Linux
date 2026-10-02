@@ -22,6 +22,15 @@ LAB = (ROOT / "tests/lab/dniv_lab.py").read_text(encoding="utf-8")
 SMOKE = (ROOT / "tests/lab/dniv-smoke.sh").read_text(encoding="utf-8")
 CONTROL = (ROOT / "tests/lab/dniv_pp11_s1.py").read_text(encoding="utf-8")
 VM_WORKFLOW = (ROOT / ".github/workflows/vm-lab.yml").read_text(encoding="utf-8")
+INTEROP_WORKFLOW = (ROOT / ".github/workflows/interop.yml").read_text(encoding="utf-8")
+INTEROP_RUN = (ROOT / "tests/lab/run-interop.sh").read_text(encoding="utf-8")
+INTEROP_SMOKE = (ROOT / "tests/lab/dniv-interop-smoke.sh").read_text(encoding="utf-8")
+SEQWRAP = (ROOT / "tests/lab/dnseqwrap.c").read_text(encoding="utf-8")
+BACKLOG = (ROOT / "tests/lab/dnbacklog.c").read_text(encoding="utf-8")
+PY_BACKLOG = (ROOT / "tests/lab/pydecnet-backlog.py").read_text(encoding="utf-8")
+ACKRANGE = (ROOT / "tests/lab/inject-nsp-ackrange.py").read_text(encoding="utf-8")
+INTFLOW = (ROOT / "tests/lab/inject-nsp-intflow.py").read_text(encoding="utf-8")
+PCAP = (ROOT / "tests/lab/validate-interop-pcap.py").read_text(encoding="utf-8")
 
 
 def main() -> int:
@@ -50,6 +59,55 @@ def main() -> int:
     handoff = "pp11_observe 35\n            # The observer records the peer's final UP transition"
     if handoff not in SMOKE or "sleep 25\n            pp11_actor" not in SMOKE:
         raise SystemExit("pp11-s1 regression: missing reciprocal actor handoff gap")
+
+    workflow_markers = (
+        "pp11_pressure=1",
+        "peer_segsize=128",
+        'DNIV_INTEROP_PP11_PRESSURE="$pp11_pressure"',
+    )
+    for marker in workflow_markers:
+        if marker not in INTEROP_WORKFLOW:
+            raise SystemExit(f"pp11-s1 regression: missing pressure workflow marker: {marker}")
+    if "'${{ matrix.arch }}' == amd64" in INTEROP_WORKFLOW.split("pp11_pressure=1", 1)[0].splitlines()[-4:]:
+        raise SystemExit("pp11-s1 regression: pressure gate must run on both architectures")
+
+    pressure_limits = (
+        "connection_table_limit=256",
+        "retransmit_queue_limit=64",
+        "rx_queue_limit=32",
+        "data_window_limit=20",
+        "listener_backlog_limit=64",
+        "malformed_control_per_round=96",
+        "slab_envelope_bytes=67108864",
+        "result=FAIL",
+        "--pp11-pressure",
+    )
+    for marker in pressure_limits:
+        if marker not in INTEROP_RUN:
+            raise SystemExit(f"pp11-s1 regression: missing fail-closed pressure marker: {marker}")
+    smoke_markers = (
+        'while [ "$round" -le 3 ]',
+        "count=256",
+        "count=32",
+        "accepted=64 busy=1",
+        "count=20",
+        "count=64",
+        "PP11-MIRROR-LIVE",
+        "pp11_wait_round_recovery",
+    )
+    for marker in smoke_markers:
+        if marker not in INTEROP_SMOKE:
+            raise SystemExit(f"pp11-s1 regression: missing pressure guest marker: {marker}")
+    if "#define PRESSURE_RECORDS 650U" not in SEQWRAP or             "#define PRESSURE_PAUSE_NS 250000000L" not in SEQWRAP:
+        raise SystemExit("pp11-s1 regression: pressure sequence-wrap duration/count changed")
+    if "#define PRESSURE_BACKLOG 64U" not in BACKLOG or             "PRESSURE_COUNT = 65" not in PY_BACKLOG:
+        raise SystemExit("pp11-s1 regression: pressure backlog boundary changed")
+    if "malformed_control=96 rx_future=32" not in ACKRANGE:
+        raise SystemExit("pp11-s1 regression: malformed/RX pressure count changed")
+    if "credit=100 interrupts=64" not in INTFLOW:
+        raise SystemExit("pp11-s1 regression: interrupt retransmit pressure count changed")
+    if "candidate_sequence_wraps" not in PCAP or "candidate_no_resources_dc" not in PCAP:
+        raise SystemExit("pp11-s1 regression: missing independent PCAP pressure evidence")
     print("pp11-s1 regression passed")
     return 0
 

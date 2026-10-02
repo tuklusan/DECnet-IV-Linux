@@ -12,6 +12,8 @@
 // patent, trademark, and governing-law provisions.
 // ============================================================================
 
+#define _POSIX_C_SOURCE 200809L
+
 #include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -19,12 +21,15 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/time.h>
+#include <time.h>
 #include <unistd.h>
 
 #include <linux/dn.h>
 
 #define RECORD_SIZE 4096U
 #define RECORDS 130U
+#define PRESSURE_RECORDS 650U
+#define PRESSURE_PAUSE_NS 250000000L
 
 static int parse_node(const char *text, uint16_t *address)
 {
@@ -52,11 +57,29 @@ int main(int argc, char **argv)
     struct timeval timeout = { .tv_sec = 30, .tv_usec = 0 };
     uint16_t address;
     unsigned int record;
+    unsigned int records = RECORDS;
+    unsigned long round = 0;
+    int pressure = 0;
     int fd;
 
     setvbuf(stdout, NULL, _IONBF, 0);
-    if (argc != 2 || parse_node(argv[1], &address)) {
-        fprintf(stderr, "usage: %s AREA.NODE\n", argv[0]);
+    if (parse_node(argc > 1 ? argv[1] : "", &address)) {
+        fprintf(stderr, "usage: %s AREA.NODE [pressure ROUND]\n", argv[0]);
+        return 2;
+    }
+    if (argc == 4 && !strcmp(argv[2], "pressure")) {
+        char *end;
+
+        errno = 0;
+        round = strtoul(argv[3], &end, 10);
+        if (errno || end == argv[3] || *end || round < 1UL || round > 3UL) {
+            fprintf(stderr, "invalid pressure round: %s\n", argv[3]);
+            return 2;
+        }
+        pressure = 1;
+        records = PRESSURE_RECORDS;
+    } else if (argc != 2) {
+        fprintf(stderr, "usage: %s AREA.NODE [pressure ROUND]\n", argv[0]);
         return 2;
     }
 
@@ -84,7 +107,7 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    for (record = 0; record < RECORDS; record++) {
+    if (pressure)\n        printf("DNIV-PP11-SEQWRAP-START round=%lu records=%u pause_ms=250\\n",\n               round, records);\n\n    for (record = 0; record < records; record++) {
         size_t i;
         ssize_t sent, got;
 
@@ -117,10 +140,22 @@ int main(int argc, char **argv)
             close(fd);
             return 1;
         }
+        if (pressure) {
+            struct timespec pause = { .tv_sec = 0, .tv_nsec = PRESSURE_PAUSE_NS };
+
+            if ((record + 1U) % 25U == 0U)
+                printf("DNIV-PP11-SEQWRAP-LIVE round=%lu records=%u\n",
+                       round, record + 1U);
+            while (nanosleep(&pause, &pause) && errno == EINTR)
+                ;
+        }
     }
 
     close(fd);
+    if (pressure)
+        printf("DNIV-PP11-SEQWRAP-PASS round=%lu records=%u bytes=%u\n",
+               round, records, records * RECORD_SIZE);
     printf("dnseqwrap: pass peer=%s records=%u bytes=%u\n",
-           argv[1], RECORDS, RECORDS * RECORD_SIZE);
+           argv[1], records, records * RECORD_SIZE);
     return 0;
 }

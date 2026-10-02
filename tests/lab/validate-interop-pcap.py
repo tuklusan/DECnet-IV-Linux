@@ -172,6 +172,18 @@ def data_payload_len(nsp: bytes) -> int | None:
     return len(nsp) - off - 2
 
 
+def data_sequence(nsp: bytes) -> int | None:
+    if not nsp or (nsp[0] & 0x9F) != 0:
+        return None
+    off = 5
+    for _ in range(2):
+        if off + 2 <= len(nsp) and int.from_bytes(nsp[off:off + 2], "little") & 0x8000:
+            off += 2
+    if off + 2 > len(nsp):
+        raise ValueError("truncated NSP Data sequence")
+    return int.from_bytes(nsp[off:off + 2], "little") & 0x0FFF
+
+
 def cc_data(nsp: bytes) -> bytes | None:
     if not nsp or nsp[0] != 0x28:
         return None
@@ -267,6 +279,7 @@ def main() -> int:
     p.add_argument("reference_hw", type=mac)
     p.add_argument("--timer-proof", action="store_true")
     p.add_argument("--reserved-proof", action="store_true")
+    p.add_argument("--pp11-pressure", action="store_true")
     p.add_argument("--peer-segsize", type=int, default=0)
     args = p.parse_args()
 
@@ -314,6 +327,9 @@ def main() -> int:
     bad_hello_hw = 0
     drain_link = None
     drain_data_seen = 0
+    candidate_link_generation: dict[bytes, int] = {}
+    candidate_seq_last: dict[tuple[bytes, int], int] = {}
+    candidate_seq_wraps: dict[tuple[bytes, int], int] = {}
 
     for frame in packets(args.pcap):
         parsed = routing_payload(frame)
@@ -324,7 +340,23 @@ def main() -> int:
         if nsp is not None:
             if src == args.candidate_mac:
                 counts["candidate_nsp"] += 1
+                if nsp[0] == 0x18 and len(nsp) >= 5:
+                    link = nsp[3:5]
+                    candidate_link_generation[link] = candidate_link_generation.get(link, 0) + 1
                 dlen = data_payload_len(nsp)
+                seq = data_sequence(nsp)
+                if seq is not None and len(nsp) >= 5:
+                    link = nsp[3:5]
+                    key = (link, candidate_link_generation.get(link, 0))
+                    previous = candidate_seq_last.get(key)
+                    if previous is None:
+                        candidate_seq_last[key] = seq
+                    else:
+                        delta = (seq - previous) & 0x0FFF
+                        if 0 < delta < 2048:
+                            if seq < previous:
+                                candidate_seq_wraps[key] = candidate_seq_wraps.get(key, 0) + 1
+                            candidate_seq_last[key] = seq
                 if dlen is not None:
                     counts["candidate_data_segments"] += 1
                     if args.peer_segsize:
@@ -498,6 +530,20 @@ def main() -> int:
                 raise SystemExit("interop pcap: missing candidate DC No Resources response")
             if counts["candidate_no_link_dc"] < 1:
                 raise SystemExit("interop pcap: missing candidate DC No Link response")
+        if args.pp11_pressure:
+            wrapped_links = [value for value in candidate_seq_wraps.values() if value >= 2]
+            total_wraps = sum(candidate_seq_wraps.values())
+            counts["candidate_sequence_wraps"] = total_wraps
+            counts["candidate_multiwrap_links"] = len(wrapped_links)
+            if len(wrapped_links) < 3 or total_wraps < 6:
+                raise SystemExit(
+                    "interop pcap: PP-11 pressure missing repeated modulo-4096 sequence wraps "
+                    f"links={len(wrapped_links)} wraps={total_wraps}"
+                )
+            if counts["candidate_no_resources_dc"] < 3:
+                raise SystemExit(
+                    "interop pcap: PP-11 pressure missing per-round DC No Resources evidence"
+                )
         if args.scenario != "router-endnode":
             if counts["candidate_interrupt"] < 2:
                 raise SystemExit("interop pcap: missing candidate NSP interrupt traffic")

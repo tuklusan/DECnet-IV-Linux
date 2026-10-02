@@ -28,6 +28,8 @@
 #define INT_THREE "DNIV-IFLOW-3"
 #define INT_FOUR "DNIV-IFLOW-4"
 #define RECOVER_PAYLOAD "DNIV-IFLOW-DATA"
+#define PRESSURE_PRIME "DNIV-IFLOW-PRESSURE-PRIME"
+#define PRESSURE_INTERRUPTS 64U
 
 static int parse_node(const char *text, uint16_t *address)
 {
@@ -68,12 +70,22 @@ int main(int argc, char **argv)
     uint16_t address;
     size_t payload_len;
     ssize_t sent, got;
+    int pressure = 0;
+    const char *round = NULL;
     int fd;
 
     setvbuf(stdout, NULL, _IONBF, 0);
-    if (argc != 4 || parse_node(argv[1], &address)) {
-        fprintf(stderr, "usage: %s AREA.NODE SESSION SCENARIO\n", argv[0]);
+    if ((argc != 4 && argc != 6) || parse_node(argv[1], &address)) {
+        fprintf(stderr, "usage: %s AREA.NODE SESSION SCENARIO [pressure ROUND]\n", argv[0]);
         return 2;
+    }
+    if (argc == 6) {
+        if (strcmp(argv[4], "pressure")) {
+            fprintf(stderr, "unsupported mode: %s\n", argv[4]);
+            return 2;
+        }
+        pressure = 1;
+        round = argv[5];
     }
 
     fd = socket(AF_DECnet, SOCK_SEQPACKET, DNPROTO_NSP);
@@ -98,6 +110,81 @@ int main(int argc, char **argv)
         perror("connect(MIRROR interrupt-flow probe)");
         close(fd);
         return 1;
+    }
+
+    if (pressure) {
+        char payload[32];
+        unsigned int i;
+
+        tx[0] = 0U;
+        memcpy(tx + 1U, PRESSURE_PRIME, sizeof(PRESSURE_PRIME) - 1U);
+        payload_len = sizeof(PRESSURE_PRIME);
+        sent = send(fd, tx, payload_len, MSG_EOR | MSG_NOSIGNAL);
+        if (sent != (ssize_t)payload_len) {
+            perror("send(interrupt pressure prime)");
+            close(fd);
+            return 1;
+        }
+        got = recv(fd, rx, sizeof(rx), 0);
+        if (got != (ssize_t)payload_len || rx[0] != 1U ||
+            memcmp(rx + 1U, tx + 1U, payload_len - 1U)) {
+            fprintf(stderr, "bad interrupt pressure prime reply: got=%zd errno=%d\n",
+                    got, errno);
+            close(fd);
+            return 1;
+        }
+        printf("DNIV-INTEROP-INTFLOW-PRESSURE-PRIMED session=%s scenario=%s peer=%s round=%s\n",
+               argv[2], argv[3], argv[1], round);
+        sleep(5);
+
+        if (send_oob(fd, "DNIV-IPR-01", 0)) {
+            perror("send(first pressure interrupt)");
+            close(fd);
+            return 1;
+        }
+        sleep(1);
+        for (i = 2U; i <= PRESSURE_INTERRUPTS; i++) {
+            snprintf(payload, sizeof(payload), "DNIV-IPR-%02u", i);
+            if (send_oob(fd, payload, MSG_DONTWAIT)) {
+                fprintf(stderr, "pressure interrupt %u failed early errno=%d (%s)\n",
+                        i, errno, strerror(errno));
+                close(fd);
+                return 1;
+            }
+        }
+        errno = 0;
+        if (!send_oob(fd, "DNIV-IPR-65", MSG_DONTWAIT) ||
+            (errno != EAGAIN && errno != EWOULDBLOCK && errno != ENOBUFS)) {
+            fprintf(stderr, "65th pressure interrupt was not bounded: errno=%d\n",
+                    errno);
+            close(fd);
+            return 1;
+        }
+        printf("DNIV-INTEROP-INTFLOW-PRESSURE-FULL session=%s scenario=%s peer=%s round=%s count=%u errno=%d\n",
+               argv[2], argv[3], argv[1], round, PRESSURE_INTERRUPTS, errno);
+        sleep(8);
+
+        tx[0] = 0U;
+        memcpy(tx + 1U, RECOVER_PAYLOAD, sizeof(RECOVER_PAYLOAD) - 1U);
+        payload_len = sizeof(RECOVER_PAYLOAD);
+        sent = send(fd, tx, payload_len, MSG_EOR | MSG_NOSIGNAL);
+        if (sent != (ssize_t)payload_len) {
+            perror("send(interrupt pressure recovery)");
+            close(fd);
+            return 1;
+        }
+        got = recv(fd, rx, sizeof(rx), 0);
+        if (got != (ssize_t)payload_len || rx[0] != 1U ||
+            memcmp(rx + 1U, tx + 1U, payload_len - 1U)) {
+            fprintf(stderr, "bad interrupt pressure recovery reply: got=%zd errno=%d\n",
+                    got, errno);
+            close(fd);
+            return 1;
+        }
+        close(fd);
+        printf("dnintflow: pressure pass peer=%s queued=%u blocked=1 recovered=1\n",
+               argv[1], PRESSURE_INTERRUPTS);
+        return 0;
     }
 
     printf("DNIV-INTEROP-INTFLOW-CONNECTED session=%s scenario=%s peer=%s\n",
