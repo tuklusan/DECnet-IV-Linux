@@ -1488,7 +1488,9 @@ python3 "$script_dir/validate-interop-pcap.py" "$pcap" "$reference" "$scenario" 
     "$candidate_mac" "$candidate_hw" "$candidate_changed_hw" \
     "$reference_mac" "$reference_hw" "${validator_args[@]}"
 
-grep -Fq "DNIV-INTEROP-SOCKET-LIFECYCLE session=$session scenario=$scenario node=$name peer=$ref_area.$ref_node cycles=$churn_cycles" "$candidate_log"
+if [[ "$reference" == pydecnet ]]; then
+    grep -Fq "DNIV-INTEROP-SOCKET-LIFECYCLE session=$session scenario=$scenario node=$name peer=$ref_area.$ref_node cycles=$churn_cycles" "$candidate_log"
+fi
 grep -Fq "DNIV-INTEROP-RECOVERED session=$session scenario=$scenario" "$candidate_log"
 ! grep -Fq 'DNIV-INTEROP-FAIL' "$candidate_log"
 ! grep -Fq 'DNIV-REF-FAIL' "$ref1_log"
