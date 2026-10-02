@@ -258,11 +258,9 @@ Hard-power/storage recovery is mandatory for the release image: terminate select
 
 ### PP-13 — upgrade, downgrade, rollback and mixed-version compatibility
 
-This stage becomes blocking once there is an N-1 production release. For the first release record it explicitly as not applicable rather than silently omitting it.
+**Owner-authorized skip for the first production release.** There is no N-1 production release and therefore no real mixed-version population to test. PP-13 is explicitly not applicable and non-blocking under project-owner authorization dated 2026-10-01.
 
-Test N-1 userspace with N kernel and N userspace with N-1 kernel wherever compatibility is claimed; clean upgrade from N-1 image/configuration to N; rollback after a successful upgrade; rollback after deliberately interrupted/failed upgrade; rejection/migration of stale incompatible checkpoints/configuration; preserved user data/permissions; repeated reboot after upgrade/rollback; and mixed N/N-1 peers in one LAN and routed topology.
-
-If rolling upgrade is claimed, replace/reboot nodes one at a time under active routing and application traffic and prove convergence/service behavior. Unsupported ABI/version combinations must fail deterministically rather than corrupt state. Upgrade and rollback evidence identifies both exact releases and every transformed artifact.
+Do not fabricate an N-1 release, synthetic downgrade path, or pretend mixed-version evidence merely to satisfy this stage. Re-enable PP-13 as a blocking stage once a real production release exists and an N-1/N compatibility surface is meaningful.
 
 ## Timing/scheduler tests
 

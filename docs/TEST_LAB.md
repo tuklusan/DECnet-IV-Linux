@@ -112,3 +112,8 @@ The classic socket-option follow-up adds option evidence in both directions. `dn
 ## PP-11 lab scope authorization
 
 Project-owner authorization dated 2026-10-01 marks PP-11 S3, S4, S5 and S6 as not executable in the current lab and therefore skipped/non-blocking for this release. S0, S1 and S2 remain executable and blocking. Do not synthesize or relabel shorter runs as S3-S6 evidence.
+
+
+## PP-13 first-release authorization
+
+Project-owner authorization dated 2026-10-01 marks PP-13 completely skipped/non-blocking for the first production release because no N-1 production version exists yet. Do not create synthetic mixed-version, downgrade, rollback, or upgrade evidence. PP-13 becomes relevant only after a real prior production release exists.
