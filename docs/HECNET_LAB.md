@@ -81,3 +81,8 @@ Remote tests belong in the repository rather than in ad-hoc runner commands. Ful
 VAX-side scripts/programs should live in a dedicated `tests/lab` subdirectory and be paired with the Linux driver that invokes and validates them. Application experiments such as a small VAX DECnet service plus a `dnlynx` client are welcome after the underlying Session/object and standard DECnet/Linux userspace features are stable; they are supplemental tests, not a shortcut around those layers.
 
 No public HECnet route is advertised from a disposable CI job outside Area 31. Disposable identities are selected only from Area 31 and checked against PYRTR's NML known-node view before the final proof identity is used. External connectivity remains optional interoperability evidence and never substitutes for local exact-SHA acceptance.
+
+
+## Remote peer safety boundary
+
+PYRTR (31.3) is the hard operational boundary for disruptive testing. Any machine reached on the far side of PYRTR via the MULTINET/HECnet uplink is read/traffic-only for project testing: do not power-cycle, shut down, reboot, pause/resume, hard-stop, reconfigure its operating state, or otherwise cause a remote state transition. PP-12 disruptive restart/power tests must use only project-controlled local systems, disposable lab VMs, or the named local SIMH/OpenVMS peers QCOCAL and IMPVAX when those systems are under project control.
