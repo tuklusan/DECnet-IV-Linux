@@ -263,7 +263,10 @@ def require_guest_log_evidence(path: Path, required: list[str]) -> None:
         )
 
 
-def validate_e1_wire_values(values: dict[str, int]) -> None:
+def validate_e1_wire_values(
+    values: dict[str, int], *, allow_dr_transition: bool = False,
+    endnodes_a_router_hellos: int = 0,
+) -> None:
     required = {
         "routersA", "routersB", "endnodesA", "endnodesB",
         "nicHelloA", "nicHelloB", "changedNicHelloA", "changedNicHelloB",
@@ -275,9 +278,12 @@ def validate_e1_wire_values(values: dict[str, int]) -> None:
             + ",".join(sorted(required - set(values)))
             + " extra=" + ",".join(sorted(set(values) - required))
         )
+    endnodes_a_ok = values["endnodesA"] == 0
+    if allow_dr_transition:
+        endnodes_a_ok = values["endnodesA"] == endnodes_a_router_hellos
     if not (
         values["routersA"] >= 2 and values["routersB"] >= 2
-        and values["endnodesA"] == 0 and values["endnodesB"] >= 1
+        and endnodes_a_ok and values["endnodesB"] >= 1
         and values["nicHelloA"] == 0 and values["nicHelloB"] == 0
         and values["changedNicHelloA"] == 0 and values["changedNicHelloB"] == 0
         and values["ucastAB"] >= 3 and values["ucastBA"] >= 3
@@ -895,7 +901,13 @@ def main() -> int:
             "ucastAB": pcap_count(lab.pcap, f"ether proto 0x6003 and ether src {changed_a} and ether dst {mac_b}"),
             "ucastBA": pcap_count(lab.pcap, f"ether proto 0x6003 and ether src {changed_b} and ether dst {mac_a}"),
         }
-        validate_e1_wire_values(values)
+        validate_e1_wire_values(
+            values,
+            allow_dr_transition=diagnostic_fault,
+            endnodes_a_router_hellos=pcap_router_hello_count(
+                lab.pcap, mac_a, ENDNODES
+            ),
+        )
         required_a = [
             f"{marker} session={session} node={name_a}",
             f"DNIV-E1-CHANGEADDR session={session} node={name_a} mac={changed_a}",

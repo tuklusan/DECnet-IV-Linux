@@ -82,6 +82,29 @@ def main():
         assert LAB.pcap_router_peer_unlisted_count(p, A, B) == 2
         assert LAB.pcap_router_peer_unlisted_count(p, B, A) == 1
 
+        values = {
+            "routersA": 2, "routersB": 2, "endnodesA": 0, "endnodesB": 1,
+            "nicHelloA": 0, "nicHelloB": 0,
+            "changedNicHelloA": 0, "changedNicHelloB": 0,
+            "ucastAB": 3, "ucastBA": 3,
+        }
+        LAB.validate_e1_wire_values(values)
+        values["endnodesA"] = 1
+        LAB.validate_e1_wire_values(
+            values, allow_dr_transition=True, endnodes_a_router_hellos=1
+        )
+        try:
+            LAB.validate_e1_wire_values(
+                values, allow_dr_transition=True, endnodes_a_router_hellos=0
+            )
+        except SystemExit:
+            pass
+        else:
+            raise SystemExit(
+                "e1 INIT PCAP regression: diagnostic DR transition accepted "
+                "a non-router All-Endnodes frame"
+            )
+
     source = (ROOT / "tests/lab/dniv_lab.py").read_text(encoding="utf-8")
     smoke = (ROOT / "tests/lab/dniv-smoke.sh").read_text(encoding="utf-8")
     for marker in (
@@ -106,6 +129,8 @@ def main():
         "pcap_router_peer_unlisted_count",
         "unlisted_a_before = pcap_router_peer_unlisted_count(",
         "unlisted_a_now > unlisted_a_before",
+        "allow_dr_transition=diagnostic_fault",
+        "endnodes_a_router_hellos=pcap_router_hello_count(",
     ):
         if marker not in source:
             raise SystemExit(
