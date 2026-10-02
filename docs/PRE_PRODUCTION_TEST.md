@@ -235,12 +235,14 @@ The non-E1 interoperability fault path now records and validates the real fault 
 | S0 deterministic | 2 VMs; all applicable lower-stage happy paths and mandatory negatives once |
 | S1 churn | 2-4 VMs; at least 100 combined module/interface/identity/peer/reboot/topology cycles under traffic |
 | S2 sustained faults | 4-8 VMs; at least 1 hour and at least 10,000 deterministic injected fault events |
-| S3 heavy | 8-16 VMs; at least 8 hours and 100,000 injected events with concurrent sessions/bulk/table pressure/SMP |
-| S4 release soak | 16 independent VMs; at least 24 hours; mixed architecture and distributed transports where available; busy and quiet windows; repeated peer/router/application restart |
-| S5 endurance | 16 independent VMs on a persistent controller; at least 72 hours; mixed architectures, SMP subset, independent peers, alternating high load/fault and long quiet periods |
-| S6 first-production/core-change endurance | at least 168 hours/7 days for first production release and after material core state-machine, lifetime/concurrency, routing, NSP, major-kernel or NIC-driver-baseline changes |
+| S3 heavy | **Owner-authorized lab skip.** Current lab cannot execute this level; not blocking for this project release under the explicit 2026-10-01 authorization. |
+| S4 release soak | **Owner-authorized lab skip.** Current lab cannot execute this level; not blocking for this project release under the explicit 2026-10-01 authorization. |
+| S5 endurance | **Owner-authorized lab skip.** Current lab cannot execute this level; not blocking for this project release under the explicit 2026-10-01 authorization. |
+| S6 first-production/core-change endurance | **Owner-authorized lab skip.** Current lab cannot execute this level; not blocking for this project release under the explicit 2026-10-01 authorization. |
 
-Duration never substitutes for event/count coverage. Across endurance: repeat sequence wraps many times; drive tables/queues to limits and back; combine malformed/control floods with valid traffic; use microbursts, sustained load and long idle; cold boot/reboot/reload/hard-kill guests; pause/resume guests; move work across CPUs; repeatedly exercise SMP RX/timer/ioctl/device races; sample memory/slab/object/timer/work/adjacency/route/socket counts; quiesce after pressure and require return to baseline or predeclared bounded envelope with no monotonic growth.
+S0-S2 remain blocking and executable in the current lab. S3-S6 are explicitly waived for this lab/release by project-owner authorization dated 2026-10-01; do not fabricate substitute evidence or treat shorter runs as equivalent. Revisit the waiver only if lab capability changes or the owner revokes it.
+
+For executable endurance/stress work, duration never substitutes for event/count coverage. Repeat sequence wraps many times; drive tables/queues to limits and back; combine malformed/control floods with valid traffic; use microbursts, sustained load and long idle where the active level requires them; cold boot/reboot/reload/hard-kill guests; pause/resume guests; move work across CPUs; repeatedly exercise SMP RX/timer/ioctl/device races; sample memory/slab/object/timer/work/adjacency/route/socket counts; quiesce after pressure and require return to baseline or predeclared bounded envelope with no monotonic growth.
 
 Retain p50/p95/p99 latency, throughput, CPU/memory use, setup and convergence distributions for claimed services. Performance/fairness limits are declared before the run; unexplained regressions block release until explained or explicitly accepted by release policy.
 
@@ -264,7 +266,7 @@ If rolling upgrade is claimed, replace/reboot nodes one at a time under active r
 
 ## Timing/scheduler tests
 
-Timers require explicit treatment: listener expiry and DR delay just-before/at/after boundaries; zero/fallback and maximum timers without arithmetic overflow; CPU saturation/workqueue delay during expiry; VM pause/resume; large scheduling stalls; timer cancel/rearm concurrent with unload/identity change/device removal; jiffies wrap via test hooks where practical; and long-idle S5/S6 periods followed by immediate traffic.
+Timers require explicit treatment: listener expiry and DR delay just-before/at/after boundaries; zero/fallback and maximum timers without arithmetic overflow; CPU saturation/workqueue delay during expiry; VM pause/resume; large scheduling stalls; timer cancel/rearm concurrent with unload/identity change/device removal; and jiffies wrap via test hooks where practical. The previously specified S5/S6 long-idle requirement is covered by the owner-authorized S3-S6 lab waiver for this release.
 
 ## Ethernet/device-path tests
 
