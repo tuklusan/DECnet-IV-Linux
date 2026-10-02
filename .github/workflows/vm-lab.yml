@@ -100,7 +100,7 @@ jobs:
       group: dniv-vm-${{ github.run_id }}-${{ matrix.slot }}-${{ inputs.lab_mode }}-${{ inputs.nic_model }}-${{ inputs.vcpus }}
       queue: max
       cancel-in-progress: false
-    timeout-minutes: 55
+    timeout-minutes: 75
     env:
       DNIV_SCRATCH_DIR: ${{ github.workspace }}/scratch/runtime/${{ github.run_id }}/${{ github.run_attempt }}/${{ github.job }}-${{ matrix.arch }}
       DNIV_LAB_MODE: ${{ inputs.lab_mode }}

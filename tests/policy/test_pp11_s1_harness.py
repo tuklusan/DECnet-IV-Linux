@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[2]
 LAB = (ROOT / "tests/lab/dniv_lab.py").read_text(encoding="utf-8")
 SMOKE = (ROOT / "tests/lab/dniv-smoke.sh").read_text(encoding="utf-8")
 CONTROL = (ROOT / "tests/lab/dniv_pp11_s1.py").read_text(encoding="utf-8")
+VM_WORKFLOW = (ROOT / ".github/workflows/vm-lab.yml").read_text(encoding="utf-8")
 
 
 def main() -> int:
@@ -44,6 +45,8 @@ def main() -> int:
         raise SystemExit("pp11-s1 regression: serial evidence parsers must accept syslog prefixes")
     if 'MAX_ANY_LINKS = 32' not in CONTROL or 'peak_links > MAX_ANY_LINKS' not in CONTROL:
         raise SystemExit("pp11-s1 regression: missing transient NSP link bound")
+    if "    timeout-minutes: 75" not in VM_WORKFLOW:
+        raise SystemExit("pp11-s1 regression: hosted job budget must permit arm64 completion")
     handoff = "pp11_observe 35\n            # The observer records the peer's final UP transition"
     if handoff not in SMOKE or "sleep 25\n            pp11_actor" not in SMOKE:
         raise SystemExit("pp11-s1 regression: missing reciprocal actor handoff gap")
