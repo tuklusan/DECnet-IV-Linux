@@ -1436,9 +1436,12 @@ if [[ "$pp11_pressure" == 1 ]]; then
         printf 'fault=pp11-control-reply-isolation round=%s\n' "$pressure_round" > "$table_log"
         sudo tc qdisc add dev "$tap_reference" clsact
         PRESSURE_QDISC=1
+        # L1-router-to-router NSP is carried in Phase IV long-data
+        # routing frames.  tc u32 offsets start at the DECnet length word:
+        # length(2) + long routing header(21) => NSP flag at offset 23.
         for control_flag in 0x28 0x38 0x48; do
             sudo tc filter add dev "$tap_reference" egress protocol all pref 20 u32 \
-                match u8 "$control_flag" 0xff at 8 action drop
+                match u8 "$control_flag" 0xff at 23 action drop
         done
         if ! timeout 30s sudo python3 "$script_dir/inject-nsp-reserved.py" \
             "$bridge" "$candidate_mac" "$ref_area.$ref_node" "$area.$node" \
@@ -1533,9 +1536,11 @@ if [[ "$pp11_pressure" == 1 ]]; then
         printf 'fault=pp11-link-selective-reply-drop round=%s link=%s\n' "$pressure_round" "$window_link" > "$window_log"
         sudo tc qdisc add dev "$tap_reference" clsact
         PRESSURE_QDISC=1
+        # Long-data routing puts the NSP destination link immediately
+        # after the flag at DECnet offsets 24/25.
         sudo tc filter add dev "$tap_reference" ingress protocol all pref 30 u32 \
-            match u8 "$window_lo" 0xff at 9 \
-            match u8 "$window_hi" 0xff at 10 action drop
+            match u8 "$window_lo" 0xff at 24 \
+            match u8 "$window_hi" 0xff at 25 action drop
         if ! wait_candidate_marker "$candidate_log" "$round_prefix-WINDOW-LIMIT session=$session scenario=$scenario round=$pressure_round link=$window_link count=20" 30 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
             sudo tc -s filter show dev "$tap_reference" ingress >>"$window_log" 2>&1 || true
             cat "$window_log" >&2 || true
@@ -1587,8 +1592,8 @@ if [[ "$pp11_pressure" == 1 ]]; then
         sudo tc qdisc add dev "$tap_reference" clsact
         PRESSURE_QDISC=1
         sudo tc filter add dev "$tap_reference" ingress protocol all pref 31 u32 \
-            match u8 "$int_lo" 0xff at 9 \
-            match u8 "$int_hi" 0xff at 10 action drop
+            match u8 "$int_lo" 0xff at 24 \
+            match u8 "$int_hi" 0xff at 25 action drop
         if ! wait_candidate_marker "$candidate_log" "$round_prefix-RETRANSMIT-LIMIT session=$session scenario=$scenario round=$pressure_round link=$int_link count=64" 30 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
             sudo tc -s filter show dev "$tap_reference" ingress >>"$int_log" 2>&1 || true
             cat "$int_log" >&2 || true

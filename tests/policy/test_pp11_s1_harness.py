@@ -85,6 +85,18 @@ def main() -> int:
     for marker in pressure_limits:
         if marker not in INTEROP_RUN:
             raise SystemExit(f"pp11-s1 regression: missing fail-closed pressure marker: {marker}")
+    long_route_filters = (
+        'match u8 "$control_flag" 0xff at 23 action drop',
+        'match u8 "$window_lo" 0xff at 24',
+        'match u8 "$window_hi" 0xff at 25 action drop',
+        'match u8 "$int_lo" 0xff at 24',
+        'match u8 "$int_hi" 0xff at 25 action drop',
+    )
+    for marker in long_route_filters:
+        if marker not in INTEROP_RUN:
+            raise SystemExit(
+                f"pp11-s1 regression: missing long-routing pressure filter: {marker}"
+            )
     smoke_markers = (
         'while [ "$round" -le 3 ]',
         "count=256",

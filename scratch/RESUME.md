@@ -1789,3 +1789,6 @@ Current work adds the still-missing PP-11 S1 sustained pressure gate to full PyD
 
 
 Fast issue #891 on `85c5f2f11adec28578868446663257df8402bf5b` failed before lab execution: parent `37069438232`; Build `37069496159` and Project State `37069513797` green; E1 `37069526585` and Independent Interop `37069544516` failed while preparing images because `dnseqwrap.c` had literal `\\n` text outside the pressure-start C string. Fix that syntax only, retain S1 open, fast-accept the successor, then run fresh full acceptance.
+
+
+Full #893 on `b19fe138bc78ef75dc3371ea7a789d346d5e4ef9` is non-promotable from amd64 PyDECnet L1 job `111050769639` in interop run `37071188500`; artifact `11254284128` SHA-256 `5601c08f2f8b33e3c94283a683bb5aca0df84741d1d94fa22c3b4e8864d68714`. Pressure round 1 reached table=256 and kept the sequence/MIRROR stream live, but the tc table-isolation filter matched zero replies. PCAP inspection shows the candidate's L1-router DC traffic uses long routing: NSP flag at DECnet offset 23, destination link at 24/25, not the short-routing 8/9/10 offsets. Correct all three pressure filters (table/window/retransmit) to 23/24/25, lock the offsets in policy, fast-accept the successor, then run fresh full acceptance. S1 remains open.
