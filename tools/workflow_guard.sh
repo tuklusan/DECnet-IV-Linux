@@ -59,6 +59,7 @@ python3 tests/policy/test_image_builder_gate.py --tree "$expected" | tee "$state
 python3 tests/policy/test_lab_stats_snapshot.py | tee "$state_dir/integrity/lab-stats-regression.log"
 python3 tests/policy/test_e1_silence_window.py | tee "$state_dir/integrity/e1-silence-regression.log"
 python3 tests/policy/test_e1_init_pcap.py | tee "$state_dir/integrity/e1-init-pcap-regression.log"
+python3 tests/policy/test_pp11_s1_harness.py | tee "$state_dir/integrity/pp11-s1-regression.log"
 python3 tests/policy/test_interop_reference_ready.py | tee "$state_dir/integrity/interop-ready-regression.log"
 python3 tests/policy/test_project_state_gate.py | tee "$state_dir/integrity/project-state-regression.log"
 python3 tests/policy/test_repo_policy_branch.py | tee "$state_dir/integrity/branch-policy-regression.log"

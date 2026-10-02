@@ -79,6 +79,8 @@ def main():
         ])
         assert LAB.pcap_router_hello_count(p, A) == 3
         assert LAB.pcap_router_hello_count(p, B) == 1
+        assert LAB.pcap_router_peer_unlisted_count(p, A, B) == 2
+        assert LAB.pcap_router_peer_unlisted_count(p, B, A) == 1
 
     source = (ROOT / "tests/lab/dniv_lab.py").read_text(encoding="utf-8")
     smoke = (ROOT / "tests/lab/dniv-smoke.sh").read_text(encoding="utf-8")
@@ -100,8 +102,15 @@ def main():
     ):
         if marker not in source:
             raise SystemExit(f"e1 INIT PCAP regression: missing host-ordered diagnostic startup: {marker}")
-    if "routers_a_now - routers_a_before >= 5" not in source:
-        raise SystemExit("e1 INIT PCAP regression: missing guest-clock KASAN expiry handoff")
+    for marker in (
+        "pcap_router_peer_unlisted_count",
+        "unlisted_a_before = pcap_router_peer_unlisted_count(",
+        "unlisted_a_now > unlisted_a_before",
+    ):
+        if marker not in source:
+            raise SystemExit(
+                f"e1 INIT PCAP regression: missing semantic expiry handoff: {marker}"
+            )
     if ('if not QmpClient(guest.qmp).execute("stop"):' not in source or
             'if not QmpClient(guest.qmp).execute("cont"):' not in source):
         raise SystemExit("e1 INIT PCAP regression: missing acknowledged QMP virtual-clock pause/resume")

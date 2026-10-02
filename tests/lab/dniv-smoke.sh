@@ -1195,7 +1195,11 @@ pp11s1)
             pp11_observe 35
         else
             pp11_observe 35
-            sleep 3
+            # The observer records the peer's final UP transition before that
+            # peer finishes its post-cycle MIRROR proof/resource snapshot and
+            # two-second tail.  Keep a bounded handoff gap so role A is inside
+            # its observer before role B starts the reciprocal 35 disruptions.
+            sleep 25
             pp11_actor
         fi
         : > "$pp11_state/local-complete"

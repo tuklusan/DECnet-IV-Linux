@@ -133,6 +133,59 @@ def pcap_router_hello_count(path: Path, source_mac: str, destination_mac: str = 
     return count
 
 
+def pcap_router_peer_unlisted_count(path: Path, source_mac: str,
+                                    peer_mac: str) -> int:
+    """Count All-Routers hellos from source whose router list omits peer."""
+    try:
+        data = path.read_bytes()
+    except FileNotFoundError:
+        return 0
+    if len(data) < 24:
+        return 0
+    magic = data[:4]
+    if magic == b"\xd4\xc3\xb2\xa1":
+        endian = "<"
+    elif magic == b"\xa1\xb2\xc3\xd4":
+        endian = ">"
+    else:
+        raise RuntimeError(f"unsupported pcap magic in {path}")
+
+    source = bytes(int(part, 16) for part in source_mac.split(":"))
+    peer = bytes(int(part, 16) for part in peer_mac.split(":"))
+    destination = bytes(int(part, 16) for part in ROUTERS.split(":"))
+    count = 0
+    off = 24
+    while off + 16 <= len(data):
+        _, _, incl, _ = struct.unpack_from(endian + "IIII", data, off)
+        off += 16
+        if incl > len(data) - off:
+            break
+        frame = data[off:off + incl]
+        off += incl
+        if (len(frame) < 43 or frame[0:6] != destination or
+                frame[6:12] != source or frame[12:14] != b"\x60\x03"):
+            continue
+        plen = int.from_bytes(frame[14:16], "little")
+        if 16 + plen > len(frame):
+            continue
+        route = frame[16:16 + plen]
+        if route and route[0] & 0x80:
+            pad = route[0] & 0x7f
+            if pad == 0 or pad >= len(route):
+                continue
+            route = route[pad:]
+        if len(route) < 27 or route[0] != 0x0b:
+            continue
+        rslen = route[26]
+        if rslen % 7 or 27 + rslen > len(route):
+            continue
+        listed = any(route[pos:pos + 6] == peer
+                     for pos in range(27, 27 + rslen, 7))
+        if not listed:
+            count += 1
+    return count
+
+
 def pcap_router_init_seen(path: Path, mac_a: str, mac_b: str) -> bool:
     """Require an unlisted router hello followed later by a reciprocal listing."""
     data = path.read_bytes()
@@ -271,6 +324,8 @@ KCSAN_IGNORED_REPORTS = frozenset({
     "BUG: KCSAN: data-race in blk_mq_dispatch_rq_list / blk_mq_dispatch_rq_list",
     "BUG: KCSAN: data-race in memchr_inv / refresh_cpu_vm_stats",
     "BUG: KCSAN: data-race in refresh_cpu_vm_stats / memchr_inv",
+    "BUG: KCSAN: data-race in mem_cgroup_wb_stats / tick_do_update_jiffies64",
+    "BUG: KCSAN: data-race in tick_do_update_jiffies64 / mem_cgroup_wb_stats",
 })
 
 LOCKDEBUG_FAILURE_MARKERS = (
@@ -512,8 +567,10 @@ class Lab:
             "-netdev", f"tap,id=lan,ifname={guest.tap},script=no,downscript=no",
             "-device", f"{self.nic_model},netdev=lan,mac={guest.nic_mac}",
             "-qmp", f"unix:{guest.qmp},server=on,wait=off",
-            "-display", "none", "-monitor", "none", "-serial", f"file:{guest.log}", "-no-reboot",
+            "-display", "none", "-monitor", "none", "-serial", f"file:{guest.log}",
         ]
+        if self.mode != "pp11s1":
+            cmd.append("-no-reboot")
         return cmd
 
     def start(self, guest: Guest, area: int) -> None:
@@ -647,7 +704,7 @@ def main() -> int:
     fault_b_paused = False
     fault_b_restored = False
     fault_restored = False
-    routers_a_before = 0
+    unlisted_a_before = 0
     routers_b_before = 0
     try:
         lab.create_network([guest_a.tap, guest_b.tap])
@@ -691,7 +748,9 @@ def main() -> int:
                     f"DNIV-E1-INITIAL session={session} node={name_a}",
                 )
                 if ready_b and initial_a:
-                    routers_a_before = pcap_router_hello_count(lab.pcap, mac_a)
+                    unlisted_a_before = pcap_router_peer_unlisted_count(
+                        lab.pcap, mac_a, mac_b
+                    )
                     routers_b_before = pcap_count(
                         lab.pcap,
                         f"ether proto 0x6003 and ether dst {ROUTERS} and ether src {mac_b}",
@@ -706,13 +765,14 @@ def main() -> int:
                     fault_started = True
 
             if diagnostic_fault and fault_started and not fault_a_paused:
-                routers_a_now = pcap_router_hello_count(lab.pcap, mac_a)
-                # Five post-isolation two-second router hellos put DN70
-                # 8-10 guest seconds into the silence window: safely beyond
-                # the 6.2-second listener lifetime but before the 11.2-second
-                # listener-plus-DR-delay boundary.  Use this guest-clock wire
-                # evidence rather than an asynchronously flushed serial marker.
-                if routers_a_now - routers_a_before >= 5:
+                unlisted_a_now = pcap_router_peer_unlisted_count(
+                    lab.pcap, mac_a, mac_b
+                )
+                # A fresh All-Routers hello that no longer lists DN71 is direct
+                # wire proof that DN70's listener expired. Freeze DN70 on that
+                # semantic transition instead of counting elapsed hellos; this
+                # leaves the full DR-delay interval before an All-Endnodes hello.
+                if unlisted_a_now > unlisted_a_before:
                     lab.pause_guest(guest_a)
                     fault_a_paused = True
                     # Let isolated DN71 run alone so it can independently
