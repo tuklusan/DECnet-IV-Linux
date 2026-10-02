@@ -1433,7 +1433,7 @@ if [[ "$pp11_pressure" == 1 ]]; then
             exit 1
         fi
         table_log="$work/pp11-pressure-table-$pressure_round.log"
-        printf 'fault=pp11-control-reply-isolation round=%s\n' "$pressure_round" > "$table_log"
+        printf 'fault=pp11-table-%s round=%s\n' "$pressure_round" "$pressure_round" > "$table_log"
         sudo tc qdisc add dev "$tap_reference" clsact
         PRESSURE_QDISC=1
         # L1-router-to-router NSP is carried in Phase IV long-data
@@ -1475,9 +1475,10 @@ if [[ "$pp11_pressure" == 1 ]]; then
             exit 1
         fi
         rx_log="$work/pp11-pressure-rx-$pressure_round.log"
+        printf 'fault=pp11-rx-malformed-%s round=%s\n' "$pressure_round" "$pressure_round" > "$rx_log"
         if ! timeout 35s sudo python3 "$script_dir/inject-nsp-ackrange.py" \
             "$bridge" "$bridge" "$candidate_mac" "$ref_area.$ref_node" "$area.$node" \
-            pressure "$pressure_round" >"$rx_log" 2>&1; then
+            pressure "$pressure_round" >>"$rx_log" 2>&1; then
             cat "$rx_log" >&2 || true
             tail -440 "$candidate_log" >&2 || true
             exit 1
@@ -1533,7 +1534,7 @@ if [[ "$pp11_pressure" == 1 ]]; then
         window_lo=$(printf '0x%02x' $((window_link & 255)))
         window_hi=$(printf '0x%02x' $(((window_link >> 8) & 255)))
         window_log="$work/pp11-pressure-window-$pressure_round.log"
-        printf 'fault=pp11-link-selective-reply-drop round=%s link=%s\n' "$pressure_round" "$window_link" > "$window_log"
+        printf 'fault=pp11-window-%s round=%s link=%s\n' "$pressure_round" "$pressure_round" "$window_link" > "$window_log"
         sudo tc qdisc add dev "$tap_reference" clsact
         PRESSURE_QDISC=1
         # Long-data routing puts the NSP destination link immediately
@@ -1567,9 +1568,10 @@ if [[ "$pp11_pressure" == 1 ]]; then
             exit 1
         fi
         int_log="$work/pp11-pressure-retransmit-$pressure_round.log"
+        printf 'fault=pp11-retransmit-%s round=%s\n' "$pressure_round" "$pressure_round" > "$int_log"
         timeout 45s sudo python3 "$script_dir/inject-nsp-intflow.py" \
             "$bridge" "$bridge" "$candidate_mac" "$ref_area.$ref_node" "$area.$node" \
-            pressure "$pressure_round" >"$int_log" 2>&1 &
+            pressure "$pressure_round" >>"$int_log" 2>&1 &
         PRESSURE_INJECT_PID=$!
         int_marker="$round_prefix-INT-LINK session=$session scenario=$scenario round=$pressure_round link="
         if ! wait_candidate_marker "$candidate_log" "$int_marker" 30 "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then

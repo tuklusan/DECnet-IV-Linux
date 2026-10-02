@@ -97,6 +97,23 @@ def main() -> int:
             raise SystemExit(
                 f"pp11-s1 regression: missing long-routing pressure filter: {marker}"
             )
+    pressure_fault_evidence = (
+        'fault=pp11-table-%s round=%s\\n',
+        '--name "pp11-table-$pressure_round"',
+        'fault=pp11-rx-malformed-%s round=%s\\n',
+        'pressure "$pressure_round" >>"$rx_log" 2>&1',
+        '--name "pp11-rx-malformed-$pressure_round"',
+        'fault=pp11-window-%s round=%s link=%s\\n',
+        '--name "pp11-window-$pressure_round"',
+        'fault=pp11-retransmit-%s round=%s\\n',
+        'pressure "$pressure_round" >>"$int_log" 2>&1 &',
+        '--name "pp11-retransmit-$pressure_round"',
+    )
+    for marker in pressure_fault_evidence:
+        if marker not in INTEROP_RUN:
+            raise SystemExit(
+                f"pp11-s1 regression: missing fail-closed pressure evidence declaration: {marker}"
+            )
     smoke_markers = (
         'while [ "$round" -le 3 ]',
         "count=256",
