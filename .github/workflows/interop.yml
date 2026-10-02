@@ -254,6 +254,7 @@ jobs:
           timer_proof=0
           peer_segsize=0
           flow_proof=0
+          churn_cycles=16
           if [[ '${{ inputs.scope }}' == socket &&
                 '${{ matrix.suite }}' == py-l1 &&
                 '${{ matrix.arch }}' == amd64 ]]; then
@@ -265,6 +266,11 @@ jobs:
                 '${{ matrix.arch }}' == amd64 ]]; then
             timer_proof=1
           fi
+          if [[ '${{ inputs.profile }}' == full &&
+                '${{ matrix.suite }}' == py-l1 &&
+                '${{ matrix.arch }}' == amd64 ]]; then
+            churn_cycles=100
+          fi
           for scenario in $scenarios; do
             session="run-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${{ matrix.arch }}-${reference}-${scenario}"
             printf '%s %s %s\n' "$reference" "$scenario" "$session" >> \
@@ -273,6 +279,7 @@ jobs:
               DNIV_INTEROP_TIMER_PROOF="$timer_proof" \
               DNIV_INTEROP_PEER_SEGMENT_SIZE="$peer_segsize" \
               DNIV_INTEROP_FLOW_PROOF="$flow_proof" \
+              DNIV_INTEROP_CHURN_CYCLES="$churn_cycles" \
               tests/lab/run-interop.sh \
               "$DNIV_CANDIDATE_IMAGE" "$DNIV_REFERENCE_IMAGE" \
               "$DNIV_KERNEL" "$DNIV_INITRD" "$reference" "$bundle" "$scenario" 2>&1 | \

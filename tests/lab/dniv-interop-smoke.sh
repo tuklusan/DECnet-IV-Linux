@@ -161,6 +161,7 @@ session=$(get_arg dniv.session || printf 'local')
 timer_proof=$(get_arg dniv.timer_proof || printf '0')
 reserved_proof=$(get_arg dniv.reserved_proof || printf '0')
 flow_proof=$(get_arg dniv.flow_proof || printf '0')
+churn_cycles=$(get_arg dniv.churn_cycles || printf '16')
 
 case "$reference" in
     route20|pydecnet) ;;
@@ -174,6 +175,13 @@ case "$reserved_proof" in
     0|1) ;;
     *) echo "DNIV-INTEROP-FAIL session=$session reason=bad-reserved-proof"; exit 1 ;;
 esac
+case "$churn_cycles" in
+    ''|*[!0-9]*) echo "DNIV-INTEROP-FAIL session=$session reason=bad-churn-cycles"; exit 1 ;;
+esac
+if [ "$churn_cycles" -lt 1 ] || [ "$churn_cycles" -gt 10000 ]; then
+    echo "DNIV-INTEROP-FAIL session=$session reason=bad-churn-cycles"
+    exit 1
+fi
 case "$scenario" in
     l1) local_type=2; peer_kind='L1 router' ;;
     l2) local_type=1; peer_kind='L2 router' ;;
@@ -799,11 +807,11 @@ EOF_DNIV_SENDMAIL
         exit 1
     fi
     echo "DNIV-INTEROP-STREAM session=$session scenario=$scenario node=$name peer=$peer_node"
-    if ! /usr/local/sbin/dnsocklife "$peer_node"; then
+    if ! /usr/local/sbin/dnsocklife "$peer_node" "$churn_cycles"; then
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=nsp-socket-lifecycle"
         exit 1
     fi
-    echo "DNIV-INTEROP-SOCKET-LIFECYCLE session=$session scenario=$scenario node=$name peer=$peer_node"
+    echo "DNIV-INTEROP-SOCKET-LIFECYCLE session=$session scenario=$scenario node=$name peer=$peer_node cycles=$churn_cycles"
     if ! /usr/local/sbin/dnsockstress "$peer_node"; then
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=nsp-socket-stress"
         exit 1

@@ -25,7 +25,8 @@
 
 #include <linux/dn.h>
 
-#define CHURN_CYCLES 16U
+#define DEFAULT_CHURN_CYCLES 16U
+#define MAX_CHURN_CYCLES 10000U
 
 static int parse_node(const char *text, uint16_t *address)
 {
@@ -371,11 +372,26 @@ int main(int argc, char **argv)
 {
     struct sockaddr_dn peer;
     uint16_t address;
+    unsigned int cycles = DEFAULT_CHURN_CYCLES;
     unsigned int i;
 
-    if (argc != 2 || parse_node(argv[1], &address)) {
-        fprintf(stderr, "usage: %s AREA.NODE\n", argv[0]);
+    if ((argc != 2 && argc != 3) || parse_node(argv[1], &address)) {
+        fprintf(stderr, "usage: %s AREA.NODE [CYCLES]\n", argv[0]);
         return 2;
+    }
+    if (argc == 3) {
+        char *end;
+        unsigned long value;
+
+        errno = 0;
+        value = strtoul(argv[2], &end, 10);
+        if (errno || end == argv[2] || *end || value < 1U ||
+            value > MAX_CHURN_CYCLES) {
+            fprintf(stderr, "dnsocklife: cycles must be 1..%u\n",
+                    MAX_CHURN_CYCLES);
+            return 2;
+        }
+        cycles = (unsigned int)value;
     }
     fill_peer(&peer, address);
 
@@ -397,7 +413,7 @@ int main(int argc, char **argv)
         fprintf(stderr, "dnsocklife: stream negative failed errno=%d\n", errno);
         return 1;
     }
-    for (i = 0U; i < CHURN_CYCLES; i++) {
+    for (i = 0U; i < cycles; i++) {
         if (mirror_once(&peer, i)) {
             fprintf(stderr, "dnsocklife: churn failed cycle=%u errno=%d\n",
                     i, errno);
@@ -405,6 +421,6 @@ int main(int argc, char **argv)
         }
     }
     printf("dnsocklife: pass peer=%s cycles=%u nonblock=1 shutdown=1 syscall_negatives=1\n",
-           argv[1], CHURN_CYCLES);
+           argv[1], cycles);
     return 0;
 }

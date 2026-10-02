@@ -91,6 +91,9 @@ peer_segsize=${DNIV_INTEROP_PEER_SEGMENT_SIZE:-0}
 [[ "$peer_segsize" =~ ^[0-9]+$ ]] || { echo "interop: bad peer segment size" >&2; exit 2; }
 flow_proof=${DNIV_INTEROP_FLOW_PROOF:-0}
 [[ "$flow_proof" =~ ^[01]$ ]] || { echo "interop: bad flow-proof selector" >&2; exit 2; }
+churn_cycles=${DNIV_INTEROP_CHURN_CYCLES:-16}
+[[ "$churn_cycles" =~ ^[1-9][0-9]*$ ]] || { echo "interop: bad churn-cycle count" >&2; exit 2; }
+(( churn_cycles <= 10000 )) || { echo "interop: churn-cycle count exceeds bound" >&2; exit 2; }
 if (( peer_segsize != 0 && (peer_segsize < 64 || peer_segsize > 563) )); then
     echo "interop: peer segment size out of bounded proof range" >&2
     exit 2
@@ -355,7 +358,7 @@ if ! wait_marker "$ref1_log" "$reference_ready_marker" "$reference_ready_seconds
     exit 1
 fi
 
-candidate_common="root=LABEL=dniv-root rootfstype=ext4 rw dniv.interop=1 dniv.reference=$reference dniv.area=$area dniv.node=$node dniv.name=$name dniv.peer_node=$ref_area.$ref_node dniv.scenario=$scenario dniv.session=$session dniv.timer_proof=$timer_proof dniv.reserved_proof=$reserved_proof dniv.flow_proof=$flow_proof"
+candidate_common="root=LABEL=dniv-root rootfstype=ext4 rw dniv.interop=1 dniv.reference=$reference dniv.area=$area dniv.node=$node dniv.name=$name dniv.peer_node=$ref_area.$ref_node dniv.scenario=$scenario dniv.session=$session dniv.timer_proof=$timer_proof dniv.reserved_proof=$reserved_proof dniv.flow_proof=$flow_proof dniv.churn_cycles=$churn_cycles"
 start_vm "candidate-$scenario" "$candidate_disk" "$tap_candidate" "$candidate_hw" "$candidate_log" "$candidate_common" & CANDIDATE_PID=$!
 if [[ "$reference" == pydecnet ]]; then
     if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-CTERM-READY session=$session scenario=$scenario" "$timeout_seconds" "$CANDIDATE_PID" "$REFERENCE_PID" "$ref1_log"; then
@@ -1485,6 +1488,7 @@ python3 "$script_dir/validate-interop-pcap.py" "$pcap" "$reference" "$scenario" 
     "$candidate_mac" "$candidate_hw" "$candidate_changed_hw" \
     "$reference_mac" "$reference_hw" "${validator_args[@]}"
 
+grep -Fq "DNIV-INTEROP-SOCKET-LIFECYCLE session=$session scenario=$scenario node=$name peer=$ref_area.$ref_node cycles=$churn_cycles" "$candidate_log"
 grep -Fq "DNIV-INTEROP-RECOVERED session=$session scenario=$scenario" "$candidate_log"
 ! grep -Fq 'DNIV-INTEROP-FAIL' "$candidate_log"
 ! grep -Fq 'DNIV-REF-FAIL' "$ref1_log"

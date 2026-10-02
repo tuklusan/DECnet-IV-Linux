@@ -244,6 +244,8 @@ Duration never substitutes for event/count coverage. Across endurance: repeat se
 
 Retain p50/p95/p99 latency, throughput, CPU/memory use, setup and convergence distributions for claimed services. Performance/fairness limits are declared before the run; unexplained regressions block release until explained or explicitly accepted by release policy.
 
+The first executable PP-11 increment makes native socket churn count explicit and fail-closed. `dnsocklife` accepts a bounded requested cycle count, the guest records the exact completed count, and the host requires that marker. Full-profile amd64 PyDECnet L1 interoperability requests 100 connect/exchange/disconnect lifecycle cycles against the independent peer; ordinary fast/consolidated coverage remains at 16 cycles. This establishes the S1 socket-lifecycle floor but does not by itself satisfy S1: module/interface/identity/peer restart, reboot/topology churn and traffic-overlap coverage remain required.
+
 ### PP-12 — real peers and exact release image
 
 Use exact pinned SIMH to host available real DEC operating systems and physical DEC systems where available. QCOCAL and IMPVAX are available SIMH-emulated VAX machines running OpenVMS and are the project's named SIMH/OpenVMS peers for PP-12 and any earlier/later PP case that explicitly requires SIMH machines. Prefer more than one DEC OS/version/role when practical. Use the exact hashed release QCOW2/RAW artifact, never a repaired development filesystem.
