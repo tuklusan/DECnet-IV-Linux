@@ -107,7 +107,11 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    if (pressure)\n        printf("DNIV-PP11-SEQWRAP-START round=%lu records=%u pause_ms=250\\n",\n               round, records);\n\n    for (record = 0; record < records; record++) {
+    if (pressure)
+        printf("DNIV-PP11-SEQWRAP-START round=%lu records=%u pause_ms=250\n",
+               round, records);
+
+    for (record = 0; record < records; record++) {
         size_t i;
         ssize_t sent, got;
 
