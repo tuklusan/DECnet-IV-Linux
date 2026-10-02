@@ -73,6 +73,7 @@ struct dniv_nsp_connection {
     __u16 segment_size;
     bool data_xon;
     bool shutdown_pending;
+    bool detached;
     bool ack_pending[DNIV_NSP_CH_COUNT];
     unsigned long ack_deadline[DNIV_NSP_CH_COUNT];
     unsigned long connect_deadline;
@@ -668,6 +669,32 @@ int dniv_nsp_conn_release(__u16 local_link)
     return 0;
 }
 
+int dniv_nsp_conn_detach(__u16 local_link)
+{
+    struct dniv_nsp_connection *conn;
+    unsigned long flags;
+    bool recycled = false;
+
+    spin_lock_irqsave(&dniv_nsp_lock, flags);
+    conn = dniv_nsp_find_locked(local_link);
+    if (!conn) {
+        spin_unlock_irqrestore(&dniv_nsp_lock, flags);
+        return -ENOENT;
+    }
+    conn->detached = true;
+    if (dniv_nsp_detached_terminal_release_allowed(
+            conn->detached, conn->state)) {
+        dniv_nsp_purge_locked(conn);
+        memset(conn, 0, sizeof(*conn));
+        dniv_nsp_init_conn_lists(conn);
+        recycled = true;
+    }
+    spin_unlock_irqrestore(&dniv_nsp_lock, flags);
+    if (recycled)
+        dniv_nsp_notify_link(local_link);
+    return 0;
+}
+
 int dniv_nsp_conn_transition(__u16 local_link,
                              enum dniv_nsp_conn_state new_state)
 {
@@ -1051,6 +1078,7 @@ int dniv_nsp_receive(__u16 remote_node, const __u8 *wire, __u16 wire_len)
     __u16 shutdown_payload_len = 0U;
     __u8 shutdown_payload[DNIV_NSP_MAX_CTL_DATA];
     bool finish_shutdown = false;
+    bool release_detached = false;
     int reply_len = 0;
 
     if (!remote_node || !wire || !wire_len ||
@@ -1242,11 +1270,13 @@ int dniv_nsp_receive(__u16 remote_node, const __u8 *wire, __u16 wire_len)
             memcpy(conn->disconnect_payload, pkt.payload, pkt.payload_len);
         dniv_nsp_purge_locked(conn);
         dniv_nsp_set_state_locked(conn, DNIV_NSP_ST_CLOSED, jiffies);
+        release_detached = conn->detached;
         break;
     case DNIV_NSP_DC:
         conn->disconnect_reason = pkt.reason;
         dniv_nsp_purge_locked(conn);
         dniv_nsp_set_state_locked(conn, DNIV_NSP_ST_CLOSED, jiffies);
+        release_detached = conn->detached;
         break;
     case DNIV_NSP_DATA:
     case DNIV_NSP_INT:
@@ -1350,6 +1380,8 @@ int dniv_nsp_receive(__u16 remote_node, const __u8 *wire, __u16 wire_len)
             dret = dniv_nsp_disconnect(notify_link, shutdown_reason,
                                        shutdown_payload,
                                        shutdown_payload_len);
+        if (release_detached)
+            (void)dniv_nsp_conn_release(notify_link);
         return ret ? ret : dret;
     }
 }
@@ -1559,9 +1591,14 @@ static void dniv_nsp_timer_workfn(struct work_struct *work)
         if (ret == -ETIMEDOUT) {
             notify_link = conn->local_link;
             dniv_nsp_purge_locked(conn);
-            conn->disconnect_reason = DNIV_NSP_REASON_NODE_UNREACHABLE;
-            conn->disconnect_payload_len = 0U;
-            dniv_nsp_set_state_locked(conn, DNIV_NSP_ST_CLOSED, now);
+            if (conn->detached) {
+                memset(conn, 0, sizeof(*conn));
+                dniv_nsp_init_conn_lists(conn);
+            } else {
+                conn->disconnect_reason = DNIV_NSP_REASON_NODE_UNREACHABLE;
+                conn->disconnect_payload_len = 0U;
+                dniv_nsp_set_state_locked(conn, DNIV_NSP_ST_CLOSED, now);
+            }
             spin_unlock_irqrestore(&dniv_nsp_lock, flags);
             dniv_nsp_notify_link(notify_link);
             continue;

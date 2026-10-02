@@ -99,6 +99,13 @@ enum dniv_nsp_conn_state {
     DNIV_NSP_ST_DI,
 };
 
+static inline int
+dniv_nsp_detached_terminal_release_allowed(
+    int detached, enum dniv_nsp_conn_state state)
+{
+    return detached && state == DNIV_NSP_ST_CLOSED;
+}
+
 enum dniv_nsp_cc_rx_action {
     DNIV_NSP_CC_RX_INVALID = 0,
     DNIV_NSP_CC_RX_ACCEPT,

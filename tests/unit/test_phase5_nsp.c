@@ -295,6 +295,16 @@ static void test_cc_receive_state(void)
            DNIV_NSP_CC_RX_INVALID);
 }
 
+static void test_detached_terminal_release(void)
+{
+    assert(!dniv_nsp_detached_terminal_release_allowed(
+        0, DNIV_NSP_ST_CLOSED));
+    assert(!dniv_nsp_detached_terminal_release_allowed(
+        1, DNIV_NSP_ST_RUN));
+    assert(dniv_nsp_detached_terminal_release_allowed(
+        1, DNIV_NSP_ST_CLOSED));
+}
+
 static void test_sequence(void)
 {
     assert(dniv_nsp_seq_norm(4096U) == 0U);
@@ -340,6 +350,7 @@ int main(void)
     test_duplicate_ci_state();
     test_ack_conn_state();
     test_cc_receive_state();
+    test_detached_terminal_release();
     test_sequence();
     return 0;
 }

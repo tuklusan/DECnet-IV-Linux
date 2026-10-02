@@ -78,6 +78,7 @@ int dniv_nsp_conn_alloc(__u16 remote_node, __u16 remote_link,
                         enum dniv_nsp_conn_state initial_state,
                         __u16 *local_link);
 int dniv_nsp_conn_release(__u16 local_link);
+int dniv_nsp_conn_detach(__u16 local_link);
 int dniv_nsp_conn_transition(__u16 local_link,
                              enum dniv_nsp_conn_state new_state);
 int dniv_nsp_conn_set_remote(__u16 local_link, __u16 remote_node,

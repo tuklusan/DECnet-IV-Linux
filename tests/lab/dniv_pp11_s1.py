@@ -43,6 +43,7 @@ MAX_P99_MS = 20000
 MIN_PAYLOAD_BPS = 25.0
 MAX_SLAB_GROWTH_KB = 65536
 MAX_FINAL_LINKS = 8
+MAX_ANY_LINKS = 32
 FATAL_MARKERS = (
     "DNIV-LAB-FAIL", "BUG: KASAN:", "BUG: KCSAN:", "kernel BUG at",
     "Kernel panic", "Oops:", "general protection fault", "use-after-free",
@@ -213,6 +214,11 @@ def write_summary(path: Path, session: str, host_arch: str, runtime: float,
             raise RuntimeError(f"pp11-s1: {guest.name} local-churn slab growth exceeded envelope")
         if int(last["slab_kb"]) > int(first["slab_kb"]) + MAX_SLAB_GROWTH_KB:
             raise RuntimeError(f"pp11-s1: {guest.name} final slab growth exceeded envelope")
+        peak_links = max(int(row["links"]) for row in resources)
+        if peak_links > MAX_ANY_LINKS:
+            raise RuntimeError(
+                f"pp11-s1: {guest.name} peak links={peak_links} > {MAX_ANY_LINKS}"
+            )
         if int(last["links"]) > MAX_FINAL_LINKS or int(last["adj"]) < 1:
             raise RuntimeError(f"pp11-s1: {guest.name} final state links={last['links']} adj={last['adj']} outside envelope")
         lines.extend([
@@ -222,6 +228,7 @@ def write_summary(path: Path, session: str, host_arch: str, runtime: float,
             f"{guest.name}_SLAB_BASE_KB={first['slab_kb']}",
             f"{guest.name}_SLAB_LOCAL_DONE_KB={initial_ready['slab_kb']}",
             f"{guest.name}_SLAB_FINAL_KB={last['slab_kb']}",
+            f"{guest.name}_PEAK_LINKS={peak_links}",
             f"{guest.name}_FINAL_LINKS={last['links']}", f"{guest.name}_FINAL_ADJ={last['adj']}",
         ])
     payload_bps = total_bytes / max(runtime, 0.001)
@@ -232,7 +239,8 @@ def write_summary(path: Path, session: str, host_arch: str, runtime: float,
         f"LIMIT_MIN_APP_SUCCESSES_PER_GUEST={MIN_APP_SUCCESSES}",
         f"LIMIT_MIN_RAW_MARKERS_PER_GUEST={MIN_RAW_MARKERS}", f"LIMIT_MAX_P99_MS={MAX_P99_MS}",
         f"LIMIT_MIN_PAYLOAD_BPS={MIN_PAYLOAD_BPS:.3f}", f"LIMIT_MAX_SLAB_GROWTH_KB={MAX_SLAB_GROWTH_KB}",
-        f"LIMIT_MAX_FINAL_LINKS={MAX_FINAL_LINKS}", "RESULT=PASS",
+        f"LIMIT_MAX_FINAL_LINKS={MAX_FINAL_LINKS}", f"LIMIT_MAX_ANY_LINKS={MAX_ANY_LINKS}",
+        "RESULT=PASS",
     ])
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 

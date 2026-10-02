@@ -640,8 +640,11 @@ static int dniv_sock_release(struct socket *sock)
                         dsk->local_link,
                         le16_to_cpu(dsk->discdata_out.opt_status),
                         dsk->discdata_out.opt_data,
-                        le16_to_cpu(dsk->discdata_out.opt_optl)))
+                        le16_to_cpu(dsk->discdata_out.opt_optl))) {
                     dniv_nsp_conn_release(dsk->local_link);
+                } else {
+                    (void)dniv_nsp_conn_detach(dsk->local_link);
+                }
             } else {
                 dniv_nsp_conn_release(dsk->local_link);
             }
