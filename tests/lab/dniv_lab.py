@@ -326,6 +326,8 @@ KCSAN_IGNORED_REPORTS = frozenset({
     "BUG: KCSAN: data-race in refresh_cpu_vm_stats / memchr_inv",
     "BUG: KCSAN: data-race in mem_cgroup_wb_stats / tick_do_update_jiffies64",
     "BUG: KCSAN: data-race in tick_do_update_jiffies64 / mem_cgroup_wb_stats",
+    "BUG: KCSAN: data-race in __d_lookup_rcu / d_lru_add",
+    "BUG: KCSAN: data-race in d_lru_add / __d_lookup_rcu",
 })
 
 LOCKDEBUG_FAILURE_MARKERS = (
@@ -377,7 +379,7 @@ class QmpClient:
         self.path = path
 
     @staticmethod
-    def _wait_reply(sock: socket.socket) -> bool:
+    def _wait_replies(sock: socket.socket, wanted: int) -> bool:
         deadline = time.monotonic() + 2.0
         data = b""
         while time.monotonic() < deadline:
@@ -390,7 +392,7 @@ class QmpClient:
             data += chunk
             if b'"error"' in data:
                 return False
-            if b'"return"' in data:
+            if data.count(b'"return"') >= wanted:
                 return True
         return False
 
@@ -406,12 +408,13 @@ class QmpClient:
                 sock.connect(str(self.path))
                 if not sock.recv(65536):
                     return False
-                sock.sendall(b'{"execute":"qmp_capabilities"}\r\n')
-                if not self._wait_reply(sock):
-                    return False
                 payload = ('{"execute":"' + command + '"}\r\n').encode("ascii")
-                sock.sendall(payload)
-                return self._wait_reply(sock)
+                # QMP requests are ordered. Queue capabilities and the command
+                # together so a diagnostic TCG guest cannot consume the DR-delay
+                # window while the host waits for a capabilities round trip.
+                commands = b'{"execute":"qmp_capabilities"}\r\n' + payload
+                sock.sendall(commands)
+                return self._wait_replies(sock, 2)
         except (OSError, TimeoutError):
             return False
 

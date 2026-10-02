@@ -130,12 +130,12 @@ def pcap_marker_count(path: Path, marker: str) -> int:
 def parse_local_cycles(guest: Guest, session: str) -> dict[str, int]:
     counts = {key: 0 for key in LOCAL_EXPECTED}
     pattern = re.compile(
-        rf"^DNIV-PP11-CYCLE-PASS session={re.escape(session)} node={re.escape(guest.name)} "
+        rf"DNIV-PP11-CYCLE-PASS session={re.escape(session)} node={re.escape(guest.name)} "
         r"kind=(module|interface|identity|peer-restart) index=([0-9]+)$"
     )
     seen: dict[str, set[int]] = {key: set() for key in LOCAL_EXPECTED}
     for line in log_text(guest.log).splitlines():
-        match = pattern.match(line.strip())
+        match = pattern.search(line.strip())
         if not match:
             continue
         kind = match.group(1)
@@ -152,13 +152,13 @@ def parse_local_cycles(guest: Guest, session: str) -> dict[str, int]:
 
 def parse_latency(guest: Guest, session: str) -> tuple[list[int], set[int]]:
     pattern = re.compile(
-        rf"^DNIV-PP11-APP-PASS session={re.escape(session)} node={re.escape(guest.name)} "
+        rf"DNIV-PP11-APP-PASS session={re.escape(session)} node={re.escape(guest.name)} "
         r"seq=([0-9]+) cpu=([0-9]+) ms=([0-9]+) bytes=5240$"
     )
     values: list[int] = []
     cpus: set[int] = set()
     for line in log_text(guest.log).splitlines():
-        match = pattern.match(line.strip())
+        match = pattern.search(line.strip())
         if match:
             cpus.add(int(match.group(2)))
             values.append(int(match.group(3)))
@@ -166,12 +166,12 @@ def parse_latency(guest: Guest, session: str) -> tuple[list[int], set[int]]:
 
 def parse_resources(guest: Guest, session: str) -> list[dict[str, int | str]]:
     pattern = re.compile(
-        rf"^DNIV-PP11-RESOURCE session={re.escape(session)} node={re.escape(guest.name)} "
+        rf"DNIV-PP11-RESOURCE session={re.escape(session)} node={re.escape(guest.name)} "
         r"stage=([^ ]+) links=([0-9]+) adj=([0-9]+) routes=([0-9]+) mem_kb=([0-9]+) slab_kb=([0-9]+)$"
     )
     rows: list[dict[str, int | str]] = []
     for line in log_text(guest.log).splitlines():
-        match = pattern.match(line.strip())
+        match = pattern.search(line.strip())
         if match:
             rows.append({
                 "stage": match.group(1), "links": int(match.group(2)),
@@ -316,9 +316,14 @@ def main() -> int:
                 app_peer = marker_count(peer.log, "DNIV-PP11-APP-PASS session=")
                 append_event(cycle_file, f"BEGIN\treboot\t{guest.name}\t{index}")
                 record_host_sample(host_resources, f"reboot-{guest.name}-{index}-before", guest)
-                if not QmpClient(guest.qmp).execute("system_reset"):
-                    raise RuntimeError(f"pp11-s1: QMP reset failed for {guest.name}")
-                append_event(cycle_file, f"FAULT\treboot\t{guest.name}\t{index}\tsystem_reset")
+                reset_ack = QmpClient(guest.qmp).execute("system_reset")
+                # system_reset can take effect before an instrumented TCG QMP
+                # client receives the command reply. The incremented boot and
+                # host-ready markers below are the fail-closed effect proof.
+                append_event(
+                    cycle_file,
+                    f"FAULT\treboot\t{guest.name}\t{index}\tsystem_reset\tqmp_ack={int(reset_ack)}",
+                )
                 reboot_timeout = 300.0 if lab.host_arch == "aarch64" else 180.0
                 wait_marker_count(guest, f"DNIV-PP11-BOOT-READY session={session} node={guest.name}", boot_before + 1, reboot_timeout)
                 wait_marker_count(guest, f"DNIV-PP11-HOST-READY session={session} node={guest.name}", ready_before + 1, reboot_timeout)

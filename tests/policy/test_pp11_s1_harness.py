@@ -31,8 +31,17 @@ def main() -> int:
     for marker in required_lab:
         if marker not in LAB:
             raise SystemExit(f"pp11-s1 regression: missing reboot guard: {marker}")
-    if 'if not QmpClient(guest.qmp).execute("system_reset"):' not in CONTROL:
-        raise SystemExit("pp11-s1 regression: missing acknowledged QMP reset")
+    for marker in (
+        'reset_ack = QmpClient(guest.qmp).execute("system_reset")',
+        'qmp_ack={int(reset_ack)}',
+        'match = pattern.search(line.strip())',
+    ):
+        if marker not in CONTROL:
+            raise SystemExit(f"pp11-s1 regression: missing reboot/evidence guard: {marker}")
+    if 'raise RuntimeError(f"pp11-s1: QMP reset failed' in CONTROL:
+        raise SystemExit("pp11-s1 regression: reset reply ambiguity must defer to boot-effect proof")
+    if CONTROL.count('match = pattern.search(line.strip())') != 3:
+        raise SystemExit("pp11-s1 regression: serial evidence parsers must accept syslog prefixes")
     if 'MAX_ANY_LINKS = 32' not in CONTROL or 'peak_links > MAX_ANY_LINKS' not in CONTROL:
         raise SystemExit("pp11-s1 regression: missing transient NSP link bound")
     handoff = "pp11_observe 35\n            # The observer records the peer's final UP transition"
