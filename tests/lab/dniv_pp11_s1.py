@@ -58,11 +58,17 @@ def log_text(path: Path) -> str:
 def marker_count(path: Path, marker: str) -> int:
     return sum(1 for line in log_text(path).splitlines() if marker in line)
 
+def fail_if_guest_reported(guest: Guest) -> None:
+    for line in reversed(log_text(guest.log).splitlines()):
+        if "DNIV-LAB-FAIL session=" in line:
+            raise RuntimeError(f"pp11-s1: guest {guest.name} reported failure: {line.strip()}")
+
 def wait_marker_count(guest: Guest, marker: str, wanted: int, timeout: float) -> None:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if marker_count(guest.log, marker) >= wanted:
             return
+        fail_if_guest_reported(guest)
         if guest.process is not None and guest.process.poll() is not None:
             raise RuntimeError(f"pp11-s1: {guest.name} exited waiting for {marker}")
         time.sleep(0.5)
@@ -74,6 +80,7 @@ def wait_app_progress(guest: Guest, baseline: int, timeout: float) -> None:
     while time.monotonic() < deadline:
         if marker_count(guest.log, marker) > baseline:
             return
+        fail_if_guest_reported(guest)
         if guest.process is not None and guest.process.poll() is not None:
             raise RuntimeError(f"pp11-s1: {guest.name} exited before traffic recovery")
         time.sleep(0.5)

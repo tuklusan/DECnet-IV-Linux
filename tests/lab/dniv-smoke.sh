@@ -931,6 +931,31 @@ pp11s1)
     sync
     pp11_app_pid=
     pp11_mirror_pid=
+    pp11_app_counter="$pp11_state/app-success-count"
+    if [ ! -r "$pp11_app_counter" ]; then
+        printf '0\n' > "$pp11_app_counter"
+    fi
+
+    pp11_app_count() {
+        value=$(cat "$pp11_app_counter" 2>/dev/null || printf '0')
+        case "$value" in ''|*[!0-9]*) value=0 ;; esac
+        printf '%s\n' "$value"
+    }
+
+    pp11_wait_app_after() {
+        baseline=$1
+        tries=$2
+        n=0
+        while [ "$n" -lt "$tries" ]; do
+            current=$(pp11_app_count)
+            if [ "$current" -gt "$baseline" ]; then
+                return 0
+            fi
+            n=$((n + 1))
+            sleep 0.25
+        done
+        return 1
+    }
 
     pp11_peer_up() {
         /usr/local/sbin/dnctl adjacencies 2>/dev/null | \
@@ -1007,6 +1032,9 @@ pp11s1)
             if wait "$child"; then
                 end_ns=$(date +%s%N)
                 elapsed_ms=$(((end_ns - start_ns) / 1000000))
+                count=$(pp11_app_count)
+                count=$((count + 1))
+                printf '%s\n' "$count" > "$pp11_app_counter"
                 echo "DNIV-PP11-APP-PASS session=$session node=$name seq=$app_seq cpu=$cpu ms=$elapsed_ms bytes=5240"
             else
                 echo "DNIV-PP11-APP-MISS session=$session node=$name seq=$app_seq cpu=$cpu"
@@ -1058,7 +1086,8 @@ pp11s1)
     }
 
     pp11_probe() {
-        if ! /usr/local/sbin/dnmrr "$peer_node" >/dev/null 2>&1; then
+        baseline=$1
+        if ! pp11_wait_app_after "$baseline" 240; then
             echo "DNIV-LAB-FAIL session=$session node=$name reason=pp11-post-cycle-mirror"
             exit 1
         fi
@@ -1102,11 +1131,12 @@ pp11s1)
                 exit 1
                 ;;
         esac
+        app_before=$(pp11_app_count)
         if ! pp11_wait_peer 600; then
             echo "DNIV-LAB-FAIL session=$session node=$name reason=pp11-$kind-recovery index=$index"
             exit 1
         fi
-        pp11_probe
+        pp11_probe "$app_before"
         pp11_resource "$kind-$index"
         echo "DNIV-PP11-CYCLE-PASS session=$session node=$name kind=$kind index=$index"
         sleep 2
@@ -1176,7 +1206,8 @@ pp11s1)
         echo "DNIV-LAB-FAIL session=$session node=$name reason=pp11-host-ready-adjacency"
         exit 1
     fi
-    pp11_probe
+    app_before=$(pp11_app_count)
+    pp11_probe "$app_before"
     pp11_resource "host-ready-$boot_count"
     echo "DNIV-PP11-HOST-READY session=$session node=$name boot=$boot_count"
     while :; do sleep 60; done
