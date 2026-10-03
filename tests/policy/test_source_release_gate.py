@@ -415,7 +415,23 @@ def main() -> int:
             raise SystemExit(f"source-release gate: installer safety safeguard missing: {marker}")
 
     uninstall = read_text("uninstall.sh")
-    for marker in ("safe install manifest not found", "normalized absolute non-root path", "\"$path\" != *
+    for marker in (
+        "safe install manifest not found",
+        "normalized absolute non-root path",
+        "\"$path\" != *$'\\n'*",
+        "\"$path\" != *$'\\r'*",
+        '"$path" != *"//"*',
+        "staged path crosses symlink parent",
+        "mapfile -t paths",
+        "safe_default_module_path",
+        "module_root_is_default",
+        "module_releases",
+        "required command not found: stat",
+        '$(stat -c %h -- "$manifest") == 1',
+        "required command not found: depmod",
+        'if [[ -z "$destdir" && -n ${MODULE_ROOT:-} ]]; then',
+        "custom MODULE_ROOT is supported only with non-empty DESTDIR",
+    ):
         if marker not in uninstall:
             raise SystemExit(f"source-release gate: uninstaller safety safeguard missing: {marker}")
 
