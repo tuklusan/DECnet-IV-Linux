@@ -185,6 +185,11 @@ def main() -> int:
     ):
         if marker not in workflow:
             raise SystemExit(f"source-release gate: exact-artifact portability safeguard missing: {marker}")
+    diagnostic_kernel = read_text("tests/lab/build-diagnostic-kernel.sh")
+    for marker in ("Linux v7.3-rc5", "linux_commit=72d3fcf802c45d00b300f25b848a93c3a2bd7c7e"):
+        if marker not in diagnostic_kernel:
+            raise SystemExit(f"source-release gate: current upstream kernel pin missing: {marker}")
+
     dispatcher = read_text(".github/workflows/repository-policy.yml")
     if "SOURCE_RELEASE source-release.yml" not in dispatcher or "RELEASE_IMAGE release-image.yml" in dispatcher:
         raise SystemExit("source-release gate: acceptance dispatcher not synchronized")

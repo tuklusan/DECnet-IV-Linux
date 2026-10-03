@@ -40,7 +40,8 @@ esac
 }
 
 linux_repo=https://github.com/torvalds/linux.git
-linux_commit=028ef9c96e96197026887c0f092424679298aae8
+# Linux v7.3-rc5, tagged 2026-09-27; current mainline forward-compatibility baseline.
+linux_commit=72d3fcf802c45d00b300f25b848a93c3a2bd7c7e
 rm -rf "$output"
 mkdir -p "$output/src" "$output/build"
 
