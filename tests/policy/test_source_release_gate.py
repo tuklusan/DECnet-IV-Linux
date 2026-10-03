@@ -119,6 +119,26 @@ def main() -> int:
         if excluded in reference_tests:
             raise SystemExit(f"source-release gate: out-of-scope IPv6/UDP reference selector selected: {excluded}")
 
+    multinet_proof = read_text("tests/lab/prove-multinet.sh")
+    if "-m unittest -v tests.test_multinet\n" in multinet_proof:
+        raise SystemExit("source-release gate: MULTINET proof still runs the broad PyDECnet module")
+    for marker in (
+        "tests.test_multinet.TestMultinetTCPconnect",
+        "tests.test_multinet.TestMultinetTCPconnectLate",
+        "tests.test_multinet.TestMultinetTCPlisten",
+    ):
+        if marker not in multinet_proof:
+            raise SystemExit(f"source-release gate: IPv4-only MULTINET proof selector missing: {marker}")
+    for excluded in (
+        "TestMultinetTCPconnect2",
+        "TestMultinetTCP6listen",
+        "TestMultinetTCP46listen",
+        "TestMultinetUDP",
+        "TestMultinetUDPnodest",
+    ):
+        if excluded in multinet_proof:
+            raise SystemExit(f"source-release gate: out-of-scope MULTINET proof selector present: {excluded}")
+
     preproduction = read_text("docs/PRE_PRODUCTION_TEST.md")
     if "`run-two-node.sh`" in preproduction:
         raise SystemExit("source-release gate: stale removed two-node harness remains in pre-production documentation")

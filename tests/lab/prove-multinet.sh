@@ -56,7 +56,10 @@ python3 -m venv "$work/venv"
 
 (
     cd "$work/pydecnet/pydecnet"
-    PYTHONPATH=. "$work/venv/bin/python" -m unittest -v tests.test_multinet
+    PYTHONPATH=. "$work/venv/bin/python" -m unittest -v \
+        tests.test_multinet.TestMultinetTCPconnect \
+        tests.test_multinet.TestMultinetTCPconnectLate \
+        tests.test_multinet.TestMultinetTCPlisten
 )
 
 base_port=$((31000 + (($$ % 1500) * 3)))
