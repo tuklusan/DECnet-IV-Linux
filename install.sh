@@ -61,6 +61,7 @@ manifest_tmp="$manifest.tmp.$$"
 safe_root() {
     local path=$1
     [[ "$path" == /* && "$path" != / &&
+       "$path" != *"//"* &&
        "$path" != *"/../"* && "$path" != */.. &&
        "$path" != *"/./"* && "$path" != */. ]]
 }
@@ -111,7 +112,7 @@ safe_default_module_path() {
 
 safe_managed_path() {
     local path=$1
-    [[ "$path" == /* &&
+    [[ "$path" == /* && "$path" != *"//"* &&
        "$path" != *"/../"* && "$path" != *"/.." &&
        "$path" != *"/./"* && "$path" != *"/." ]] || return 1
     case "$path" in
