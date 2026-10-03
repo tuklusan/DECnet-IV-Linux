@@ -36,6 +36,10 @@ command -v modinfo >/dev/null 2>&1 || {
     echo "install.sh: required command not found: modinfo" >&2
     exit 2
 }
+command -v mktemp >/dev/null 2>&1 || {
+    echo "install.sh: required command not found: mktemp" >&2
+    exit 2
+}
 vermagic=$(modinfo -F vermagic "$module_path") || {
     echo "install.sh: cannot read module vermagic: $module_path" >&2
     exit 2
@@ -56,7 +60,6 @@ module_root=${MODULE_ROOT:-/lib/modules/$kernel_release}
 while [[ "$module_root" != / && "$module_root" == */ ]]; do module_root=${module_root%/}; done
 manifest_rel="$prefix/share/decnet-iv-linux/install-manifest.txt"
 manifest="$destdir$manifest_rel"
-manifest_tmp="$manifest.tmp.$$"
 
 safe_root() {
     local path=$1
@@ -135,6 +138,15 @@ safe_managed_path() {
 
 check_staged_parent "$manifest_rel" || exit 2
 mkdir -p "$(dirname "$manifest")"
+manifest_tmp=$(mktemp "$manifest.tmp.XXXXXX") || {
+    echo "install.sh: cannot create safe manifest temporary file" >&2
+    exit 2
+}
+[[ -f "$manifest_tmp" && ! -L "$manifest_tmp" ]] || {
+    echo "install.sh: unsafe manifest temporary file" >&2
+    exit 2
+}
+trap 'rm -f -- "$manifest_tmp"' EXIT
 if [[ -e "$manifest" || -L "$manifest" ]]; then
     [[ -f "$manifest" && ! -L "$manifest" ]] || {
         echo "install.sh: unsafe existing manifest: $manifest" >&2
@@ -151,8 +163,6 @@ if [[ -e "$manifest" || -L "$manifest" ]]; then
 else
     : >"$manifest"
 fi
-
-trap 'rm -f "$manifest_tmp"' EXIT
 
 managed() {
     grep -Fxq -- "$1" "$manifest" 2>/dev/null

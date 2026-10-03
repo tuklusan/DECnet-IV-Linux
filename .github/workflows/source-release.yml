@@ -289,6 +289,21 @@ jobs:
             exit 1
           fi
 
+          manifest_temp_stage="$RUNNER_TEMP/manifest-temp-symlink-stage"
+          manifest_temp_victim="$RUNNER_TEMP/manifest-temp-symlink-victim"
+          mkdir -p "$manifest_temp_stage/usr/local/share/decnet-iv-linux"
+          printf 'foreign-victim\n' >"$manifest_temp_victim"
+          STAGE="$manifest_temp_stage" VICTIM="$manifest_temp_victim" KERNEL_RELEASE="$KERNEL_RELEASE" bash -c '
+            predictable="$STAGE/usr/local/share/decnet-iv-linux/install-manifest.txt.tmp.$"
+            ln -s "$VICTIM" "$predictable"
+            exec env DESTDIR="$STAGE" KERNEL_RELEASE="$KERNEL_RELEASE" ./install.sh
+          '
+          grep -Fqx 'foreign-victim' "$manifest_temp_victim"
+          test -f "$manifest_temp_stage/usr/local/share/decnet-iv-linux/install-manifest.txt"
+          test ! -L "$manifest_temp_stage/usr/local/share/decnet-iv-linux/install-manifest.txt"
+          rm -f "$manifest_temp_stage/usr/local/share/decnet-iv-linux/install-manifest.txt.tmp."*
+          DESTDIR="$manifest_temp_stage" KERNEL_RELEASE="$KERNEL_RELEASE" ./uninstall.sh
+
           symlink_stage="$RUNNER_TEMP/symlink-parent-stage"
           symlink_escape="$RUNNER_TEMP/symlink-parent-escape"
           mkdir -p "$symlink_stage/usr/local" "$symlink_escape"

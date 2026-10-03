@@ -338,6 +338,8 @@ def main() -> int:
         "refusing non-symlink at link target",
         "module vermagic release",
         "required command not found: modinfo",
+        "required command not found: mktemp",
+        'mktemp "$manifest.tmp.XXXXXX"',
         "required command not found: depmod",
         'if [[ -z "$destdir" && -n ${MODULE_ROOT:-} ]]; then',
         "custom MODULE_ROOT is supported only with non-empty DESTDIR",
@@ -391,6 +393,8 @@ def main() -> int:
         'test "$(git -C /tmp/linux-clang rev-parse HEAD)" = "$linux_commit"',
         'KBUILD_MODPOST_WARN=1 CC="$cc" KDIR=/tmp/linux-clang KERNEL_RELEASE="$clang_release" ./build.sh',
         'DESTDIR="$stage" KERNEL_RELEASE="$clang_release" ./install.sh',
+        "manifest-temp-symlink-stage",
+        "foreign-victim",
         "KBUILD_MODPOST_WARN=1",
         "linux_floor_commit=e8f897f4afef0031fe618a8e94127a0934896aba",
         'test "$floor_release" = 6.8.0',
@@ -439,7 +443,7 @@ def main() -> int:
         raise SystemExit("source-release gate: repository still advertises disk-image delivery")
 
     install_doc = read_text("INSTALL.md")
-    for marker in ("Secure Boot", "MODULE_ROOT", "modprobe -r decnet_iv", "python3 -c 'import decnet'", "module vermagic", "binutils (including `ar`)", "reject existing symlinked parent components", "dnf install gcc make binutils", "dirname", "basename", "sha256sum", "earlier kernel builds remain valid managed entries", "repeated `//` separators", "CR/LF line breaks", "line-oriented", "pass the same value to `uninstall.sh`", "live install always uses `/lib/modules/<kernel-release>`", "custom `MODULE_ROOT` is rejected for live uninstall"):
+    for marker in ("Secure Boot", "MODULE_ROOT", "modprobe -r decnet_iv", "python3 -c 'import decnet'", "module vermagic", "binutils (including `ar`)", "reject existing symlinked parent components", "dnf install gcc make binutils", "dirname", "basename", "mktemp", "sha256sum", "earlier kernel builds remain valid managed entries", "repeated `//` separators", "CR/LF line breaks", "line-oriented", "pass the same value to `uninstall.sh`", "live install always uses `/lib/modules/<kernel-release>`", "custom `MODULE_ROOT` is rejected for live uninstall"):
         if marker not in install_doc:
             raise SystemExit(f"source-release gate: installation manual missing: {marker}")
 
