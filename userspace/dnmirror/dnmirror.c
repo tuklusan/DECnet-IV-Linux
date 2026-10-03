@@ -219,8 +219,11 @@ int main(int argc, char **argv)
             if (rc < 0) {
                 perror("dnmirror: access");
                 close(fd);
-                close(listener);
-                return 1;
+                if (once) {
+                    close(listener);
+                    return 1;
+                }
+                continue;
             }
             if (rc > 0) {
                 close(fd);
@@ -234,8 +237,11 @@ int main(int argc, char **argv)
         close(fd);
         if (rc) {
             perror("dnmirror: session");
-            close(listener);
-            return 1;
+            if (once) {
+                close(listener);
+                return 1;
+            }
+            continue;
         }
         if (once)
             break;

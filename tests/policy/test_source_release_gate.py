@@ -564,6 +564,8 @@ def main() -> int:
         "dnhttpd": dnhttpd,
         "dnmaild": dnmaild,
         "dnphoned": read_text("userspace/dnphone/dnphoned.c"),
+        "dnmirror": read_text("userspace/dnmirror/dnmirror.c"),
+        "dnobject": read_text("userspace/dnobject/dnobject.c"),
     }
     for daemon, source in persistent_daemons.items():
         if f'perror("{daemon}: session");' not in source or "continue;" not in source:
@@ -572,11 +574,14 @@ def main() -> int:
         source = persistent_daemons[daemon]
         if "int failed = 0;" not in source or "failed = 1;" not in source or "return failed ? 1 : 0;" not in source:
             raise SystemExit(f"source-release gate: {daemon} bounded-session failure accounting missing")
-    for daemon in ("dnhttpd", "dnmaild"):
+    for daemon in ("dnhttpd", "dnmaild", "dnmirror", "dnobject"):
         source = persistent_daemons[daemon]
         for marker in ("if (once) {", "return 1;", "continue;"):
             if marker not in source:
                 raise SystemExit(f"source-release gate: {daemon} once/default session isolation contract missing: {marker}")
+    dnmirror = persistent_daemons["dnmirror"]
+    if 'perror("dnmirror: access");' not in dnmirror or "if (once) {" not in dnmirror:
+        raise SystemExit("source-release gate: dnmirror access-session isolation contract missing")
 
     state = read_text("docs/PROJECT_STATE.md")
     goal = state.split("## Goal", 1)[1].split("## References and licensing", 1)[0]
