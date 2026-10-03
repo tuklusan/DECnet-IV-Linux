@@ -34,7 +34,16 @@ def main() -> int:
     if (ROOT / ".github/workflows/release-image.yml").exists():
         raise SystemExit("source-release gate: obsolete release-image workflow remains")
     workflow = read_text(".github/workflows/source-release.yml")
-    for marker in ("Build source archive twice", "cmp \"$a\" \"$b\"", "Build install and uninstall extracted source", "validate-arm64:", "actions/download-artifact@"):
+    for marker in (
+        "Build source archive twice",
+        "cmp \"$a\" \"$b\"",
+        'build-source-release.sh" relative',
+        "Build install and uninstall extracted source",
+        "missing-artifact negative unexpectedly succeeded",
+        "unmanaged-target negative unexpectedly succeeded",
+        "validate-arm64:",
+        "actions/download-artifact@",
+    ):
         if marker not in workflow:
             raise SystemExit(f"source-release gate: workflow safeguard missing: {marker}")
     for forbidden in ("qemu-system", ".qcow2", "dniv.raw", "Release Image"):
@@ -60,8 +69,25 @@ def main() -> int:
         if marker not in builder:
             raise SystemExit(f"source-release gate: archive safeguard missing: {marker}")
 
+    install = read_text("install.sh")
+    for marker in (
+        "refusing unmanaged existing target",
+        'record "$target"',
+        'sort -u "$manifest"',
+        "unsafe existing manifest",
+        "DESTDIR must be empty or absolute",
+    ):
+        if marker not in install:
+            raise SystemExit(f"source-release gate: installer safety safeguard missing: {marker}")
+
+    uninstall = read_text("uninstall.sh")
+    for marker in ("safe install manifest not found", "DESTDIR must be empty or absolute"):
+        if marker not in uninstall:
+            raise SystemExit(f"source-release gate: uninstaller safety safeguard missing: {marker}")
+
     build = read_text("build.sh")
     for marker in (
+        "include/config/kernel.release",
         "kernelrelease",
         "does not match KDIR release",
         "Clang 16 or later required",

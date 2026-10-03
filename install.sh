@@ -13,28 +13,131 @@
 # patent, trademark, and governing-law provisions.
 # ============================================================================
 
+
 set -euo pipefail
+
 root=$(cd "$(dirname "$0")" && pwd)
 cd "$root"
+
 destdir=${DESTDIR:-}
 prefix=${PREFIX:-/usr/local}
 kernel_release=${KERNEL_RELEASE:-$(uname -r)}
 module_root=${MODULE_ROOT:-/lib/modules/$kernel_release}
 manifest_rel="$prefix/share/decnet-iv-linux/install-manifest.txt"
 manifest="$destdir$manifest_rel"
-tmp_manifest=$(mktemp)
-trap 'rm -f "$tmp_manifest"' EXIT
-[[ "$prefix" == /* && "$module_root" == /* ]] || { echo "install.sh: PREFIX and MODULE_ROOT must be absolute" >&2; exit 2; }
-if [[ -z "$destdir" && ${EUID:-$(id -u)} -ne 0 ]]; then echo "install.sh: live installation requires root; use DESTDIR for staging" >&2; exit 2; fi
-record() { printf '%s\n' "$1" >>"$tmp_manifest"; }
-put() { local mode=$1 source=$2 target=$3; test -e "$source" || { echo "install.sh: missing built artifact: $source" >&2; exit 2; }; install -D -m "$mode" "$source" "$destdir$target"; record "$target"; }
-link_to() { local target=$1 link=$2; mkdir -p "$(dirname "$destdir$link")"; ln -sfn "$target" "$destdir$link"; record "$link"; }
+manifest_tmp="$manifest.tmp.$$"
+
+[[ -z "$destdir" || "$destdir" == /* ]] || {
+    echo "install.sh: DESTDIR must be empty or absolute" >&2
+    exit 2
+}
+[[ "$prefix" == /* && "$prefix" != / && "$module_root" == /* && "$module_root" != / ]] || {
+    echo "install.sh: PREFIX and MODULE_ROOT must be absolute non-root paths" >&2
+    exit 2
+}
+if [[ -z "$destdir" && ${EUID:-$(id -u)} -ne 0 ]]; then
+    echo "install.sh: live installation requires root; use DESTDIR for staging" >&2
+    exit 2
+fi
+
+safe_managed_path() {
+    local path=$1
+    [[ "$path" == /* && "$path" != *"/../"* && "$path" != *"/.." ]] || return 1
+    case "$path" in
+        "$prefix"/*|"$module_root"/*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+mkdir -p "$(dirname "$manifest")"
+if [[ -e "$manifest" || -L "$manifest" ]]; then
+    [[ -f "$manifest" && ! -L "$manifest" ]] || {
+        echo "install.sh: unsafe existing manifest: $manifest" >&2
+        exit 2
+    }
+    while IFS= read -r path; do
+        [[ -z "$path" ]] && continue
+        safe_managed_path "$path" || {
+            echo "install.sh: unsafe existing manifest path: $path" >&2
+            exit 2
+        }
+    done <"$manifest"
+else
+    : >"$manifest"
+fi
+
+trap 'rm -f "$manifest_tmp"' EXIT
+
+managed() {
+    grep -Fxq -- "$1" "$manifest" 2>/dev/null
+}
+
+check_target() {
+    local target=$1
+    local full="$destdir$target"
+    if [[ -e "$full" || -L "$full" ]]; then
+        managed "$target" || {
+            echo "install.sh: refusing unmanaged existing target: $target" >&2
+            exit 2
+        }
+    fi
+}
+
+record() {
+    local target=$1
+    safe_managed_path "$target" || {
+        echo "install.sh: unsafe install target: $target" >&2
+        exit 2
+    }
+    managed "$target" || printf '%s\n' "$target" >>"$manifest"
+}
+
+put() {
+    local mode=$1 source=$2 target=$3
+    test -e "$source" || {
+        echo "install.sh: missing built artifact: $source" >&2
+        exit 2
+    }
+    check_target "$target"
+    record "$target"
+    install -D -m "$mode" "$source" "$destdir$target"
+}
+
+link_to() {
+    local target=$1 link=$2
+    check_target "$link"
+    record "$link"
+    mkdir -p "$(dirname "$destdir$link")"
+    ln -sfn "$target" "$destdir$link"
+}
+
 put 0644 kernel/decnet/decnet_iv.ko "$module_root/extra/decnet_iv.ko"
-for pair in   "userspace/dnctl/dnctl:$prefix/sbin/dnctl"   "userspace/dnetd/dnetd:$prefix/sbin/dnetd"   "userspace/dnfald/dnfald:$prefix/sbin/dnfald"   "userspace/dnnml/dnnml:$prefix/sbin/dnnml"   "userspace/dnphone/dnphoned:$prefix/sbin/dnphoned"   "userspace/dnmail/dnmaild:$prefix/sbin/dnmaild"   "userspace/dnhttpd/dnhttpd:$prefix/sbin/dnhttpd"   "userspace/dnmultinet/dnmultinet.py:$prefix/sbin/dnmultinet"   "userspace/ncp/ncp:$prefix/bin/ncp"   "userspace/dnlogin/dnlogin:$prefix/bin/dnlogin"   "userspace/dncopy/dncopy:$prefix/bin/dncopy"   "userspace/dntask/dntask:$prefix/bin/dntask"   "userspace/dnnice/dnnice:$prefix/bin/dnnice"   "userspace/dnmirror/dnmirror:$prefix/bin/dnmirror"   "userspace/dnobject/dnobject:$prefix/bin/dnobject"   "userspace/dnphone/phone:$prefix/bin/phone"   "userspace/dnmail/dnmail:$prefix/bin/dnmail"   "userspace/dnlynx/dnlynx:$prefix/bin/dnlynx"   "userspace/dnping/dnping:$prefix/bin/dnping"; do
-    put 0755 "${pair%%:*}" "${pair#*:}"
-done
+
+put 0755 userspace/dnctl/dnctl "$prefix/sbin/dnctl"
+put 0755 userspace/dnetd/dnetd "$prefix/sbin/dnetd"
+put 0755 userspace/dnfald/dnfald "$prefix/sbin/dnfald"
+put 0755 userspace/dnnml/dnnml "$prefix/sbin/dnnml"
+put 0755 userspace/dnphone/dnphoned "$prefix/sbin/dnphoned"
+put 0755 userspace/dnmail/dnmaild "$prefix/sbin/dnmaild"
+put 0755 userspace/dnhttpd/dnhttpd "$prefix/sbin/dnhttpd"
+put 0755 userspace/dnmultinet/dnmultinet.py "$prefix/sbin/dnmultinet"
+
+put 0755 userspace/ncp/ncp "$prefix/bin/ncp"
+put 0755 userspace/dnlogin/dnlogin "$prefix/bin/dnlogin"
 link_to dnlogin "$prefix/bin/sethost"
-for alias in dntype dndir dndel dnrename dnsubmit dnprint; do link_to dncopy "$prefix/bin/$alias"; done
+put 0755 userspace/dncopy/dncopy "$prefix/bin/dncopy"
+for alias in dntype dndir dndel dnrename dnsubmit dnprint; do
+    link_to dncopy "$prefix/bin/$alias"
+done
+put 0755 userspace/dntask/dntask "$prefix/bin/dntask"
+put 0755 userspace/dnnice/dnnice "$prefix/bin/dnnice"
+put 0755 userspace/dnmirror/dnmirror "$prefix/bin/dnmirror"
+put 0755 userspace/dnobject/dnobject "$prefix/bin/dnobject"
+put 0755 userspace/dnphone/phone "$prefix/bin/phone"
+put 0755 userspace/dnmail/dnmail "$prefix/bin/dnmail"
+put 0755 userspace/dnlynx/dnlynx "$prefix/bin/dnlynx"
+put 0755 userspace/dnping/dnping "$prefix/bin/dnping"
+
 put 0644 userspace/libdnet/libdnet.a "$prefix/lib/libdnet.a"
 put 0755 userspace/libdnet/libdnet.so.1.0 "$prefix/lib/libdnet.so.1.0"
 link_to libdnet.so.1.0 "$prefix/lib/libdnet.so.1"
@@ -43,13 +146,26 @@ put 0644 userspace/libdnet/libdnet_daemon.a "$prefix/lib/libdnet_daemon.a"
 put 0755 userspace/libdnet/libdnet_daemon.so.1.0 "$prefix/lib/libdnet_daemon.so.1.0"
 link_to libdnet_daemon.so.1.0 "$prefix/lib/libdnet_daemon.so.1"
 link_to libdnet_daemon.so.1 "$prefix/lib/libdnet_daemon.so"
+
 put 0644 userspace/libdnet/include/netdnet/dn.h "$prefix/include/netdnet/dn.h"
 put 0644 userspace/libdnet/include/netdnet/dnetdb.h "$prefix/include/netdnet/dnetdb.h"
 put 0644 include/uapi/linux/dn.h "$prefix/include/linux/dn.h"
 put 0644 include/uapi/linux/decnet_iv.h "$prefix/include/linux/decnet_iv.h"
-for doc in README.md INSTALL.md LICENSE docs/DELIVERY.md docs/FEATURES.md docs/COMPONENTS.md docs/ARCHITECTURE.md; do put 0644 "$doc" "$prefix/share/doc/decnet-iv-linux/$(basename "$doc")"; done
-if [[ -f SOURCE-METADATA ]]; then put 0644 SOURCE-METADATA "$prefix/share/doc/decnet-iv-linux/SOURCE-METADATA"; fi
-mkdir -p "$(dirname "$manifest")"
-sort -u "$tmp_manifest" >"$manifest"
-if [[ -z "$destdir" ]]; then command -v depmod >/dev/null 2>&1 && depmod -a "$kernel_release"; command -v ldconfig >/dev/null 2>&1 && ldconfig; fi
+
+for doc in README.md INSTALL.md LICENSE docs/DELIVERY.md docs/FEATURES.md docs/COMPONENTS.md docs/ARCHITECTURE.md; do
+    put 0644 "$doc" "$prefix/share/doc/decnet-iv-linux/$(basename "$doc")"
+done
+if [[ -f SOURCE-METADATA ]]; then
+    put 0644 SOURCE-METADATA "$prefix/share/doc/decnet-iv-linux/SOURCE-METADATA"
+fi
+
+sort -u "$manifest" >"$manifest_tmp"
+chmod 0644 "$manifest_tmp"
+mv -f "$manifest_tmp" "$manifest"
+
+if [[ -z "$destdir" ]]; then
+    command -v depmod >/dev/null 2>&1 && depmod -a "$kernel_release"
+    command -v ldconfig >/dev/null 2>&1 && ldconfig
+fi
+
 echo "install.sh: installed manifest $manifest_rel"

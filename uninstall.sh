@@ -20,9 +20,10 @@ kernel_release=${KERNEL_RELEASE:-$(uname -r)}
 module_root=${MODULE_ROOT:-/lib/modules/$kernel_release}
 manifest_rel="$prefix/share/decnet-iv-linux/install-manifest.txt"
 manifest="$destdir$manifest_rel"
-[[ "$prefix" == /* && "$module_root" == /* ]] || { echo "uninstall.sh: PREFIX and MODULE_ROOT must be absolute" >&2; exit 2; }
+[[ -z "$destdir" || "$destdir" == /* ]] || { echo "uninstall.sh: DESTDIR must be empty or absolute" >&2; exit 2; }
+[[ "$prefix" == /* && "$prefix" != / && "$module_root" == /* && "$module_root" != / ]] || { echo "uninstall.sh: PREFIX and MODULE_ROOT must be absolute non-root paths" >&2; exit 2; }
 if [[ -z "$destdir" && ${EUID:-$(id -u)} -ne 0 ]]; then echo "uninstall.sh: live uninstall requires root; use DESTDIR for staging" >&2; exit 2; fi
-test -r "$manifest" || { echo "uninstall.sh: install manifest not found: $manifest" >&2; exit 2; }
+[[ -f "$manifest" && ! -L "$manifest" ]] || { echo "uninstall.sh: safe install manifest not found: $manifest" >&2; exit 2; }
 while IFS= read -r path; do
   [[ "$path" == /* && "$path" != *"/../"* && "$path" != *"/.." ]] || { echo "uninstall.sh: unsafe manifest path: $path" >&2; exit 2; }
   case "$path" in "$prefix"/*|"$module_root"/*) ;; *) echo "uninstall.sh: manifest path outside managed roots: $path" >&2; exit 2 ;; esac

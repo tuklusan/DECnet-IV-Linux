@@ -30,7 +30,11 @@ else
     kdir=/lib/modules/$kernel_release/build
 fi
 test -r "$kdir/Makefile" || { echo "build.sh: matching kernel build tree not found: $kdir" >&2; exit 2; }
-detected_release=$(make -s -C "$kdir" kernelrelease)
+if [[ -r "$kdir/include/config/kernel.release" ]]; then
+    detected_release=$(cat "$kdir/include/config/kernel.release")
+else
+    detected_release=$(make -s -C "$kdir" kernelrelease)
+fi
 kernel_release=${KERNEL_RELEASE:-$detected_release}
 [[ "$kernel_release" == "$detected_release" ]] || {
     echo "build.sh: KERNEL_RELEASE=$kernel_release does not match KDIR release $detected_release" >&2

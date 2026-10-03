@@ -38,7 +38,7 @@ Core build requirements:
 - binutils and libc development environment;
 - Bash 5.0+;
 - Python 3.10+;
-- standard `install`, `ln`, `rm`, `find`, `sort`, `grep`, and `sed`;
+- standard `install`, `ln`, `rm`, `mv`, `find`, `sort`, `grep`, and `sed`;
 - `kmod` utilities for live installation/loading.
 
 The tarball needs tar with xz support for extraction.
@@ -108,7 +108,7 @@ rm -rf /tmp/dniv-stage
 DESTDIR=/tmp/dniv-stage ./install.sh
 ```
 
-This requires no root privilege and is the supported packaging/release-validation path.
+This requires no root privilege and is the supported packaging/release-validation path. `DESTDIR` must be absolute. `install.sh` records each managed target in the installation manifest before writing it, refuses to overwrite an existing target that is not already managed, and preserves the manifest on failure. If a staged or live install is interrupted or otherwise fails, rerun `uninstall.sh` with the same `DESTDIR`, `PREFIX` and `MODULE_ROOT` values to clean the tracked partial installation before retrying.
 
 ## 7. Live install
 
@@ -116,7 +116,7 @@ This requires no root privilege and is the supported packaging/release-validatio
 sudo ./install.sh
 ```
 
-The default userspace prefix is `/usr/local`. The module installs under `/lib/modules/<kernel-release>/extra/`. The manifest is `/usr/local/share/decnet-iv-linux/install-manifest.txt`. The installer refreshes `depmod` and `ldconfig` when available.
+The default userspace prefix is `/usr/local`. The module installs under `/lib/modules/<kernel-release>/extra/`. The manifest is `/usr/local/share/decnet-iv-linux/install-manifest.txt`. The installer refreshes `depmod` and `ldconfig` when available. Existing files outside that manifest are never overwritten; resolve any collision explicitly rather than forcing the installer.
 
 A different userspace prefix may be selected with `PREFIX=/opt/decnet`. Systems whose module tree is not rooted at `/lib/modules/<kernel-release>` may set an absolute `MODULE_ROOT`.
 
