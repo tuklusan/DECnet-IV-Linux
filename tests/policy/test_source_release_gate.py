@@ -42,6 +42,9 @@ def main() -> int:
         "missing-artifact negative unexpectedly succeeded",
         "unmanaged-target negative unexpectedly succeeded",
         "validate-arm64:",
+        "  portability:",
+        "debian13",
+        "fedora42",
         "actions/download-artifact@",
     ):
         if marker not in workflow:
@@ -75,6 +78,8 @@ def main() -> int:
         'record "$target"',
         'sort -u "$manifest"',
         "unsafe existing manifest",
+        "refusing symlink at regular-file target",
+        "refusing non-symlink at link target",
         "DESTDIR must be empty or absolute",
     ):
         if marker not in install:
@@ -107,9 +112,22 @@ def main() -> int:
             raise SystemExit(f"source-release gate: portability provenance safeguard missing: {marker}")
     if "SOURCE-METADATA 2>/dev/null || true" in portability:
         raise SystemExit("source-release gate: portability provenance check is fail-open")
+    for marker in (
+        "needs: package-amd64",
+        "source-release-portability-${{ matrix.arch }}",
+        'source_dir="$RUNNER_TEMP/release"',
+        'sha256sum -c "$(basename "$archive").sha256"',
+        'grep -Fqx "source_sha=$DNIV_EXPECTED_SHA" SOURCE-METADATA',
+        "run_case debian13 debian:13 gcc",
+        "run_case fedora42 fedora:42 clang",
+    ):
+        if marker not in workflow:
+            raise SystemExit(f"source-release gate: exact-artifact portability safeguard missing: {marker}")
     dispatcher = read_text(".github/workflows/repository-policy.yml")
     if "SOURCE_RELEASE source-release.yml" not in dispatcher or "RELEASE_IMAGE release-image.yml" in dispatcher:
         raise SystemExit("source-release gate: acceptance dispatcher not synchronized")
+    if "dispatch_and_record PORTABILITY portability.yml" in dispatcher:
+        raise SystemExit("source-release gate: full acceptance duplicates portability outside exact release artifact")
     attributes = read_text(".gitattributes")
     if "filter=lfs" in attributes or "qcow2" in attributes.lower():
         raise SystemExit("source-release gate: repository still advertises disk-image delivery")

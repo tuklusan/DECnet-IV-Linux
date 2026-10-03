@@ -99,6 +99,10 @@ put() {
         exit 2
     }
     check_target "$target"
+    [[ ! -L "$destdir$target" ]] || {
+        echo "install.sh: refusing symlink at regular-file target: $target" >&2
+        exit 2
+    }
     record "$target"
     install -D -m "$mode" "$source" "$destdir$target"
 }
@@ -106,6 +110,10 @@ put() {
 link_to() {
     local target=$1 link=$2
     check_target "$link"
+    if [[ -e "$destdir$link" && ! -L "$destdir$link" ]]; then
+        echo "install.sh: refusing non-symlink at link target: $link" >&2
+        exit 2
+    fi
     record "$link"
     mkdir -p "$(dirname "$destdir$link")"
     ln -sfn "$target" "$destdir$link"

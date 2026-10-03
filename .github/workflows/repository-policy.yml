@@ -456,11 +456,6 @@ jobs:
           fi
 
           if [[ "$profile" == full ]]; then
-            dispatch_and_record PORTABILITY portability.yml \
-              -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
-          fi
-
-          if [[ "$profile" == full ]]; then
             dispatch_and_record SOURCE_RELEASE source-release.yml \
               -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
           fi

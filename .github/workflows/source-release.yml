@@ -215,3 +215,141 @@ jobs:
           retention-days: 30
           compression-level: 6
           overwrite: false
+
+  portability:
+    needs: package-amd64
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {runner: ubuntu-24.04, arch: amd64}
+          - {runner: ubuntu-24.04-arm, arch: arm64}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 75
+    env:
+      DNIV_SCRATCH_DIR: ${{ github.workspace }}/scratch/runtime/${{ github.run_id }}/${{ github.run_attempt }}/source-release-portability-${{ matrix.arch }}
+    steps:
+      - name: Check out exact repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.expected_sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Initialize exact candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate=$(git rev-parse HEAD)
+          if [[ -n '${{ inputs.expected_sha }}' ]]; then test "$candidate" = '${{ inputs.expected_sha }}'; fi
+          python3 tools/scratch_state.py init --dir "$DNIV_SCRATCH_DIR" \
+            --workflow source-release --job portability --arch '${{ matrix.arch }}' \
+            --mode exact-release-portability --source-sha "$candidate" \
+            --parent-run-id '${{ inputs.parent_run_id }}' --expected-sha '${{ inputs.expected_sha }}'
+          tools/workflow_guard.sh "$DNIV_SCRATCH_DIR" "$candidate" main
+
+      - name: Download exact source release
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: decnet-iv-linux-source-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release
+
+      - name: Build exact archive through maintained distro toolchains
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_dir="$RUNNER_TEMP/release"
+          archive=$(find "$source_dir" -maxdepth 1 -name 'DECnet-IV-Linux-*.tar.xz' -print -quit)
+          test -n "$archive"
+          test -s "$archive.sha256"
+
+          run_case() {
+            local distro=$1 image=$2 compiler=$3
+            local log="$DNIV_SCRATCH_DIR/${distro}-${compiler}.log"
+            docker pull "$image"
+            docker run --rm \
+              -e DNIV_DISTRO="$distro" \
+              -e DNIV_ARCH='${{ matrix.arch }}' \
+              -e DNIV_COMPILER="$compiler" \
+              -e DNIV_EXPECTED_SHA="$GITHUB_SHA" \
+              -v "$source_dir:/release:ro" \
+              "$image" bash -ceu '
+                if [[ "$DNIV_DISTRO" == debian13 ]]; then
+                  export DEBIAN_FRONTEND=noninteractive
+                  apt-get update
+                  if [[ "$DNIV_ARCH" == amd64 ]]; then kh=linux-headers-amd64; else kh=linux-headers-arm64; fi
+                  apt-get install -y build-essential clang llvm lld python3 kmod xz-utils "$kh"
+                  KDIR=$(find /usr/src -maxdepth 1 -type d -name "linux-headers-*" ! -name "*-common" | sort -V | tail -1)
+                else
+                  dnf -y install gcc clang llvm lld make python3 kmod kernel-devel findutils \
+                    bc bison flex elfutils-libelf-devel openssl-devel perl curl xz tar
+                  KDIR=$(find /usr/src/kernels -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
+                fi
+                test -n "$KDIR"
+                if [[ -r "$KDIR/include/config/kernel.release" ]]; then
+                  kernel_release=$(cat "$KDIR/include/config/kernel.release")
+                else
+                  kernel_release=$(basename "$KDIR")
+                  kernel_release=${kernel_release#linux-headers-}
+                fi
+
+                archive=$(find /release -maxdepth 1 -name "DECnet-IV-Linux-*.tar.xz" -print -quit)
+                test -n "$archive"
+                (cd /release && sha256sum -c "$(basename "$archive").sha256")
+                rm -rf /src /tmp/dniv-stage
+                mkdir /src
+                tar -xJf "$archive" -C /src --strip-components=1
+                cd /src
+                test ! -e .git
+                grep -Fqx "source_sha=$DNIV_EXPECTED_SHA" SOURCE-METADATA
+
+                case "$DNIV_COMPILER" in gcc) cc=gcc ;; clang) cc=clang ;; *) exit 2 ;; esac
+                if [[ "$DNIV_COMPILER" == clang && "$DNIV_DISTRO" == fedora42 ]]; then
+                  make clean KDIR="$KDIR" >/dev/null 2>&1 || true
+                  make userspace CC="$cc"
+                  kbase=${kernel_release%%-*}
+                  case "$kbase" in [0-9]*.[0-9]*.[0-9]*) ;; *) echo "bad Fedora kernel base version: $kbase" >&2; exit 2 ;; esac
+                  curl -fsSLo /tmp/linux.tar.xz "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-${kbase}.tar.xz"
+                  rm -rf "/tmp/linux-${kbase}"
+                  tar -C /tmp -xf /tmp/linux.tar.xz
+                  LLVM=1 make -C "/tmp/linux-${kbase}" defconfig >/dev/null
+                  LLVM=1 make -C "/tmp/linux-${kbase}" modules_prepare -j2 >/dev/null
+                  LLVM=1 make -C "/tmp/linux-${kbase}" M="$PWD/kernel/decnet" decnet_iv.o
+                  test -s kernel/decnet/decnet_iv.o
+                else
+                  CC="$cc" KDIR="$KDIR" KERNEL_RELEASE="$kernel_release" ./build.sh
+                  stage=/tmp/dniv-stage
+                  DESTDIR="$stage" KERNEL_RELEASE="$kernel_release" ./install.sh
+                  test -s "$stage/usr/local/bin/ncp"
+                  test -s "$stage/usr/local/sbin/dnctl"
+                  test -s "$stage/usr/local/lib/libdnet.so.1.0"
+                  test -s "$stage/lib/modules/$kernel_release/extra/decnet_iv.ko"
+                  DESTDIR="$stage" KERNEL_RELEASE="$kernel_release" ./uninstall.sh
+                fi
+              ' 2>&1 | tee "$log"
+          }
+
+          run_case debian13 debian:13 gcc
+          run_case debian13 debian:13 clang
+          run_case fedora42 fedora:42 gcc
+          run_case fedora42 fedora:42 clang
+
+      - name: Verify exact tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/integrity_scan.py --rev "$GITHUB_SHA" --pass-id final \
+            --baseline "$DNIV_SCRATCH_DIR/integrity/pass-1.json" \
+            --output "$DNIV_SCRATCH_DIR/integrity/final.json"
+          python3 tools/scratch_state.py verify --dir "$DNIV_SCRATCH_DIR"
+
+      - name: Preserve portability evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: source-release-portability-${{ matrix.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.DNIV_SCRATCH_DIR }}/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 6
+          overwrite: false
+

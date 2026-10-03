@@ -34,7 +34,7 @@ The production target is an existing modern Linux installation on x86_64 or aarc
 
 The release is distribution-neutral. Debian/Ubuntu and Fedora/RHEL-family package names in `INSTALL.md` are examples; the real requirements are a supported compiler, libc development environment, GNU make, matching kernel development tree, Python where applicable, and standard module-management utilities.
 
-Forward compatibility is an active maintenance requirement. Full release acceptance compiles against the oldest supported floor, maintained distro kernels, the current validated upstream kernel line and both supported C compiler families where the kernel build permits them. Future published kernel API changes are fixed in source and retained as compatibility regressions.
+Forward compatibility is an active maintenance requirement. Full release acceptance compiles the exact packaged source archive against the oldest supported floor, maintained distro kernels, the current validated upstream kernel line and both supported C compiler families where the kernel build permits them. Future published kernel API changes are fixed in source and retained as compatibility regressions.
 
 ## Build and installation model
 
@@ -54,7 +54,7 @@ The canonical release object is the exact source tarball. The source-release gat
 - stage-install every delivered component on amd64 and arm64;
 - validate the installed component manifest;
 - run uninstall and prove manifest-owned files are removed;
-- exercise the same archive through the maintained distro portability matrix;
+- exercise the exact same archive bytes through the maintained Debian/Fedora, amd64/arm64 and GCC/Clang portability matrix;
 - bind later protocol/real-peer evidence to the source SHA carried by that archive.
 
 The VM lab may continue to create disposable disks internally to obtain independent kernels and destructive isolation. Those files are never release artifacts.

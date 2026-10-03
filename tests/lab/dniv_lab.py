@@ -17,7 +17,7 @@
 
 The controller deliberately treats the supplied base image as immutable. Every
 node receives a throw-away qcow2 overlay; no checkpoint is uploaded or restored.
-The release image builder remains a separate concern.
+All base images and overlays are disposable lab-only infrastructure; source-release packaging is a separate concern.
 """
 
 from __future__ import annotations
