@@ -412,6 +412,35 @@ jobs:
           sed -i '\|^/lib/modules/'"$old_release"'/extra/decnet_iv\.ko$|d' "$custom_manifest"
           DESTDIR="$custom_stage" MODULE_ROOT="$custom_root" KERNEL_RELEASE="$KERNEL_RELEASE" ./uninstall.sh
           test ! -e "$custom_stage$custom_root/extra/decnet_iv.ko"
+
+          custom_prefix_stage="$RUNNER_TEMP/custom-prefix-stage"
+          custom_prefix=/opt/decnet
+          env -u KERNEL_RELEASE DESTDIR="$custom_prefix_stage" PREFIX="$custom_prefix" ./install.sh
+          custom_prefix_manifest="$custom_prefix_stage$custom_prefix/share/decnet-iv-linux/install-manifest.txt"
+          grep -Fqx "/lib/modules/$KERNEL_RELEASE/extra/decnet_iv.ko" "$custom_prefix_manifest"
+          grep -Fqx "$custom_prefix/bin/ncp" "$custom_prefix_manifest"
+          grep -Fqx "$custom_prefix/sbin/dnctl" "$custom_prefix_manifest"
+          grep -Fqx "$custom_prefix/lib/libdnet.so.1.0" "$custom_prefix_manifest"
+          grep -Fqx "$custom_prefix/share/doc/decnet-iv-linux/SOURCE-METADATA" "$custom_prefix_manifest"
+          if grep -Fq "/usr/local/" "$custom_prefix_manifest"; then
+            echo "source-release: custom-prefix manifest leaked default-prefix paths" >&2
+            exit 1
+          fi
+          test -s "$custom_prefix_stage$custom_prefix/bin/ncp"
+          test -s "$custom_prefix_stage$custom_prefix/sbin/dnctl"
+          test -s "$custom_prefix_stage$custom_prefix/lib/libdnet.so.1.0"
+          test -s "$custom_prefix_stage/lib/modules/$KERNEL_RELEASE/extra/decnet_iv.ko"
+          env -u KERNEL_RELEASE DESTDIR="$custom_prefix_stage" PREFIX="$custom_prefix" ./uninstall.sh
+          test ! -e "$custom_prefix_stage$custom_prefix/bin/ncp"
+          test ! -e "$custom_prefix_stage$custom_prefix/sbin/dnctl"
+          test ! -e "$custom_prefix_stage$custom_prefix/lib/libdnet.so.1.0"
+          test ! -e "$custom_prefix_stage/lib/modules/$KERNEL_RELEASE/extra/decnet_iv.ko"
+          test ! -e "$custom_prefix_manifest"
+
+          if DESTDIR="$RUNNER_TEMP/bad-prefix-stage" PREFIX=relative KERNEL_RELEASE="$KERNEL_RELEASE" ./install.sh; then
+            echo "source-release: relative-PREFIX negative unexpectedly succeeded" >&2
+            exit 1
+          fi
       - name: Verify exact tree
         shell: bash
         run: |
