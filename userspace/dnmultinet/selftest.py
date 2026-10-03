@@ -34,9 +34,9 @@ def expect_failure(argv, marker, env=None):
             saved[name] = os.environ.get(name)
             os.environ[name] = value
     try:
-        args = dnmultinet.parser().parse_args(argv)
-        dnmultinet.load_runtime_peer(args)
         try:
+            args = dnmultinet.parser().parse_args(argv)
+            dnmultinet.load_runtime_peer(args)
             dnmultinet.validate(args)
         except SystemExit as exc:
             if marker not in str(exc):
