@@ -23,7 +23,11 @@ tests.test_host
 tests.test_mirror
 tests.test_modulo
 tests.test_mop
-tests.test_multinet
+# MULTINET project acceptance is IPv4 TCP only. Do not run the module wholesale:
+# it also contains UDP and IPv6-specific classes that are outside this project scope.
+tests.test_multinet.TestMultinetTCPconnect
+tests.test_multinet.TestMultinetTCPconnectLate
+tests.test_multinet.TestMultinetTCPlisten
 tests.test_nicepacket
 tests.test_nsp
 tests.test_nsppacket

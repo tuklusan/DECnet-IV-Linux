@@ -81,6 +81,26 @@ def main() -> int:
         value = read_text(doc)
         if "Fedora 42" in value or "Fedora 44" not in value:
             raise SystemExit(f"source-release gate: stale Fedora portability documentation remains in {doc}")
+    reference_tests = read_text("tests/reference/pydecnet-in-scope-tests.txt")
+    if any(line.strip() == "tests.test_multinet" for line in reference_tests.splitlines()):
+        raise SystemExit("source-release gate: broad PyDECnet MULTINET module still makes UDP/IPv6 cases blocking")
+    for marker in (
+        "tests.test_multinet.TestMultinetTCPconnect",
+        "tests.test_multinet.TestMultinetTCPconnectLate",
+        "tests.test_multinet.TestMultinetTCPlisten",
+    ):
+        if marker not in reference_tests:
+            raise SystemExit(f"source-release gate: IPv4-only MULTINET reference class missing: {marker}")
+    for excluded in (
+        "TestMultinetTCPconnect2",
+        "TestMultinetTCP6listen",
+        "TestMultinetTCP46listen",
+        "TestMultinetUDP",
+        "TestMultinetUDPnodest",
+    ):
+        if excluded in reference_tests:
+            raise SystemExit(f"source-release gate: out-of-scope MULTINET reference class selected: {excluded}")
+
     preproduction = read_text("docs/PRE_PRODUCTION_TEST.md")
     if "`run-two-node.sh`" in preproduction:
         raise SystemExit("source-release gate: stale removed two-node harness remains in pre-production documentation")

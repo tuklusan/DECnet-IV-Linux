@@ -305,7 +305,7 @@ The repository-maintained in-scope native module set at `9a844987bf3a1450632dee8
 | `test_mirror.py` | mapped PP-07 |
 | `test_modulo.py` | mapped PP-01/PP-06/PP-08 where applicable |
 | `test_mop.py` | reference-health; feature-gated if MOP is claimed |
-| `test_multinet.py` | mapped/blocking PP-08 for MULTINET TCP transport |
+| `test_multinet.py` | mapped/blocking PP-08 only for the explicit IPv4 TCP connect/late-listener/listen classes selected by `tests/reference/pydecnet-in-scope-tests.txt`; UDP and IPv6-specific classes are outside the project transport claim |
 | `test_nicepacket.py` | mapped PP-01/PP-07 |
 | `test_nsp.py` | mapped PP-06 |
 | `test_nsppacket.py` | mapped PP-01/PP-06 |
