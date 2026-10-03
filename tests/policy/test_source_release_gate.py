@@ -56,6 +56,11 @@ def main() -> int:
         "below-gcc-floor negative unexpectedly succeeded",
         "below-clang-floor negative unexpectedly succeeded",
         "non-root-live-install negative unexpectedly succeeded",
+        "custom-live-module-root negative unexpectedly succeeded",
+        "custom-live-module-root uninstall negative unexpectedly succeeded",
+        "installed-manifest completeness mismatch",
+        "manifest target missing after install",
+        "manifest target remains after uninstall",
         "Build install and uninstall extracted source",
         "missing-artifact negative unexpectedly succeeded",
         "unmanaged-target negative unexpectedly succeeded",
@@ -262,7 +267,7 @@ def main() -> int:
             raise SystemExit(f"source-release gate: kernel component README contains stale phase text: {stale}")
 
     components = read_text("docs/COMPONENTS.md")
-    for marker in ("## Explicit scope exclusions", "No DDCMP implementation component and no IPv6 transport component are required or claimed", "not a release blocker"):
+    for marker in ("## Explicit scope exclusions", "No DDCMP implementation component and no IPv6 transport component are required or claimed", "not a release blocker", "libdnet_daemon.so.1", "install-manifest.txt", "exact default manifest is acceptance-checked on both amd64 and arm64"):
         if marker not in components:
             raise SystemExit(f"source-release gate: component scope boundary missing: {marker}")
     for marker in ("SOCK_SEQPACKET", "SOCK_STREAM", "DNPROTO_NSP", "DSO_DISDATA", "DSO_ACCEPTMODE"):
