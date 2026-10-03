@@ -83,10 +83,18 @@ jobs:
           distro='${{ matrix.distro }}'
           arch='${{ matrix.arch }}'
           compiler='${{ matrix.compiler }}'
-          archive=$(find "$DNIV_SCRATCH_DIR/source" -maxdepth 1 -name 'DECnet-IV-Linux-*.tar.xz' -print -quit)
+          source_dir="$DNIV_SCRATCH_DIR/source"
+          archive=$(find "$source_dir" -maxdepth 1 -name 'DECnet-IV-Linux-*.tar.xz' -print -quit)
           test -n "$archive"
+          test -s "$archive.sha256"
           docker pull "$image"
-          docker run --rm             -e DNIV_DISTRO="$distro" -e DNIV_ARCH="$arch" -e DNIV_COMPILER="$compiler"             -v "$archive:/source.tar.xz:ro" "$image" bash -ceu '
+          docker run --rm \
+            -e DNIV_DISTRO="$distro" \
+            -e DNIV_ARCH="$arch" \
+            -e DNIV_COMPILER="$compiler" \
+            -e DNIV_EXPECTED_SHA="$GITHUB_SHA" \
+            -v "$source_dir:/release:ro" \
+            "$image" bash -ceu '
               if [[ "$DNIV_DISTRO" == debian13 ]]; then
                 export DEBIAN_FRONTEND=noninteractive
                 apt-get update
@@ -98,11 +106,14 @@ jobs:
                 KDIR=$(find /usr/src/kernels -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
               fi
               test -n "$KDIR"
+              archive=$(find /release -maxdepth 1 -name "DECnet-IV-Linux-*.tar.xz" -print -quit)
+              test -n "$archive"
+              (cd /release && sha256sum -c "$(basename "$archive").sha256")
               mkdir /src
-              tar -xJf /source.tar.xz -C /src --strip-components=1
+              tar -xJf "$archive" -C /src --strip-components=1
               cd /src
               test ! -e .git
-              grep -Fqx "source_sha=${GITHUB_SHA:-}" SOURCE-METADATA 2>/dev/null || true
+              grep -Fqx "source_sha=$DNIV_EXPECTED_SHA" SOURCE-METADATA
               case "$DNIV_COMPILER" in gcc) cc=gcc ;; clang) cc=clang ;; *) exit 2 ;; esac
               "$cc" --version | head -1
               make clean KDIR="$KDIR" >/dev/null 2>&1 || true

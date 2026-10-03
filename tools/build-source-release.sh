@@ -24,21 +24,41 @@ case "$version" in
     exit 2
     ;;
 esac
+mkdir -p "$output_dir"
+output_dir=$(cd "$output_dir" && pwd -P)
+umask 022
+
 root=$(git rev-parse --show-toplevel)
 commit=$(git -C "$root" rev-parse --verify "$source_sha^{commit}")
 epoch=$(git -C "$root" show -s --format=%ct "$commit")
 name="DECnet-IV-Linux-$version"
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
-mkdir -p "$work/$name" "$output_dir"
+mkdir -p "$work/$name"
 git -C "$root" archive --format=tar "$commit" | tar -xf - -C "$work/$name"
 cat >"$work/$name/SOURCE-METADATA" <<EOF_METADATA
 version=$version
 source_sha=$commit
 source_date_epoch=$epoch
 EOF_METADATA
-for forbidden in .git '*.qcow2' '*.raw' '*.img' '*.iso' '*.ko' '*.o'; do
+for forbidden in .git '*.qcow2' '*.raw' '*.img' '*.iso' '*.ko' '*.o' '*.a' '*.so' '*.so.*'; do
   if find "$work/$name" -name "$forbidden" -print -quit | grep -q .; then echo "build-source-release: forbidden generated payload matched $forbidden" >&2; exit 2; fi
+done
+generated_paths=(
+  kernel/decnet/decnet_iv.ko
+  userspace/dnctl/dnctl userspace/ncp/ncp userspace/dnlogin/dnlogin
+  userspace/dncopy/dncopy userspace/dntask/dntask userspace/dnfald/dnfald
+  userspace/dnnml/dnnml userspace/dnnice/dnnice userspace/dnmirror/dnmirror
+  userspace/dnobject/dnobject userspace/dnhttpd/dnhttpd userspace/dnlynx/dnlynx
+  userspace/dnphone/phone userspace/dnphone/dnphoned
+  userspace/dnmail/dnmail userspace/dnmail/dnmaild
+  userspace/dnping/dnping userspace/dnetd/dnetd
+)
+for generated in "${generated_paths[@]}"; do
+  test ! -e "$work/$name/$generated" || {
+    echo "build-source-release: generated executable payload present: $generated" >&2
+    exit 2
+  }
 done
 for required in build.sh install.sh uninstall.sh INSTALL.md docs/DELIVERY.md docs/FEATURES.md docs/COMPONENTS.md LICENSE; do
   test -r "$work/$name/$required" || { echo "build-source-release: required release member missing: $required" >&2; exit 2; }

@@ -62,11 +62,12 @@ The installed kernel development package must match the kernel being targeted.
 
 The native stack and C userspace do not require PyDECnet, Route20, SIMH, QEMU or VDE2.
 
-- `dnmultinet`: Python 3.10+, compatible PyDECnet, and the VDE/libvdeplug environment used by the selected PyDECnet Ethernet circuit.
+- `dnmultinet`: Python 3.10+, a compatible PyDECnet installation providing `python3 -m decnet.main`, and libvdeplug/VDE2 for the required `vde://` Ethernet circuit. The project's acceptance references are PyDECnet `8d93c2a546317c67aba0adf9433f5f3efdf1f85c` and `tuklusan/vde-2` `7e7017b6308f3f81d5c922a32097137ceee13074`; they are external projects with their own licenses and are not vendored in this tarball.
+- Before using `dnmultinet`, verify `python3 -c 'import decnet'` and the VDE commands required by the chosen deployment (normally `vde_switch` and `vde_plug`). The `--pydecnet-dir` option can point at an unpacked compatible PyDECnet tree without installing it system-wide.
 - `dnmaild --sendmail`: a sendmail-compatible executable.
 - `dnmaild --smtp`: a reachable SMTP service.
 - VDE2/MULTINET/HECnet laboratory integration is optional; see `docs/HECNET_LAB.md`.
-- SIMH, Route20 and independent PyDECnet trees are acceptance dependencies unless separately deployed by the administrator.
+- SIMH and Route20 are acceptance dependencies unless separately deployed by the administrator.
 
 ## 4. Verify and extract
 
@@ -117,7 +118,11 @@ sudo ./install.sh
 
 The default userspace prefix is `/usr/local`. The module installs under `/lib/modules/<kernel-release>/extra/`. The manifest is `/usr/local/share/decnet-iv-linux/install-manifest.txt`. The installer refreshes `depmod` and `ldconfig` when available.
 
-A different userspace prefix may be selected with `PREFIX=/opt/decnet`.
+A different userspace prefix may be selected with `PREFIX=/opt/decnet`. Systems whose module tree is not rooted at `/lib/modules/<kernel-release>` may set an absolute `MODULE_ROOT`.
+
+### Secure Boot and module signing
+
+`decnet_iv.ko` is an out-of-tree module. On systems enforcing kernel-module signatures (commonly Secure Boot), the kernel may reject an unsigned module even though it built correctly. Use the distribution's normal external-module signing/MOK procedure and sign the exact built `decnet_iv.ko`; DECnet-IV-Linux does not bypass signature enforcement. Verify the host policy with `mokutil --sb-state` when that tool is available and inspect `dmesg` if `modprobe` reports a signature/key error.
 
 ## 8. Load and establish identity
 
@@ -131,6 +136,8 @@ sudo /usr/local/sbin/dnctl set 1.10 LINUX
 /usr/local/sbin/dnctl stats
 ```
 
+To request automatic module loading at boot on a conventional system, create an administrator-managed `/etc/modules-load.d/decnet-iv-linux.conf` containing `decnet_iv`. Node identity and user-space daemons still require site-specific startup configuration; the installer deliberately does not create or enable network-facing services.
+
 ## 9. Services
 
 The release does not silently enable network-facing daemons. Delivered servers include `dnetd`, `dnfald`, `dnnml`, `dnphoned`, `dnmaild` and `dnhttpd`. `dnetd` defaults to `/etc/dnetd.conf`. Use the host's service manager if persistent services are desired.
@@ -143,9 +150,14 @@ See `docs/FEATURES.md` and `docs/COMPONENTS.md`.
 
 ## 11. Uninstall
 
+Stop DECnet services and, when safe for the host, unload the module first:
+
 ```sh
+sudo modprobe -r decnet_iv
 sudo ./uninstall.sh
 ```
+
+If the module is intentionally left loaded, removing the on-disk module does not remove the already-loaded kernel code; unload it or reboot before considering the running kernel reverted.
 
 For staged installation:
 

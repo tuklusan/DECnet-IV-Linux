@@ -49,15 +49,53 @@ def main() -> int:
         if f"userspace/{directory}" not in components:
             raise SystemExit(f"source-release gate: undocumented userspace component: {directory}")
     builder = read_text("tools/build-source-release.sh")
-    for marker in ("SOURCE-METADATA", "'*.qcow2'", "'*.raw'", "'*.img'", "'*.iso'", "'*.ko'", "git -C \"$root\" archive"):
+    for marker in (
+        "SOURCE-METADATA",
+        "'*.qcow2'", "'*.raw'", "'*.img'", "'*.iso'", "'*.ko'",
+        "'*.a'", "'*.so'", "'*.so.*'",
+        "generated_paths=(",
+        "output_dir=$(cd \"$output_dir\" && pwd -P)",
+        "git -C \"$root\" archive",
+    ):
         if marker not in builder:
             raise SystemExit(f"source-release gate: archive safeguard missing: {marker}")
+
+    build = read_text("build.sh")
+    for marker in (
+        "kernelrelease",
+        "does not match KDIR release",
+        "Clang 16 or later required",
+        "GCC-compatible compiler 12 or later required",
+        'make clean KDIR="$kdir"',
+    ):
+        if marker not in build:
+            raise SystemExit(f"source-release gate: end-user build safeguard missing: {marker}")
+
+    portability = read_text(".github/workflows/portability.yml")
+    for marker in (
+        'DNIV_EXPECTED_SHA="$GITHUB_SHA"',
+        'sha256sum -c "$(basename "$archive").sha256"',
+        'grep -Fqx "source_sha=$DNIV_EXPECTED_SHA" SOURCE-METADATA',
+    ):
+        if marker not in portability:
+            raise SystemExit(f"source-release gate: portability provenance safeguard missing: {marker}")
+    if "SOURCE-METADATA 2>/dev/null || true" in portability:
+        raise SystemExit("source-release gate: portability provenance check is fail-open")
     dispatcher = read_text(".github/workflows/repository-policy.yml")
     if "SOURCE_RELEASE source-release.yml" not in dispatcher or "RELEASE_IMAGE release-image.yml" in dispatcher:
         raise SystemExit("source-release gate: acceptance dispatcher not synchronized")
     attributes = read_text(".gitattributes")
     if "filter=lfs" in attributes or "qcow2" in attributes.lower():
         raise SystemExit("source-release gate: repository still advertises disk-image delivery")
+
+    install_doc = read_text("INSTALL.md")
+    for marker in ("Secure Boot", "MODULE_ROOT", "modprobe -r decnet_iv", "python3 -c 'import decnet'"):
+        if marker not in install_doc:
+            raise SystemExit(f"source-release gate: installation manual missing: {marker}")
+
+    handover = read_text("docs/HANDOVER.md")
+    if "four exact-SHA acceptance depths" not in handover:
+        raise SystemExit("source-release gate: handover acceptance-depth model is stale")
     for path in ("README.md", "docs/ROADMAP.md", "docs/ARCHITECTURE.md", "docs/PRE_PRODUCTION_TEST.md"):
         value = read_text(path)
         for stale in ("self-booting QCOW2/RAW images", "Release images remain QCOW2-first", "exact release image"):
