@@ -98,6 +98,29 @@ def main():
         {"MULTINET_REMOTE_HOST": "bad\nhost", "MULTINET_REMOTE_PORT": "700"},
     )
 
+    saved_host = os.environ.get("MULTINET_REMOTE_HOST")
+    saved_port = os.environ.get("MULTINET_REMOTE_PORT")
+    os.environ["MULTINET_REMOTE_HOST"] = "127.0.0.1"
+    os.environ["MULTINET_REMOTE_PORT"] = "700"
+    try:
+        runtime = dnmultinet.parser().parse_args(
+            BASE + ["--mode", "connect", "--runtime-peer-env"]
+        )
+        dnmultinet.load_runtime_peer(runtime)
+        dnmultinet.validate(runtime)
+        child_env = dnmultinet.child_environment(runtime)
+        if "MULTINET_REMOTE_HOST" in child_env or "MULTINET_REMOTE_PORT" in child_env:
+            raise AssertionError("runtime MULTINET peer variables leaked to child environment")
+    finally:
+        if saved_host is None:
+            os.environ.pop("MULTINET_REMOTE_HOST", None)
+        else:
+            os.environ["MULTINET_REMOTE_HOST"] = saved_host
+        if saved_port is None:
+            os.environ.pop("MULTINET_REMOTE_PORT", None)
+        else:
+            os.environ["MULTINET_REMOTE_PORT"] = saved_port
+
     args = dnmultinet.parser().parse_args(
         BASE + ["--mode", "connect", "--peer-host", "example.invalid",
                 "--peer-port", "700", "--local-address", "127.0.0.1"]

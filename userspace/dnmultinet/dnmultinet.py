@@ -201,6 +201,18 @@ def build_api_config(args):
     return f"api {args.api_socket} --mode 600\n"
 
 
+def child_environment(args):
+    env = os.environ.copy()
+    if args.runtime_peer_env:
+        env.pop("MULTINET_REMOTE_HOST", None)
+        env.pop("MULTINET_REMOTE_PORT", None)
+    if args.pydecnet_dir:
+        source = str(pathlib.Path(args.pydecnet_dir).resolve())
+        old = env.get("PYTHONPATH")
+        env["PYTHONPATH"] = source if not old else source + os.pathsep + old
+    return env
+
+
 def main():
     args = parser().parse_args()
     load_runtime_peer(args)
@@ -237,11 +249,7 @@ def main():
             config_fds.append(config_fd)
             config_names.append(f"/proc/self/fd/{config_fd}")
 
-    env = os.environ.copy()
-    if args.pydecnet_dir:
-        source = str(pathlib.Path(args.pydecnet_dir).resolve())
-        old = env.get("PYTHONPATH")
-        env["PYTHONPATH"] = source if not old else source + os.pathsep + old
+    env = child_environment(args)
 
     os.execve(
         sys.executable,
