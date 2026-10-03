@@ -41,6 +41,9 @@ def main() -> int:
         "Build install and uninstall extracted source",
         "missing-artifact negative unexpectedly succeeded",
         "unmanaged-target negative unexpectedly succeeded",
+        "relative-DESTDIR negative unexpectedly succeeded",
+        "module-vermagic negative unexpectedly succeeded",
+        "managed-target-type negative unexpectedly succeeded",
         "validate-arm64:",
         "  portability:",
         "debian13",
@@ -53,7 +56,7 @@ def main() -> int:
         if forbidden in workflow:
             raise SystemExit(f"source-release gate: disk-image release behavior remains: {forbidden}")
     delivery = read_text("docs/DELIVERY.md")
-    for marker in ("source tarball", "Disk images are not release artifacts", "x86_64", "aarch64", "Linux 6.8", "Forward compatibility"):
+    for marker in ("source tarball", "Disk images are not release artifacts", "x86_64", "aarch64", "Linux 6.8", "Forward compatibility", "native DDCMP", "explicitly **pending**"):
         if marker not in delivery:
             raise SystemExit(f"source-release gate: delivery contract missing: {marker}")
     components = read_text("docs/COMPONENTS.md")
@@ -64,7 +67,8 @@ def main() -> int:
     for marker in (
         "SOURCE-METADATA",
         "'*.qcow2'", "'*.raw'", "'*.img'", "'*.iso'", "'*.ko'",
-        "'*.a'", "'*.so'", "'*.so.*'",
+        "'*.a'", "'*.so'", "'*.so.*'", "'*.pyc'", "__pycache__",
+        "ELF binary payload present",
         "generated_paths=(",
         "output_dir=$(cd \"$output_dir\" && pwd -P)",
         "git -C \"$root\" archive",
@@ -78,15 +82,17 @@ def main() -> int:
         'record "$target"',
         'sort -u "$manifest"',
         "unsafe existing manifest",
-        "refusing symlink at regular-file target",
+        "refusing non-regular file at regular-file target",
         "refusing non-symlink at link target",
+        "module vermagic release",
+        "required command not found: modinfo",
         "DESTDIR must be empty or absolute",
     ):
         if marker not in install:
             raise SystemExit(f"source-release gate: installer safety safeguard missing: {marker}")
 
     uninstall = read_text("uninstall.sh")
-    for marker in ("safe install manifest not found", "DESTDIR must be empty or absolute"):
+    for marker in ("safe install manifest not found", "normalized absolute non-root path"):
         if marker not in uninstall:
             raise SystemExit(f"source-release gate: uninstaller safety safeguard missing: {marker}")
 
@@ -99,6 +105,7 @@ def main() -> int:
         "GCC-compatible compiler 12 or later required",
         "target kernel build tree was configured with GCC",
         "target kernel build tree was configured with Clang",
+        'for command in bash make ar',
         'make clean KDIR="$kdir"',
     ):
         if marker not in build:
@@ -126,6 +133,8 @@ def main() -> int:
         "tests/lab/build-diagnostic-kernel.sh",
         "git -C /tmp/linux-clang fetch --depth=1 origin",
         'test "$(git -C /tmp/linux-clang rev-parse HEAD)" = "$linux_commit"',
+        'CC="$cc" KDIR=/tmp/linux-clang KERNEL_RELEASE="$clang_release" ./build.sh',
+        'DESTDIR="$stage" KERNEL_RELEASE="$clang_release" ./install.sh',
         "run_case fedora42 fedora:42 clang",
     ):
         if marker not in workflow:
@@ -140,9 +149,16 @@ def main() -> int:
         raise SystemExit("source-release gate: repository still advertises disk-image delivery")
 
     install_doc = read_text("INSTALL.md")
-    for marker in ("Secure Boot", "MODULE_ROOT", "modprobe -r decnet_iv", "python3 -c 'import decnet'"):
+    for marker in ("Secure Boot", "MODULE_ROOT", "modprobe -r decnet_iv", "python3 -c 'import decnet'", "module vermagic", "binutils (including `ar`)"):
         if marker not in install_doc:
             raise SystemExit(f"source-release gate: installation manual missing: {marker}")
+
+    dnmultinet_make = read_text("userspace/dnmultinet/Makefile")
+    if "all: check" not in dnmultinet_make or "test: check" not in dnmultinet_make:
+        raise SystemExit("source-release gate: end-user dnmultinet build still coupled to lab-only tests")
+    root_make = read_text("Makefile")
+    if "$(MAKE) -C userspace/dnmultinet test" not in root_make:
+        raise SystemExit("source-release gate: lab dnmultinet tests disappeared from repository unit coverage")
 
     handover = read_text("docs/HANDOVER.md")
     if "four exact-SHA acceptance depths" not in handover:

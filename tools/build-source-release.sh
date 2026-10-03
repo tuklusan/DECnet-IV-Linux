@@ -41,9 +41,16 @@ version=$version
 source_sha=$commit
 source_date_epoch=$epoch
 EOF_METADATA
-for forbidden in .git '*.qcow2' '*.raw' '*.img' '*.iso' '*.ko' '*.o' '*.a' '*.so' '*.so.*'; do
+for forbidden in .git __pycache__ '*.pyc' '*.qcow2' '*.raw' '*.img' '*.iso' '*.ko' '*.o' '*.a' '*.so' '*.so.*'; do
   if find "$work/$name" -name "$forbidden" -print -quit | grep -q .; then echo "build-source-release: forbidden generated payload matched $forbidden" >&2; exit 2; fi
 done
+while IFS= read -r -d '' candidate; do
+  magic=$(od -An -tx1 -N4 "$candidate" | tr -d ' \n')
+  if [[ "$magic" == 7f454c46 ]]; then
+    echo "build-source-release: ELF binary payload present: ${candidate#"$work/$name/"}" >&2
+    exit 2
+  fi
+done < <(find "$work/$name" -type f -print0)
 generated_paths=(
   kernel/decnet/decnet_iv.ko
   userspace/dnctl/dnctl userspace/ncp/ncp userspace/dnlogin/dnlogin

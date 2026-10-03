@@ -21,18 +21,54 @@ cd "$root"
 
 destdir=${DESTDIR:-}
 prefix=${PREFIX:-/usr/local}
-kernel_release=${KERNEL_RELEASE:-$(uname -r)}
+module_path=kernel/decnet/decnet_iv.ko
+
+while [[ "$prefix" != / && "$prefix" == */ ]]; do prefix=${prefix%/}; done
+if [[ -n "$destdir" ]]; then
+    while [[ "$destdir" != / && "$destdir" == */ ]]; do destdir=${destdir%/}; done
+fi
+
+test -r "$module_path" || {
+    echo "install.sh: built kernel module not found: $module_path" >&2
+    exit 2
+}
+command -v modinfo >/dev/null 2>&1 || {
+    echo "install.sh: required command not found: modinfo" >&2
+    exit 2
+}
+vermagic=$(modinfo -F vermagic "$module_path") || {
+    echo "install.sh: cannot read module vermagic: $module_path" >&2
+    exit 2
+}
+read -r module_release _ <<<"$vermagic"
+[[ -n "$module_release" ]] || {
+    echo "install.sh: cannot determine built module kernel release" >&2
+    exit 2
+}
+if [[ -n ${KERNEL_RELEASE:-} && "$KERNEL_RELEASE" != "$module_release" ]]; then
+    echo "install.sh: KERNEL_RELEASE=$KERNEL_RELEASE does not match module vermagic release $module_release" >&2
+    exit 2
+fi
+kernel_release=${KERNEL_RELEASE:-$module_release}
 module_root=${MODULE_ROOT:-/lib/modules/$kernel_release}
+while [[ "$module_root" != / && "$module_root" == */ ]]; do module_root=${module_root%/}; done
 manifest_rel="$prefix/share/decnet-iv-linux/install-manifest.txt"
 manifest="$destdir$manifest_rel"
 manifest_tmp="$manifest.tmp.$$"
 
-[[ -z "$destdir" || "$destdir" == /* ]] || {
-    echo "install.sh: DESTDIR must be empty or absolute" >&2
-    exit 2
+safe_root() {
+    local path=$1
+    [[ "$path" == /* && "$path" != / &&
+       "$path" != *"/../"* && "$path" != */.. &&
+       "$path" != *"/./"* && "$path" != */. ]]
 }
-[[ "$prefix" == /* && "$prefix" != / && "$module_root" == /* && "$module_root" != / ]] || {
-    echo "install.sh: PREFIX and MODULE_ROOT must be absolute non-root paths" >&2
+
+if [[ -n "$destdir" ]] && ! safe_root "$destdir"; then
+    echo "install.sh: DESTDIR must be empty or a normalized absolute non-root path" >&2
+    exit 2
+fi
+safe_root "$prefix" && safe_root "$module_root" || {
+    echo "install.sh: PREFIX and MODULE_ROOT must be normalized absolute non-root paths" >&2
     exit 2
 }
 if [[ -z "$destdir" && ${EUID:-$(id -u)} -ne 0 ]]; then
@@ -42,7 +78,9 @@ fi
 
 safe_managed_path() {
     local path=$1
-    [[ "$path" == /* && "$path" != *"/../"* && "$path" != *"/.." ]] || return 1
+    [[ "$path" == /* &&
+       "$path" != *"/../"* && "$path" != *"/.." &&
+       "$path" != *"/./"* && "$path" != *"/." ]] || return 1
     case "$path" in
         "$prefix"/*|"$module_root"/*) return 0 ;;
         *) return 1 ;;
@@ -99,10 +137,12 @@ put() {
         exit 2
     }
     check_target "$target"
-    [[ ! -L "$destdir$target" ]] || {
-        echo "install.sh: refusing symlink at regular-file target: $target" >&2
-        exit 2
-    }
+    if [[ -e "$destdir$target" || -L "$destdir$target" ]]; then
+        [[ -f "$destdir$target" && ! -L "$destdir$target" ]] || {
+            echo "install.sh: refusing non-regular file at regular-file target: $target" >&2
+            exit 2
+        }
+    fi
     record "$target"
     install -D -m "$mode" "$source" "$destdir$target"
 }
@@ -119,7 +159,7 @@ link_to() {
     ln -sfn "$target" "$destdir$link"
 }
 
-put 0644 kernel/decnet/decnet_iv.ko "$module_root/extra/decnet_iv.ko"
+put 0644 "$module_path" "$module_root/extra/decnet_iv.ko"
 
 put 0755 userspace/dnctl/dnctl "$prefix/sbin/dnctl"
 put 0755 userspace/dnetd/dnetd "$prefix/sbin/dnetd"

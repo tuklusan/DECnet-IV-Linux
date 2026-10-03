@@ -38,7 +38,7 @@ Forward compatibility is an active maintenance requirement. Full release accepta
 
 ## Build and installation model
 
-- `build.sh` validates prerequisites and builds all delivered userspace plus the kernel module.
+- `build.sh` validates end-user prerequisites and builds all delivered userspace plus the kernel module without requiring lab-only VDE2/Area-31 test infrastructure.
 - `install.sh` installs the module, commands, daemons, libraries, development headers and documentation. `DESTDIR` is supported. It records managed paths before writing them and refuses unmanaged target collisions, so a failed or interrupted install remains manifest-cleanable rather than silently untracked.
 - `uninstall.sh` removes only paths recorded by the installation manifest and refreshes module/library caches on a live system.
 
@@ -54,7 +54,13 @@ The canonical release object is the exact source tarball. The source-release gat
 - stage-install every delivered component on amd64 and arm64;
 - validate the installed component manifest;
 - run uninstall and prove manifest-owned files are removed;
-- exercise the exact same archive bytes through the maintained Debian/Fedora, amd64/arm64 and GCC/Clang portability matrix;
+- exercise the exact same archive bytes through the maintained Debian/Fedora, amd64/arm64 and GCC/Clang portability matrix; every compiler-compatible kernel path must run the documented `build.sh` and staged install/uninstall path, not only a compile-only object probe;
 - bind later protocol/real-peer evidence to the source SHA carried by that archive.
 
 The VM lab may continue to create disposable disks internally to obtain independent kernels and destructive isolation. Those files are never release artifacts.
+
+## Completeness gate
+
+The production tarball must document every delivered project-goal surface in `docs/FEATURES.md` and every installed/source component in `docs/COMPONENTS.md`. A project-goal component cannot disappear merely because the delivery format changed.
+
+The standing project goal includes native DDCMP. No DDCMP implementation exists in the current tracked source tree, so DDCMP is explicitly **pending** and is not claimed as a delivered feature by the current pre-production source archive. A final release claiming the complete DECnet-IV-Linux project goal is blocked until DDCMP is implemented, documented, installed where applicable, and accepted, unless the project owner explicitly changes that scope.

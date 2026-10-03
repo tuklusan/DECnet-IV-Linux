@@ -35,11 +35,11 @@ Core build requirements:
 - Linux 6.8+ with matching kernel headers/development tree;
 - GNU make 4.0+;
 - GCC 12+ or Clang 16+; for the kernel module, use the compiler family compatible with the selected kernel build tree;
-- binutils and libc development environment;
+- binutils (including `ar`) and libc development environment;
 - Bash 5.0+;
 - Python 3.10+;
-- standard `install`, `ln`, `rm`, `mv`, `find`, `sort`, `grep`, and `sed`;
-- `kmod` utilities for live installation/loading.
+- standard `cat`, `head`, `install`, `ln`, `mkdir`, `chmod`, `rm`, `mv`, `find`, `sort`, `grep`, and `sed`;
+- `kmod` utilities, including `modinfo`, `depmod` and `modprobe`, for module verification and live installation/loading.
 
 The tarball needs tar with xz support for extraction.
 
@@ -60,7 +60,7 @@ The installed kernel development package must match the kernel being targeted.
 
 ## 3. Optional runtime integrations
 
-The native stack and C userspace do not require PyDECnet, Route20, SIMH, QEMU or VDE2.
+The native stack and C userspace do not require PyDECnet, Route20, SIMH, QEMU or VDE2. The end-user `build.sh` does not execute the lab-only Area-31/VDE2 integration selftests; those remain under the repository test targets.
 
 - `dnmultinet`: Python 3.10+, a compatible PyDECnet installation providing `python3 -m decnet.main`, and libvdeplug/VDE2 for the required `vde://` Ethernet circuit. The project's acceptance references are PyDECnet `8d93c2a546317c67aba0adf9433f5f3efdf1f85c` and `tuklusan/vde-2` `7e7017b6308f3f81d5c922a32097137ceee13074`; they are external projects with their own licenses and are not vendored in this tarball.
 - Before using `dnmultinet`, verify `python3 -c 'import decnet'` and the VDE commands required by the chosen deployment (normally `vde_switch` and `vde_plug`). The `--pydecnet-dir` option can point at an unpacked compatible PyDECnet tree without installing it system-wide.
@@ -96,12 +96,13 @@ Many distribution kernels are configured and built with GCC. Their exported exte
 Another installed kernel:
 
 ```sh
-KERNEL_RELEASE=<kernel-release> \
-KDIR=/lib/modules/<kernel-release>/build \
+target=<kernel-release>
+KERNEL_RELEASE="$target" \
+KDIR="/lib/modules/$target/build" \
 ./build.sh
 ```
 
-A successful build produces userspace programs/libraries and `kernel/decnet/decnet_iv.ko`.
+A successful build produces userspace programs/libraries and `kernel/decnet/decnet_iv.ko`. `install.sh` reads the module vermagic and refuses a conflicting `KERNEL_RELEASE`, preventing a cross-kernel build from being installed into the wrong module tree.
 
 ## 6. Staged install
 
@@ -110,7 +111,7 @@ rm -rf /tmp/dniv-stage
 DESTDIR=/tmp/dniv-stage ./install.sh
 ```
 
-This requires no root privilege and is the supported packaging/release-validation path. `DESTDIR` must be absolute. `install.sh` records each managed target in the installation manifest before writing it, refuses to overwrite an existing target that is not already managed, and preserves the manifest on failure. If a staged or live install is interrupted or otherwise fails, rerun `uninstall.sh` with the same `DESTDIR`, `PREFIX` and `MODULE_ROOT` values to clean the tracked partial installation before retrying.
+This requires no root privilege and is the supported packaging/release-validation path. `DESTDIR` must be a normalized absolute non-root path. `install.sh` records each managed target in the installation manifest before writing it, refuses to overwrite an existing target that is not already managed, and preserves the manifest on failure. If a staged or live install is interrupted or otherwise fails, rerun `uninstall.sh` with the same `DESTDIR`, `PREFIX` and `MODULE_ROOT` values to clean the tracked partial installation before retrying.
 
 ## 7. Live install
 
@@ -118,9 +119,9 @@ This requires no root privilege and is the supported packaging/release-validatio
 sudo ./install.sh
 ```
 
-The default userspace prefix is `/usr/local`. The module installs under `/lib/modules/<kernel-release>/extra/`. The manifest is `/usr/local/share/decnet-iv-linux/install-manifest.txt`. The installer refreshes `depmod` and `ldconfig` when available. Existing files outside that manifest are never overwritten; resolve any collision explicitly rather than forcing the installer.
+The default userspace prefix is `/usr/local`. The module installs under `/lib/modules/<kernel-release>/extra/`. By default the installer obtains `<kernel-release>` from the built module's vermagic; if `KERNEL_RELEASE` is supplied it must match that vermagic exactly. The manifest is `/usr/local/share/decnet-iv-linux/install-manifest.txt`. The installer refreshes `depmod` and `ldconfig` when available. Existing files outside that manifest are never overwritten; resolve any collision explicitly rather than forcing the installer.
 
-A different userspace prefix may be selected with `PREFIX=/opt/decnet`. Systems whose module tree is not rooted at `/lib/modules/<kernel-release>` may set an absolute `MODULE_ROOT`.
+A different userspace prefix may be selected with `PREFIX=/opt/decnet`. Systems whose module tree is not rooted at `/lib/modules/<kernel-release>` may set a normalized absolute non-root `MODULE_ROOT`. `PREFIX`, `MODULE_ROOT` and non-empty `DESTDIR` reject `.`/`..` path components.
 
 ### Secure Boot and module signing
 
@@ -175,9 +176,8 @@ After installing a new kernel:
 
 1. install matching headers;
 2. use a clean copy of the accepted source release;
-3. set `KERNEL_RELEASE` and `KDIR`;
-4. run `./build.sh`;
-5. run `sudo ./install.sh`;
-6. after booting that kernel, load `decnet_iv` and verify identity, adjacencies and required services.
+3. build for the exact target release, for example `KERNEL_RELEASE="$target" KDIR="/lib/modules/$target/build" ./build.sh`;
+4. install the resulting module and userspace with `sudo KERNEL_RELEASE="$target" ./install.sh`; the installer independently checks the module vermagic before writing anything;
+5. after booting that kernel, load `decnet_iv` and verify identity, adjacencies and required services.
 
 Never reuse a `decnet_iv.ko` on a kernel for which it was not built.

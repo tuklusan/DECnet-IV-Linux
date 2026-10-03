@@ -19,7 +19,7 @@ cd "$root"
 python=${PYTHON:-python3}
 cc=${CC:-cc}
 need() { command -v "$1" >/dev/null 2>&1 || { echo "build.sh: required command not found: $1" >&2; exit 2; }; }
-for command in bash make "$cc" "$python" install ln rm find sort grep sed; do need "$command"; done
+for command in bash make ar "$cc" "$python" cat head install ln rm find sort grep sed; do need "$command"; done
 "$python" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' || { echo "build.sh: Python 3.10 or later is required" >&2; exit 2; }
 case "$(uname -m)" in x86_64|aarch64) ;; *) echo "build.sh: supported architectures are x86_64 and aarch64" >&2; exit 2 ;; esac
 

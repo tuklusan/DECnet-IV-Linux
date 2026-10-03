@@ -137,14 +137,26 @@ jobs:
                 test "$(git -C /tmp/linux-clang rev-parse HEAD)" = "$linux_commit"
                 rm -rf /tmp/linux-clang/.git
                 LLVM=1 make -C /tmp/linux-clang defconfig >/dev/null
+                /tmp/linux-clang/scripts/config --file /tmp/linux-clang/.config --disable MODVERSIONS
+                /tmp/linux-clang/scripts/config --file /tmp/linux-clang/.config --disable MODULE_SIG_ALL
+                /tmp/linux-clang/scripts/config --file /tmp/linux-clang/.config --disable MODULE_SIG_FORCE
+                LLVM=1 make -C /tmp/linux-clang olddefconfig >/dev/null
                 LLVM=1 make -C /tmp/linux-clang modules_prepare -j2 >/dev/null
-                LLVM=1 make -C /tmp/linux-clang M="$PWD/kernel/decnet" decnet_iv.o
-                test -s kernel/decnet/decnet_iv.o
+                clang_release=$(cat /tmp/linux-clang/include/config/kernel.release)
+                test -n "$clang_release"
+                CC="$cc" KDIR=/tmp/linux-clang KERNEL_RELEASE="$clang_release" ./build.sh
+                stage=/tmp/dniv-stage-clang
+                rm -rf "$stage"
+                DESTDIR="$stage" KERNEL_RELEASE="$clang_release" ./install.sh
+                test -s "$stage/usr/local/bin/ncp"
+                test -s "$stage/usr/local/sbin/dnctl"
+                test -s "$stage/usr/local/lib/libdnet.so.1.0"
+                test -s "$stage/lib/modules/$clang_release/extra/decnet_iv.ko"
+                DESTDIR="$stage" KERNEL_RELEASE="$clang_release" ./uninstall.sh
               else
-                make kernel KDIR="$KDIR" CC="$cc"
-              fi
-              if [[ -s kernel/decnet/decnet_iv.ko ]]; then
+                CC="$cc" KDIR="$KDIR" KERNEL_RELEASE="$kernel_release" ./build.sh
                 stage=/tmp/dniv-stage
+                rm -rf "$stage"
                 DESTDIR="$stage" KERNEL_RELEASE="$kernel_release" ./install.sh
                 test -s "$stage/usr/local/bin/ncp"
                 test -s "$stage/usr/local/sbin/dnctl"

@@ -14,10 +14,10 @@
 
 PYTHON ?= python3
 
-.PHONY: all test clean
-all: test
+.PHONY: all check test clean
+all: check
 
-test:
+check:
 	$(PYTHON) -m py_compile dnmultinet.py
 	$(PYTHON) dnmultinet.py --node 31.80 --name MNET80 --type l2router \
 		--vde vde:///tmp/dn31.ctl --mode connect \
@@ -32,6 +32,7 @@ test:
 		$(PYTHON) dnmultinet.py --node 31.80 --name MNET80 --type l2router \
 		--vde vde:///tmp/dn31.ctl --mode connect --runtime-peer-env \
 		--validate-only | grep -Fqx 'dnmultinet: configuration valid'
+test: check
 	$(PYTHON) -m py_compile ../../tests/lab/area31-nice.py
 	$(CC) -std=c11 -Wall -Wextra -Werror -I../../include/uapi -I../../include \
 		-I../libdnet/include -fsyntax-only ../../tests/lab/area31-native.c

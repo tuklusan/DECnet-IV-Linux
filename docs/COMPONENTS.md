@@ -22,7 +22,15 @@
 | `include/uapi/linux/dn.h` | Classic-compatible socket-facing UAPI definitions. |
 | `include/uapi/linux/decnet_iv.h` | Management/state UAPI. |
 
-Kernel source is split across `decnet_iv_main.c`, `decnet_iv_ethernet.c`, `decnet_iv_route.c`, `decnet_iv_nsp.c` and `decnet_iv_socket.c`.
+Kernel source responsibilities:
+
+| Source | Responsibility |
+| --- | --- |
+| `decnet_iv_main.c` | Module lifecycle, node identity and management/control integration. |
+| `decnet_iv_ethernet.c` | Native Ethernet framing, logical DECnet MAC handling, hello traffic and adjacency-facing link behavior. |
+| `decnet_iv_route.c` | Endnode/L1/L2 routing state, route selection, forwarding and convergence. |
+| `decnet_iv_nsp.c` | NSP logical links, sequencing, flow control, retransmission, timers and receive queues. |
+| `decnet_iv_socket.c` | Native `AF_DECnet` socket/UAPI boundary and Session Control object dispatch. |
 
 ## Libraries
 
@@ -76,6 +84,10 @@ Kernel source is split across `decnet_iv_main.c`, `decnet_iv_ethernet.c`, `decne
 ## Build and release support
 
 `build.sh`, `install.sh`, `uninstall.sh`, `tools/build-source-release.sh`, `INSTALL.md`, `docs/DELIVERY.md`, and `docs/FEATURES.md` define the portable source-release path.
+
+## Pending project-goal component
+
+Native DDCMP is part of the standing project goal but has no implementation component in the current tracked tree. It is deliberately listed here as pending rather than being silently omitted or falsely described as delivered.
 
 ## Lab-only content
 
