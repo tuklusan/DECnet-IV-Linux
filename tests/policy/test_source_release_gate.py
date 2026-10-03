@@ -394,6 +394,7 @@ def main() -> int:
         'KBUILD_MODPOST_WARN=1 CC="$cc" KDIR=/tmp/linux-clang KERNEL_RELEASE="$clang_release" ./build.sh',
         'DESTDIR="$stage" KERNEL_RELEASE="$clang_release" ./install.sh',
         "manifest-temp-symlink-stage",
+        "install-manifest.txt.tmp.$BASHPID",
         "foreign-victim",
         "KBUILD_MODPOST_WARN=1",
         "linux_floor_commit=e8f897f4afef0031fe618a8e94127a0934896aba",

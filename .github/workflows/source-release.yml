@@ -294,7 +294,7 @@ jobs:
           mkdir -p "$manifest_temp_stage/usr/local/share/decnet-iv-linux"
           printf 'foreign-victim\n' >"$manifest_temp_victim"
           STAGE="$manifest_temp_stage" VICTIM="$manifest_temp_victim" KERNEL_RELEASE="$KERNEL_RELEASE" bash -c '
-            predictable="$STAGE/usr/local/share/decnet-iv-linux/install-manifest.txt.tmp.$"
+            predictable="$STAGE/usr/local/share/decnet-iv-linux/install-manifest.txt.tmp.$BASHPID"
             ln -s "$VICTIM" "$predictable"
             exec env DESTDIR="$STAGE" KERNEL_RELEASE="$KERNEL_RELEASE" ./install.sh
           '
