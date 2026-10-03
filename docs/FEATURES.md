@@ -46,7 +46,7 @@ This catalogue describes the production source release. Lab-only helpers and ind
 ## Library and compatibility surface
 
 - `libdnet` static/shared libraries, including native connection/receive/EOF helpers.
-- `/etc/decnet.conf` compatible node database lookup, executor/device lookup, node iteration, object name/number lookup and named-node connection support.
+- `/etc/decnet.conf` compatible node database lookup, executor/device lookup, node iteration, object name/number lookup and named-node connection support, with strict bounded physical-line parsing that rejects embedded NULs and overlong records instead of treating one line as multiple entries.
 - `libdnet_daemon` static/shared helper library with deferred listener, accept/reject, accept-data and daemon-name helpers.
 - `netdnet/dn.h` and `netdnet/dnetdb.h`.
 - Project `linux/dn.h` and `linux/decnet_iv.h` UAPI headers.

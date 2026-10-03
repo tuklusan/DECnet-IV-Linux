@@ -643,6 +643,20 @@ def main() -> int:
         if marker not in dnhttpd:
             raise SystemExit(f"source-release gate: dnhttpd root-safety regression: {marker}")
 
+    dnetdb_source = read_text("userspace/libdnet/dnetdb.c")
+    for marker in (
+        "static int read_node_line(FILE *file, char *line, size_t cap)",
+        "while ((ch = fgetc(file)) != EOF)",
+        "if (ch == '\\0')",
+        "if (used + 1U >= cap)",
+        "errno = E2BIG;",
+        "int line_rc = read_node_line(file, line, sizeof(line));",
+    ):
+        if marker not in dnetdb_source:
+            raise SystemExit(f"source-release gate: libdnet node-database line-bound safeguard missing: {marker}")
+    if "while (fgets(line, sizeof(line), file))" in dnetdb_source:
+        raise SystemExit("source-release gate: libdnet node database still fragments overlong physical lines through fgets")
+
     main_source = read_text("kernel/decnet/decnet_iv_main.c")
     init_start = main_source.index("static int __init dniv_init(void)")
     exit_start = main_source.index("static void __exit dniv_exit(void)")

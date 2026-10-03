@@ -114,12 +114,48 @@ static int uppercase_copy(char *dst, size_t cap, const char *src)
     return 0;
 }
 
+static int read_node_line(FILE *file, char *line, size_t cap)
+{
+    size_t used = 0U;
+    int ch;
+
+    if (!file || !line || cap < 2U) {
+        errno = EINVAL;
+        return -1;
+    }
+    while ((ch = fgetc(file)) != EOF) {
+        if (ch == '\0') {
+            errno = EINVAL;
+            return -1;
+        }
+        if (used + 1U >= cap) {
+            errno = E2BIG;
+            return -1;
+        }
+        line[used++] = (char)ch;
+        if (ch == '\n')
+            break;
+    }
+    if (ferror(file)) {
+        errno = EIO;
+        return -1;
+    }
+    if (!used)
+        return 0;
+    line[used] = '\0';
+    return 1;
+}
+
 static int read_node_record(FILE *file, struct node_record *record)
 {
     char line[512];
 
-    while (fgets(line, sizeof(line), file)) {
+    for (;;) {
         char *start = line;
+        int line_rc = read_node_line(file, line, sizeof(line));
+
+        if (line_rc <= 0)
+            return line_rc;
 
         while (*start == ' ' || *start == '\t' || *start == '\r' ||
                *start == '\n')
@@ -154,12 +190,6 @@ static int read_node_record(FILE *file, struct node_record *record)
         }
         return 1;
     }
-
-    if (ferror(file)) {
-        errno = EIO;
-        return -1;
-    }
-    return 0;
 }
 
 static struct nodeent *fill_node(const char *name,
