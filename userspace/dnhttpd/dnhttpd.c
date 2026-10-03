@@ -12,13 +12,17 @@
 // patent, trademark, and governing-law provisions.
 // ============================================================================
 
+#define _GNU_SOURCE
+
 #include <errno.h>
+#include <fcntl.h>
 #include <linux/dn.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/time.h>
 #include <unistd.h>
 
@@ -72,11 +76,38 @@ static int safe_path(const char *uri, char *name, size_t cap)
     return 0;
 }
 
+static FILE *open_root_file(const char *root, const char *name)
+{
+    struct stat st;
+    FILE *stream;
+    int rootfd;
+    int fd;
+
+    rootfd = open(root, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    if (rootfd < 0)
+        return NULL;
+    fd = openat(rootfd, name, O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
+    close(rootfd);
+    if (fd < 0)
+        return NULL;
+    if (fstat(fd, &st) || !S_ISREG(st.st_mode)) {
+        int saved = errno;
+
+        close(fd);
+        errno = saved ? saved : EACCES;
+        return NULL;
+    }
+    stream = fdopen(fd, "rb");
+    if (!stream)
+        close(fd);
+    return stream;
+}
+
 static int serve(int fd, const char *root)
 {
     struct timeval timeout = { .tv_sec = 30, .tv_usec = 0 };
     unsigned char request[2048];
-    char method[16], uri[512], version[32], path[1024], name[512];
+    char method[16], uri[512], version[32], name[512];
     unsigned char body[8192];
     char header[512];
     FILE *in;
@@ -99,10 +130,7 @@ static int serve(int fd, const char *root)
         reason = "Bad Request";
         n = (size_t)snprintf((char *)body, sizeof(body), "Bad Request\n");
     } else {
-        if (snprintf(path, sizeof(path), "%s/%s", root, name) >=
-            (int)sizeof(path))
-            return -1;
-        in = fopen(path, "rb");
+        in = open_root_file(root, name);
         if (!in) {
             code = 404;
             reason = "Not Found";
@@ -135,13 +163,61 @@ static int serve(int fd, const char *root)
 
 static int selftest(void)
 {
+    char directory[] = "/tmp/dnhttpd-selftest.XXXXXX";
+    char victim[] = "/tmp/dnhttpd-victim.XXXXXX";
+    char good[256];
+    char link[256];
     char name[64];
+    FILE *file = NULL;
+    int victim_fd = -1;
+    int rc = 1;
 
     if (safe_path("/", name, sizeof(name)) || strcmp(name, "index.html") ||
         safe_path("/hello.html", name, sizeof(name)) ||
         strcmp(name, "hello.html") ||
         !safe_path("/../secret", name, sizeof(name)) ||
         !safe_path("/sub/file", name, sizeof(name)))
+        return 1;
+    if (!mkdtemp(directory))
+        return 1;
+    victim_fd = mkstemp(victim);
+    if (victim_fd < 0)
+        goto out;
+    close(victim_fd);
+    victim_fd = -1;
+    if (snprintf(good, sizeof(good), "%s/index.html", directory) >=
+            (int)sizeof(good) ||
+        snprintf(link, sizeof(link), "%s/escape.html", directory) >=
+            (int)sizeof(link))
+        goto out;
+    file = fopen(good, "wb");
+    if (!file || fputs("ok\n", file) == EOF || fclose(file)) {
+        file = NULL;
+        goto out;
+    }
+    file = NULL;
+    if (symlink(victim, link))
+        goto out;
+    file = open_root_file(directory, "index.html");
+    if (!file)
+        goto out;
+    fclose(file);
+    file = NULL;
+    file = open_root_file(directory, "escape.html");
+    if (file)
+        goto out;
+    rc = 0;
+
+out:
+    if (file)
+        fclose(file);
+    if (victim_fd >= 0)
+        close(victim_fd);
+    unlink(link);
+    unlink(good);
+    unlink(victim);
+    rmdir(directory);
+    if (rc)
         return 1;
     puts("dnhttpd selftest passed");
     return 0;

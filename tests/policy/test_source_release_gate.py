@@ -487,6 +487,16 @@ def main() -> int:
     if "$(MAKE) -C userspace/dnmultinet test" not in root_make:
         raise SystemExit("source-release gate: lab dnmultinet tests disappeared from repository unit coverage")
 
+    dnhttpd = read_text("userspace/dnhttpd/dnhttpd.c")
+    for marker in (
+        "openat(rootfd, name, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)",
+        "fstat(fd, &st)",
+        "S_ISREG(st.st_mode)",
+        'open_root_file(directory, "escape.html")',
+    ):
+        if marker not in dnhttpd:
+            raise SystemExit(f"source-release gate: dnhttpd root-safety regression: {marker}")
+
     state = read_text("docs/PROJECT_STATE.md")
     goal = state.split("## Goal", 1)[1].split("## References and licensing", 1)[0]
     if "portable source release" not in goal or "Deliver reproducible x86_64/aarch64 images" in goal:
