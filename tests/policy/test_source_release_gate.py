@@ -526,7 +526,9 @@ def main() -> int:
         "openat(rootfd, name, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)",
         "fstat(fd, &st)",
         "S_ISREG(st.st_mode)",
+        "st.st_nlink != 1",
         'open_root_file(directory, "escape.html")',
+        'open_root_file(directory, "hard.html")',
     ):
         if marker not in dnhttpd:
             raise SystemExit(f"source-release gate: dnhttpd root-safety regression: {marker}")

@@ -90,11 +90,16 @@ static FILE *open_root_file(const char *root, const char *name)
     close(rootfd);
     if (fd < 0)
         return NULL;
-    if (fstat(fd, &st) || !S_ISREG(st.st_mode)) {
+    if (fstat(fd, &st)) {
         int saved = errno;
 
         close(fd);
-        errno = saved ? saved : EACCES;
+        errno = saved;
+        return NULL;
+    }
+    if (!S_ISREG(st.st_mode) || st.st_nlink != 1) {
+        close(fd);
+        errno = EACCES;
         return NULL;
     }
     stream = fdopen(fd, "rb");
@@ -167,6 +172,7 @@ static int selftest(void)
     char victim[] = "/tmp/dnhttpd-victim.XXXXXX";
     char good[256];
     char link[256];
+    char hardlink_path[256];
     char name[64];
     FILE *file = NULL;
     int victim_fd = -1;
@@ -188,7 +194,9 @@ static int selftest(void)
     if (snprintf(good, sizeof(good), "%s/index.html", directory) >=
             (int)sizeof(good) ||
         snprintf(link, sizeof(link), "%s/escape.html", directory) >=
-            (int)sizeof(link))
+            (int)sizeof(link) ||
+        snprintf(hardlink_path, sizeof(hardlink_path), "%s/hard.html", directory) >=
+            (int)sizeof(hardlink_path))
         goto out;
     file = fopen(good, "wb");
     if (!file || fputs("ok\n", file) == EOF || fclose(file)) {
@@ -196,7 +204,7 @@ static int selftest(void)
         goto out;
     }
     file = NULL;
-    if (symlink(victim, link))
+    if (symlink(victim, link) || linkat(AT_FDCWD, victim, AT_FDCWD, hardlink_path, 0))
         goto out;
     file = open_root_file(directory, "index.html");
     if (!file)
@@ -206,6 +214,9 @@ static int selftest(void)
     file = open_root_file(directory, "escape.html");
     if (file)
         goto out;
+    file = open_root_file(directory, "hard.html");
+    if (file)
+        goto out;
     rc = 0;
 
 out:
@@ -213,6 +224,7 @@ out:
         fclose(file);
     if (victim_fd >= 0)
         close(victim_fd);
+    unlink(hardlink_path);
     unlink(link);
     unlink(good);
     unlink(victim);

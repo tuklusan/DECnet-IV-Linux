@@ -57,7 +57,7 @@ This catalogue describes the production source release. Lab-only helpers and ind
 - `dnobject` named/numbered object client.
 - `dntask` task/object client.
 - `dnlynx` bounded DECnet-native HTTP/1.0 client.
-- `dnhttpd` bounded DECnet-native static HTTP/1.0 server with safe root-level GET handling and explicit bad/not-found responses.
+- `dnhttpd` bounded DECnet-native static HTTP/1.0 server with safe root-level GET handling that rejects symbolic-link and hard-link leaf escapes, plus explicit bad/not-found responses.
 
 ## DAP/FAL
 
