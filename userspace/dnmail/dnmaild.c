@@ -379,7 +379,7 @@ static FILE *open_mailbox(const char *root)
     }
     fd = openat(rootfd, "mailbox.log",
                 O_WRONLY | O_CREAT | O_APPEND | O_NOFOLLOW | O_CLOEXEC |
-                O_NONBLOCK, 0666);
+                O_NONBLOCK, 0600);
     close(rootfd);
     if (fd < 0)
         return NULL;

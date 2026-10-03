@@ -57,7 +57,7 @@ This catalogue describes the production source release. Lab-only helpers and ind
 - `dnobject` named/numbered object client.
 - `dntask` task/object client.
 - `dnlynx` bounded DECnet-native HTTP/1.0 client.
-- `dnhttpd` bounded DECnet-native static HTTP/1.0 server with safe root-level GET handling that rejects symbolic-link, hard-link and non-regular leaf escapes without blocking on special files, plus explicit bad/not-found responses.
+- `dnhttpd` bounded DECnet-native static HTTP/1.0 server serving regular root-level files through the full 8192-byte body limit, with safe root-level GET handling that rejects symbolic-link, hard-link and non-regular leaf escapes without blocking on special files, plus explicit bad/not-found responses.
 
 ## DAP/FAL
 
@@ -73,7 +73,7 @@ This catalogue describes the production source release. Lab-only helpers and ind
 ## Mail
 
 - `dnmail` MAIL-11 client including optional v3 Session capability negotiation and multiple-recipient delivery.
-- `dnmaild` object 27 service with legacy/v3 negotiation, local spool delivery, sendmail-compatible execution and bounded direct SMTP delivery; the local `mailbox.log` spool is opened inside `--root` without following symbolic links and rejects multiply linked/non-regular targets.
+- `dnmaild` object 27 service with legacy/v3 negotiation, local spool delivery, sendmail-compatible execution and bounded direct SMTP delivery; the local `mailbox.log` spool is created owner-only (0600), opened inside `--root` without following symbolic links and rejects multiply linked/non-regular targets.
 - Persistent `dnetd`, `dnfald`, `dnhttpd`, `dnmaild`, `dnphoned`, `dnmirror` and `dnobject` loops isolate malformed or aborted client sessions; explicit bounded/once modes still report session failures.
 
 ## Generic object dispatch

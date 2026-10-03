@@ -529,6 +529,7 @@ def main() -> int:
         'open_regular_at(rootfd, "HARD.TXT", 1)',
         "mkfifo(fifo_path, 0600)",
         'open_regular_at(rootfd, "FIFO.TXT", 1)',
+        "errno = EPROTO;",
     ):
         if marker not in dnfald:
             raise SystemExit(f"source-release gate: dnfald root-safety regression: {marker}")
@@ -542,6 +543,7 @@ def main() -> int:
         "symlink(victim, mailbox)",
         "link(victim, mailbox)",
         "open_mailbox(directory)",
+        "O_NONBLOCK, 0600)",
     ):
         if marker not in dnmaild:
             raise SystemExit(f"source-release gate: dnmaild spool-safety regression: {marker}")
@@ -555,6 +557,9 @@ def main() -> int:
         'open_root_file(directory, "escape.html")',
         'open_root_file(directory, "hard.html")',
         'open_root_file(directory, "pipe.html")',
+        "static int read_bounded_file",
+        "ftruncate(good_fd, (off_t)sizeof(boundary))",
+        "ftruncate(good_fd, (off_t)sizeof(boundary) + 1)",
     ):
         if marker not in dnhttpd:
             raise SystemExit(f"source-release gate: dnhttpd root-safety regression: {marker}")

@@ -787,9 +787,12 @@ static int authenticate_session(int fd, const char *user,
     if (!user && !password && !account)
         return 0;
     memset(&access, 0, sizeof(access));
-    if (getsockopt(fd, DNPROTO_NSP, DSO_CONACCESS, &access, &len) ||
-        len != sizeof(access))
+    if (getsockopt(fd, DNPROTO_NSP, DSO_CONACCESS, &access, &len))
         return -1;
+    if (len != sizeof(access)) {
+        errno = EPROTO;
+        return -1;
+    }
     if (!access_field_match(access.acc_user, access.acc_userl, user) ||
         !access_field_match(access.acc_pass, access.acc_passl, password) ||
         !access_field_match(access.acc_acc, access.acc_accl, account)) {

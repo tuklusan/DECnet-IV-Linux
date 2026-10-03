@@ -109,6 +109,28 @@ static FILE *open_root_file(const char *root, const char *name)
     return stream;
 }
 
+static int read_bounded_file(FILE *in, unsigned char *body,
+                             size_t cap, size_t *len)
+{
+    size_t n;
+
+    if (!in || !body || !cap || !len)
+        return -1;
+    n = fread(body, 1, cap, in);
+    if (ferror(in))
+        return -1;
+    if (n == cap) {
+        int extra = fgetc(in);
+
+        if (extra != EOF || ferror(in))
+            return -1;
+    } else if (!feof(in)) {
+        return -1;
+    }
+    *len = n;
+    return 0;
+}
+
 static int serve(int fd, const char *root)
 {
     struct timeval timeout = { .tv_sec = 30, .tv_usec = 0 };
@@ -142,8 +164,7 @@ static int serve(int fd, const char *root)
             reason = "Not Found";
             n = (size_t)snprintf((char *)body, sizeof(body), "Not Found\n");
         } else {
-            n = fread(body, 1, sizeof(body), in);
-            if (ferror(in) || !feof(in)) {
+            if (read_bounded_file(in, body, sizeof(body), &n)) {
                 fclose(in);
                 return -1;
             }
@@ -176,8 +197,11 @@ static int selftest(void)
     char hardlink_path[256];
     char fifo_path[256];
     char name[64];
+    unsigned char boundary[8192];
+    size_t boundary_len = 0U;
     FILE *file = NULL;
     int victim_fd = -1;
+    int good_fd = -1;
     int rc = 1;
 
     if (safe_path("/", name, sizeof(name)) || strcmp(name, "index.html") ||
@@ -226,6 +250,30 @@ static int selftest(void)
     file = open_root_file(directory, "pipe.html");
     if (file)
         goto out;
+    good_fd = open(good, O_WRONLY | O_CLOEXEC);
+    if (good_fd < 0 || ftruncate(good_fd, (off_t)sizeof(boundary)))
+        goto out;
+    close(good_fd);
+    good_fd = -1;
+    file = open_root_file(directory, "index.html");
+    if (!file || read_bounded_file(file, boundary, sizeof(boundary),
+                                   &boundary_len) ||
+        boundary_len != sizeof(boundary))
+        goto out;
+    fclose(file);
+    file = NULL;
+    good_fd = open(good, O_WRONLY | O_CLOEXEC);
+    if (good_fd < 0 ||
+        ftruncate(good_fd, (off_t)sizeof(boundary) + 1))
+        goto out;
+    close(good_fd);
+    good_fd = -1;
+    file = open_root_file(directory, "index.html");
+    if (!file || !read_bounded_file(file, boundary, sizeof(boundary),
+                                    &boundary_len))
+        goto out;
+    fclose(file);
+    file = NULL;
     rc = 0;
 
 out:
@@ -233,6 +281,8 @@ out:
         fclose(file);
     if (victim_fd >= 0)
         close(victim_fd);
+    if (good_fd >= 0)
+        close(good_fd);
     unlink(fifo_path);
     unlink(hardlink_path);
     unlink(link);
