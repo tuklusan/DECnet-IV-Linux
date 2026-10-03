@@ -202,8 +202,9 @@ put() {
     }
     check_target "$target"
     if [[ -e "$destdir$target" || -L "$destdir$target" ]]; then
-        [[ -f "$destdir$target" && ! -L "$destdir$target" ]] || {
-            echo "install.sh: refusing non-regular file at regular-file target: $target" >&2
+        [[ -f "$destdir$target" && ! -L "$destdir$target" &&
+           $(stat -c %h -- "$destdir$target") == 1 ]] || {
+            echo "install.sh: refusing unsafe regular-file target: $target" >&2
             exit 2
         }
     fi
