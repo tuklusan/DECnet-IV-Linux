@@ -172,6 +172,15 @@ def main() -> int:
     ):
         if required not in preproduction:
             raise SystemExit(f"source-release gate: PP-09 remote-peer safety boundary missing: {required}")
+    if "locally controlled peers such as QCOCAL/IMPVAX" in preproduction:
+        raise SystemExit("source-release gate: PP-12 still ambiguously treats named remote VAX peers as locally controlled")
+    for required in (
+        "QCOCAL/IMPVAX instances that are themselves running locally under project control",
+        "A QCOCAL/IMPVAX system reached beyond PYRTR `31.3` is a protected remote HECnet peer",
+        "must not be restarted, hard-stopped, reconfigured or otherwise disrupted",
+    ):
+        if required not in preproduction:
+            raise SystemExit(f"source-release gate: PP-12 named-peer safety boundary missing: {required}")
     for required in ("`tests/lab/dniv_lab.py`", "`tests/lab/dniv-smoke.sh`"):
         if required not in preproduction:
             raise SystemExit(f"source-release gate: active two-node harness documentation missing: {required}")
