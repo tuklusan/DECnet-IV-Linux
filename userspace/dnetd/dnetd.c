@@ -227,6 +227,13 @@ static int load_config(const char *path, const char *program_dir,
         int parsed;
 
         lineno++;
+        if (!strchr(line, '\n') && !feof(file)) {
+            fprintf(stderr, "dnetd: config line %u exceeds %zu bytes\n",
+                    lineno, sizeof(line) - 2U);
+            fclose(file);
+            errno = E2BIG;
+            return -1;
+        }
         while (*start == ' ' || *start == '\t')
             start++;
         if (!*start || *start == '\n' || *start == '#')
@@ -430,6 +437,37 @@ out:
     return rc;
 }
 
+static int selftest_config_line_bound(void)
+{
+    char path[] = "/tmp/dnetd-config-selftest.XXXXXX";
+    char overlong[2200];
+    static const char prefix[] = "TEST 0 N,N root /bin/cat";
+    struct service services[DNETD_MAX_SERVICES];
+    int count = 0;
+    int fd;
+    int rc;
+
+    memset(overlong, ' ', sizeof(overlong));
+    memcpy(overlong, prefix, sizeof(prefix) - 1U);
+    overlong[sizeof(overlong) - 2U] = '\n';
+    overlong[sizeof(overlong) - 1U] = '\0';
+
+    fd = mkstemp(path);
+    if (fd < 0)
+        return -1;
+    if (write(fd, overlong, sizeof(overlong) - 1U) !=
+        (ssize_t)(sizeof(overlong) - 1U) || close(fd)) {
+        close(fd);
+        unlink(path);
+        return -1;
+    }
+
+    errno = 0;
+    rc = load_config(path, "/usr/local/sbin", services, &count);
+    unlink(path);
+    return rc < 0 && errno == E2BIG ? 0 : -1;
+}
+
 static int run_selftest(void)
 {
     struct service service;
@@ -459,7 +497,7 @@ static int run_selftest(void)
     if (parse_line(too_many, "/usr/local/sbin", &service) >= 0 ||
         errno != E2BIG)
         return 1;
-    if (selftest_reaper())
+    if (selftest_reaper() || selftest_config_line_bound())
         return 1;
     puts("dnetd selftest passed");
     return 0;

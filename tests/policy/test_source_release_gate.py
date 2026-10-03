@@ -706,6 +706,11 @@ def main() -> int:
         "return sigaction(SIGCHLD, &action, NULL);",
         "if (!once && install_child_reaper())",
         "if (selftest_reaper())",
+        "if (!strchr(line, '\\n') && !feof(file))",
+        "config line %u exceeds %zu bytes",
+        "static int selftest_config_line_bound(void)",
+        "char overlong[2200]",
+        "errno == E2BIG",
     ):
         if marker not in dnetd:
             raise SystemExit(f"source-release gate: dnetd child-reaping safeguard missing: {marker}")
