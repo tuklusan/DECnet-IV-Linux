@@ -61,6 +61,10 @@ def main() -> int:
             raise SystemExit(f"source-release gate: workflow safeguard missing: {marker}")
     if "fedora:42" in workflow:
         raise SystemExit("source-release gate: EOL Fedora 42 portability image remains")
+    for doc in ("docs/TEST_LAB.md", "docs/PRE_PRODUCTION_TEST.md"):
+        value = read_text(doc)
+        if "Fedora 42" in value or "Fedora 44" not in value:
+            raise SystemExit(f"source-release gate: stale Fedora portability documentation remains in {doc}")
     for forbidden in ("qemu-system", ".qcow2", "dniv.raw", "Release Image"):
         if forbidden in workflow:
             raise SystemExit(f"source-release gate: disk-image release behavior remains: {forbidden}")
