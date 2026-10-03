@@ -680,6 +680,16 @@ def main() -> int:
                 raise SystemExit(f"source-release gate: {daemon} once/default session isolation contract missing: {marker}")
     dnetd = read_text("userspace/dnetd/dnetd.c")
     for marker in (
+        "static void reap_children(int signo)",
+        "while (waitpid(-1, NULL, WNOHANG) > 0)",
+        "action.sa_flags = SA_RESTART | SA_NOCLDSTOP;",
+        "return sigaction(SIGCHLD, &action, NULL);",
+        "if (!once && install_child_reaper())",
+        "if (selftest_reaper())",
+    ):
+        if marker not in dnetd:
+            raise SystemExit(f"source-release gate: dnetd child-reaping safeguard missing: {marker}")
+    for marker in (
         "if (token) {",
         "errno = E2BIG;",
         'char too_many[] =',

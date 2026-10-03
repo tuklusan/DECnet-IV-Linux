@@ -372,6 +372,64 @@ static void close_listeners(struct service *services, int count)
     }
 }
 
+static void reap_children(int signo)
+{
+    int saved_errno = errno;
+
+    (void)signo;
+    while (waitpid(-1, NULL, WNOHANG) > 0)
+        ;
+    errno = saved_errno;
+}
+
+static int install_child_reaper(void)
+{
+    struct sigaction action;
+
+    memset(&action, 0, sizeof(action));
+    action.sa_handler = reap_children;
+    action.sa_flags = SA_RESTART | SA_NOCLDSTOP;
+    if (sigemptyset(&action.sa_mask))
+        return -1;
+    return sigaction(SIGCHLD, &action, NULL);
+}
+
+static int selftest_reaper(void)
+{
+    sigset_t blocked;
+    sigset_t previous;
+    pid_t child;
+    int rc = -1;
+
+    if (sigemptyset(&blocked) || sigaddset(&blocked, SIGCHLD) ||
+        sigprocmask(SIG_BLOCK, &blocked, &previous))
+        return -1;
+    child = fork();
+    if (child < 0)
+        goto out;
+    if (!child)
+        _exit(0);
+    while (sigwaitinfo(&blocked, NULL) < 0) {
+        if (errno != EINTR)
+            goto kill_child;
+    }
+    reap_children(SIGCHLD);
+    errno = 0;
+    if (waitpid(child, NULL, WNOHANG) != -1 || errno != ECHILD)
+        goto kill_child;
+    rc = 0;
+    goto out;
+
+kill_child:
+    (void)kill(child, SIGKILL);
+    while (waitpid(child, NULL, 0) < 0 && errno == EINTR)
+        ;
+out:
+    if (sigprocmask(SIG_SETMASK, &previous, NULL))
+        return -1;
+    return rc;
+}
+
 static int run_selftest(void)
 {
     struct service service;
@@ -400,6 +458,8 @@ static int run_selftest(void)
     errno = 0;
     if (parse_line(too_many, "/usr/local/sbin", &service) >= 0 ||
         errno != E2BIG)
+        return 1;
+    if (selftest_reaper())
         return 1;
     puts("dnetd selftest passed");
     return 0;
@@ -487,6 +547,11 @@ int main(int argc, char **argv)
         close_listeners(services, service_count);
         return 1;
     }
+    if (!once && install_child_reaper()) {
+        perror("dnetd: SIGCHLD");
+        close_listeners(services, service_count);
+        return 1;
+    }
     setvbuf(stdout, NULL, _IONBF, 0);
     if (foreground)
         printf("dnetd: ready services=%d\n", service_count);
@@ -562,8 +627,6 @@ int main(int argc, char **argv)
                     return 1;
                 return WIFEXITED(status) && WEXITSTATUS(status) == 0 ? 0 : 1;
             }
-            while (waitpid(-1, NULL, WNOHANG) > 0)
-                ;
         }
     }
 }
