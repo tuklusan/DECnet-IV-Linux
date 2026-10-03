@@ -83,7 +83,7 @@ if [[ -z "$timeout_seconds" ]]; then
     fi
 fi
 [[ "$timeout_seconds" =~ ^[1-9][0-9]*$ ]] || { echo "interop: bad timeout" >&2; exit 2; }
-session=${DNIV_INTEROP_SESSION_ID:-"local-$(date -u +%Y%m%dT%H%M%SZ)-$-$reference-$scenario"}
+session=${DNIV_INTEROP_SESSION_ID:-"local-$(date -u +%Y%m%dT%H%M%SZ)-${BASHPID}-${reference}-${scenario}"}
 [[ "$session" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "interop: bad session id" >&2; exit 2; }
 timer_proof=${DNIV_INTEROP_TIMER_PROOF:-0}
 [[ "$timer_proof" =~ ^[01]$ ]] || { echo "interop: bad timer-proof selector" >&2; exit 2; }

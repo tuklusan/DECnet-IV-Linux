@@ -210,6 +210,12 @@ def main() -> int:
     if ".github/workflows/area31-interop.yml" not in handover_status:
         raise SystemExit("source-release gate: handover does not identify the implemented Area-31 workflow")
 
+    run_interop = read_text("tests/lab/run-interop.sh")
+    if '-$-$reference-$scenario' in run_interop:
+        raise SystemExit("source-release gate: generator-damaged default interop session identifier remains")
+    if 'local-$(date -u +%Y%m%dT%H%M%SZ)-${BASHPID}-${reference}-${scenario}' not in run_interop:
+        raise SystemExit("source-release gate: unique default interop session identifier missing")
+
     area31_smoke = read_text("tests/lab/dniv-area31-smoke.sh")
     for stale in (
         "/tmp/dniv-area31-native.err",
