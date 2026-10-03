@@ -21,6 +21,7 @@ MULTINET/UDP is intentionally not offered here.
 """
 
 import argparse
+import ipaddress
 import os
 import pathlib
 import re
@@ -44,6 +45,27 @@ def node_name(value):
     if not NAME_RE.match(value):
         raise argparse.ArgumentTypeError("name must be 1..6 alphanumeric characters, starting with a letter")
     return value.upper()
+
+
+def safe_config_token(name, value):
+    if not value or value.startswith("-") or any(ch.isspace() for ch in value):
+        raise SystemExit(f"{name} has invalid syntax")
+    return value
+
+
+def ipv4_address(name, value):
+    safe_config_token(name, value)
+    try:
+        return str(ipaddress.IPv4Address(value))
+    except ipaddress.AddressValueError as exc:
+        raise SystemExit(f"{name} must be an IPv4 address") from exc
+
+
+def peer_host(value):
+    safe_config_token("peer host", value)
+    if ":" in value:
+        raise SystemExit("peer host must be an IPv4 address or hostname")
+    return value
 
 
 def parser():
@@ -93,8 +115,10 @@ def load_runtime_peer(args):
 
     host = os.environ["MULTINET_REMOTE_HOST"]
     port_text = os.environ["MULTINET_REMOTE_PORT"]
-    if any(ch.isspace() for ch in host):
-        raise SystemExit("MULTINET_REMOTE_HOST has invalid syntax")
+    try:
+        host = peer_host(host)
+    except SystemExit as exc:
+        raise SystemExit("MULTINET_REMOTE_HOST has invalid syntax") from exc
     if not port_text.isdigit():
         raise SystemExit("MULTINET_REMOTE_PORT must be numeric")
     args.peer_host = host
@@ -111,18 +135,23 @@ def validate(args):
         value = getattr(args, name)
         if value is not None and not 1 <= value <= 65535:
             raise SystemExit(name.replace("_", "-") + " must be 1..65535")
+    safe_config_token("VDE URL", args.vde)
+    args.local_address = ipv4_address("local address", args.local_address)
     if args.mode == "connect":
         if not args.peer_host or args.peer_port is None:
             raise SystemExit("connect mode requires --peer-host and --peer-port")
-        if any(ch.isspace() for ch in args.peer_host):
-            raise SystemExit("peer host has invalid syntax")
+        args.peer_host = peer_host(args.peer_host)
     else:
         if args.local_port is None:
             raise SystemExit("listen mode requires --local-port")
-    if args.api_socket and (any(ch.isspace() for ch in args.api_socket) or "\n" in args.api_socket):
-        raise SystemExit("api socket path must not contain whitespace")
+        if args.peer_host:
+            args.peer_host = peer_host(args.peer_host)
+    if args.api_socket:
+        safe_config_token("api socket path", args.api_socket)
     if args.runtime_peer_env and args.dry_run:
         raise SystemExit("dry-run refuses runtime peer environment")
+    if args.runtime_peer_env and args.config_out is not None:
+        raise SystemExit("--runtime-peer-env refuses --config-out to avoid persisting runtime peer values")
     if args.dry_run and args.validate_only:
         raise SystemExit("--dry-run and --validate-only are mutually exclusive")
 

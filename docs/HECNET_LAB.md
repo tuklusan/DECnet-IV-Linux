@@ -52,7 +52,7 @@ MULTINET is the supported point-to-point Internet transport for the lab. The imp
 
 Only TCP connect/listen modes are accepted for normal project use. MULTINET/UDP is excluded from the project transport claim because it lacks the reliability and restart properties required for dependable routing tests.
 
-`userspace/dnmultinet/dnmultinet.py` launches a PyDECnet router with one VDE Ethernet circuit facing local DECnet-IV-Linux VMs and one MULTINET TCP circuit facing a local or remote peer. Its Area-31 mode reads the remote host/port from runtime environment variables, keeps the generated configuration in a memory-backed file descriptor, refuses secret-backed dry-run output, and can expose a local API socket for bounded remote probes. This gives the native Linux stack an Internet path without adding a non-Ethernet media implementation to the kernel.
+`userspace/dnmultinet/dnmultinet.py` launches a PyDECnet router with one VDE Ethernet circuit facing local DECnet-IV-Linux VMs and one MULTINET TCP circuit facing a local or remote peer. Its Area-31 mode reads the remote host/port from runtime environment variables, validates generated-config values as single tokens, keeps the generated configuration in a memory-backed file descriptor, refuses secret-backed dry-run or `--config-out` persistence, and can expose a local API socket for bounded remote probes. This gives the native Linux stack an Internet path without adding a non-Ethernet media implementation to the kernel.
 
 ## Runtime secret contract
 

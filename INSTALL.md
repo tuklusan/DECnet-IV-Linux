@@ -64,7 +64,7 @@ The installed kernel development package must match the kernel being targeted.
 The native stack and C userspace do not require PyDECnet, Route20, SIMH, QEMU or VDE2. The end-user `build.sh` does not execute the lab-only Area-31/VDE2 integration selftests; those remain under the repository test targets.
 
 - `dnmultinet`: Python 3.10+, a compatible PyDECnet installation providing `python3 -m decnet.main`, and libvdeplug/VDE2 for the required `vde://` Ethernet circuit. The project's acceptance references are PyDECnet `8d93c2a546317c67aba0adf9433f5f3efdf1f85c` and `tuklusan/vde-2` `7e7017b6308f3f81d5c922a32097137ceee13074`; they are external projects with their own licenses and are not vendored in this tarball.
-- Before using `dnmultinet`, verify `python3 -c 'import decnet'` and the VDE commands required by the chosen deployment (normally `vde_switch` and `vde_plug`). The `--pydecnet-dir` option can point at an unpacked compatible PyDECnet tree without installing it system-wide.
+- Before using `dnmultinet`, verify `python3 -c 'import decnet'` and the VDE commands required by the chosen deployment (normally `vde_switch` and `vde_plug`). The `--pydecnet-dir` option can point at an unpacked compatible PyDECnet tree without installing it system-wide. MULTINET configuration values are validated as single config tokens, `--local-address` is IPv4-only, and `--runtime-peer-env` refuses both `--dry-run` and `--config-out` so runtime peer values stay in the memory-backed configuration passed to PyDECnet.
 - `dnmaild --sendmail`: a sendmail-compatible executable.
 - `dnmaild --smtp`: a reachable SMTP service.
 - VDE2/MULTINET/HECnet laboratory integration is optional; see `docs/HECNET_LAB.md`.

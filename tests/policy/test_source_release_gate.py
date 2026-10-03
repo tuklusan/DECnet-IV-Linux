@@ -441,7 +441,23 @@ def main() -> int:
         if marker not in install_doc:
             raise SystemExit(f"source-release gate: installation loader contract missing: {marker}")
 
+    dnmultinet = read_text("userspace/dnmultinet/dnmultinet.py")
+    for marker in (
+        "def safe_config_token",
+        "ipaddress.IPv4Address",
+        "--runtime-peer-env refuses --config-out to avoid persisting runtime peer values",
+    ):
+        if marker not in dnmultinet:
+            raise SystemExit(f"source-release gate: dnmultinet config-safety regression: {marker}")
     dnmultinet_make = read_text("userspace/dnmultinet/Makefile")
+    for marker in (
+        "unsafe VDE config token unexpectedly accepted",
+        "unsafe local-address config token unexpectedly accepted",
+        "IPv6 peer unexpectedly accepted",
+        "runtime peer config persistence unexpectedly accepted",
+    ):
+        if marker not in dnmultinet_make:
+            raise SystemExit(f"source-release gate: dnmultinet config-safety negative missing: {marker}")
     if "all: check" not in dnmultinet_make or "test: check" not in dnmultinet_make:
         raise SystemExit("source-release gate: end-user dnmultinet build still coupled to lab-only tests")
     root_make = read_text("Makefile")
