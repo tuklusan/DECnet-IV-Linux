@@ -86,7 +86,7 @@ def main() -> int:
         "refusing non-symlink at link target",
         "module vermagic release",
         "required command not found: modinfo",
-        "DESTDIR must be empty or absolute",
+        "DESTDIR must be empty or a normalized absolute non-root path",
     ):
         if marker not in install:
             raise SystemExit(f"source-release gate: installer safety safeguard missing: {marker}")
@@ -133,8 +133,9 @@ def main() -> int:
         "tests/lab/build-diagnostic-kernel.sh",
         "git -C /tmp/linux-clang fetch --depth=1 origin",
         'test "$(git -C /tmp/linux-clang rev-parse HEAD)" = "$linux_commit"',
-        'CC="$cc" KDIR=/tmp/linux-clang KERNEL_RELEASE="$clang_release" ./build.sh',
+        'KBUILD_MODPOST_WARN=1 CC="$cc" KDIR=/tmp/linux-clang KERNEL_RELEASE="$clang_release" ./build.sh',
         'DESTDIR="$stage" KERNEL_RELEASE="$clang_release" ./install.sh',
+        "KBUILD_MODPOST_WARN=1",
         "run_case fedora42 fedora:42 clang",
     ):
         if marker not in workflow:

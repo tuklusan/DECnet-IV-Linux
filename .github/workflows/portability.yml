@@ -144,7 +144,7 @@ jobs:
                 LLVM=1 make -C /tmp/linux-clang modules_prepare -j2 >/dev/null
                 clang_release=$(cat /tmp/linux-clang/include/config/kernel.release)
                 test -n "$clang_release"
-                CC="$cc" KDIR=/tmp/linux-clang KERNEL_RELEASE="$clang_release" ./build.sh
+                KBUILD_MODPOST_WARN=1 CC="$cc" KDIR=/tmp/linux-clang KERNEL_RELEASE="$clang_release" ./build.sh
                 stage=/tmp/dniv-stage-clang
                 rm -rf "$stage"
                 DESTDIR="$stage" KERNEL_RELEASE="$clang_release" ./install.sh
