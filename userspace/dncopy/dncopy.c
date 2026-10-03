@@ -559,24 +559,15 @@ static int retrieve_file(const char *node_text, const char *filespec,
     int fd;
     unsigned char rfm = 0U;
     FILE *out = stdout;
+    int close_out = 0;
 
     if (!n || n > 128U) {
         fprintf(stderr, "dncopy: invalid remote file specification\n");
         return -1;
     }
-    if (local_path && strcmp(local_path, "-")) {
-        out = fopen(local_path, "wb");
-        if (!out) {
-            perror("dncopy: open local output");
-            return -1;
-        }
-    }
     fd = open_fal(node_text, options);
-    if (fd < 0) {
-        if (local_path && strcmp(local_path, "-"))
-            fclose(out);
+    if (fd < 0)
         return -1;
-    }
     if (exchange_config(fd))
         goto fail;
 
@@ -601,6 +592,20 @@ static int retrieve_file(const char *node_text, const char *filespec,
     if (send_record(fd, msg, 3U) ||
         recv_message(fd, reply, sizeof(reply), DAP_ACK) != 2)
         goto fail;
+
+    /*
+     * Do not clobber an existing local destination until the remote file has
+     * completed DAP OPEN and CONNECT successfully.
+     */
+    if (local_path && strcmp(local_path, "-")) {
+        out = fopen(local_path, "wb");
+        if (!out) {
+            perror("dncopy: open local output");
+            close(fd);
+            return -1;
+        }
+        close_out = 1;
+    }
 
     msg[0] = DAP_CONTROL;
     msg[1] = 0U;
@@ -658,14 +663,14 @@ static int retrieve_file(const char *node_text, const char *filespec,
     if (fflush(out))
         goto fail;
     close(fd);
-    if (local_path && strcmp(local_path, "-") && fclose(out))
+    if (close_out && fclose(out))
         return -1;
     return 0;
 
 fail:
     fprintf(stderr, "dncopy: DAP retrieval failed\n");
     close(fd);
-    if (local_path && strcmp(local_path, "-"))
+    if (close_out)
         fclose(out);
     return -1;
 }

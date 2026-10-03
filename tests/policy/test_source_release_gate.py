@@ -547,6 +547,24 @@ def main() -> int:
     if "$(MAKE) -C userspace/dnmultinet test" not in root_make:
         raise SystemExit("source-release gate: lab dnmultinet tests disappeared from repository unit coverage")
 
+    dncopy = read_text("userspace/dncopy/dncopy.c")
+    retrieve_start = dncopy.find("static int retrieve_file")
+    retrieve_end = dncopy.find("static int store_file", retrieve_start)
+    retrieve = dncopy[retrieve_start:retrieve_end]
+    connect_marker = 'msg[2] = 2U; /* CONNECT data stream */'
+    local_open_marker = 'out = fopen(local_path, "wb");'
+    if (
+        retrieve_start < 0
+        or retrieve_end < 0
+        or connect_marker not in retrieve
+        or local_open_marker not in retrieve
+        or retrieve.find(local_open_marker) < retrieve.find(connect_marker)
+        or "int close_out = 0;" not in retrieve
+        or "if (close_out)" not in retrieve
+        or "Do not clobber an existing local destination until the remote file has" not in retrieve
+    ):
+        raise SystemExit("source-release gate: dncopy local retrieval destination is not deferred until remote OPEN/CONNECT")
+
     dnfald = read_text("userspace/dnfald/dnfald.c")
     for marker in (
         "open(root, O_RDONLY | O_DIRECTORY | O_CLOEXEC)",
