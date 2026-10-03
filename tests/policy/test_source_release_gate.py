@@ -643,6 +643,22 @@ def main() -> int:
         if marker not in dnhttpd:
             raise SystemExit(f"source-release gate: dnhttpd root-safety regression: {marker}")
 
+    main_source = read_text("kernel/decnet/decnet_iv_main.c")
+    init_start = main_source.index("static int __init dniv_init(void)")
+    exit_start = main_source.index("static void __exit dniv_exit(void)")
+    init_body = main_source[init_start:exit_start]
+    exit_body = main_source[exit_start:main_source.index("module_init(dniv_init);")]
+    init_misc = init_body.find("misc_register(&dniv_miscdev)")
+    init_sock = init_body.find("dniv_sock_init()")
+    if init_sock < 0 or init_misc < 0 or init_misc < init_sock:
+        raise SystemExit("source-release gate: management device is exposed before socket/data-plane initialization")
+    if "dniv_sock_exit();\n        dniv_eth_exit();" not in init_body:
+        raise SystemExit("source-release gate: late misc-register failure does not unwind initialized socket/data-plane state")
+    exit_misc = exit_body.find("misc_deregister(&dniv_miscdev)")
+    exit_sock = exit_body.find("dniv_sock_exit()")
+    if exit_misc < 0 or exit_sock < 0 or exit_misc > exit_sock:
+        raise SystemExit("source-release gate: management device is withdrawn after subsystem teardown starts")
+
     socket_source = read_text("kernel/decnet/decnet_iv_socket.c")
     for marker in (
         "__u32 tx_record_len;",

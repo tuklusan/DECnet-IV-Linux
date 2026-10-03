@@ -279,20 +279,13 @@ static int __init dniv_init(void)
     strscpy(dniv_identity.name, default_name, sizeof(dniv_identity.name));
     dniv_identity_normalize(&dniv_identity);
 
-    err = misc_register(&dniv_miscdev);
+    err = dniv_route_init();
     if (err)
         return err;
-
-    err = dniv_route_init();
-    if (err) {
-        misc_deregister(&dniv_miscdev);
-        return err;
-    }
 
     err = dniv_nsp_init();
     if (err) {
         dniv_route_exit();
-        misc_deregister(&dniv_miscdev);
         return err;
     }
 
@@ -302,7 +295,6 @@ static int __init dniv_init(void)
     if (err) {
         dniv_nsp_exit();
         dniv_route_exit();
-        misc_deregister(&dniv_miscdev);
         return err;
     }
 
@@ -311,7 +303,15 @@ static int __init dniv_init(void)
         dniv_eth_exit();
         dniv_nsp_exit();
         dniv_route_exit();
-        misc_deregister(&dniv_miscdev);
+        return err;
+    }
+
+    err = misc_register(&dniv_miscdev);
+    if (err) {
+        dniv_sock_exit();
+        dniv_eth_exit();
+        dniv_nsp_exit();
+        dniv_route_exit();
         return err;
     }
 
@@ -324,11 +324,11 @@ static int __init dniv_init(void)
 
 static void __exit dniv_exit(void)
 {
+    misc_deregister(&dniv_miscdev);
     dniv_sock_exit();
     dniv_eth_exit();
     dniv_nsp_exit();
     dniv_route_exit();
-    misc_deregister(&dniv_miscdev);
     pr_info("decnet_iv: unloaded\n");
 }
 

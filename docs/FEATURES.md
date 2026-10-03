@@ -34,6 +34,7 @@ This catalogue describes the production source release. Lab-only helpers and ind
 - Multi-segment socket writes preserve an in-progress NSP record across short/partial sends, and once NSP data, interrupt or retained connection-control traffic is committed to retransmission state, an immediate Ethernet transmit result cannot contradict that accepted queue/state ownership.
 - Classic `DNPROTO_NSP` socket controls for access data, connect/accept data, peer/local disconnect data, link information, immediate/deferred accept, explicit accept and explicit reject (`DSO_CONACCESS`, `DSO_CONDATA`, `DSO_DISDATA`, `DSO_LINKINFO`, `DSO_ACCEPTMODE`, `DSO_CONACCEPT`, `DSO_CONREJECT`).
 - Versioned management UAPI for identity, counters, adjacencies, routes and NSP links.
+- The `/dev/decnet_iv` management endpoint is published only after routing, NSP, Ethernet and socket initialization completes, and is withdrawn before subsystem teardown.
 
 ## Management
 
