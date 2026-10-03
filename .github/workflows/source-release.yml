@@ -319,54 +319,54 @@ jobs:
           manifest="$RUNNER_TEMP/stage/usr/local/share/decnet-iv-linux/install-manifest.txt"
           expected_manifest="$RUNNER_TEMP/expected-install-manifest.txt"
           cat >"$expected_manifest" <<EOF_MANIFEST
-/lib/modules/$KERNEL_RELEASE/extra/decnet_iv.ko
-/usr/local/sbin/dnctl
-/usr/local/sbin/dnetd
-/usr/local/sbin/dnfald
-/usr/local/sbin/dnnml
-/usr/local/sbin/dnphoned
-/usr/local/sbin/dnmaild
-/usr/local/sbin/dnhttpd
-/usr/local/sbin/dnmultinet
-/usr/local/bin/ncp
-/usr/local/bin/dnlogin
-/usr/local/bin/sethost
-/usr/local/bin/dncopy
-/usr/local/bin/dntype
-/usr/local/bin/dndir
-/usr/local/bin/dndel
-/usr/local/bin/dnrename
-/usr/local/bin/dnsubmit
-/usr/local/bin/dnprint
-/usr/local/bin/dntask
-/usr/local/bin/dnnice
-/usr/local/bin/dnmirror
-/usr/local/bin/dnobject
-/usr/local/bin/phone
-/usr/local/bin/dnmail
-/usr/local/bin/dnlynx
-/usr/local/bin/dnping
-/usr/local/lib/libdnet.a
-/usr/local/lib/libdnet.so.1.0
-/usr/local/lib/libdnet.so.1
-/usr/local/lib/libdnet.so
-/usr/local/lib/libdnet_daemon.a
-/usr/local/lib/libdnet_daemon.so.1.0
-/usr/local/lib/libdnet_daemon.so.1
-/usr/local/lib/libdnet_daemon.so
-/usr/local/include/netdnet/dn.h
-/usr/local/include/netdnet/dnetdb.h
-/usr/local/include/linux/dn.h
-/usr/local/include/linux/decnet_iv.h
-/usr/local/share/doc/decnet-iv-linux/README.md
-/usr/local/share/doc/decnet-iv-linux/INSTALL.md
-/usr/local/share/doc/decnet-iv-linux/LICENSE
-/usr/local/share/doc/decnet-iv-linux/DELIVERY.md
-/usr/local/share/doc/decnet-iv-linux/FEATURES.md
-/usr/local/share/doc/decnet-iv-linux/COMPONENTS.md
-/usr/local/share/doc/decnet-iv-linux/ARCHITECTURE.md
-/usr/local/share/doc/decnet-iv-linux/SOURCE-METADATA
-EOF_MANIFEST
+          /lib/modules/$KERNEL_RELEASE/extra/decnet_iv.ko
+          /usr/local/sbin/dnctl
+          /usr/local/sbin/dnetd
+          /usr/local/sbin/dnfald
+          /usr/local/sbin/dnnml
+          /usr/local/sbin/dnphoned
+          /usr/local/sbin/dnmaild
+          /usr/local/sbin/dnhttpd
+          /usr/local/sbin/dnmultinet
+          /usr/local/bin/ncp
+          /usr/local/bin/dnlogin
+          /usr/local/bin/sethost
+          /usr/local/bin/dncopy
+          /usr/local/bin/dntype
+          /usr/local/bin/dndir
+          /usr/local/bin/dndel
+          /usr/local/bin/dnrename
+          /usr/local/bin/dnsubmit
+          /usr/local/bin/dnprint
+          /usr/local/bin/dntask
+          /usr/local/bin/dnnice
+          /usr/local/bin/dnmirror
+          /usr/local/bin/dnobject
+          /usr/local/bin/phone
+          /usr/local/bin/dnmail
+          /usr/local/bin/dnlynx
+          /usr/local/bin/dnping
+          /usr/local/lib/libdnet.a
+          /usr/local/lib/libdnet.so.1.0
+          /usr/local/lib/libdnet.so.1
+          /usr/local/lib/libdnet.so
+          /usr/local/lib/libdnet_daemon.a
+          /usr/local/lib/libdnet_daemon.so.1.0
+          /usr/local/lib/libdnet_daemon.so.1
+          /usr/local/lib/libdnet_daemon.so
+          /usr/local/include/netdnet/dn.h
+          /usr/local/include/netdnet/dnetdb.h
+          /usr/local/include/linux/dn.h
+          /usr/local/include/linux/decnet_iv.h
+          /usr/local/share/doc/decnet-iv-linux/README.md
+          /usr/local/share/doc/decnet-iv-linux/INSTALL.md
+          /usr/local/share/doc/decnet-iv-linux/LICENSE
+          /usr/local/share/doc/decnet-iv-linux/DELIVERY.md
+          /usr/local/share/doc/decnet-iv-linux/FEATURES.md
+          /usr/local/share/doc/decnet-iv-linux/COMPONENTS.md
+          /usr/local/share/doc/decnet-iv-linux/ARCHITECTURE.md
+          /usr/local/share/doc/decnet-iv-linux/SOURCE-METADATA
+          EOF_MANIFEST
           sort -u "$expected_manifest" -o "$expected_manifest"
           if ! cmp -s "$expected_manifest" "$manifest"; then
             echo "source-release: installed-manifest completeness mismatch" >&2
@@ -482,54 +482,54 @@ EOF_MANIFEST
           manifest="$RUNNER_TEMP/stage/usr/local/share/decnet-iv-linux/install-manifest.txt"
           expected_manifest="$RUNNER_TEMP/expected-install-manifest-arm64.txt"
           cat >"$expected_manifest" <<EOF_MANIFEST
-/lib/modules/$KERNEL_RELEASE/extra/decnet_iv.ko
-/usr/local/sbin/dnctl
-/usr/local/sbin/dnetd
-/usr/local/sbin/dnfald
-/usr/local/sbin/dnnml
-/usr/local/sbin/dnphoned
-/usr/local/sbin/dnmaild
-/usr/local/sbin/dnhttpd
-/usr/local/sbin/dnmultinet
-/usr/local/bin/ncp
-/usr/local/bin/dnlogin
-/usr/local/bin/sethost
-/usr/local/bin/dncopy
-/usr/local/bin/dntype
-/usr/local/bin/dndir
-/usr/local/bin/dndel
-/usr/local/bin/dnrename
-/usr/local/bin/dnsubmit
-/usr/local/bin/dnprint
-/usr/local/bin/dntask
-/usr/local/bin/dnnice
-/usr/local/bin/dnmirror
-/usr/local/bin/dnobject
-/usr/local/bin/phone
-/usr/local/bin/dnmail
-/usr/local/bin/dnlynx
-/usr/local/bin/dnping
-/usr/local/lib/libdnet.a
-/usr/local/lib/libdnet.so.1.0
-/usr/local/lib/libdnet.so.1
-/usr/local/lib/libdnet.so
-/usr/local/lib/libdnet_daemon.a
-/usr/local/lib/libdnet_daemon.so.1.0
-/usr/local/lib/libdnet_daemon.so.1
-/usr/local/lib/libdnet_daemon.so
-/usr/local/include/netdnet/dn.h
-/usr/local/include/netdnet/dnetdb.h
-/usr/local/include/linux/dn.h
-/usr/local/include/linux/decnet_iv.h
-/usr/local/share/doc/decnet-iv-linux/README.md
-/usr/local/share/doc/decnet-iv-linux/INSTALL.md
-/usr/local/share/doc/decnet-iv-linux/LICENSE
-/usr/local/share/doc/decnet-iv-linux/DELIVERY.md
-/usr/local/share/doc/decnet-iv-linux/FEATURES.md
-/usr/local/share/doc/decnet-iv-linux/COMPONENTS.md
-/usr/local/share/doc/decnet-iv-linux/ARCHITECTURE.md
-/usr/local/share/doc/decnet-iv-linux/SOURCE-METADATA
-EOF_MANIFEST
+          /lib/modules/$KERNEL_RELEASE/extra/decnet_iv.ko
+          /usr/local/sbin/dnctl
+          /usr/local/sbin/dnetd
+          /usr/local/sbin/dnfald
+          /usr/local/sbin/dnnml
+          /usr/local/sbin/dnphoned
+          /usr/local/sbin/dnmaild
+          /usr/local/sbin/dnhttpd
+          /usr/local/sbin/dnmultinet
+          /usr/local/bin/ncp
+          /usr/local/bin/dnlogin
+          /usr/local/bin/sethost
+          /usr/local/bin/dncopy
+          /usr/local/bin/dntype
+          /usr/local/bin/dndir
+          /usr/local/bin/dndel
+          /usr/local/bin/dnrename
+          /usr/local/bin/dnsubmit
+          /usr/local/bin/dnprint
+          /usr/local/bin/dntask
+          /usr/local/bin/dnnice
+          /usr/local/bin/dnmirror
+          /usr/local/bin/dnobject
+          /usr/local/bin/phone
+          /usr/local/bin/dnmail
+          /usr/local/bin/dnlynx
+          /usr/local/bin/dnping
+          /usr/local/lib/libdnet.a
+          /usr/local/lib/libdnet.so.1.0
+          /usr/local/lib/libdnet.so.1
+          /usr/local/lib/libdnet.so
+          /usr/local/lib/libdnet_daemon.a
+          /usr/local/lib/libdnet_daemon.so.1.0
+          /usr/local/lib/libdnet_daemon.so.1
+          /usr/local/lib/libdnet_daemon.so
+          /usr/local/include/netdnet/dn.h
+          /usr/local/include/netdnet/dnetdb.h
+          /usr/local/include/linux/dn.h
+          /usr/local/include/linux/decnet_iv.h
+          /usr/local/share/doc/decnet-iv-linux/README.md
+          /usr/local/share/doc/decnet-iv-linux/INSTALL.md
+          /usr/local/share/doc/decnet-iv-linux/LICENSE
+          /usr/local/share/doc/decnet-iv-linux/DELIVERY.md
+          /usr/local/share/doc/decnet-iv-linux/FEATURES.md
+          /usr/local/share/doc/decnet-iv-linux/COMPONENTS.md
+          /usr/local/share/doc/decnet-iv-linux/ARCHITECTURE.md
+          /usr/local/share/doc/decnet-iv-linux/SOURCE-METADATA
+          EOF_MANIFEST
           sort -u "$expected_manifest" -o "$expected_manifest"
           if ! cmp -s "$expected_manifest" "$manifest"; then
             echo "source-release: installed-manifest completeness mismatch" >&2
