@@ -83,6 +83,10 @@ safe_managed_path() {
     (( module_root_is_default )) && safe_default_module_path "$path"
 }
 
+if [[ -z "$destdir" && -n ${MODULE_ROOT:-} ]]; then
+  echo "uninstall.sh: custom MODULE_ROOT is supported only with non-empty DESTDIR" >&2
+  exit 2
+fi
 if [[ -z "$destdir" && ${EUID:-$(id -u)} -ne 0 ]]; then echo "uninstall.sh: live uninstall requires root; use DESTDIR for staging" >&2; exit 2; fi
 if [[ -z "$destdir" ]]; then
   command -v depmod >/dev/null 2>&1 || { echo "uninstall.sh: required command not found: depmod" >&2; exit 2; }

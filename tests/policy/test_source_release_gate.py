@@ -315,6 +315,8 @@ def main() -> int:
         "module vermagic release",
         "required command not found: modinfo",
         "required command not found: depmod",
+        'if [[ -z "$destdir" && -n ${MODULE_ROOT:-} ]]; then',
+        "custom MODULE_ROOT is supported only with non-empty DESTDIR",
         "DESTDIR must be empty or a normalized absolute non-root path",
         '"$path" != *"//"*',
         "staged path crosses symlink parent",
@@ -325,7 +327,7 @@ def main() -> int:
             raise SystemExit(f"source-release gate: installer safety safeguard missing: {marker}")
 
     uninstall = read_text("uninstall.sh")
-    for marker in ("safe install manifest not found", "normalized absolute non-root path", '"$path" != *"//"*', "staged path crosses symlink parent", "mapfile -t paths", "safe_default_module_path", "module_root_is_default", "module_releases", "required command not found: depmod"):
+    for marker in ("safe install manifest not found", "normalized absolute non-root path", '"$path" != *"//"*', "staged path crosses symlink parent", "mapfile -t paths", "safe_default_module_path", "module_root_is_default", "module_releases", "required command not found: depmod", 'if [[ -z "$destdir" && -n ${MODULE_ROOT:-} ]]; then', "custom MODULE_ROOT is supported only with non-empty DESTDIR"):
         if marker not in uninstall:
             raise SystemExit(f"source-release gate: uninstaller safety safeguard missing: {marker}")
 
@@ -411,7 +413,7 @@ def main() -> int:
         raise SystemExit("source-release gate: repository still advertises disk-image delivery")
 
     install_doc = read_text("INSTALL.md")
-    for marker in ("Secure Boot", "MODULE_ROOT", "modprobe -r decnet_iv", "python3 -c 'import decnet'", "module vermagic", "binutils (including `ar`)", "reject existing symlinked parent components", "dnf install gcc make binutils", "dirname", "sha256sum", "earlier kernel builds remain valid managed entries", "repeated `//` separators", "pass the same value to `uninstall.sh`"):
+    for marker in ("Secure Boot", "MODULE_ROOT", "modprobe -r decnet_iv", "python3 -c 'import decnet'", "module vermagic", "binutils (including `ar`)", "reject existing symlinked parent components", "dnf install gcc make binutils", "dirname", "sha256sum", "earlier kernel builds remain valid managed entries", "repeated `//` separators", "pass the same value to `uninstall.sh`", "live install always uses `/lib/modules/<kernel-release>`", "custom `MODULE_ROOT` is rejected for live uninstall"):
         if marker not in install_doc:
             raise SystemExit(f"source-release gate: installation manual missing: {marker}")
 

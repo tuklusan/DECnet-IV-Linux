@@ -97,6 +97,10 @@ check_staged_parent() {
     done
 }
 
+if [[ -z "$destdir" && -n ${MODULE_ROOT:-} ]]; then
+    echo "install.sh: custom MODULE_ROOT is supported only with non-empty DESTDIR" >&2
+    exit 2
+fi
 if [[ -z "$destdir" && ${EUID:-$(id -u)} -ne 0 ]]; then
     echo "install.sh: live installation requires root; use DESTDIR for staging" >&2
     exit 2
