@@ -508,6 +508,19 @@ def main() -> int:
         if marker not in dnfald:
             raise SystemExit(f"source-release gate: dnfald root-safety regression: {marker}")
 
+    dnmaild = read_text("userspace/dnmail/dnmaild.c")
+    for marker in (
+        'openat(rootfd, "mailbox.log",',
+        "O_APPEND | O_NOFOLLOW | O_CLOEXEC",
+        "st.st_nlink != 1",
+        'char directory[] = "/tmp/dnmaild-selftest.XXXXXX"',
+        "symlink(victim, mailbox)",
+        "link(victim, mailbox)",
+        "open_mailbox(directory)",
+    ):
+        if marker not in dnmaild:
+            raise SystemExit(f"source-release gate: dnmaild spool-safety regression: {marker}")
+
     dnhttpd = read_text("userspace/dnhttpd/dnhttpd.c")
     for marker in (
         "openat(rootfd, name, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)",

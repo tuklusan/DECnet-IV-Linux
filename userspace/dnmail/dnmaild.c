@@ -15,6 +15,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include <errno.h>
+#include <fcntl.h>
 #include <linux/dn.h>
 #include <netdb.h>
 #include <netinet/in.h>
@@ -24,6 +25,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <time.h>
@@ -358,6 +360,47 @@ static int smtp_finish(int fd)
 }
 
 
+static FILE *open_mailbox(const char *root)
+{
+    struct stat st;
+    FILE *out;
+    int rootfd;
+    int fd;
+
+    rootfd = open(root, O_RDONLY | O_CLOEXEC);
+    if (rootfd < 0)
+        return NULL;
+    if (fstat(rootfd, &st) || !S_ISDIR(st.st_mode)) {
+        int saved = errno;
+
+        close(rootfd);
+        errno = saved ? saved : ENOTDIR;
+        return NULL;
+    }
+    fd = openat(rootfd, "mailbox.log",
+                O_WRONLY | O_CREAT | O_APPEND | O_NOFOLLOW | O_CLOEXEC |
+                O_NONBLOCK, 0666);
+    close(rootfd);
+    if (fd < 0)
+        return NULL;
+    if (fstat(fd, &st)) {
+        int saved = errno;
+
+        close(fd);
+        errno = saved;
+        return NULL;
+    }
+    if (!S_ISREG(st.st_mode) || st.st_nlink != 1) {
+        close(fd);
+        errno = EACCES;
+        return NULL;
+    }
+    out = fdopen(fd, "ab");
+    if (!out)
+        close(fd);
+    return out;
+}
+
 static int serve(int fd, const char *root, const char *sendmail_path,
                  const char *smtp_host, unsigned int smtp_port,
                  const char *smtp_from)
@@ -365,7 +408,7 @@ static int serve(int fd, const char *root, const char *sendmail_path,
     struct timeval timeout = { .tv_sec = 30, .tv_usec = 0 };
     unsigned char body[4096];
     char sender[256], recipient[256], recipients[1024];
-    char full_user[256], subject[256], path[1024], header[4096];
+    char full_user[256], subject[256], header[4096];
     FILE *out = NULL;
     int mail_fd = -1;
     int smtp_fd = -1;
@@ -410,9 +453,7 @@ static int serve(int fd, const char *root, const char *sendmail_path,
         recv_field(fd, subject, sizeof(subject), 1) < 0)
         return -1;
 
-    if (snprintf(path, sizeof(path), "%s/mailbox.log", root) >= (int)sizeof(path))
-        return -1;
-    out = fopen(path, "ab");
+    out = open_mailbox(root);
     if (!out)
         return -1;
     {
@@ -489,7 +530,59 @@ fail:
 
 static int selftest(void)
 {
+    char directory[] = "/tmp/dnmaild-selftest.XXXXXX";
+    char victim[] = "/tmp/dnmaild-victim.XXXXXX";
+    char mailbox[256];
+    char victim_buf[16];
+    FILE *out = NULL;
+    int victim_fd = -1;
+    int rc = 1;
+
     if (MAIL_OBJECT != 27U || MAIL11_V3_LEN != 16U)
+        return 1;
+    if (!mkdtemp(directory))
+        return 1;
+    victim_fd = mkstemp(victim);
+    if (victim_fd < 0 || write(victim_fd, "victim\n", 7U) != 7)
+        goto out;
+    close(victim_fd);
+    victim_fd = -1;
+    if (snprintf(mailbox, sizeof(mailbox), "%s/mailbox.log", directory) >=
+        (int)sizeof(mailbox))
+        goto out;
+    if (symlink(victim, mailbox))
+        goto out;
+    out = open_mailbox(directory);
+    if (out)
+        goto out;
+    unlink(mailbox);
+    if (link(victim, mailbox))
+        goto out;
+    out = open_mailbox(directory);
+    if (out)
+        goto out;
+    unlink(mailbox);
+    out = open_mailbox(directory);
+    if (!out || fputs("ok\n", out) == EOF || fclose(out)) {
+        out = NULL;
+        goto out;
+    }
+    out = NULL;
+    victim_fd = open(victim, O_RDONLY | O_CLOEXEC);
+    if (victim_fd < 0 || read(victim_fd, victim_buf, sizeof(victim_buf)) != 7 ||
+        memcmp(victim_buf, "victim\n", 7U))
+        goto out;
+    rc = 0;
+
+out:
+    if (out)
+        fclose(out);
+    if (victim_fd >= 0)
+        close(victim_fd);
+    unlink(mailbox);
+    unlink(victim);
+    rmdir(directory);
+    if (rc)
         return 1;
     puts("dnmaild selftest passed");
     return 0;

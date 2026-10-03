@@ -73,7 +73,7 @@ This catalogue describes the production source release. Lab-only helpers and ind
 ## Mail
 
 - `dnmail` MAIL-11 client including optional v3 Session capability negotiation and multiple-recipient delivery.
-- `dnmaild` object 27 service with legacy/v3 negotiation, local spool delivery, sendmail-compatible execution and bounded direct SMTP delivery.
+- `dnmaild` object 27 service with legacy/v3 negotiation, local spool delivery, sendmail-compatible execution and bounded direct SMTP delivery; the local `mailbox.log` spool is opened inside `--root` without following symbolic links and rejects multiply linked/non-regular targets.
 
 ## Generic object dispatch
 
