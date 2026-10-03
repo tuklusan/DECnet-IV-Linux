@@ -246,6 +246,7 @@ def main() -> int:
         "refusing non-symlink at link target",
         "module vermagic release",
         "required command not found: modinfo",
+        "required command not found: depmod",
         "DESTDIR must be empty or a normalized absolute non-root path",
         '"$path" != *"//"*',
         "staged path crosses symlink parent",
@@ -256,7 +257,7 @@ def main() -> int:
             raise SystemExit(f"source-release gate: installer safety safeguard missing: {marker}")
 
     uninstall = read_text("uninstall.sh")
-    for marker in ("safe install manifest not found", "normalized absolute non-root path", '"$path" != *"//"*', "staged path crosses symlink parent", "mapfile -t paths", "safe_default_module_path", "module_root_is_default", "module_releases"):
+    for marker in ("safe install manifest not found", "normalized absolute non-root path", '"$path" != *"//"*', "staged path crosses symlink parent", "mapfile -t paths", "safe_default_module_path", "module_root_is_default", "module_releases", "required command not found: depmod"):
         if marker not in uninstall:
             raise SystemExit(f"source-release gate: uninstaller safety safeguard missing: {marker}")
 

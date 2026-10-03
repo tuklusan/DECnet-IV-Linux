@@ -101,6 +101,12 @@ if [[ -z "$destdir" && ${EUID:-$(id -u)} -ne 0 ]]; then
     echo "install.sh: live installation requires root; use DESTDIR for staging" >&2
     exit 2
 fi
+if [[ -z "$destdir" ]]; then
+    command -v depmod >/dev/null 2>&1 || {
+        echo "install.sh: required command not found: depmod" >&2
+        exit 2
+    }
+fi
 
 safe_default_module_path() {
     local path=$1 rest release
@@ -250,7 +256,7 @@ chmod 0644 "$manifest_tmp"
 mv -f "$manifest_tmp" "$manifest"
 
 if [[ -z "$destdir" ]]; then
-    command -v depmod >/dev/null 2>&1 && depmod -a "$kernel_release"
+    depmod -a "$kernel_release"
     command -v ldconfig >/dev/null 2>&1 && ldconfig
 fi
 

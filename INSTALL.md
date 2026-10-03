@@ -119,7 +119,7 @@ This requires no root privilege and is the supported packaging/release-validatio
 sudo ./install.sh
 ```
 
-The default userspace prefix is `/usr/local`. The module installs under `/lib/modules/<kernel-release>/extra/`. By default the installer obtains `<kernel-release>` from the built module's vermagic; if `KERNEL_RELEASE` is supplied it must match that vermagic exactly. The manifest is `/usr/local/share/decnet-iv-linux/install-manifest.txt`. With the default module root, standard `/lib/modules/<kernel-release>/extra/decnet_iv.ko` entries from earlier kernel builds remain valid managed entries, so installing for a new kernel can preserve an older tracked module for fallback. A full uninstall removes every such tracked standard module copy and refreshes their dependency caches. Custom `MODULE_ROOT` installations remain bound to the explicitly supplied root, never adopt standard `/lib/modules/...` entries from another installation, and must be uninstalled with the same setting. Existing files outside the manifest are never overwritten; resolve any collision explicitly rather than forcing the installer.
+The default userspace prefix is `/usr/local`. The module installs under `/lib/modules/<kernel-release>/extra/`. By default the installer obtains `<kernel-release>` from the built module's vermagic; if `KERNEL_RELEASE` is supplied it must match that vermagic exactly. The manifest is `/usr/local/share/decnet-iv-linux/install-manifest.txt`. Live installation requires `depmod` and preflights it before creating or changing the manifest, so module dependency metadata cannot be silently left stale. With the default module root, standard `/lib/modules/<kernel-release>/extra/decnet_iv.ko` entries from earlier kernel builds remain valid managed entries, so installing for a new kernel can preserve an older tracked module for fallback. A full uninstall removes every such tracked standard module copy and refreshes their dependency caches. Custom `MODULE_ROOT` installations remain bound to the explicitly supplied root, never adopt standard `/lib/modules/...` entries from another installation, and must be uninstalled with the same setting. Existing files outside the manifest are never overwritten; resolve any collision explicitly rather than forcing the installer.
 
 A different userspace prefix may be selected with `PREFIX=/opt/decnet`. Systems whose module tree is not rooted at `/lib/modules/<kernel-release>` may set a normalized absolute non-root `MODULE_ROOT`. `PREFIX`, `MODULE_ROOT` and non-empty `DESTDIR` reject `.`/`..` path components and repeated `//` separators; a trailing slash is normalized away.
 
@@ -168,7 +168,7 @@ For staged installation:
 DESTDIR=/tmp/dniv-stage ./uninstall.sh
 ```
 
-Uninstall is manifest-driven and refuses unsafe manifest paths. If installation used a non-default `PREFIX` or `MODULE_ROOT`, pass the same value to `uninstall.sh`; the manifest lives below the selected `PREFIX`, and a custom module root is deliberately not inferred.
+Uninstall is manifest-driven and refuses unsafe manifest paths. Live uninstall requires `depmod` and verifies it before removing any manifest-owned path, so dependency-cache refresh cannot be silently skipped after module removal. If installation used a non-default `PREFIX` or `MODULE_ROOT`, pass the same value to `uninstall.sh`; the manifest lives below the selected `PREFIX`, and a custom module root is deliberately not inferred.
 
 ## 12. Kernel upgrades
 

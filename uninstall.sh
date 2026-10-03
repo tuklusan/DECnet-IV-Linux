@@ -84,6 +84,9 @@ safe_managed_path() {
 }
 
 if [[ -z "$destdir" && ${EUID:-$(id -u)} -ne 0 ]]; then echo "uninstall.sh: live uninstall requires root; use DESTDIR for staging" >&2; exit 2; fi
+if [[ -z "$destdir" ]]; then
+  command -v depmod >/dev/null 2>&1 || { echo "uninstall.sh: required command not found: depmod" >&2; exit 2; }
+fi
 check_staged_parent "$manifest_rel" || exit 2
 [[ -f "$manifest" && ! -L "$manifest" ]] || { echo "uninstall.sh: safe install manifest not found: $manifest" >&2; exit 2; }
 mapfile -t paths <"$manifest"
@@ -107,11 +110,9 @@ for rel in "$prefix/share/doc/decnet-iv-linux" "$prefix/share/decnet-iv-linux" "
   rmdir "$destdir$rel" 2>/dev/null || true
 done
 if [[ -z "$destdir" ]]; then
-  if command -v depmod >/dev/null 2>&1; then
-    printf '%s\n' "$kernel_release" "${module_releases[@]}" | sort -u | while IFS= read -r release; do
-      [[ -z "$release" ]] || depmod -a "$release"
-    done
-  fi
+  printf '%s\n' "$kernel_release" "${module_releases[@]}" | sort -u | while IFS= read -r release; do
+    [[ -z "$release" ]] || depmod -a "$release"
+  done
   command -v ldconfig >/dev/null 2>&1 && ldconfig
 fi
 echo "uninstall.sh: PASS"
