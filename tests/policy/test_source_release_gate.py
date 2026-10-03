@@ -158,6 +158,15 @@ def main() -> int:
     ):
         if required not in preproduction:
             raise SystemExit(f"source-release gate: pre-production owner scope boundary missing: {required}")
+    if "peer and gateway restart, link interruption" in preproduction:
+        raise SystemExit("source-release gate: PP-09 still permits ambiguous disruptive remote-peer testing")
+    for required in (
+        "project-controlled local gateway restart",
+        "Remote HECnet peers beyond PYRTR `31.3` are observation/traffic peers only",
+        "do not restart, stop, reconfigure, disconnect or otherwise disrupt them",
+    ):
+        if required not in preproduction:
+            raise SystemExit(f"source-release gate: PP-09 remote-peer safety boundary missing: {required}")
     for required in ("`tests/lab/dniv_lab.py`", "`tests/lab/dniv-smoke.sh`"):
         if required not in preproduction:
             raise SystemExit(f"source-release gate: active two-node harness documentation missing: {required}")
