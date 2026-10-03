@@ -285,6 +285,14 @@ def main() -> int:
     if "portable source release" not in goal or "Deliver reproducible x86_64/aarch64 images" in goal:
         raise SystemExit("source-release gate: current project goal still advertises disk-image delivery")
 
+    scratch_readme = read_text("scratch/README.md")
+    for stale in ("sealed format-2 QCOW2 checkpoint", "rolling VM checkpoint safeguards", "Resume exists only for files that were explicitly uploaded as artifacts"):
+        if stale in scratch_readme:
+            raise SystemExit(f"source-release gate: stale VM persistence contract remains in scratch documentation: {stale}")
+    for required in ("source-independent architecture foundation", "Actions cache", "never accepted as resume input"):
+        if required not in scratch_readme:
+            raise SystemExit(f"source-release gate: current VM persistence contract missing from scratch documentation: {required}")
+
     handover = read_text("docs/HANDOVER.md")
     if "four exact-SHA acceptance depths" not in handover:
         raise SystemExit("source-release gate: handover acceptance-depth model is stale")
