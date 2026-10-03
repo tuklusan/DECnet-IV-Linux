@@ -559,6 +559,25 @@ def main() -> int:
         if marker not in dnhttpd:
             raise SystemExit(f"source-release gate: dnhttpd root-safety regression: {marker}")
 
+    persistent_daemons = {
+        "dnfald": dnfald,
+        "dnhttpd": dnhttpd,
+        "dnmaild": dnmaild,
+        "dnphoned": read_text("userspace/dnphone/dnphoned.c"),
+    }
+    for daemon, source in persistent_daemons.items():
+        if f'perror("{daemon}: session");' not in source or "continue;" not in source:
+            raise SystemExit(f"source-release gate: {daemon} no longer isolates failed client sessions")
+    for daemon in ("dnfald", "dnphoned"):
+        source = persistent_daemons[daemon]
+        if "int failed = 0;" not in source or "failed = 1;" not in source or "return failed ? 1 : 0;" not in source:
+            raise SystemExit(f"source-release gate: {daemon} bounded-session failure accounting missing")
+    for daemon in ("dnhttpd", "dnmaild"):
+        source = persistent_daemons[daemon]
+        for marker in ("if (once) {", "return 1;", "continue;"):
+            if marker not in source:
+                raise SystemExit(f"source-release gate: {daemon} once/default session isolation contract missing: {marker}")
+
     state = read_text("docs/PROJECT_STATE.md")
     goal = state.split("## Goal", 1)[1].split("## References and licensing", 1)[0]
     if "portable source release" not in goal or "Deliver reproducible x86_64/aarch64 images" in goal:

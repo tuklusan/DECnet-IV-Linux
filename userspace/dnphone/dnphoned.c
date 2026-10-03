@@ -188,6 +188,7 @@ int main(int argc, char **argv)
 {
     const char *user = NULL;
     int sessions = 0;
+    int failed = 0;
     int listener;
     int i;
 
@@ -239,12 +240,14 @@ int main(int argc, char **argv)
         close(fd);
         if (rc) {
             perror("dnphoned: session");
-            close(listener);
-            return 1;
+            failed = 1;
+            if (sessions > 0 && --sessions == 0)
+                break;
+            continue;
         }
         if (sessions > 0 && --sessions == 0)
             break;
     }
     close(listener);
-    return 0;
+    return failed ? 1 : 0;
 }

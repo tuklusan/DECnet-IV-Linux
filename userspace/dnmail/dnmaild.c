@@ -660,8 +660,11 @@ int main(int argc, char **argv)
         close(fd);
         if (rc) {
             perror("dnmaild: session");
-            close(listener);
-            return 1;
+            if (once) {
+                close(listener);
+                return 1;
+            }
+            continue;
         }
         if (once)
             break;
