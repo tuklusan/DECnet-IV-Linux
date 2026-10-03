@@ -32,10 +32,11 @@ on:
         type: choice
         options:
           - fast
+          - targeted
           - consolidated
           - full
       scope:
-        description: Change scope used by the fast profile
+        description: Change or targeted-test scope
         required: true
         default: all
         type: choice
@@ -43,6 +44,7 @@ on:
           - all
           - socket
           - routing
+          - pp11-pressure
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}-${{ github.sha }}
@@ -61,6 +63,7 @@ jobs:
       matrix:
         include: ${{ fromJSON(
           inputs.profile == 'full' && '[{"runner":"ubuntu-24.04","slot":"x64","arch":"amd64","qemu":"qemu-system-x86","suite":"r20-l1","reference":"route20","scenarios":"l1"},{"runner":"ubuntu-24.04-arm","slot":"arm64","arch":"arm64","qemu":"qemu-system-arm","suite":"r20-l1","reference":"route20","scenarios":"l1"},{"runner":"ubuntu-24.04","slot":"x64","arch":"amd64","qemu":"qemu-system-x86","suite":"r20-l2","reference":"route20","scenarios":"l2"},{"runner":"ubuntu-24.04-arm","slot":"arm64","arch":"arm64","qemu":"qemu-system-arm","suite":"r20-l2","reference":"route20","scenarios":"l2"},{"runner":"ubuntu-24.04","slot":"x64","arch":"amd64","qemu":"qemu-system-x86","suite":"r20-endnode","reference":"route20","scenarios":"endnode"},{"runner":"ubuntu-24.04-arm","slot":"arm64","arch":"arm64","qemu":"qemu-system-arm","suite":"r20-endnode","reference":"route20","scenarios":"endnode"},{"runner":"ubuntu-24.04","slot":"x64","arch":"amd64","qemu":"qemu-system-x86","suite":"py-l1","reference":"pydecnet","scenarios":"l1"},{"runner":"ubuntu-24.04-arm","slot":"arm64","arch":"arm64","qemu":"qemu-system-arm","suite":"py-l1","reference":"pydecnet","scenarios":"l1"},{"runner":"ubuntu-24.04","slot":"x64","arch":"amd64","qemu":"qemu-system-x86","suite":"py-l2","reference":"pydecnet","scenarios":"l2"},{"runner":"ubuntu-24.04-arm","slot":"arm64","arch":"arm64","qemu":"qemu-system-arm","suite":"py-l2","reference":"pydecnet","scenarios":"l2"},{"runner":"ubuntu-24.04","slot":"x64","arch":"amd64","qemu":"qemu-system-x86","suite":"py-endnode","reference":"pydecnet","scenarios":"endnode"},{"runner":"ubuntu-24.04-arm","slot":"arm64","arch":"arm64","qemu":"qemu-system-arm","suite":"py-endnode","reference":"pydecnet","scenarios":"endnode"},{"runner":"ubuntu-24.04","slot":"x64","arch":"amd64","qemu":"qemu-system-x86","suite":"py-router-endnode","reference":"pydecnet","scenarios":"router-endnode"},{"runner":"ubuntu-24.04-arm","slot":"arm64","arch":"arm64","qemu":"qemu-system-arm","suite":"py-router-endnode","reference":"pydecnet","scenarios":"router-endnode"}]' ||
+          inputs.profile == 'targeted' && inputs.scope == 'pp11-pressure' && '[{"runner":"ubuntu-24.04","slot":"x64","arch":"amd64","qemu":"qemu-system-x86","suite":"py-l1","reference":"pydecnet","scenarios":"l1"},{"runner":"ubuntu-24.04-arm","slot":"arm64","arch":"arm64","qemu":"qemu-system-arm","suite":"py-l1","reference":"pydecnet","scenarios":"l1"}]' ||
           inputs.profile == 'consolidated' && '[{"runner":"ubuntu-24.04","slot":"x64","arch":"amd64","qemu":"qemu-system-x86","suite":"r20-l1","reference":"route20","scenarios":"l1"},{"runner":"ubuntu-24.04-arm","slot":"arm64","arch":"arm64","qemu":"qemu-system-arm","suite":"r20-l1","reference":"route20","scenarios":"l1"},{"runner":"ubuntu-24.04","slot":"x64","arch":"amd64","qemu":"qemu-system-x86","suite":"py-l1","reference":"pydecnet","scenarios":"l1"},{"runner":"ubuntu-24.04-arm","slot":"arm64","arch":"arm64","qemu":"qemu-system-arm","suite":"py-l1","reference":"pydecnet","scenarios":"l1"},{"runner":"ubuntu-24.04","slot":"x64","arch":"amd64","qemu":"qemu-system-x86","suite":"py-endnode","reference":"pydecnet","scenarios":"endnode"},{"runner":"ubuntu-24.04-arm","slot":"arm64","arch":"arm64","qemu":"qemu-system-arm","suite":"py-endnode","reference":"pydecnet","scenarios":"endnode"}]' ||
           inputs.scope == 'socket' && '[{"runner":"ubuntu-24.04","slot":"x64","arch":"amd64","qemu":"qemu-system-x86","suite":"py-l1","reference":"pydecnet","scenarios":"l1"}]' ||
           '[{"runner":"ubuntu-24.04","slot":"x64","arch":"amd64","qemu":"qemu-system-x86","suite":"r20-l1","reference":"route20","scenarios":"l1"},{"runner":"ubuntu-24.04","slot":"x64","arch":"amd64","qemu":"qemu-system-x86","suite":"py-l1","reference":"pydecnet","scenarios":"l1"}]'
@@ -262,12 +265,13 @@ jobs:
             peer_segsize=128
             flow_proof=1
           fi
-          if [[ '${{ inputs.profile }}' != fast &&
+          if [[ ('${{ inputs.profile }}' == consolidated || '${{ inputs.profile }}' == full) &&
                 '${{ matrix.suite }}' == py-l1 &&
                 '${{ matrix.arch }}' == amd64 ]]; then
             timer_proof=1
           fi
-          if [[ '${{ inputs.profile }}' == full &&
+          if [[ (('${{ inputs.profile }}' == full) ||
+                 ('${{ inputs.profile }}' == targeted && '${{ inputs.scope }}' == pp11-pressure)) &&
                 '${{ matrix.suite }}' == py-l1 ]]; then
             pp11_pressure=1
             peer_segsize=128

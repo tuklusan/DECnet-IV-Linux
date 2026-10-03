@@ -360,10 +360,13 @@ A failed test remains a failure of that exact candidate until explained/fixed or
 
 After any code, test, image, workflow or acceptance-document change:
 
-1. invalidate prior-candidate acceptance evidence;
-2. run the required exact-SHA mechanical, build, VM, reference, protocol and interoperability gates on the new unchanged tree;
-3. rerun every affected acceptance stage and downstream dependent stage;
-4. promote only the exact commit whose required matrix and retained evidence are green.
+1. invalidate prior-candidate promotion status;
+2. run exact-SHA mechanical/build/state plus the smallest fail-closed VM/protocol/interoperability gate that directly exercises the changed behavior and its required architecture coverage;
+3. rerun every affected canonical acceptance stage and downstream dependent stage before claiming that stage complete;
+4. do not launch the full repository-wide matrix after every intermediate fix. Full acceptance is reserved for closing a canonical PP increment, deliberate release/pre-production checkpoints, the weekly scheduled regression, or an explicit owner request;
+5. promote only the exact unchanged commit whose required canonical evidence and final full matrix are green.
+
+`PROFILE=targeted` is the bounded development profile for a named expensive gate. Its scope must identify the exact target and must not silently stand in for final full acceptance. The initial target is `SCOPE=pp11-pressure`: Build Bootstrap, Project State, dual-architecture E1, and only the amd64/arm64 PyDECnet L1 pressure jobs.
 
 ## Final pre-production gate
 

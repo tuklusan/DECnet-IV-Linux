@@ -35,7 +35,7 @@ on:
     types: [created, edited]
   workflow_dispatch:
   schedule:
-    - cron: '17 5 * * *'
+    - cron: '17 5 * * 0'
 
 # Repository-control runs are isolated by exact candidate SHA. They must not
 # share the scarce protocol-lab runner slots or an obsolete candidate can block
@@ -282,8 +282,16 @@ jobs:
               *) echo "bad PP-10 retry probe value: $requested_pp10_retry_probe" >&2; exit 2 ;;
             esac
           fi
-          case "$profile" in fast|consolidated|full) ;; *) echo "bad acceptance profile: $profile" >&2; exit 2 ;; esac
-          case "$scope" in all|socket|routing) ;; *) echo "bad acceptance scope: $scope" >&2; exit 2 ;; esac
+          case "$profile" in fast|targeted|consolidated|full) ;; *) echo "bad acceptance profile: $profile" >&2; exit 2 ;; esac
+          case "$scope" in all|socket|routing|pp11-pressure) ;; *) echo "bad acceptance scope: $scope" >&2; exit 2 ;; esac
+          if [[ "$profile" == targeted && "$scope" != pp11-pressure ]]; then
+            echo "targeted acceptance currently requires SCOPE=pp11-pressure" >&2
+            exit 2
+          fi
+          if [[ "$profile" != targeted && "$scope" == pp11-pressure ]]; then
+            echo "SCOPE=pp11-pressure requires PROFILE=targeted" >&2
+            exit 2
+          fi
           if [[ "$pp10_retry_probe" == true && "$profile" != full ]]; then
             echo "PP-10 retry probe requires full acceptance" >&2
             exit 2
@@ -352,7 +360,7 @@ jobs:
               -f retry_probe="$pp10_retry_probe"
           fi
 
-          if [[ "$profile" != fast ]]; then
+          if [[ "$profile" == consolidated || "$profile" == full ]]; then
             printf 'REFERENCES=reference-baselines.yml\n' >> "$DNIV_SCRATCH_DIR/dispatch.env"
             dispatch_and_record REFERENCES reference-baselines.yml \
               -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
@@ -432,7 +440,7 @@ jobs:
             -f profile="$profile" -f scope="$scope" \
             -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
 
-          if [[ "$profile" != fast ]]; then
+          if [[ "$profile" == consolidated || "$profile" == full ]]; then
             dispatch_and_record VDE2_LOCAL vde2-proof.yml \
               -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
             dispatch_and_record MULTINET multinet-proof.yml \
