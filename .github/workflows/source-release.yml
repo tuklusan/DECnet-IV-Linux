@@ -304,6 +304,21 @@ jobs:
           rm -f "$manifest_temp_stage/usr/local/share/decnet-iv-linux/install-manifest.txt.tmp."*
           DESTDIR="$manifest_temp_stage" KERNEL_RELEASE="$KERNEL_RELEASE" ./uninstall.sh
 
+          manifest_hardlink_stage="$RUNNER_TEMP/manifest-hardlink-stage"
+          manifest_hardlink_victim="$RUNNER_TEMP/manifest-hardlink-victim"
+          manifest_hardlink="$manifest_hardlink_stage/usr/local/share/decnet-iv-linux/install-manifest.txt"
+          mkdir -p "$(dirname "$manifest_hardlink")"
+          printf '/usr/local/bin/ncp\n' >"$manifest_hardlink_victim"
+          ln "$manifest_hardlink_victim" "$manifest_hardlink"
+          cp "$manifest_hardlink_victim" "$RUNNER_TEMP/manifest-hardlink-expected"
+          if DESTDIR="$manifest_hardlink_stage" KERNEL_RELEASE="$KERNEL_RELEASE" ./install.sh; then
+            echo "source-release: hard-linked-manifest negative unexpectedly succeeded" >&2
+            exit 1
+          fi
+          cmp "$RUNNER_TEMP/manifest-hardlink-expected" "$manifest_hardlink_victim"
+          test "$(stat -c %h -- "$manifest_hardlink_victim")" = 2
+          rm -f "$manifest_hardlink"
+
           symlink_stage="$RUNNER_TEMP/symlink-parent-stage"
           symlink_escape="$RUNNER_TEMP/symlink-parent-escape"
           mkdir -p "$symlink_stage/usr/local" "$symlink_escape"

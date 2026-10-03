@@ -40,6 +40,10 @@ command -v mktemp >/dev/null 2>&1 || {
     echo "install.sh: required command not found: mktemp" >&2
     exit 2
 }
+command -v stat >/dev/null 2>&1 || {
+    echo "install.sh: required command not found: stat" >&2
+    exit 2
+}
 vermagic=$(modinfo -F vermagic "$module_path") || {
     echo "install.sh: cannot read module vermagic: $module_path" >&2
     exit 2
@@ -142,13 +146,13 @@ manifest_tmp=$(mktemp "$manifest.tmp.XXXXXX") || {
     echo "install.sh: cannot create safe manifest temporary file" >&2
     exit 2
 }
-[[ -f "$manifest_tmp" && ! -L "$manifest_tmp" ]] || {
+[[ -f "$manifest_tmp" && ! -L "$manifest_tmp" && $(stat -c %h -- "$manifest_tmp") == 1 ]] || {
     echo "install.sh: unsafe manifest temporary file" >&2
     exit 2
 }
 trap 'rm -f -- "$manifest_tmp"' EXIT
 if [[ -e "$manifest" || -L "$manifest" ]]; then
-    [[ -f "$manifest" && ! -L "$manifest" ]] || {
+    [[ -f "$manifest" && ! -L "$manifest" && $(stat -c %h -- "$manifest") == 1 ]] || {
         echo "install.sh: unsafe existing manifest: $manifest" >&2
         exit 2
     }
