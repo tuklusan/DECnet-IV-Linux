@@ -124,6 +124,10 @@ static int parse_line(char *line, const char *program_dir,
          token = strtok(NULL, " \t\r\n"))
         tokens[count++] = token;
 
+    if (token) {
+        errno = E2BIG;
+        return -1;
+    }
     if (!count || tokens[0][0] == '#')
         return 0;
     if (count < 5) {
@@ -374,6 +378,9 @@ static int run_selftest(void)
     char good[] = "TEST 0 N,N root /bin/cat arg";
     char bad_auth[] = "TEST 0 Y,N root /bin/cat";
     char bad_wild[] = "* 0 N,N root /bin/cat";
+    char too_many[] =
+        "TEST 0 N,N root /bin/cat "
+        "1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16";
     int rc;
 
     rc = parse_line(good, "/usr/local/sbin", &service);
@@ -389,6 +396,10 @@ static int run_selftest(void)
     errno = 0;
     if (parse_line(bad_wild, "/usr/local/sbin", &service) >= 0 ||
         errno != EOPNOTSUPP)
+        return 1;
+    errno = 0;
+    if (parse_line(too_many, "/usr/local/sbin", &service) >= 0 ||
+        errno != E2BIG)
         return 1;
     puts("dnetd selftest passed");
     return 0;

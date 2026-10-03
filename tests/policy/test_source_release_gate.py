@@ -595,6 +595,14 @@ def main() -> int:
             if marker not in source:
                 raise SystemExit(f"source-release gate: {daemon} once/default session isolation contract missing: {marker}")
     dnetd = read_text("userspace/dnetd/dnetd.c")
+    for marker in (
+        "if (token) {",
+        "errno = E2BIG;",
+        'char too_many[] =',
+        "parse_line(too_many",
+    ):
+        if marker not in dnetd:
+            raise SystemExit(f"source-release gate: dnetd argument-limit regression: {marker}")
     dnetd_isolation = '''            if (policy < 0) {
                 perror("dnetd: accept policy");
                 close(fd);
