@@ -419,8 +419,8 @@ jobs:
 
           run_case debian13 debian:13 gcc
           run_case debian13 debian:13 clang
-          run_case fedora42 fedora:42 gcc
-          run_case fedora42 fedora:42 clang
+          run_case fedora44 fedora:44 gcc
+          run_case fedora44 fedora:44 clang
 
       - name: Verify exact tree
         shell: bash

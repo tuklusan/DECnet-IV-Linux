@@ -54,11 +54,13 @@ def main() -> int:
         "validate-arm64:",
         "  portability:",
         "debian13",
-        "fedora42",
+        "fedora44",
         "actions/download-artifact@",
     ):
         if marker not in workflow:
             raise SystemExit(f"source-release gate: workflow safeguard missing: {marker}")
+    if "fedora:42" in workflow:
+        raise SystemExit("source-release gate: EOL Fedora 42 portability image remains")
     for forbidden in ("qemu-system", ".qcow2", "dniv.raw", "Release Image"):
         if forbidden in workflow:
             raise SystemExit(f"source-release gate: disk-image release behavior remains: {forbidden}")
@@ -179,7 +181,7 @@ def main() -> int:
         'KBUILD_MODPOST_WARN=1 CC="$cc" KDIR=/tmp/linux-clang KERNEL_RELEASE="$clang_release" ./build.sh',
         'DESTDIR="$stage" KERNEL_RELEASE="$clang_release" ./install.sh',
         "KBUILD_MODPOST_WARN=1",
-        "run_case fedora42 fedora:42 clang",
+        "run_case fedora44 fedora:44 clang",
     ):
         if marker not in workflow:
             raise SystemExit(f"source-release gate: exact-artifact portability safeguard missing: {marker}")
