@@ -344,7 +344,7 @@ SIMH is a simulator dependency, not a DECnet protocol oracle. At `5b73b1032b52d1
 | real DEC/exact source release | PP-12 |
 | upgrade/rollback/mixed version | PP-13 once N-1 exists |
 
-Current `tests/lab/dniv-smoke.sh` and `run-two-node.sh` implement only the currently automated subset. A future PP case is not green merely because the present harness has no mode for it.
+Current `tests/lab/dniv_lab.py`, `tests/lab/dniv-smoke.sh` and the repository-tracked acceptance workflows implement only the currently automated subset. A future PP case is not green merely because the present harness has no mode for it.
 
 ## Evidence required for every run
 

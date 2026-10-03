@@ -65,6 +65,12 @@ def main() -> int:
         value = read_text(doc)
         if "Fedora 42" in value or "Fedora 44" not in value:
             raise SystemExit(f"source-release gate: stale Fedora portability documentation remains in {doc}")
+    preproduction = read_text("docs/PRE_PRODUCTION_TEST.md")
+    if "`run-two-node.sh`" in preproduction:
+        raise SystemExit("source-release gate: stale removed two-node harness remains in pre-production documentation")
+    for required in ("`tests/lab/dniv_lab.py`", "`tests/lab/dniv-smoke.sh`"):
+        if required not in preproduction:
+            raise SystemExit(f"source-release gate: active two-node harness documentation missing: {required}")
     test_lab_scale = read_text("docs/TEST_LAB.md")
     for stale in ("Full acceptance initially dispatches `scale4`", "`scale8` and `scale16` exist but are not promotion-green"):
         if stale in test_lab_scale:
