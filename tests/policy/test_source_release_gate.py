@@ -495,7 +495,7 @@ def main() -> int:
     for marker in (
         "open(root, O_RDONLY | O_DIRECTORY | O_CLOEXEC)",
         "openat(rootfd, name, flags, 0666)",
-        "O_NOFOLLOW | O_CLOEXEC",
+        "O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK",
         "st.st_nlink != 1",
         "fgetxattr(fd, DNFAL_XATTR_RFM",
         "fsetxattr(fd, DNFAL_XATTR_RFM",
@@ -504,6 +504,8 @@ def main() -> int:
         "unlinkat(rootfd, name, 0)",
         'open_regular_at(rootfd, "ESCAPE.TXT", 0)',
         'open_regular_at(rootfd, "HARD.TXT", 1)',
+        "mkfifo(fifo_path, 0600)",
+        'open_regular_at(rootfd, "FIFO.TXT", 1)',
     ):
         if marker not in dnfald:
             raise SystemExit(f"source-release gate: dnfald root-safety regression: {marker}")
@@ -523,12 +525,13 @@ def main() -> int:
 
     dnhttpd = read_text("userspace/dnhttpd/dnhttpd.c")
     for marker in (
-        "openat(rootfd, name, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)",
+        "O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK",
         "fstat(fd, &st)",
         "S_ISREG(st.st_mode)",
         "st.st_nlink != 1",
         'open_root_file(directory, "escape.html")',
         'open_root_file(directory, "hard.html")',
+        'open_root_file(directory, "pipe.html")',
     ):
         if marker not in dnhttpd:
             raise SystemExit(f"source-release gate: dnhttpd root-safety regression: {marker}")

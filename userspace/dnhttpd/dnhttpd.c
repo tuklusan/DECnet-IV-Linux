@@ -86,7 +86,8 @@ static FILE *open_root_file(const char *root, const char *name)
     rootfd = open(root, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
     if (rootfd < 0)
         return NULL;
-    fd = openat(rootfd, name, O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
+    fd = openat(rootfd, name,
+                O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK);
     close(rootfd);
     if (fd < 0)
         return NULL;
@@ -173,6 +174,7 @@ static int selftest(void)
     char good[256];
     char link[256];
     char hardlink_path[256];
+    char fifo_path[256];
     char name[64];
     FILE *file = NULL;
     int victim_fd = -1;
@@ -196,7 +198,9 @@ static int selftest(void)
         snprintf(link, sizeof(link), "%s/escape.html", directory) >=
             (int)sizeof(link) ||
         snprintf(hardlink_path, sizeof(hardlink_path), "%s/hard.html", directory) >=
-            (int)sizeof(hardlink_path))
+            (int)sizeof(hardlink_path) ||
+        snprintf(fifo_path, sizeof(fifo_path), "%s/pipe.html", directory) >=
+            (int)sizeof(fifo_path))
         goto out;
     file = fopen(good, "wb");
     if (!file || fputs("ok\n", file) == EOF || fclose(file)) {
@@ -204,7 +208,9 @@ static int selftest(void)
         goto out;
     }
     file = NULL;
-    if (symlink(victim, link) || linkat(AT_FDCWD, victim, AT_FDCWD, hardlink_path, 0))
+    if (symlink(victim, link) ||
+        linkat(AT_FDCWD, victim, AT_FDCWD, hardlink_path, 0) ||
+        mkfifo(fifo_path, 0600))
         goto out;
     file = open_root_file(directory, "index.html");
     if (!file)
@@ -217,6 +223,9 @@ static int selftest(void)
     file = open_root_file(directory, "hard.html");
     if (file)
         goto out;
+    file = open_root_file(directory, "pipe.html");
+    if (file)
+        goto out;
     rc = 0;
 
 out:
@@ -224,6 +233,7 @@ out:
         fclose(file);
     if (victim_fd >= 0)
         close(victim_fd);
+    unlink(fifo_path);
     unlink(hardlink_path);
     unlink(link);
     unlink(good);

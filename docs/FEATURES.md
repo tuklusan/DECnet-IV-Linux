@@ -57,12 +57,12 @@ This catalogue describes the production source release. Lab-only helpers and ind
 - `dnobject` named/numbered object client.
 - `dntask` task/object client.
 - `dnlynx` bounded DECnet-native HTTP/1.0 client.
-- `dnhttpd` bounded DECnet-native static HTTP/1.0 server with safe root-level GET handling that rejects symbolic-link and hard-link leaf escapes, plus explicit bad/not-found responses.
+- `dnhttpd` bounded DECnet-native static HTTP/1.0 server with safe root-level GET handling that rejects symbolic-link, hard-link and non-regular leaf escapes without blocking on special files, plus explicit bad/not-found responses.
 
 ## DAP/FAL
 
 - `dncopy`, `dntype`, `dndir`, `dndel`, `dnrename`, `dnsubmit`, `dnprint`.
-- `dnfald` FAL object 17 service with DAP configuration plus the implemented file/directory/delete/rename/submit/print operations; `--root` pins the served directory and file data operations reject symbolic-link and hard-link leaf escapes.
+- `dnfald` FAL object 17 service with DAP configuration plus the implemented file/directory/delete/rename/submit/print operations; `--root` pins the served directory and file data operations reject symbolic-link, hard-link and non-regular leaf escapes without blocking on special files.
 - Optional Session access-data policy for user/password/account before DAP exchange.
 
 ## PHONE

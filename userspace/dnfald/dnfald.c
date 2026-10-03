@@ -190,7 +190,7 @@ static int save_metadata(int fd, unsigned char rfm, unsigned char rat)
 static int open_regular_at(int rootfd, const char *name, int write_file)
 {
     struct stat st;
-    int flags = O_NOFOLLOW | O_CLOEXEC;
+    int flags = O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK;
     int fd;
 
     if (write_file)
@@ -654,6 +654,7 @@ static int selftest(void)
     char good[256];
     char escape[256];
     char hardlink_path[256];
+    char fifo_path[256];
     char victim_buf[16];
     int rootfd = -1;
     int victim_fd = -1;
@@ -703,14 +704,17 @@ static int selftest(void)
         snprintf(escape, sizeof(escape), "%s/ESCAPE.TXT", directory) >=
             (int)sizeof(escape) ||
         snprintf(hardlink_path, sizeof(hardlink_path), "%s/HARD.TXT", directory) >=
-            (int)sizeof(hardlink_path))
+            (int)sizeof(hardlink_path) ||
+        snprintf(fifo_path, sizeof(fifo_path), "%s/FIFO.TXT", directory) >=
+            (int)sizeof(fifo_path))
         goto out;
     file_fd = open(good, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
     if (file_fd < 0 || write(file_fd, "ok\n", 3U) != 3)
         goto out;
     close(file_fd);
     file_fd = -1;
-    if (symlink(victim, escape) || link(victim, hardlink_path))
+    if (symlink(victim, escape) || link(victim, hardlink_path) ||
+        mkfifo(fifo_path, 0600))
         goto out;
     rootfd = open(directory, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
     if (rootfd < 0)
@@ -732,6 +736,12 @@ static int selftest(void)
     file_fd = open_regular_at(rootfd, "HARD.TXT", 1);
     if (file_fd >= 0)
         goto out;
+    file_fd = open_regular_at(rootfd, "FIFO.TXT", 0);
+    if (file_fd >= 0)
+        goto out;
+    file_fd = open_regular_at(rootfd, "FIFO.TXT", 1);
+    if (file_fd >= 0)
+        goto out;
     victim_fd = open(victim, O_RDONLY | O_CLOEXEC);
     if (victim_fd < 0 || read(victim_fd, victim_buf, sizeof(victim_buf)) != 7 ||
         memcmp(victim_buf, "secret\n", 7U))
@@ -745,6 +755,7 @@ out:
         close(victim_fd);
     if (rootfd >= 0)
         close(rootfd);
+    unlink(fifo_path);
     unlink(hardlink_path);
     unlink(escape);
     unlink(good);
