@@ -59,6 +59,18 @@ case "$compiler_line" in
         ;;
 esac
 
+auto_conf="$kdir/include/config/auto.conf"
+if [[ -r "$auto_conf" ]]; then
+    if (( llvm )) && grep -Fqx 'CONFIG_CC_IS_GCC=y' "$auto_conf"; then
+        echo "build.sh: target kernel build tree was configured with GCC; use a compatible GCC for the module" >&2
+        exit 2
+    fi
+    if (( ! llvm )) && grep -Fqx 'CONFIG_CC_IS_CLANG=y' "$auto_conf"; then
+        echo "build.sh: target kernel build tree was configured with Clang; use a compatible Clang for the module" >&2
+        exit 2
+    fi
+fi
+
 printf 'DECnet-IV-Linux build\n  kernel release: %s\n  kernel version: %s\n  kernel build:   %s\n  compiler:       %s\n' "$kernel_release" "$kernel_version" "$kdir" "$compiler_line"
 make clean KDIR="$kdir"
 make userspace CC="$cc" PYTHON="$python"

@@ -34,7 +34,7 @@ The production target is an existing modern Linux installation on x86_64 or aarc
 
 The release is distribution-neutral. Debian/Ubuntu and Fedora/RHEL-family package names in `INSTALL.md` are examples; the real requirements are a supported compiler, libc development environment, GNU make, matching kernel development tree, Python where applicable, and standard module-management utilities.
 
-Forward compatibility is an active maintenance requirement. Full release acceptance compiles the exact packaged source archive against the oldest supported floor, maintained distro kernels, the current validated upstream kernel line and both supported C compiler families where the kernel build permits them. Future published kernel API changes are fixed in source and retained as compatibility regressions.
+Forward compatibility is an active maintenance requirement. Full release acceptance compiles the exact packaged source archive against the oldest supported floor, maintained distro kernels, the current validated upstream kernel line and both supported C compiler families where the selected kernel build tree permits them. The module compiler must be compatible with the kernel's configured compiler family; userspace is checked independently with both GCC and Clang. Future published kernel API changes are fixed in source and retained as compatibility regressions.
 
 ## Build and installation model
 

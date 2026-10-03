@@ -97,6 +97,8 @@ def main() -> int:
         "does not match KDIR release",
         "Clang 16 or later required",
         "GCC-compatible compiler 12 or later required",
+        "target kernel build tree was configured with GCC",
+        "target kernel build tree was configured with Clang",
         'make clean KDIR="$kdir"',
     ):
         if marker not in build:
@@ -119,6 +121,8 @@ def main() -> int:
         'sha256sum -c "$(basename "$archive").sha256"',
         'grep -Fqx "source_sha=$DNIV_EXPECTED_SHA" SOURCE-METADATA',
         "run_case debian13 debian:13 gcc",
+        'if [[ "$DNIV_COMPILER" == clang ]]',
+        'kbase=$(make -s -C "$KDIR" kernelversion)',
         "run_case fedora42 fedora:42 clang",
     ):
         if marker not in workflow:

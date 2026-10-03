@@ -34,7 +34,7 @@ Core build requirements:
 
 - Linux 6.8+ with matching kernel headers/development tree;
 - GNU make 4.0+;
-- GCC 12+ or Clang 16+;
+- GCC 12+ or Clang 16+; for the kernel module, use the compiler family compatible with the selected kernel build tree;
 - binutils and libc development environment;
 - Bash 5.0+;
 - Python 3.10+;
@@ -85,11 +85,13 @@ Read `SOURCE-METADATA` and `LICENSE`.
 ./build.sh
 ```
 
-Clang:
+Clang, when the target kernel build tree was configured for Clang:
 
 ```sh
 CC=clang ./build.sh
 ```
+
+Many distribution kernels are configured and built with GCC. Their exported external-module flags can be GCC-specific, so forcing Clang against such a `KDIR` is not supported. `build.sh` detects the common `CONFIG_CC_IS_GCC`/`CONFIG_CC_IS_CLANG` mismatch and fails with a clear diagnostic. Use the compiler family compatible with the target kernel; userspace itself is continuously checked with both GCC and Clang.
 
 Another installed kernel:
 
