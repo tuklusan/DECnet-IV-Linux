@@ -494,8 +494,7 @@ if [ "$reference" = pydecnet ]; then
         printf '%s\n' "$dap_output"
         exit 1
     fi
-    dap_local="/tmp/dniv-dap-phase7.$$"
-    rm -f "$dap_local"
+    dap_local=$(mktemp /tmp/dniv-dap-phase7.XXXXXX)
     if ! /usr/local/bin/dncopy -u DAPUSER -p DAPPASS -a DAPACCT --get-to "$peer_node" PHASE7.TXT "$dap_local"; then
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=dap-get-to"
         exit 1
@@ -515,7 +514,7 @@ if [ "$reference" = pydecnet ]; then
         printf '%s\n' "$dap_text_output"
         exit 1
     fi
-    dap_put="/tmp/dniv-dap-put.$$"
+    dap_put=$(mktemp /tmp/dniv-dap-put.XXXXXX)
     if ! dd if=/dev/zero of="$dap_put" bs=1024 count=3 status=none; then
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=dap-put-fixture"
         exit 1
@@ -526,7 +525,7 @@ if [ "$reference" = pydecnet ]; then
         exit 1
     fi
     rm -f "$dap_put"
-    dap_put_text="/tmp/dniv-dap-put-text.$"
+    dap_put_text=$(mktemp /tmp/dniv-dap-put-text.XXXXXX)
     printf 'ALPHA\nBETA\n' >"$dap_put_text"
     if ! /usr/local/bin/dncopy --put-text "$dap_put_text" "$peer_node" TEXTUP.TXT; then
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=dap-put-text"
@@ -565,8 +564,7 @@ if [ "$reference" = pydecnet ]; then
         printf '%s\n' "$dap_dndir_output"
         exit 1
     fi
-    dap_copy_local="/tmp/dniv-dap-copy.$$"
-    rm -f "$dap_copy_local"
+    dap_copy_local=$(mktemp /tmp/dniv-dap-copy.XXXXXX)
     if ! /usr/local/bin/dncopy "$peer_node::PHASE7.TXT" "$dap_copy_local"; then
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=dncopy-transparent-get"
         exit 1
@@ -582,7 +580,6 @@ if [ "$reference" = pydecnet ]; then
         rm -f "$dap_copy_local"
         exit 1
     fi
-    rm -f "$dap_copy_local"
     printf 'META-A\nMETA-B\n' >"$dap_copy_local"
     if ! /usr/local/bin/dncopy -r vfc -c prn "$dap_copy_local" "$peer_node::METADATA.TXT"; then
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=dncopy-metadata-put"
@@ -590,8 +587,7 @@ if [ "$reference" = pydecnet ]; then
         exit 1
     fi
     rm -f "$dap_copy_local"
-    dap_block="/tmp/dniv-dap-block.$"
-    rm -f "$dap_block"
+    dap_block=$(mktemp /tmp/dniv-dap-block.XXXXXX)
     if ! /usr/local/bin/dncopy -m block "$peer_node::BLOCK.BIN" "$dap_block"; then
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=dncopy-block-get"
         exit 1
@@ -667,10 +663,11 @@ EOF_DECNET_CONF
         exit 1
     fi
     echo "DNIV-INTEROP-LIBDNET-DAEMON-PASS session=$session scenario=$scenario node=$name peer=$peer_node object=LIBMIRROR"
-    cat > /tmp/dnetd.conf <<EOF_DNETD
+    dnetd_conf=$(mktemp /tmp/dniv-dnetd.XXXXXX)
+    cat >"$dnetd_conf" <<EOF_DNETD
 DNETDTEST 0 N,N root /usr/local/sbin/dnetd-mirror
 EOF_DNETD
-    /usr/local/sbin/dnetd -d --once -c /tmp/dnetd.conf &
+    /usr/local/sbin/dnetd -d --once -c "$dnetd_conf" &
     dnetd_pid=$!
     sleep 1
     if ! kill -0 "$dnetd_pid" 2>/dev/null; then
@@ -682,6 +679,7 @@ EOF_DNETD
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=dnetd-session"
         exit 1
     fi
+    rm -f "$dnetd_conf"
     echo "DNIV-INTEROP-DNETD-PASS session=$session scenario=$scenario node=$name peer=$peer_node object=DNETDTEST"
     /usr/local/sbin/dnnml --once &
     nml_pid=$!
@@ -787,9 +785,7 @@ EOF_DNETD
         exit 1
     fi
     echo "DNIV-INTEROP-TASK-PASS session=$session scenario=$scenario node=$name peer=$peer_node"
-    fal_root="/tmp/dniv-fal-root.$"
-    rm -rf "$fal_root"
-    mkdir -p "$fal_root"
+    fal_root=$(mktemp -d /tmp/dniv-fal-root.XXXXXX)
     printf 'SERVER-FAL\n' >"$fal_root/SERVER.TXT"
     /usr/local/sbin/dnfald --root "$fal_root" --sessions 7 \
         --user FALUSER --password FALPASS --account FALACCT &
@@ -811,9 +807,7 @@ EOF_DNETD
     fi
     rm -rf "$fal_root"
     echo "DNIV-INTEROP-FAL-PASS session=$session scenario=$scenario node=$name peer=$peer_node operations=get,put,dir,erase"
-    http_root="/tmp/dniv-http-root.$"
-    rm -rf "$http_root"
-    mkdir -p "$http_root"
+    http_root=$(mktemp -d /tmp/dniv-http-root.XXXXXX)
     printf 'DECNET-WEB-PASS\n' >"$http_root/index.html"
     /usr/local/sbin/dnhttpd --once --root "$http_root" &
     http_pid=$!
@@ -878,9 +872,7 @@ EOF_DNETD
         exit 1
     fi
     echo "DNIV-INTEROP-PHONE-PASS session=$session scenario=$scenario node=$name peer=$peer_node"
-    mail_root="/tmp/dniv-mail-root.$"
-    rm -rf "$mail_root"
-    mkdir -p "$mail_root"
+    mail_root=$(mktemp -d /tmp/dniv-mail-root.XXXXXX)
     mail_sendmail="$mail_root/fake-sendmail"
     cat > "$mail_sendmail" <<'EOF_DNIV_SENDMAIL'
 #!/bin/sh

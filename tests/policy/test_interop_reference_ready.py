@@ -219,6 +219,32 @@ def main() -> int:
             "proof must remain required for every independent reference path"
         )
 
+    temp_markers = (
+        "mktemp /tmp/dniv-dap-phase7.XXXXXX",
+        "mktemp /tmp/dniv-dap-put.XXXXXX",
+        "mktemp /tmp/dniv-dap-put-text.XXXXXX",
+        "mktemp /tmp/dniv-dap-copy.XXXXXX",
+        "mktemp /tmp/dniv-dap-block.XXXXXX",
+        "mktemp /tmp/dniv-dnetd.XXXXXX",
+        "mktemp -d /tmp/dniv-fal-root.XXXXXX",
+        "mktemp -d /tmp/dniv-http-root.XXXXXX",
+        "mktemp -d /tmp/dniv-mail-root.XXXXXX",
+    )
+    for marker in temp_markers:
+        if marker not in CANDIDATE_SMOKE:
+            raise SystemExit(
+                "interop-ready regression: candidate guest scratch paths must "
+                f"be created atomically; missing {marker!r}"
+            )
+    predictable_tmp = re.compile(
+        r'/tmp/(?:dniv-dap|dniv-dnetd|dniv-fal-root|dniv-http-root|dniv-mail-root)'
+        r'[^\n"]*(?:\.\$\$|\.\$")'
+    )
+    if predictable_tmp.search(CANDIDATE_SMOKE) or "cat > /tmp/dnetd.conf" in CANDIDATE_SMOKE:
+        raise SystemExit(
+            "interop-ready regression: predictable candidate guest /tmp path remains"
+        )
+
     router_endnode_reference_guard = (
         'if [[ "$reference" == pydecnet && "$scenario" != router-endnode ]]; then'
     )
