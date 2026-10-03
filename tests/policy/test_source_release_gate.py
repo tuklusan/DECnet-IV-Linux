@@ -491,6 +491,23 @@ def main() -> int:
     if "$(MAKE) -C userspace/dnmultinet test" not in root_make:
         raise SystemExit("source-release gate: lab dnmultinet tests disappeared from repository unit coverage")
 
+    dnfald = read_text("userspace/dnfald/dnfald.c")
+    for marker in (
+        "open(root, O_RDONLY | O_DIRECTORY | O_CLOEXEC)",
+        "openat(rootfd, name, flags, 0666)",
+        "O_NOFOLLOW | O_CLOEXEC",
+        "st.st_nlink != 1",
+        "fgetxattr(fd, DNFAL_XATTR_RFM",
+        "fsetxattr(fd, DNFAL_XATTR_RFM",
+        "renameat(rootfd, oldname, rootfd, newname)",
+        "fdopendir(dirfd)",
+        "unlinkat(rootfd, name, 0)",
+        'open_regular_at(rootfd, "ESCAPE.TXT", 0)',
+        'open_regular_at(rootfd, "HARD.TXT", 1)',
+    ):
+        if marker not in dnfald:
+            raise SystemExit(f"source-release gate: dnfald root-safety regression: {marker}")
+
     dnhttpd = read_text("userspace/dnhttpd/dnhttpd.c")
     for marker in (
         "openat(rootfd, name, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)",

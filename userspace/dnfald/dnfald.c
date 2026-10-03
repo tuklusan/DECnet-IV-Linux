@@ -12,7 +12,10 @@
 // patent, trademark, and governing-law provisions.
 // ============================================================================
 
+#define _GNU_SOURCE
+
 #include <dirent.h>
+#include <fcntl.h>
 #include <errno.h>
 #include <fnmatch.h>
 #include <linux/dn.h>
@@ -21,6 +24,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/xattr.h>
 #include <unistd.h>
@@ -158,19 +162,18 @@ static size_t make_attributes(unsigned char *buf, size_t cap,
     return 7U;
 }
 
-static int load_metadata(const char *path, unsigned char *rfm,
-                         unsigned char *rat)
+static int load_metadata(int fd, unsigned char *rfm, unsigned char *rat)
 {
     ssize_t got;
 
     *rfm = DAP_RFM_FIX;
     *rat = 0U;
-    got = getxattr(path, DNFAL_XATTR_RFM, rfm, 1U);
+    got = fgetxattr(fd, DNFAL_XATTR_RFM, rfm, 1U);
     if (got < 0 && errno != ENODATA && errno != ENOTSUP)
         return -1;
     if (got > 0 && got != 1)
         return -1;
-    got = getxattr(path, DNFAL_XATTR_RAT, rat, 1U);
+    got = fgetxattr(fd, DNFAL_XATTR_RAT, rat, 1U);
     if (got < 0 && errno != ENODATA && errno != ENOTSUP)
         return -1;
     if (got > 0 && got != 1)
@@ -178,11 +181,45 @@ static int load_metadata(const char *path, unsigned char *rfm,
     return 0;
 }
 
-static int save_metadata(const char *path, unsigned char rfm,
-                         unsigned char rat)
+static int save_metadata(int fd, unsigned char rfm, unsigned char rat)
 {
-    return setxattr(path, DNFAL_XATTR_RFM, &rfm, 1U, 0) ||
-           setxattr(path, DNFAL_XATTR_RAT, &rat, 1U, 0) ? -1 : 0;
+    return fsetxattr(fd, DNFAL_XATTR_RFM, &rfm, 1U, 0) ||
+           fsetxattr(fd, DNFAL_XATTR_RAT, &rat, 1U, 0) ? -1 : 0;
+}
+
+static int open_regular_at(int rootfd, const char *name, int write_file)
+{
+    struct stat st;
+    int flags = O_NOFOLLOW | O_CLOEXEC;
+    int fd;
+
+    if (write_file)
+        flags |= O_WRONLY | O_CREAT;
+    else
+        flags |= O_RDONLY;
+    fd = openat(rootfd, name, flags, 0666);
+    if (fd < 0)
+        return -1;
+    if (fstat(fd, &st)) {
+        int saved = errno;
+
+        close(fd);
+        errno = saved;
+        return -1;
+    }
+    if (!S_ISREG(st.st_mode) || st.st_nlink != 1) {
+        close(fd);
+        errno = EACCES;
+        return -1;
+    }
+    if (write_file && ftruncate(fd, 0)) {
+        int saved = errno;
+
+        close(fd);
+        errno = saved;
+        return -1;
+    }
+    return fd;
 }
 
 static int safe_filespec(const unsigned char *text, size_t len,
@@ -207,48 +244,50 @@ static int safe_filespec(const unsigned char *text, size_t len,
     return 0;
 }
 
-static int make_path(const char *root, const unsigned char *request,
-                     size_t len, unsigned char function,
-                     char *path, size_t path_cap)
+static int access_name(const unsigned char *request, size_t len,
+                       unsigned char function, char *name, size_t name_cap)
 {
-    char filespec[256];
     size_t n;
 
     if (len < 5U || request[0] != DAP_ACCESS || request[2] != function)
         return -1;
     n = request[4];
     if (len != n + 5U ||
-        safe_filespec(request + 5U, n, filespec, sizeof(filespec)))
-        return -1;
-    if (snprintf(path, path_cap, "%s/%s", root, filespec) >= (int)path_cap)
+        safe_filespec(request + 5U, n, name, name_cap))
         return -1;
     return 0;
 }
 
-static int serve_get(int fd, const char *root,
+static int serve_get(int fd, int rootfd,
                      const unsigned char *access, size_t access_len)
 {
     unsigned char request[2048];
     unsigned char reply[2048];
-    char path[1024];
+    char name[256];
     FILE *in = NULL;
+    int file_fd;
     unsigned char rfm;
     unsigned char rat;
     ssize_t got;
 
-    if (make_path(root, access, access_len, DAP_ACCESS_OPEN,
-                  path, sizeof(path)))
+    if (access_name(access, access_len, DAP_ACCESS_OPEN,
+                    name, sizeof(name)))
         return -1;
-    in = fopen(path, "rb");
-    if (!in)
+    file_fd = open_regular_at(rootfd, name, 0);
+    if (file_fd < 0)
         return -1;
+    in = fdopen(file_fd, "rb");
+    if (!in) {
+        close(file_fd);
+        return -1;
+    }
 
     {
         unsigned char attributes[16];
         const unsigned char ack[] = { DAP_ACK, 0U };
         size_t attr_len;
 
-        if (load_metadata(path, &rfm, &rat))
+        if (load_metadata(fileno(in), &rfm, &rat))
             goto fail;
         attr_len = make_attributes(attributes, sizeof(attributes), rfm, rat);
         if (!attr_len || send_record(fd, attributes, attr_len) ||
@@ -313,29 +352,35 @@ fail:
     return -1;
 }
 
-static int serve_create(int fd, const char *root,
+static int serve_create(int fd, int rootfd,
                         const unsigned char *access, size_t access_len,
                         unsigned char requested_rfm,
                         unsigned char requested_rat)
 {
     unsigned char request[2048];
-    char path[1024];
+    char name[256];
     FILE *out = NULL;
+    int file_fd;
     ssize_t got;
 
-    if (make_path(root, access, access_len, DAP_ACCESS_CREATE,
-                  path, sizeof(path)))
+    if (access_name(access, access_len, DAP_ACCESS_CREATE,
+                    name, sizeof(name)))
         return -1;
-    out = fopen(path, "wb");
-    if (!out)
+    file_fd = open_regular_at(rootfd, name, 1);
+    if (file_fd < 0)
         return -1;
+    out = fdopen(file_fd, "wb");
+    if (!out) {
+        close(file_fd);
+        return -1;
+    }
 
     {
         unsigned char attributes[16];
         const unsigned char ack[] = { DAP_ACK, 0U };
         size_t attr_len;
 
-        if (save_metadata(path, requested_rfm, requested_rat))
+        if (save_metadata(fileno(out), requested_rfm, requested_rat))
             goto fail;
         attr_len = make_attributes(attributes, sizeof(attributes),
                                    requested_rfm, requested_rat);
@@ -395,22 +440,21 @@ static int serve_create(int fd, const char *root,
 fail:
     if (out)
         fclose(out);
-    unlink(path);
+    unlinkat(rootfd, name, 0);
     return -1;
 }
 
-static int serve_rename(int fd, const char *root,
+static int serve_rename(int fd, int rootfd,
                         const unsigned char *access, size_t access_len)
 {
     unsigned char request[512];
-    char oldpath[1024];
+    char oldname[256];
     char newname[256];
-    char newpath[1024];
     size_t n;
     ssize_t got;
 
-    if (make_path(root, access, access_len, DAP_ACCESS_RENAME,
-                  oldpath, sizeof(oldpath)))
+    if (access_name(access, access_len, DAP_ACCESS_RENAME,
+                    oldname, sizeof(oldname)))
         return -1;
     got = recv(fd, request, sizeof(request), 0);
     if (got < 4 || request[0] != 15U || request[2] != 1U)
@@ -419,10 +463,7 @@ static int serve_rename(int fd, const char *root,
     if ((size_t)got != n + 4U ||
         safe_filespec(request + 4U, n, newname, sizeof(newname)))
         return -1;
-    if (snprintf(newpath, sizeof(newpath), "%s/%s", root, newname) >=
-        (int)sizeof(newpath))
-        return -1;
-    if (rename(oldpath, newpath))
+    if (renameat(rootfd, oldname, rootfd, newname))
         return -1;
     {
         const unsigned char complete[] = {
@@ -459,7 +500,7 @@ static int safe_pattern(const unsigned char *text, size_t len,
     return 0;
 }
 
-static int serve_directory(int fd, const char *root,
+static int serve_directory(int fd, int rootfd,
                            const unsigned char *access, size_t access_len)
 {
     unsigned char msg[512];
@@ -475,9 +516,17 @@ static int serve_directory(int fd, const char *root,
     if (access_len != n + 5U ||
         safe_pattern(access + 5U, n, pattern, sizeof(pattern)))
         return -1;
-    dir = opendir(root);
-    if (!dir)
-        return -1;
+    {
+        int dirfd = dup(rootfd);
+
+        if (dirfd < 0)
+            return -1;
+        dir = fdopendir(dirfd);
+        if (!dir) {
+            close(dirfd);
+            return -1;
+        }
+    }
     while ((ent = readdir(dir)) != NULL) {
         size_t len;
 
@@ -508,15 +557,15 @@ static int serve_directory(int fd, const char *root,
     }
 }
 
-static int serve_erase(int fd, const char *root,
+static int serve_erase(int fd, int rootfd,
                        const unsigned char *access, size_t access_len)
 {
-    char path[1024];
+    char name[256];
 
-    if (make_path(root, access, access_len, DAP_ACCESS_ERASE,
-                  path, sizeof(path)))
+    if (access_name(access, access_len, DAP_ACCESS_ERASE,
+                    name, sizeof(name)))
         return -1;
-    if (unlink(path))
+    if (unlinkat(rootfd, name, 0))
         return -1;
     {
         const unsigned char complete[] = {
@@ -535,6 +584,8 @@ static int serve_session(int fd, const char *root)
     unsigned char requested_rat = 0U;
     size_t reply_len;
     ssize_t got;
+    int rootfd;
+    int rc;
 
     if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0 ||
         setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)) < 0)
@@ -547,32 +598,47 @@ static int serve_session(int fd, const char *root)
         return -1;
     if (!root)
         return 0;
+    rootfd = open(root, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    if (rootfd < 0)
+        return -1;
 
     got = recv(fd, request, sizeof(request), 0);
-    if (got < 0)
-        return -1;
+    if (got < 0) {
+        rc = -1;
+        goto out;
+    }
     if (got >= 3 && request[0] == DAP_ATTRIBUTES) {
         if (parse_attributes(request, (size_t)got,
-                             &requested_rfm, &requested_rat))
-            return -1;
+                             &requested_rfm, &requested_rat)) {
+            rc = -1;
+            goto out;
+        }
         got = recv(fd, request, sizeof(request), 0);
-        if (got < 0)
-            return -1;
+        if (got < 0) {
+            rc = -1;
+            goto out;
+        }
     }
-    if (got < 5 || request[0] != DAP_ACCESS)
-        return -1;
+    if (got < 5 || request[0] != DAP_ACCESS) {
+        rc = -1;
+        goto out;
+    }
     if (request[2] == DAP_ACCESS_OPEN)
-        return serve_get(fd, root, request, (size_t)got);
-    if (request[2] == DAP_ACCESS_CREATE)
-        return serve_create(fd, root, request, (size_t)got,
-                            requested_rfm, requested_rat);
-    if (request[2] == DAP_ACCESS_RENAME)
-        return serve_rename(fd, root, request, (size_t)got);
-    if (request[2] == DAP_ACCESS_DIRECTORY)
-        return serve_directory(fd, root, request, (size_t)got);
-    if (request[2] == DAP_ACCESS_ERASE)
-        return serve_erase(fd, root, request, (size_t)got);
-    return -1;
+        rc = serve_get(fd, rootfd, request, (size_t)got);
+    else if (request[2] == DAP_ACCESS_CREATE)
+        rc = serve_create(fd, rootfd, request, (size_t)got,
+                          requested_rfm, requested_rat);
+    else if (request[2] == DAP_ACCESS_RENAME)
+        rc = serve_rename(fd, rootfd, request, (size_t)got);
+    else if (request[2] == DAP_ACCESS_DIRECTORY)
+        rc = serve_directory(fd, rootfd, request, (size_t)got);
+    else if (request[2] == DAP_ACCESS_ERASE)
+        rc = serve_erase(fd, rootfd, request, (size_t)got);
+    else
+        rc = -1;
+out:
+    close(rootfd);
+    return rc;
 }
 
 static int selftest(void)
@@ -583,6 +649,16 @@ static int selftest(void)
     unsigned char attrs[16];
     unsigned char rfm;
     unsigned char rat;
+    char directory[] = "/tmp/dnfald-selftest.XXXXXX";
+    char victim[] = "/tmp/dnfald-victim.XXXXXX";
+    char good[256];
+    char escape[256];
+    char hardlink_path[256];
+    char victim_buf[16];
+    int rootfd = -1;
+    int victim_fd = -1;
+    int file_fd = -1;
+    int rc = 1;
 
     if (make_config(config, sizeof(config)) != 12U ||
         validate_config(config, 12U) ||
@@ -613,6 +689,68 @@ static int selftest(void)
         make_attributes(attrs, sizeof(attrs), DAP_RFM_FIX, 0U) != 4U ||
         memcmp(attrs, (const unsigned char[]){ DAP_ATTRIBUTES, 0U,
                                                0x04U, DAP_RFM_FIX }, 4U))
+        return 1;
+
+    if (!mkdtemp(directory))
+        return 1;
+    victim_fd = mkstemp(victim);
+    if (victim_fd < 0 || write(victim_fd, "secret\n", 7U) != 7)
+        goto out;
+    close(victim_fd);
+    victim_fd = -1;
+    if (snprintf(good, sizeof(good), "%s/GOOD.TXT", directory) >=
+            (int)sizeof(good) ||
+        snprintf(escape, sizeof(escape), "%s/ESCAPE.TXT", directory) >=
+            (int)sizeof(escape) ||
+        snprintf(hardlink_path, sizeof(hardlink_path), "%s/HARD.TXT", directory) >=
+            (int)sizeof(hardlink_path))
+        goto out;
+    file_fd = open(good, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
+    if (file_fd < 0 || write(file_fd, "ok\n", 3U) != 3)
+        goto out;
+    close(file_fd);
+    file_fd = -1;
+    if (symlink(victim, escape) || link(victim, hardlink_path))
+        goto out;
+    rootfd = open(directory, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    if (rootfd < 0)
+        goto out;
+    file_fd = open_regular_at(rootfd, "GOOD.TXT", 0);
+    if (file_fd < 0)
+        goto out;
+    close(file_fd);
+    file_fd = -1;
+    file_fd = open_regular_at(rootfd, "ESCAPE.TXT", 0);
+    if (file_fd >= 0)
+        goto out;
+    file_fd = open_regular_at(rootfd, "HARD.TXT", 0);
+    if (file_fd >= 0)
+        goto out;
+    file_fd = open_regular_at(rootfd, "ESCAPE.TXT", 1);
+    if (file_fd >= 0)
+        goto out;
+    file_fd = open_regular_at(rootfd, "HARD.TXT", 1);
+    if (file_fd >= 0)
+        goto out;
+    victim_fd = open(victim, O_RDONLY | O_CLOEXEC);
+    if (victim_fd < 0 || read(victim_fd, victim_buf, sizeof(victim_buf)) != 7 ||
+        memcmp(victim_buf, "secret\n", 7U))
+        goto out;
+    rc = 0;
+
+out:
+    if (file_fd >= 0)
+        close(file_fd);
+    if (victim_fd >= 0)
+        close(victim_fd);
+    if (rootfd >= 0)
+        close(rootfd);
+    unlink(hardlink_path);
+    unlink(escape);
+    unlink(good);
+    unlink(victim);
+    rmdir(directory);
+    if (rc)
         return 1;
     puts("dnfald selftest passed");
     return 0;

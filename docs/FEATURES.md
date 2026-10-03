@@ -62,7 +62,7 @@ This catalogue describes the production source release. Lab-only helpers and ind
 ## DAP/FAL
 
 - `dncopy`, `dntype`, `dndir`, `dndel`, `dnrename`, `dnsubmit`, `dnprint`.
-- `dnfald` FAL object 17 service with DAP configuration plus the implemented file/directory/delete/rename/submit/print operations.
+- `dnfald` FAL object 17 service with DAP configuration plus the implemented file/directory/delete/rename/submit/print operations; `--root` pins the served directory and file data operations reject symbolic-link and hard-link leaf escapes.
 - Optional Session access-data policy for user/password/account before DAP exchange.
 
 ## PHONE
