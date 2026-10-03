@@ -59,6 +59,16 @@ def main():
         "VDE URL has invalid syntax",
     )
     expect_failure(
+        BASE[:4] + ["--vde", 'vde:///tmp/x"', "--mode", "listen",
+                    "--local-port", "700"],
+        "VDE URL has invalid syntax",
+    )
+    expect_failure(
+        BASE[:4] + ["--vde", "vde:///tmp/x\\", "--mode", "listen",
+                    "--local-port", "700"],
+        "VDE URL has invalid syntax",
+    )
+    expect_failure(
         BASE + ["--mode", "listen", "--local-address",
                 "0.0.0.0\nlogging console --events 9.9", "--local-port", "700"],
         "local address has invalid syntax",

@@ -444,6 +444,7 @@ def main() -> int:
     dnmultinet = read_text("userspace/dnmultinet/dnmultinet.py")
     for marker in (
         "def safe_config_token",
+        "shlex.split(value, comments=False, posix=True)",
         "ipaddress.IPv4Address",
         "--runtime-peer-env refuses --config-out to avoid persisting runtime peer values",
     ):

@@ -25,6 +25,7 @@ import ipaddress
 import os
 import pathlib
 import re
+import shlex
 import sys
 
 NODE_RE = re.compile(r"^([0-9]{1,2})\.([0-9]{1,4})$")
@@ -49,6 +50,12 @@ def node_name(value):
 
 def safe_config_token(name, value):
     if not value or value.startswith("-") or any(ch.isspace() for ch in value):
+        raise SystemExit(f"{name} has invalid syntax")
+    try:
+        parsed = shlex.split(value, comments=False, posix=True)
+    except ValueError as exc:
+        raise SystemExit(f"{name} has invalid syntax") from exc
+    if parsed != [value]:
         raise SystemExit(f"{name} has invalid syntax")
     return value
 
