@@ -14,34 +14,42 @@
 
 # DECnet-IV-Linux
 
-A minimal modern Linux distribution with native DECnet Phase IV networking.
+DECnet Phase IV for modern Linux, delivered as portable source.
+
+The production deliverable is a versioned source tarball. It builds the out-of-tree kernel module and the complete DECnet/Linux userspace directly on the target x86_64 or aarch64 Linux system against that system's installed kernel headers. Disk images are not release artifacts.
 
 Based on original work by Supratim Sanyal of SANYALnet Labs. See `LICENSE` for the governing terms.
 
-## Project goals
+## Delivered stack
 
-- Build DECnet Phase IV as a fresh out-of-tree Linux kernel module, not the removed legacy stack.
-- Provide a versioned kernel/userspace ABI and the useful DECnet/Linux tool environment.
-- Build reproducible x86_64 and aarch64 images.
-- Test on independent VMs, independent peers, routed/distributed VDE2 and MULTINET topologies, faults and stress.
+The source release contains the native Ethernet endnode/L1/L2 routing stack, NSP transport, native `AF_DECnet` / `SOCK_SEQPACKET` socket ABI, Session Control, NICE/NML management, UAPI headers, libraries, administration tools, DAP/FAL utilities and service, login, task/object access, PHONE, mail, MIRROR, DECnet HTTP client/server tools, and the MULTINET integration launcher.
 
-## Current baseline
+See `docs/FEATURES.md`, `docs/COMPONENTS.md`, `docs/DELIVERY.md`, and `INSTALL.md`.
 
-Phases 1-4 are complete. The kernel stack has native DECnet Ethernet initialization, endnode/L1/L2 routing, convergence and multi-area forwarding on amd64 and ARM64.
+## Supported target
 
-Phase 5 is active. NSP transport and native `AF_DECnet` / `SOCK_SEQPACKET` support include outbound connections, record segmentation/reassembly, inbound listener/backlog/accept handling and independent PyDECnet MIRROR/listener interoperability. Exact-SHA acceptance is green through `6aa5eec808e45c0477bb7ea87b9ff76e0bc0859b`.
+The current production compatibility floor is Linux 6.12 or later on x86_64 or aarch64, with a matching configured kernel build/header tree. GCC or Clang may be used. Python 3.10 or later is required for the delivered `dnmultinet` launcher.
 
-Local/rootless VDE2 and MULTINET TCP transports have separate green proofs. Cross-runner VDE2 joining and secret-backed Area-31 integration remain planned distributed-lab work; they do not replace exact-SHA local acceptance.
+Forward compatibility is maintained by continuously compiling against maintained distro kernels and current upstream kernel lines. Unknown future kernel API changes cannot be guaranteed in advance; compatibility defects discovered by the forward build gates are blocking until corrected.
 
-## Layout
+## Build
 
-- `include/uapi/` — versioned kernel/userspace ABI
-- `kernel/decnet/` — native DECnet Phase IV kernel module
-- `userspace/` — DECnet command-line tools and libraries
-- `image/ubuntu-base/` — pinned rootfs metadata and deterministic image builder
-- `tests/` — unit and interoperability tests
-- `docs/` — architecture, roadmap, test lab, handover and continuity state
-- `references/` — normative DECnet specifications, pinned implementation references and source-of-truth rules
-- `.github/workflows/` — repository, build, reference, continuity and VM gates
+```sh
+./build.sh
+sudo ./install.sh
+```
 
-Start with `docs/HANDOVER.md` when resuming work. It points to the authoritative project state and ordered roadmap.
+The build compiles userspace and `decnet_iv.ko` against the selected target kernel. Installation never requires a prebuilt project kernel or project disk image.
+
+## Repository layout
+
+- `include/uapi/` — versioned kernel/userspace ABI.
+- `kernel/decnet/` — native DECnet Phase IV out-of-tree kernel module.
+- `userspace/` — commands, daemons and libraries.
+- `docs/` — architecture, feature, component, delivery and acceptance documentation.
+- `tests/` — unit, VM, interoperability, fault and stress tests.
+- `image/ubuntu-base/` — lab-only disposable VM construction support; not a product deliverable.
+- `references/` — normative specification and pinned independent-reference metadata.
+- `.github/workflows/` — exact-source build, portability and acceptance gates.
+
+Start with `docs/HANDOVER.md` when resuming project work.

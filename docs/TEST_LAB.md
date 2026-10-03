@@ -16,7 +16,7 @@
 
 ## Purpose
 
-The lab proves DECnet protocol behavior independently of release-image production. Protocol tests spend their time booting and exercising nodes, not reinstalling Ubuntu packages or serializing mutable VM state.
+The lab proves DECnet protocol behavior independently of source-release production. Its VM disks are disposable test fixtures, never product artifacts. Protocol tests spend their time booting and exercising nodes, not reinstalling Linux packages or serializing mutable VM state.
 
 ## Persistent architecture foundations
 
@@ -58,11 +58,12 @@ Ordinary test nodes use area 31, nodes 70 through 79, with names DN70 through DN
 
 Development acceptance is tiered so reliability coverage is preserved without re-running the entire production matrix after every small increment.
 
+- **Targeted** runs one named expensive development gate without unrelated fan-out. `SCOPE=pp11-pressure` runs Build, Project State, dual-architecture E1 and only the amd64/arm64 PyDECnet L1 pressure jobs. `SCOPE=source-release` runs Build, Project State and the dual-architecture source-release reproducibility/build/install/uninstall gate.
 - **Fast** is the default exact-SHA development gate. It runs repository policy, native amd64/arm64 build and unit coverage, project-state continuity, E1 on both architectures, and a small independent interop slice selected by change scope. `SCOPE=socket` runs the x64 PyDECnet L1 socket path; `SCOPE=routing` runs x64 Route20 L1 plus x64 PyDECnet L1; `SCOPE=all` runs the same two independent x64 paths. Fast evidence proves the increment is suitable for continued development; it is not phase/release promotion evidence.
 - **Consolidated** is used after several related increments or at a subsystem checkpoint. It adds pinned reference baselines, E4 on both architectures, and a broader six-job interop slice spanning Route20/PyDECnet, amd64/arm64 and router/endnode roles.
-- **Full** is mandatory for phase closure, release candidates, and any promotion claim. It runs pinned reference baselines, E1-E4 on both architectures and every independent interoperability scenario. Full interoperability is split into one scenario per matrix job so L1/L2 and role scenarios execute independently instead of serially inside a single runner.
-- A scheduled nightly run uses the full profile against the exact current `main` SHA. Thus slower coverage remains continuously exercised even while ordinary development uses the fast gate.
-- The acceptance issue body may contain exact lines `PROFILE=fast|consolidated|full` and `SCOPE=all|socket|routing`. Omitted profile defaults to `fast`; scheduled runs force `full`.
+- **Full** is mandatory for phase closure, release candidates, and any promotion claim. It runs pinned reference baselines, E1-E4 on both architectures, every independent interoperability scenario and the source-release gate.
+- A scheduled weekly run uses the full profile against the exact current `main` SHA.
+- The acceptance issue body may contain exact lines `PROFILE=targeted|fast|consolidated|full` and `SCOPE=all|socket|routing|pp11-pressure|source-release`. Targeted requires one of its two targeted scopes. Omitted profile defaults to `fast`; scheduled runs force `full`.
 
 Long stress, soak and release-endurance work remains at the documented checkpoint/release stages. Runtime reduction comes from eliminating redundant repetition and serial scenario packing, not from deleting required production coverage.
 
@@ -86,9 +87,9 @@ The Area-31 stage uses `userspace/dnmultinet/dnmultinet.py` as a VDE-to-MULTINET
 
 As userspace matures, keep reusable Linux/VAX test pairs under `tests/lab` (with VAX-side helpers in a dedicated subdirectory). Start with remote node/route/NICE information and counters, then NSP/Session/object access, login, DAP/FAL, PHONE, mail, task access and application experiments. Evidence must redact credentials and must distinguish local transport proof, remote routing proof and application proof. See `docs/HECNET_LAB.md`.
 
-## Release-image separation
+## Source-release separation
 
-`image/ubuntu-base/build-image.sh` remains the canonical full exact-source release/test image path. `image/ubuntu-base/build-foundation.sh` exists only to amortize expensive package/kernel preparation for protocol acceptance. Release-image correctness remains an independent gate and is not inferred from a cached foundation.
+The production object is the reproducible source tarball defined by `docs/DELIVERY.md` and `.github/workflows/source-release.yml`. `image/ubuntu-base/build-foundation.sh` and all derived QCOW2 files are lab-only infrastructure used to obtain independent disposable kernels for protocol, fault and stress testing. No VM disk file is a release artifact or installation requirement.
 
 For direct host-TAP PyDECnet runs, a separate host `dnraw` loop injects marked DECnet-Ethernet unicast frames through the Linux bridge toward the candidate logical MAC. This preserves the same post-NIC-MAC-change lower-layer receive proof used by guest-backed references without coupling that check to PyDECnet routing/NSP convergence.
 

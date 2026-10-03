@@ -36,6 +36,10 @@ Every future entry records the PP case, exact candidate SHA, architecture/topolo
 - MIM `1.13` is stricter: read-only access by valid DECnet methods only. Never write/change remote state, install/execute test programs, or use MIM for load, stress, endurance, negative/fault-tolerance or disruptive testing. Required resources may only be copied away read-only.
 - Local lab systems may install pinned `tuklusan/simh` and create multiple local RSX-11M-PLUS V4.6 instances from resources copied read-only from MIM. Acquisition source, hashes, SIMH pin, install steps, RSX configuration and DECnet configuration must be retained before those instances count as evidence.
 
+## Delivery-policy transition
+
+Beginning with the source-delivery pivot, production release evidence is bound to the exact reproducible source tarball and its clean extracted-tree build/install manifest. Historical rows mentioning release-image workflows remain historical evidence for the candidates on which they ran; they do not make any disk image a current deliverable or current PP-12 release criterion. Future full acceptance uses the source-release gate.
+
 ## Current proof ledger
 
 | Case | Result | Exact candidate / evidence |
@@ -64,7 +68,7 @@ Every future entry records the PP case, exact candidate SHA, architecture/topolo
 | PP-11 S5 | OWNER-AUTHORIZED SKIP | Commit `39ca86f0f11d525abf062684de8779baa9eaef72`; no substitute evidence permitted. |
 | PP-11 S6 | OWNER-AUTHORIZED SKIP | Commit `39ca86f0f11d525abf062684de8779baa9eaef72`; no substitute evidence permitted. |
 | Full acceptance of `081f2ef9cb219a143ad15e18a34ad1a4ea376951` | FAIL | Issue #875. KCSAN run `36954406524`, amd64 job `110674076971`, artifact `11206077517`: upstream Linux timer-migration race summary `tmigr_cpu_deactivate / tmigr_next_groupevt`. Portability run `36954591057`, Debian 13 amd64 GCC job `110674646311`, artifact `11205828708`: Debian mirror mid-sync size/hash mismatch before candidate compilation. This candidate is not promotable. |
-| PP-12 exact release image / real DEC peers | PARTIAL | QCOCAL and IMPVAX are available SIMH/OpenVMS peers. Exact PP-12 release-image execution is not yet closed. Any additional RSX-11M-PLUS V4.6 instances must be local/project-controlled and built from documented, hashed inputs. MIM may supply read-only copied resources only. |
+| PP-12 exact source release / real DEC peers | PARTIAL | QCOCAL and IMPVAX are available SIMH/OpenVMS peers. Exact PP-12 source-tarball build/install execution is not yet closed. Any additional RSX-11M-PLUS V4.6 instances must be local/project-controlled and built from documented, hashed inputs. MIM may supply read-only copied resources only. |
 | PP-13 first release | OWNER-AUTHORIZED SKIP | Commit `081f2ef9cb219a143ad15e18a34ad1a4ea376951`; no real N-1 release exists, so synthetic downgrade/rollback/mixed-version evidence is prohibited. |
 
 ## Post-Timing ledger rule

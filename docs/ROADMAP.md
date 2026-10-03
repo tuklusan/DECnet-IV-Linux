@@ -28,13 +28,13 @@ Exit criteria: module, userspace and unit tests build cleanly on both required a
 
 Status: complete foundation retained on `main`.
 
-## Phase 2 - reproducible Ubuntu Base image and two-node lab
+## Phase 2 - reproducible VM lab foundation and two-node lab
 
 Deliver:
 
-- pinned Ubuntu Base 26.04.1 amd64 and arm64 rootfs tarballs;
-- deterministic ext4/QCOW2 test image construction;
-- exact image kernel, headers, module and current userspace tools;
+- pinned Ubuntu Base amd64 and arm64 lab rootfs inputs;
+- deterministic disposable ext4/QCOW2 construction strictly for isolated acceptance VMs;
+- exact lab kernel, headers, module and current userspace tools;
 - direct QEMU kernel/initrd boot with no installer or runtime provisioning layer;
 - DN70 and DN71 as separate VMs on one raw Ethernet LAN;
 - packet capture and per-node serial logs on failure;
@@ -98,10 +98,10 @@ Exit criteria: VDE2 and MULTINET pass separate positive, negative, restart and s
 
 Status: complete on exact candidate `9b73e61bbd0f95b82410276f7b5dc3db94e219ba`. Full acceptance from Repository Policy run `36258507655` passed Build Bootstrap `36258543209`, Project State Gate `36258553606`, Cross-runner VDE2 `36258564105`, External Reference Baselines `36258573270`, x86_64/aarch64 E1-E4 VM runs `36258584817`, `36258594905`, `36258607144`, `36258617814`, Independent Ethernet Interoperability `36258627216`, VDE2 Transport Proof `36258635481`, MULTINET Transport Proof `36258643588`, and Area-31 Interoperability `36258654316`. The cross-runner proof passed on both hosted architectures with three marked frames, hard transport loss, adjacency expiry/recovery, bridge reconnect and client switch restart using pinned `tuklusan/vde-2`. Credentials/endpoints remain GitHub Actions secrets. Phase 9 may proceed from this unchanged green protocol candidate.
 
-## Phase 9 - scale, portability, real peers and release images
+## Phase 9 - scale, portability, real peers and portable source release
 
-Deliver 4/8/16-node routed topologies across one or more runners, both CPU architectures and mixed directions, maintained distro portability, HECnet and real DEC peers, physical mixed-CPU testing, self-booting QCOW2/RAW images, checksums and reproducible manifests.
+Deliver 4/8/16-node routed topologies across one or more runners, both CPU architectures and mixed directions, maintained distro/kernel portability, HECnet and real DEC peers, physical mixed-CPU testing, and one reproducible source tarball with build/install/uninstall scripts, checksums, complete feature/component documentation and clean-host installation proof. Disk images are lab-only and are not release artifacts.
 
 Exit criteria: the release candidate passes `docs/PRE_PRODUCTION_TEST.md`, including all applicable external conformance, virtual/distributed topology, VDE2/MULTINET transport, positive/negative, stress/endurance, false-green, real-peer and upgrade/rollback gates.
 
-Status: active. Phase 8 closed fully green on `9b73e61bbd0f95b82410276f7b5dc3db94e219ba`. Routed scale 4/8/16, maintained-distro GCC/Clang portability, release-image reproducibility, dual-architecture firmware boot and the 1/2/4/8-vCPU SMP breadth are promotion-green. The custom-kernel diagnostic matrix is exact-SHA green for dual-architecture KASAN, KCSAN, the license-compatible lockdebug subset and kmemleak, alongside production-kernel KFENCE/UBSAN. Phase 9 now advances through the blocking harness/evidence false-green gates in `docs/PRE_PRODUCTION_TEST.md`, then the remaining real/physical-peer, release-recovery, stress and endurance work. Bootable image formats under `image/**` remain Git-LFS attributed for any repository-tracked image payloads.
+Status: active. Phase 8 closed fully green on `9b73e61bbd0f95b82410276f7b5dc3db94e219ba`. Routed scale 4/8/16, maintained-distro GCC/Clang portability and the 1/2/4/8-vCPU SMP breadth are established acceptance evidence. Earlier bootable-image experiments are retained only as historical/lab evidence and no longer define a product deliverable. Phase 9 now requires the portable source-release contract in `docs/DELIVERY.md`: reproducible source archive, clean extracted-tree build, complete manifested installation/uninstallation on x86_64/aarch64, maintained-kernel compatibility and all remaining canonical PP evidence.

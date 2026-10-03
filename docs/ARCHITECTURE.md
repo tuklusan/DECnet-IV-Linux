@@ -33,11 +33,13 @@ Userspace is built against the new kernel ABI. The target is the useful DECnet/L
 
 Historical behavior is implemented, replaced by a documented modern equivalent, explicitly retired with justification, or deferred behind a tracked protocol dependency. Point-to-point Internet lab connectivity is a userspace concern: the supported path is PyDECnet-derived MULTINET TCP, normally fronting a VDE Ethernet segment.
 
-## Distribution image
+## Source distribution and target systems
 
-Phase 2 uses pinned Ubuntu Base 26.04.1 LTS amd64 and arm64 root filesystems. The acceptance lab assembles the image before boot and direct-boots its exact kernel/initrd, avoiding installer and runtime provisioning machinery. Release images remain QCOW2-first, with RAW and conversion formats later.
+The production deliverable is a source tarball, not a Linux distribution image. It targets existing x86_64 and aarch64 Linux systems with Linux 6.12 or later, matching external-module kernel headers/build tree, a supported C compiler and the dependencies listed in `INSTALL.md`. The kernel module is built on the target for the selected kernel; no prebuilt project kernel or `decnet_iv.ko` is required.
 
-A graphical desktop is not part of the protocol acceptance path. Any later GUI layer must remain optional and must not enlarge or destabilize the core DECnet image unnecessarily.
+Forward compatibility is maintained by portability/compatibility gates against maintained distro kernels and current validated upstream kernel lines. Unknown future kernel API changes are corrected when published and retained as compatibility regressions.
+
+The Ubuntu/QEMU disk machinery under `image/` and `tests/lab/` exists only to create independent disposable acceptance nodes. QCOW2/RAW/IMG/ISO files are not production deliverables.
 
 ## Testing
 

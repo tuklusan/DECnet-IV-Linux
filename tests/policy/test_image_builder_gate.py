@@ -13,7 +13,7 @@
 # patent, trademark, and governing-law provisions.
 # ============================================================================
 
-"""Gate release images, persistent foundations and disposable candidate images."""
+"""Gate lab-only persistent foundations and disposable candidate images."""
 
 from __future__ import annotations
 
@@ -23,7 +23,6 @@ import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-RELEASE_BUILDER = "image/ubuntu-base/build-image.sh"
 FOUNDATION_BUILDER = "image/ubuntu-base/build-foundation.sh"
 ARM64_NORMALIZER = "image/ubuntu-base/normalize-arm64-kernel.sh"
 CANDIDATE_BUILDER = "tests/lab/prepare-candidate-image.sh"
@@ -178,31 +177,12 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
-        release, source_label = read_path(RELEASE_BUILDER, args.staged, args.tree)
-        foundation = read_path(FOUNDATION_BUILDER, args.staged, args.tree)[0]
+        foundation, source_label = read_path(FOUNDATION_BUILDER, args.staged, args.tree)
         normalizer = read_path(ARM64_NORMALIZER, args.staged, args.tree)[0]
         candidate = read_path(CANDIDATE_BUILDER, args.staged, args.tree)[0]
         reference = read_path(REFERENCE_BUILDER, args.staged, args.tree)[0]
     except (OSError, subprocess.CalledProcessError) as exc:
         raise SystemExit(f"image-builder gate: cannot read exact source: {exc}") from exc
-
-    release_packages = install_tokens(release)
-    release_required = {"initramfs-tools", "linux-image-virtual-hwe-26.04", "linux-headers-virtual-hwe-26.04"}
-    missing = sorted(release_required - release_packages)
-    if missing:
-        raise SystemExit("image-builder gate: release direct-boot package(s) missing: " + ", ".join(missing))
-    if INITRD_CHECK not in release:
-        raise SystemExit("image-builder gate: release image does not validate generated initrd")
-    for marker in (
-        'sudo cmp -s "$smoke_script_source" "$smoke_script_dest"',
-        'systemd-analyze verify /etc/systemd/system/dniv-smoke.service',
-        '"$arm64_normalizer" "$kernel" "$boot_dir/vmlinuz" "build-image"',
-        'qemu-img check -f qcow2 "$output"',
-        'qemu-img compare -f raw -F qcow2 "$raw" "$output"',
-    ):
-        if marker not in release:
-            raise SystemExit(f"image-builder gate: release image safeguard missing: {marker}")
-    reject_bad_image_compare("release image", release)
 
     foundation_packages = install_tokens(foundation)
     foundation_required_packages = {
@@ -223,7 +203,6 @@ def main() -> int:
     reject_bad_image_compare("architecture foundation", foundation)
 
     require_snippets("arm64 kernel normalizer", normalizer, NORMALIZER_REQUIRED)
-    require_normalizer_binding("release image", release, normalizer)
     require_normalizer_binding("architecture foundation", foundation, normalizer)
 
     require_snippets("disposable candidate", candidate, CANDIDATE_REQUIRED)
@@ -238,7 +217,7 @@ def main() -> int:
 
     print(
         "image-builder gate: source=" + source_label
-        + " release image, source-independent architecture foundation, raw arm64 kernel, and exact-candidate disposable layers verified"
+        + " lab-only source-independent architecture foundation, raw arm64 kernel, and exact-candidate disposable layers verified"
     )
     return 0
 

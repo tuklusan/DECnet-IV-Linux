@@ -283,13 +283,13 @@ jobs:
             esac
           fi
           case "$profile" in fast|targeted|consolidated|full) ;; *) echo "bad acceptance profile: $profile" >&2; exit 2 ;; esac
-          case "$scope" in all|socket|routing|pp11-pressure) ;; *) echo "bad acceptance scope: $scope" >&2; exit 2 ;; esac
-          if [[ "$profile" == targeted && "$scope" != pp11-pressure ]]; then
-            echo "targeted acceptance currently requires SCOPE=pp11-pressure" >&2
+          case "$scope" in all|socket|routing|pp11-pressure|source-release) ;; *) echo "bad acceptance scope: $scope" >&2; exit 2 ;; esac
+          if [[ "$profile" == targeted && "$scope" != pp11-pressure && "$scope" != source-release ]]; then
+            echo "targeted acceptance requires SCOPE=pp11-pressure or SCOPE=source-release" >&2
             exit 2
           fi
-          if [[ "$profile" != targeted && "$scope" == pp11-pressure ]]; then
-            echo "SCOPE=pp11-pressure requires PROFILE=targeted" >&2
+          if [[ "$profile" != targeted && ( "$scope" == pp11-pressure || "$scope" == source-release ) ]]; then
+            echo "targeted-only scope requires PROFILE=targeted" >&2
             exit 2
           fi
           if [[ "$pp10_retry_probe" == true && "$profile" != full ]]; then
@@ -366,6 +366,10 @@ jobs:
               -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
           fi
 
+          if [[ "$profile" == targeted && "$scope" == source-release ]]; then
+            dispatch_and_record SOURCE_RELEASE source-release.yml \
+              -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
+          else
           printf 'VM_LAB_E1=vm-lab.yml:e1\n' >> "$DNIV_SCRATCH_DIR/dispatch.env"
           dispatch_and_record VM_LAB_E1 vm-lab.yml \
             -f lab_mode=e1 -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
@@ -457,8 +461,9 @@ jobs:
           fi
 
           if [[ "$profile" == full ]]; then
-            dispatch_and_record RELEASE_IMAGE release-image.yml \
+            dispatch_and_record SOURCE_RELEASE source-release.yml \
               -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
+          fi
           fi
 
           if [[ "$GITHUB_EVENT_NAME" == issues ]]; then

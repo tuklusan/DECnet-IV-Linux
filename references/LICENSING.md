@@ -14,7 +14,7 @@
 
 # Reference Licensing and Redistribution
 
-The root project license does not relicense third-party material. Every imported source, extract or future vendored artifact remains subject to its original copyright and license.
+The root project license does not relicense third-party material. Every imported source, extract or future vendored artifact remains subject to its original copyright and license. The production source tarball is built from this repository's tracked tree and does not vendor the pinned Route20, PyDECnet, LinuxDECnet, SIMH or VDE2 repositories.
 
 Rules for this directory:
 

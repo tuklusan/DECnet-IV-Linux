@@ -29,6 +29,8 @@ tests/lab/artifacts/
 *.raw
 *.img
 *.iso
+*.tar.xz
+*.tar.xz.sha256
 *.pcap
 *.log
 .DS_Store

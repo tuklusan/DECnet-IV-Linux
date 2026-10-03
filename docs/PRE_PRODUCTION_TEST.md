@@ -40,7 +40,7 @@ A reference result proves that reference only. It does not prove this implementa
 
 Each semantic invariant has one canonical `PP-xx` home. Two cases are duplicates only when they prove the same invariant with the same failure meaning. The stronger canonical case wins: exact legal vectors plus boundaries plus malformed input plus recovery is preferred over a simple happy path.
 
-These are dimensions, not duplicates: x86_64/aarch64; 1/2/4/8 vCPU; endnode/L1/L2; Phase III/IV where supported; Ethernet/VDE2/MULTINET transport; Linux/self versus independent peer; single LAN/routed/multi-area; first-start/restart/upgrade; clean/faulted transport; size/timer/table boundaries; kernel/toolchain/driver variants; and release-image versus development-image execution.
+These are dimensions, not duplicates: x86_64/aarch64; 1/2/4/8 vCPU; endnode/L1/L2; Phase III/IV where supported; Ethernet/VDE2/MULTINET transport; Linux/self versus independent peer; single LAN/routed/multi-area; first-start/restart/upgrade; clean/faulted transport; size/timer/table boundaries; kernel/toolchain/driver variants; and extracted-source-release versus repository-checkout execution.
 
 Every upstream test is classified as one of:
 
@@ -119,7 +119,7 @@ Boundary coverage is not satisfied by the words `minimum` and `maximum`. Test th
 
 ## Development versus promotion execution
 
-The complete procedure below defines production acceptance coverage; it does not require every production case to run after every development increment. Exact-SHA development uses three execution depths documented in `docs/TEST_LAB.md`: fast, consolidated and full. Fast and consolidated runs reduce redundant repetition while preserving the full catalogue for scheduled nightly revalidation and mandatory phase/release promotion. Only a full run can satisfy a phase-closure or release acceptance claim.
+The complete procedure below defines production acceptance coverage; it does not require every production case to run after every development increment. Exact-SHA development uses bounded targeted/fast/consolidated execution plus full promotion coverage as documented in `docs/TEST_LAB.md`. Reduced profiles eliminate unrelated repetition while preserving the full catalogue for scheduled weekly revalidation and mandatory phase/release promotion. Only a full run can satisfy a phase-closure or release acceptance claim.
 
 Scenario parallelism is an execution optimization only. Splitting independent interoperability scenarios into separate jobs does not change their assertions, peer pins, evidence rules or pass criteria.
 
@@ -127,13 +127,13 @@ Scenario parallelism is an execution optimization only. Splitting independent in
 
 ### PP-00 — provenance, source health, build and reproducibility
 
-Record exact DECnet-IV-Linux commit/tree, all reference SHAs, kernel/compiler/configuration and release artifact hashes. Build module/userspace/unit tests natively on x86_64 and aarch64, oldest/newest supported kernels and both supported compilers. Run appropriate kernel warning/static-analysis modes.
+Record the exact DECnet-IV-Linux commit/tree, source-tarball SHA-256, all reference SHAs, kernel/compiler/configuration and installed-artifact hashes. Build module/userspace/unit tests natively on x86_64 and aarch64, the supported kernel floor plus maintained/current validated kernel lines, and both supported compiler families where the kernel build permits them. Run appropriate kernel warning/static-analysis modes.
 
 Build the exact Route20 pin. Run the repository-maintained in-scope PyDECnet native module set unmodified. Build applicable LinuxDECnet tools/libraries and run `dnprogs/libvaxdata/src/test.c` as reference health; it also becomes mapped PP-07 evidence when VAX/RMS conversion is claimed. Build the exact selected SIMH DEC-host target with tests enabled and retain target-specific per-simulator test output for the VAX/PDP-11/DEC CPU, storage, Ethernet and timer path used by PP-12. Serial/synchronous DECnet media are outside this project's transport claim. Unrelated simulator families remain reference-health only.
 
-Build the release/test image twice from identical inputs and compare documented reproducibility outputs. Verify base image, kernel, initrd, module, userspace, overlay and checkpoint hashes. Resume only a checkpoint matching architecture, exact source revision and mode.
+Build the source release tarball twice from identical inputs and require byte-for-byte equality. The archive must contain no `.git` directory, generated object/module files or QCOW2/RAW/IMG/ISO payloads. Extract it into a clean directory and execute the documented `build.sh`, staged `install.sh` and `uninstall.sh` on both native architectures. The installed component manifest must cover the complete delivered kernel/userspace/header/library/documentation set.
 
-Mandatory negatives: wrong/missing pin; partial/bad download; checksum mismatch; unavailable/bad snapshot; failed certificate bootstrap; disk/inode/output-space exhaustion; interrupted extraction/build/image conversion; partial artifact rejection; corrupt/missing checkpoint member; wrong architecture/revision/mode; evidence directory unavailable/full/read-only.
+Mandatory negatives: wrong/missing pin; partial/bad source download; source checksum mismatch; truncated/corrupt archive; missing `SOURCE-METADATA`; generated binary/disk payload accidentally entering the source archive; missing/wrong kernel headers; unsupported kernel build tree; compiler/Python below the declared floor; interrupted extraction/build/install; non-root live install; unsafe uninstall manifest; wrong architecture/revision/mode; output/evidence directory unavailable/full/read-only.
 
 ### PP-01 — vectors, codecs, properties, models and differential checks
 
@@ -250,13 +250,13 @@ The first executable PP-11 increment makes native socket churn count explicit an
 
 The second executable PP-11 increment adds a dedicated two-VM `pp11s1` full-profile gate on both amd64 and arm64 with two vCPUs per guest. Each architecture executes exactly 100 counted disruptive cycles under continuously offered DECnet raw and MIRROR application traffic: 10 module reloads, 20 interface down/up cycles, 20 runtime identity changes/restores, 20 explicit peer-restart cycles observed as adjacency loss/recovery from the opposite VM, 20 host TAP detach/reattach topology cycles and 10 QMP reset/reboot cycles. Every cycle requires post-fault MIRROR recovery; the peer observer must account for all 35 guest-local disruptions per side. The gate retains cycle/fault timelines, PCAP, serial logs, host RSS/thread/CPU samples and guest link/adjacency/route/memory/slab snapshots before and after churn. Predeclared service limits require at least 40 successful MIRROR batches and 100 raw traffic markers per guest, p99 successful MIRROR latency no greater than 20 seconds, aggregate application payload throughput at least 25 B/s, both vCPUs exercised by application calls, final adjacency restored, at most eight live NSP links and slab growth within a 64 MiB envelope. This closes the explicit 100-cycle disruptive-churn floor only after exact-SHA execution is retained; repeated sequence-wrap/table/queue and malformed/control-flood pressure still remain before S1 can be declared complete.
 
-### PP-12 — real peers and exact release image
+### PP-12 — real peers and exact source release
 
-Use exact pinned SIMH to host available real DEC operating systems and physical DEC systems where available. QCOCAL and IMPVAX are available SIMH-emulated VAX machines running OpenVMS and are the project's named SIMH/OpenVMS peers for PP-12 and any earlier/later PP case that explicitly requires SIMH machines. Prefer more than one DEC OS/version/role when practical. Local lab hosts may install pinned `tuklusan/simh` and create one or more RSX-11M-PLUS V4.6 instances when that adds useful independent DEC coverage. Required RSX/SIMH resources may be copied from MIM `1.13`, reachable through PYRTR `31.3`, but MIM itself is read-only: use only valid DECnet access methods, make no remote changes, run no load/stress/fault tests against it, and document the complete local acquisition/checksum/install/configuration/DECnet setup procedure. Use the exact hashed release QCOW2/RAW artifact, never a repaired development filesystem.
+Use exact pinned SIMH to host available real DEC operating systems and physical DEC systems where available. QCOCAL and IMPVAX are available SIMH-emulated VAX machines running OpenVMS and are the project's named SIMH/OpenVMS peers for PP-12 and any earlier/later PP case that explicitly requires SIMH machines. Prefer more than one DEC OS/version/role when practical. Local lab hosts may install pinned `tuklusan/simh` and create one or more RSX-11M-PLUS V4.6 instances when that adds useful independent DEC coverage. Required RSX/SIMH resources may be copied from MIM `1.13`, reachable through PYRTR `31.3`, but MIM itself is read-only: use only valid DECnet access methods, make no remote changes, run no load/stress/fault tests against it, and document the complete local acquisition/checksum/install/configuration/DECnet setup procedure. Build and install only from the exact hashed source tarball being accepted; repository-checkout or repaired-image substitutions do not satisfy PP-12 source provenance.
 
 Test cold/warm boot, NIC early/late/initially down, configured startup, adjacency/routing, NSP/Session/NICE, every claimed user tool, service/module restart and repeated reboot only on project-controlled local/SIMH systems. **Never power-cycle, shut down, reboot, pause, resume, hard-stop, or otherwise change the running state of any machine reached beyond PYRTR (31.3) over the MULTINET/HECnet uplink.** Remote HECnet peers beyond PYRTR are observation/traffic peers only. Include disruptive peer restart/hard-stop tests only on locally controlled peers such as QCOCAL/IMPVAX or disposable lab VMs; retain non-disruptive wrong-credentials/object/node and interrupted-transfer checks against remote peers where safe.
 
-Hard-power/storage recovery is mandatory for the release image: terminate selected VMs without orderly shutdown during idle, control churn and file/application activity; boot the same disk afterward; require filesystem/release-integrity checks, no silent configuration corruption, no stale protocol state and valid subsequent network/application behavior. No one-off patch/manual repair is allowed after the release image hash is fixed.
+Release-install recovery is mandatory for the source distribution: exercise clean install, reinstall over the same version, interrupted/staged-install failure, module unload/reload, kernel reboot on project-controlled systems, and manifest-driven uninstall. A failed install must not leave an untracked partial module/library/tool set. After reinstall or recovery, required network/application behavior must remain valid. No one-off source patch or manual repair is allowed after the source-tarball hash is fixed.
 
 ### PP-13 — upgrade, downgrade, rollback and mixed-version compatibility
 
@@ -341,7 +341,7 @@ SIMH is a simulator dependency, not a DECnet protocol oracle. At `5b73b1032b52d1
 | HECnet Area-31 controlled routing | PP-09 |
 | harness false-green | PP-10 |
 | 2→4→8→16 stress/endurance | PP-11 |
-| real DEC/release image | PP-12 |
+| real DEC/exact source release | PP-12 |
 | upgrade/rollback/mixed version | PP-13 once N-1 exists |
 
 Current `tests/lab/dniv-smoke.sh` and `run-two-node.sh` implement only the currently automated subset. A future PP case is not green merely because the present harness has no mode for it.
@@ -350,7 +350,7 @@ Current `tests/lab/dniv-smoke.sh` and `run-two-node.sh` implement only the curre
 
 `docs/PP_EVIDENCE.md` is the canonical repository-tracked proof index. Every executed canonical PP case must get an entry tying its result to the exact candidate, workflow/run/job and retained artifact/log evidence. Owner-authorized skips and every impossible post-Timing requirement must also appear there explicitly; the ledger never substitutes for the raw artifacts.
 
-Retain exact source commit/tree; reference SHAs; kernel/compiler/configuration/harness version; image/kernel/initrd/module/userspace/overlay hashes; architecture/vCPU/driver/offload/MTU/topology/identity/media; canonical case and stress level; random/fuzz/fault seed; requested and actual injection counts; packet/VDE2/MULTINET traces where transport behavior matters; complete serial/kernel/service/application logs; state/counter/resource snapshots before/during/after fault and after quiescence; fault/topology timeline; duration/packet/session/byte/restart/churn counts; measured distributions; diagnostic output; and explicit pass/fail for every canonical case/applicable negative family.
+Retain exact source commit/tree and source-tarball SHA-256; reference SHAs; kernel/compiler/configuration/harness version; built module/userspace/library/header/install-manifest hashes; architecture/vCPU/driver/offload/MTU/topology/identity/media; canonical case and stress level; random/fuzz/fault seed; requested and actual injection counts; packet/VDE2/MULTINET traces where transport behavior matters; complete serial/kernel/service/application logs; state/counter/resource snapshots before/during/after fault and after quiescence; fault/topology timeline; duration/packet/session/byte/restart/churn counts; measured distributions; diagnostic output; and explicit pass/fail for every canonical case/applicable negative family.
 
 Missing mandatory evidence invalidates the run.
 
@@ -358,7 +358,7 @@ Missing mandatory evidence invalidates the run.
 
 A failed test remains a failure of that exact candidate until explained/fixed or the test itself is proven invalid. Retrying until green does not erase the first failure. Every discovered protocol, kernel or harness defect gains the smallest practical permanent regression test; minimized fuzz vectors and exact fault seeds join the corpus.
 
-After any code, test, image, workflow or acceptance-document change:
+After any code, test-lab infrastructure, source-release workflow or acceptance-document change:
 
 1. invalidate prior-candidate promotion status;
 2. run exact-SHA mechanical/build/state plus the smallest fail-closed VM/protocol/interoperability gate that directly exercises the changed behavior and its required architecture coverage;
@@ -366,7 +366,7 @@ After any code, test, image, workflow or acceptance-document change:
 4. do not launch the full repository-wide matrix after every intermediate fix. Full acceptance is reserved for closing a canonical PP increment, deliberate release/pre-production checkpoints, the weekly scheduled regression, or an explicit owner request;
 5. promote only the exact unchanged commit whose required canonical evidence and final full matrix are green.
 
-`PROFILE=targeted` is the bounded development profile for a named expensive gate. Its scope must identify the exact target and must not silently stand in for final full acceptance. The initial target is `SCOPE=pp11-pressure`: Build Bootstrap, Project State, dual-architecture E1, and only the amd64/arm64 PyDECnet L1 pressure jobs.
+`PROFILE=targeted` is the bounded development profile for a named expensive gate. Its scope must identify the exact target and must not silently stand in for final full acceptance. `SCOPE=pp11-pressure` runs Build Bootstrap, Project State, dual-architecture E1 and only the amd64/arm64 PyDECnet L1 pressure jobs. `SCOPE=source-release` runs Build Bootstrap, Project State and the dual-architecture source-tarball reproducibility/build/install/uninstall gate.
 
 ## Final pre-production gate
 

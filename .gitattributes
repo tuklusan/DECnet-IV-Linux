@@ -12,8 +12,5 @@
 # patent, trademark, and governing-law provisions.
 # ============================================================================
 
-# Bootable disk/image payloads under image/ use Git LFS when committed.
-image/**/*.qcow2 filter=lfs diff=lfs merge=lfs -text
-image/**/*.raw filter=lfs diff=lfs merge=lfs -text
-image/**/*.img filter=lfs diff=lfs merge=lfs -text
-image/**/*.iso filter=lfs diff=lfs merge=lfs -text
+# Production delivery is source-only. Generated VM/disk artifacts remain ignored
+# by .gitignore and must never be committed as release payloads.

@@ -26,7 +26,6 @@ from typing import Callable
 
 WORKFLOW_ROOT = ".github/workflows/"
 MAX_JOB_MINUTES = 75
-MAX_RELEASE_IMAGE_JOB_MINUTES = 120
 MAX_DISTRIBUTED_JOB_MINUTES = 120
 MAX_EVIDENCE_DAYS = 30
 MAX_INTEROP_SCENARIOS_PER_JOB = 1
@@ -39,7 +38,7 @@ ACTION_PINS = {
 }
 CHILD_WORKFLOWS = {
     "build.yml", "project-state.yml", "reference-baselines.yml", "vm-lab.yml", "interop.yml",
-    "kernel-diagnostics.yml", "false-green.yml",
+    "kernel-diagnostics.yml", "false-green.yml", "source-release.yml",
 }
 JOB_RE = re.compile(r"^  ([A-Za-z0-9_-]+):\s*$")
 TIMEOUT_RE = re.compile(r"^    timeout-minutes:\s*([0-9]+)\s*$")
@@ -132,9 +131,7 @@ def check_workflow(path: str, text: str) -> list[str]:
         if len(values) != 1:
             errors.append(f"{path}: job {job_name} must declare exactly one timeout-minutes")
         else:
-            if name == "release-image.yml":
-                max_minutes = MAX_RELEASE_IMAGE_JOB_MINUTES
-            elif name == "scale16-distributed.yml":
+            if name == "scale16-distributed.yml":
                 max_minutes = MAX_DISTRIBUTED_JOB_MINUTES
             else:
                 max_minutes = MAX_JOB_MINUTES
@@ -320,7 +317,7 @@ def main() -> int:
         for error in errors:
             print(f"workflow-budget: {error}", file=sys.stderr)
         return 1
-    print(f"workflow-budget: source={source_label} files={len(paths)} jobs<={MAX_JOB_MINUTES}m release-image<={MAX_RELEASE_IMAGE_JOB_MINUTES}m distributed<={MAX_DISTRIBUTED_JOB_MINUTES}m artifacts<={MAX_EVIDENCE_DAYS}d evidence=fail-closed+attempt-preserved queue=max actions=pinned interop-scenarios/job<={MAX_INTEROP_SCENARIOS_PER_JOB}")
+    print(f"workflow-budget: source={source_label} files={len(paths)} jobs<={MAX_JOB_MINUTES}m distributed<={MAX_DISTRIBUTED_JOB_MINUTES}m artifacts<={MAX_EVIDENCE_DAYS}d evidence=fail-closed+attempt-preserved queue=max actions=pinned interop-scenarios/job<={MAX_INTEROP_SCENARIOS_PER_JOB}")
     return 0
 
 

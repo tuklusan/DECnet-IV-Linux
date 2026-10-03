@@ -38,6 +38,7 @@ userspace:
 
 unit:
 	$(MAKE) -C tests/unit test
+	python3 tests/policy/test_source_release_gate.py
 	python3 tests/lab/vax/make-http-com.py --selftest
 	python3 tests/lab/vax/make-task-com.py --selftest
 	python3 -m py_compile tests/lab/area31-find-node.py

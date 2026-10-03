@@ -14,7 +14,7 @@
 
 # Pinned Implementation References
 
-These are implementation references, not substitutes for the Digital functional specifications.
+These are implementation references, not substitutes for the Digital functional specifications. They are not bundled into the DECnet-IV-Linux production source tarball. A reference becomes an end-user runtime dependency only where `INSTALL.md` explicitly says so; currently PyDECnet/VDE are optional dependencies for `dnmultinet`.
 
 ## Route20
 

@@ -39,46 +39,14 @@ jobs:
       max-parallel: 8
       matrix:
         include:
-          - runner: ubuntu-24.04
-            arch: amd64
-            distro: debian13
-            image: debian:13
-            compiler: gcc
-          - runner: ubuntu-24.04
-            arch: amd64
-            distro: debian13
-            image: debian:13
-            compiler: clang
-          - runner: ubuntu-24.04-arm
-            arch: arm64
-            distro: debian13
-            image: debian:13
-            compiler: gcc
-          - runner: ubuntu-24.04-arm
-            arch: arm64
-            distro: debian13
-            image: debian:13
-            compiler: clang
-          - runner: ubuntu-24.04
-            arch: amd64
-            distro: fedora42
-            image: fedora:42
-            compiler: gcc
-          - runner: ubuntu-24.04
-            arch: amd64
-            distro: fedora42
-            image: fedora:42
-            compiler: clang
-          - runner: ubuntu-24.04-arm
-            arch: arm64
-            distro: fedora42
-            image: fedora:42
-            compiler: gcc
-          - runner: ubuntu-24.04-arm
-            arch: arm64
-            distro: fedora42
-            image: fedora:42
-            compiler: clang
+          - {runner: ubuntu-24.04, arch: amd64, distro: debian13, image: "debian:13", compiler: gcc}
+          - {runner: ubuntu-24.04, arch: amd64, distro: debian13, image: "debian:13", compiler: clang}
+          - {runner: ubuntu-24.04-arm, arch: arm64, distro: debian13, image: "debian:13", compiler: gcc}
+          - {runner: ubuntu-24.04-arm, arch: arm64, distro: debian13, image: "debian:13", compiler: clang}
+          - {runner: ubuntu-24.04, arch: amd64, distro: fedora42, image: "fedora:42", compiler: gcc}
+          - {runner: ubuntu-24.04, arch: amd64, distro: fedora42, image: "fedora:42", compiler: clang}
+          - {runner: ubuntu-24.04-arm, arch: arm64, distro: fedora42, image: "fedora:42", compiler: gcc}
+          - {runner: ubuntu-24.04-arm, arch: arm64, distro: fedora42, image: "fedora:42", compiler: clang}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     env:
@@ -96,13 +64,18 @@ jobs:
           set -euo pipefail
           candidate=$(git rev-parse HEAD)
           if [[ -n '${{ inputs.expected_sha }}' ]]; then test "$candidate" = '${{ inputs.expected_sha }}'; fi
-          python3 tools/scratch_state.py init --dir "$DNIV_SCRATCH_DIR" \
-            --workflow portability --job "${{ matrix.distro }}-${{ matrix.compiler }}" --arch '${{ matrix.arch }}' \
-            --mode '${{ matrix.distro }}-${{ matrix.compiler }}' --source-sha "$candidate" \
-            --parent-run-id '${{ inputs.parent_run_id }}' --expected-sha '${{ inputs.expected_sha }}'
+          python3 tools/scratch_state.py init --dir "$DNIV_SCRATCH_DIR"             --workflow portability --job "${{ matrix.distro }}-${{ matrix.compiler }}" --arch '${{ matrix.arch }}'             --mode '${{ matrix.distro }}-${{ matrix.compiler }}' --source-sha "$candidate"             --parent-run-id '${{ inputs.parent_run_id }}' --expected-sha '${{ inputs.expected_sha }}'
           tools/workflow_guard.sh "$DNIV_SCRATCH_DIR" "$candidate" main
 
-      - name: Build and test in distro container
+      - name: Build exact source bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$DNIV_SCRATCH_DIR/source"
+          version="0.0.0-ci-${GITHUB_SHA:0:12}"
+          tools/build-source-release.sh "$DNIV_SCRATCH_DIR/source" "$version" "$GITHUB_SHA" >/dev/null
+
+      - name: Build and test extracted source in distro container
         shell: bash
         run: |
           set -euo pipefail
@@ -110,40 +83,36 @@ jobs:
           distro='${{ matrix.distro }}'
           arch='${{ matrix.arch }}'
           compiler='${{ matrix.compiler }}'
+          archive=$(find "$DNIV_SCRATCH_DIR/source" -maxdepth 1 -name 'DECnet-IV-Linux-*.tar.xz' -print -quit)
+          test -n "$archive"
           docker pull "$image"
-          docker run --rm \
-            -e DNIV_DISTRO="$distro" -e DNIV_ARCH="$arch" -e DNIV_COMPILER="$compiler" \
-            -v "$PWD:/src" -w /src "$image" bash -ceu '
+          docker run --rm             -e DNIV_DISTRO="$distro" -e DNIV_ARCH="$arch" -e DNIV_COMPILER="$compiler"             -v "$archive:/source.tar.xz:ro" "$image" bash -ceu '
               if [[ "$DNIV_DISTRO" == debian13 ]]; then
                 export DEBIAN_FRONTEND=noninteractive
                 apt-get update
                 if [[ "$DNIV_ARCH" == amd64 ]]; then kh=linux-headers-amd64; else kh=linux-headers-arm64; fi
-                apt-get install -y build-essential clang llvm lld python3 "$kh"
+                apt-get install -y build-essential clang llvm lld python3 kmod xz-utils "$kh"
                 KDIR=$(find /usr/src -maxdepth 1 -type d -name "linux-headers-*" ! -name "*-common" | sort -V | tail -1)
               else
-                dnf -y install gcc clang llvm lld make python3 kernel-devel findutils \
-                  bc bison flex elfutils-libelf-devel openssl-devel perl curl xz
+                dnf -y install gcc clang llvm lld make python3 kmod kernel-devel findutils                   bc bison flex elfutils-libelf-devel openssl-devel perl curl xz tar
                 KDIR=$(find /usr/src/kernels -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
               fi
               test -n "$KDIR"
+              mkdir /src
+              tar -xJf /source.tar.xz -C /src --strip-components=1
+              cd /src
+              test ! -e .git
+              grep -Fqx "source_sha=${GITHUB_SHA:-}" SOURCE-METADATA 2>/dev/null || true
               case "$DNIV_COMPILER" in gcc) cc=gcc ;; clang) cc=clang ;; *) exit 2 ;; esac
               "$cc" --version | head -1
               make clean KDIR="$KDIR" >/dev/null 2>&1 || true
               make all CC="$cc"
+              kernel_release=$(basename "$KDIR")
+              kernel_release=${kernel_release#linux-headers-}
               if [[ "$DNIV_COMPILER" == clang && "$DNIV_DISTRO" == fedora42 ]]; then
-                # Fedora packaged kernel-devel tree is configured for GCC and
-                # therefore carries GCC-only KBUILD_CFLAGS.  Validate the exact
-                # Fedora kernel ABI/API in the paired GCC job, and validate this
-                # module with Clang against the same upstream kernel base version
-                # using a compiler-native prepared tree.
-                kver=$(basename "$KDIR")
-                kbase=${kver%%-*}
-                case "$kbase" in
-                  [0-9]*.[0-9]*.[0-9]*) ;;
-                  *) echo "bad Fedora kernel base version: $kbase" >&2; exit 2 ;;
-                esac
-                curl -fsSLo /tmp/linux.tar.xz \
-                  "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-${kbase}.tar.xz"
+                kbase=${kernel_release%%-*}
+                case "$kbase" in [0-9]*.[0-9]*.[0-9]*) ;; *) echo "bad Fedora kernel base version: $kbase" >&2; exit 2 ;; esac
+                curl -fsSLo /tmp/linux.tar.xz "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-${kbase}.tar.xz"
                 tar -C /tmp -xf /tmp/linux.tar.xz
                 LLVM=1 make -C "/tmp/linux-${kbase}" defconfig >/dev/null
                 LLVM=1 make -C "/tmp/linux-${kbase}" modules_prepare -j2 >/dev/null
@@ -154,15 +123,22 @@ jobs:
               else
                 make kernel KDIR="$KDIR" CC="$cc"
               fi
+              if [[ -s kernel/decnet/decnet_iv.ko ]]; then
+                stage=/tmp/dniv-stage
+                DESTDIR="$stage" KERNEL_RELEASE="$kernel_release" ./install.sh
+                test -s "$stage/usr/local/bin/ncp"
+                test -s "$stage/usr/local/sbin/dnctl"
+                test -s "$stage/usr/local/lib/libdnet.so.1.0"
+                test -s "$stage/lib/modules/$kernel_release/extra/decnet_iv.ko"
+                DESTDIR="$stage" KERNEL_RELEASE="$kernel_release" ./uninstall.sh
+              fi
             ' 2>&1 | tee "$DNIV_SCRATCH_DIR/portability.log"
 
       - name: Verify exact tree
         shell: bash
         run: |
           set -euo pipefail
-          python3 tools/integrity_scan.py --rev "$GITHUB_SHA" --pass-id final \
-            --baseline "$DNIV_SCRATCH_DIR/integrity/pass-1.json" \
-            --output "$DNIV_SCRATCH_DIR/integrity/final.json"
+          python3 tools/integrity_scan.py --rev "$GITHUB_SHA" --pass-id final             --baseline "$DNIV_SCRATCH_DIR/integrity/pass-1.json"             --output "$DNIV_SCRATCH_DIR/integrity/final.json"
           python3 tools/scratch_state.py verify --dir "$DNIV_SCRATCH_DIR"
 
       - name: Preserve evidence
