@@ -18,8 +18,9 @@ tests.test_config
 tests.test_crc
 tests.test_ethernet
 tests.test_event
-tests.test_gre
-tests.test_host
+tests.test_gre.TestGre4
+tests.test_host.TestHost.test_goodhost4
+tests.test_host.TestHost.test_badhost2
 tests.test_mirror
 tests.test_modulo
 tests.test_mop

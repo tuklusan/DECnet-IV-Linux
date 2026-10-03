@@ -82,16 +82,34 @@ def main() -> int:
         if "Fedora 42" in value or "Fedora 44" not in value:
             raise SystemExit(f"source-release gate: stale Fedora portability documentation remains in {doc}")
     reference_tests = read_text("tests/reference/pydecnet-in-scope-tests.txt")
-    if any(line.strip() == "tests.test_multinet" for line in reference_tests.splitlines()):
-        raise SystemExit("source-release gate: broad PyDECnet MULTINET module still makes UDP/IPv6 cases blocking")
+    broad_reference_modules = {
+        "tests.test_gre": "GRE IPv6",
+        "tests.test_host": "host dual-stack/IPv6",
+        "tests.test_multinet": "MULTINET UDP/IPv6",
+    }
+    for line in reference_tests.splitlines():
+        selected = line.strip()
+        if selected in broad_reference_modules:
+            raise SystemExit(
+                f"source-release gate: broad PyDECnet {selected} module still makes "
+                f"{broad_reference_modules[selected]} cases blocking"
+            )
     for marker in (
+        "tests.test_gre.TestGre4",
+        "tests.test_host.TestHost.test_goodhost4",
+        "tests.test_host.TestHost.test_badhost2",
         "tests.test_multinet.TestMultinetTCPconnect",
         "tests.test_multinet.TestMultinetTCPconnectLate",
         "tests.test_multinet.TestMultinetTCPlisten",
     ):
         if marker not in reference_tests:
-            raise SystemExit(f"source-release gate: IPv4-only MULTINET reference class missing: {marker}")
+            raise SystemExit(f"source-release gate: IPv4-only reference selector missing: {marker}")
     for excluded in (
+        "TestGre6",
+        "test_goodhost46",
+        "test_goodhost446",
+        "test_goodhost466",
+        "test_goodhost6",
         "TestMultinetTCPconnect2",
         "TestMultinetTCP6listen",
         "TestMultinetTCP46listen",
@@ -99,7 +117,7 @@ def main() -> int:
         "TestMultinetUDPnodest",
     ):
         if excluded in reference_tests:
-            raise SystemExit(f"source-release gate: out-of-scope MULTINET reference class selected: {excluded}")
+            raise SystemExit(f"source-release gate: out-of-scope IPv6/UDP reference selector selected: {excluded}")
 
     preproduction = read_text("docs/PRE_PRODUCTION_TEST.md")
     if "`run-two-node.sh`" in preproduction:

@@ -300,8 +300,8 @@ The repository-maintained in-scope native module set at `9a844987bf3a1450632dee8
 | `test_crc.py` | mapped PP-01 for applicable protocol checksums/CRC machinery; generic machinery reference-health |
 | `test_ethernet.py` | mapped PP-01/PP-03/PP-05 |
 | `test_event.py` | mapped PP-07 when management events are claimed; otherwise feature-gated/reference-health |
-| `test_gre.py` | reference-health; feature-gated if GRE is claimed |
-| `test_host.py` | mapped PP-07 |
+| `test_gre.py` | reference-health only for the explicit IPv4 `TestGre4` class selected by `tests/reference/pydecnet-in-scope-tests.txt`; IPv6 GRE is outside project scope |
+| `test_host.py` | mapped PP-07 only for the explicit IPv4 `test_goodhost4` and `test_badhost2` methods selected by `tests/reference/pydecnet-in-scope-tests.txt`; dual-stack/IPv6 host cases are outside project scope |
 | `test_mirror.py` | mapped PP-07 |
 | `test_modulo.py` | mapped PP-01/PP-06/PP-08 where applicable |
 | `test_mop.py` | reference-health; feature-gated if MOP is claimed |
