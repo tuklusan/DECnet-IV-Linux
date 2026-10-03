@@ -12,6 +12,7 @@
 # SANYALnet Labs." See LICENSE for full terms, warranty disclaimer, termination,
 # patent, trademark, and governing-law provisions.
 # ============================================================================
+
 set -euo pipefail
 if [[ $# -ne 3 ]]; then echo "usage: $0 OUTPUT_DIR VERSION SOURCE_SHA" >&2; exit 2; fi
 output_dir=$1

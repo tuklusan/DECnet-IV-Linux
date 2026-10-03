@@ -12,6 +12,7 @@
 # SANYALnet Labs." See LICENSE for full terms, warranty disclaimer, termination,
 # patent, trademark, and governing-law provisions.
 # ============================================================================
+
 set -euo pipefail
 root=$(cd "$(dirname "$0")" && pwd)
 cd "$root"
