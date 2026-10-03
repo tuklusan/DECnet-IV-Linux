@@ -22,6 +22,8 @@
 #include <sys/time.h>
 #include <unistd.h>
 
+#include "../common/record_io.h"
+
 #define MAIL_OBJECT 27U
 #define MAIL11_V3_LEN 16U
 
@@ -127,7 +129,7 @@ static int send_record(int fd, const void *data, size_t len)
 static int recv_ack(int fd)
 {
     unsigned char ack[8];
-    ssize_t got = recv(fd, ack, sizeof(ack), 0);
+    ssize_t got = dniv_recv_record(fd, ack, sizeof(ack), 0);
 
     return got == 4 && ack[0] == 1U && ack[1] == 0U &&
         ack[2] == 0U && ack[3] == 0U ? 0 : -1;

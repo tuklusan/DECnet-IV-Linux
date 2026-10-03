@@ -21,6 +21,8 @@
 #include <sys/time.h>
 #include <unistd.h>
 
+#include "../common/record_io.h"
+
 #include <linux/dn.h>
 #include <decnet_iv_nice.h>
 
@@ -489,7 +491,7 @@ static int receive_multiple(int fd, enum dnnice_query_entity entity,
     unsigned int saw_header = 0U;
 
     for (;;) {
-        ssize_t got = recv(fd, response, sizeof(response), 0);
+        ssize_t got = dniv_recv_record(fd, response, sizeof(response), 0);
         int bad;
 
         if (got <= 0) {
@@ -756,7 +758,7 @@ int main(int argc, char **argv)
         close(fd);
         return bad ? 1 : 0;
     }
-    got = recv(fd, response, sizeof(response), 0);
+    got = dniv_recv_record(fd, response, sizeof(response), 0);
     if (got <= 0) {
         if (got < 0)
             perror("dnnice: recv");

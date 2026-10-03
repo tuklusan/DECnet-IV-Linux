@@ -75,6 +75,7 @@ This catalogue describes the production source release. Lab-only helpers and ind
 - `dnmail` MAIL-11 client including optional v3 Session capability negotiation and multiple-recipient delivery.
 - `dnmaild` object 27 service with legacy/v3 negotiation, local spool delivery, sendmail-compatible execution and bounded direct SMTP delivery; the local `mailbox.log` spool is created owner-only (0600), opened inside `--root` without following symbolic links and rejects multiply linked/non-regular targets.
 - Persistent `dnetd`, `dnfald`, `dnhttpd`, `dnmaild`, `dnphoned`, `dnmirror` and `dnobject` loops isolate malformed or aborted client sessions; explicit bounded/once modes still report session failures.
+- Fixed-buffer DECnet sequenced-packet consumers reject overlong records instead of silently accepting truncated data; the shared receive helper uses `MSG_TRUNC` to recover the original record length and reports `EMSGSIZE` when it exceeds the caller buffer.
 
 ## Generic object dispatch
 

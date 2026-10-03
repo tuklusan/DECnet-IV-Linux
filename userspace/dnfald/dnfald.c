@@ -29,6 +29,8 @@
 #include <sys/xattr.h>
 #include <unistd.h>
 
+#include "../common/record_io.h"
+
 #define DAP_FAL_OBJECT 17U
 #define DAP_CONFIG 1U
 #define DAP_ATTRIBUTES 2U
@@ -295,7 +297,7 @@ static int serve_get(int fd, int rootfd,
             goto fail;
     }
 
-    got = recv(fd, request, sizeof(request), 0);
+    got = dniv_recv_record(fd, request, sizeof(request), 0);
     if (got != 3 || request[0] != DAP_CONTROL || request[2] != DAP_CONTROL_CONNECT)
         goto fail;
     {
@@ -304,7 +306,7 @@ static int serve_get(int fd, int rootfd,
             goto fail;
     }
 
-    got = recv(fd, request, sizeof(request), 0);
+    got = dniv_recv_record(fd, request, sizeof(request), 0);
     if (got != 3 || request[0] != DAP_CONTROL || request[2] != DAP_CONTROL_GET)
         goto fail;
 
@@ -336,7 +338,7 @@ static int serve_get(int fd, int rootfd,
         if (send_record(fd, eof, sizeof(eof)))
             return -1;
     }
-    got = recv(fd, request, sizeof(request), 0);
+    got = dniv_recv_record(fd, request, sizeof(request), 0);
     if (got != 3 || request[0] != DAP_ACCESS_COMPLETE || request[2] != DAP_ACCOMP_CLOSE)
         return -1;
     {
@@ -389,7 +391,7 @@ static int serve_create(int fd, int rootfd,
             goto fail;
     }
 
-    got = recv(fd, request, sizeof(request), 0);
+    got = dniv_recv_record(fd, request, sizeof(request), 0);
     if (got != 3 || request[0] != DAP_CONTROL ||
         request[2] != DAP_CONTROL_CONNECT)
         goto fail;
@@ -399,7 +401,7 @@ static int serve_create(int fd, int rootfd,
             goto fail;
     }
 
-    got = recv(fd, request, sizeof(request), 0);
+    got = dniv_recv_record(fd, request, sizeof(request), 0);
     if (got != 3 || request[0] != DAP_CONTROL ||
         request[2] != DAP_CONTROL_PUT)
         goto fail;
@@ -407,7 +409,7 @@ static int serve_create(int fd, int rootfd,
     for (;;) {
         size_t off;
 
-        got = recv(fd, request, sizeof(request), 0);
+        got = dniv_recv_record(fd, request, sizeof(request), 0);
         if (got < 2)
             goto fail;
         if (request[0] == DAP_DATA) {
@@ -456,7 +458,7 @@ static int serve_rename(int fd, int rootfd,
     if (access_name(access, access_len, DAP_ACCESS_RENAME,
                     oldname, sizeof(oldname)))
         return -1;
-    got = recv(fd, request, sizeof(request), 0);
+    got = dniv_recv_record(fd, request, sizeof(request), 0);
     if (got < 4 || request[0] != 15U || request[2] != 1U)
         return -1;
     n = request[3];
@@ -590,7 +592,7 @@ static int serve_session(int fd, const char *root)
     if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0 ||
         setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)) < 0)
         return -1;
-    got = recv(fd, request, sizeof(request), 0);
+    got = dniv_recv_record(fd, request, sizeof(request), 0);
     if (got < 0 || validate_config(request, (size_t)got))
         return -1;
     reply_len = make_config(reply, sizeof(reply));
@@ -602,7 +604,7 @@ static int serve_session(int fd, const char *root)
     if (rootfd < 0)
         return -1;
 
-    got = recv(fd, request, sizeof(request), 0);
+    got = dniv_recv_record(fd, request, sizeof(request), 0);
     if (got < 0) {
         rc = -1;
         goto out;
@@ -613,7 +615,7 @@ static int serve_session(int fd, const char *root)
             rc = -1;
             goto out;
         }
-        got = recv(fd, request, sizeof(request), 0);
+        got = dniv_recv_record(fd, request, sizeof(request), 0);
         if (got < 0) {
             rc = -1;
             goto out;

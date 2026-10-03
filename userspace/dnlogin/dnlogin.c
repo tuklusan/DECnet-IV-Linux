@@ -28,6 +28,8 @@
 #include <termios.h>
 #include <unistd.h>
 
+#include "../common/record_io.h"
+
 #ifndef AF_DECnet
 #define AF_DECnet 12
 #endif
@@ -231,7 +233,7 @@ static int perform_handshake(int fd)
     ssize_t got;
     size_t len;
 
-    got = recv(fd, buf, sizeof(buf), 0);
+    got = dniv_recv_record(fd, buf, sizeof(buf), 0);
     if (got <= 0 || !validate_bind(buf, (size_t)got)) {
         fprintf(stderr, "dnlogin: invalid Foundation bind\n");
         return -1;
@@ -241,7 +243,7 @@ static int perform_handshake(int fd)
         perror("dnlogin: bind accept");
         return -1;
     }
-    got = recv(fd, buf, sizeof(buf), 0);
+    got = dniv_recv_record(fd, buf, sizeof(buf), 0);
     if (got <= 0 || validate_cterm_initiate(buf, (size_t)got)) {
         fprintf(stderr, "dnlogin: missing CTERM initiate\n");
         return -1;
@@ -808,7 +810,7 @@ static int session(const char *node_text, const struct login_options *options)
         }
         if (!(pfd[0].revents & (POLLIN | POLLHUP)))
             continue;
-        got = recv(fd, buf, sizeof(buf), 0);
+        got = dniv_recv_record(fd, buf, sizeof(buf), 0);
         if (got == 0) {
             rc = 0;
             break;

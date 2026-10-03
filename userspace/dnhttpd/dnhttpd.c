@@ -26,6 +26,8 @@
 #include <sys/time.h>
 #include <unistd.h>
 
+#include "../common/record_io.h"
+
 #define DNHTTP_OBJECT "HTTP"
 #define DNHTTP_BACKLOG 8
 
@@ -147,7 +149,7 @@ static int serve(int fd, const char *root)
     if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) ||
         setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)))
         return -1;
-    got = recv(fd, request, sizeof(request) - 1U, 0);
+    got = dniv_recv_record(fd, request, sizeof(request) - 1U, 0);
     if (got <= 0)
         return -1;
     request[got] = 0;

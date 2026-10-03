@@ -22,6 +22,8 @@
 #include <sys/time.h>
 #include <unistd.h>
 
+#include "../common/record_io.h"
+
 #define PHONE_OBJECT 29U
 #define PHONE_REPLYOK 0x01U
 #define PHONE_CONNECT 0x07U
@@ -168,7 +170,7 @@ int main(int argc, char **argv)
         if (send(fd, buf, total, MSG_EOR | MSG_NOSIGNAL) != (ssize_t)total)
             goto fail;
     }
-    if (recv(fd, &reply, 1U, 0) != 1 || reply != PHONE_REPLYOK)
+    if (dniv_recv_record(fd, &reply, 1U, 0) != 1 || reply != PHONE_REPLYOK)
         goto fail;
     {
         unsigned char dial[128];
@@ -183,7 +185,7 @@ int main(int argc, char **argv)
         if (send(fd, dial, total, MSG_EOR | MSG_NOSIGNAL) != (ssize_t)total)
             goto fail;
     }
-    if (recv(fd, &reply, 1U, 0) != 1 || reply != PHONE_REPLYOK)
+    if (dniv_recv_record(fd, &reply, 1U, 0) != 1 || reply != PHONE_REPLYOK)
         goto fail;
     if (send_packet(fd, PHONE_DATA, source, message, strlen(message)) ||
         send_packet(fd, PHONE_HANGUP, source, NULL, 0U) ||

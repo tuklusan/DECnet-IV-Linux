@@ -22,6 +22,8 @@
 #include <sys/time.h>
 #include <unistd.h>
 
+#include "../common/record_io.h"
+
 #define PHONE_OBJECT 29U
 #define PHONE_REPLYOK 0x01U
 #define PHONE_REPLYNOUSER 0x06U
@@ -93,7 +95,7 @@ static int serve(int fd, const char *user)
         setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)))
         return -1;
 
-    got = recv(fd, buf, sizeof(buf) - 1U, 0);
+    got = dniv_recv_record(fd, buf, sizeof(buf) - 1U, 0);
     if (got == 1 && buf[0] == PHONE_DIRECTORY) {
         char line[192];
         int len = snprintf(line, sizeof(line),
@@ -124,7 +126,7 @@ static int serve(int fd, const char *user)
     if (send_code(fd, PHONE_REPLYOK))
         return -1;
 
-    got = recv(fd, buf, sizeof(buf), 0);
+    got = dniv_recv_record(fd, buf, sizeof(buf), 0);
     if (got < 3 || buf[0] != PHONE_DIAL)
         return -1;
     if (send_code(fd, PHONE_REPLYOK))
@@ -136,7 +138,7 @@ static int serve(int fd, const char *user)
         for (;;) {
             size_t source_len;
 
-            got = recv(fd, buf, sizeof(buf) - 1U, 0);
+            got = dniv_recv_record(fd, buf, sizeof(buf) - 1U, 0);
             if (!got)
                 return seen_data ? 0 : -1;
             if (got < 0)

@@ -22,6 +22,8 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include "../common/record_io.h"
+
 #ifndef AF_DECnet
 #define AF_DECnet 12
 #endif
@@ -268,7 +270,7 @@ static int exchange_config(int fd)
 
     if (!config_len || send_record(fd, config, config_len))
         return -1;
-    got = recv(fd, reply, sizeof(reply), 0);
+    got = dniv_recv_record(fd, reply, sizeof(reply), 0);
     return got > 0 && !validate_config(reply, (size_t)got) ? 0 : -1;
 }
 
@@ -291,7 +293,7 @@ static int connect_fal(const char *node_text, const struct access_options *optio
 
 static int recv_message(int fd, unsigned char *buf, size_t cap, unsigned char type)
 {
-    ssize_t got = recv(fd, buf, cap, 0);
+    ssize_t got = dniv_recv_record(fd, buf, cap, 0);
 
     if (got < 2 || buf[0] != type)
         return -1;
@@ -607,7 +609,7 @@ static int retrieve_file(const char *node_text, const char *filespec,
         goto fail;
 
     for (;;) {
-        got = recv(fd, reply, sizeof(reply), 0);
+        got = dniv_recv_record(fd, reply, sizeof(reply), 0);
         if (got < 2)
             goto fail;
         if (reply[0] == DAP_DATA) {
@@ -845,7 +847,7 @@ static int rename_file(const char *node_text, const char *oldspec,
     if (send_record(fd, msg, newn + 4U))
         goto fail;
 
-    got = recv(fd, reply, sizeof(reply), 0);
+    got = dniv_recv_record(fd, reply, sizeof(reply), 0);
     if (got < 3 || reply[0] != DAP_ACCESS_COMPLETE || reply[2] != 2U)
         goto fail;
     close(fd);
@@ -884,7 +886,7 @@ static int delete_file(const char *node_text, const char *filespec,
     if (send_record(fd, msg, n + 5U))
         goto fail;
 
-    got = recv(fd, reply, sizeof(reply), 0);
+    got = dniv_recv_record(fd, reply, sizeof(reply), 0);
     if (got < 2)
         goto fail;
     if (reply[0] == DAP_STATUS) {
@@ -935,7 +937,7 @@ static int print_file(const char *node_text, const char *filespec,
         goto fail;
 
     for (;;) {
-        ssize_t got = recv(fd, reply, sizeof(reply), 0);
+        ssize_t got = dniv_recv_record(fd, reply, sizeof(reply), 0);
 
         if (got < 2)
             goto fail;
@@ -960,7 +962,7 @@ static int print_file(const char *node_text, const char *filespec,
         goto fail;
 
     for (;;) {
-        ssize_t got = recv(fd, reply, sizeof(reply), 0);
+        ssize_t got = dniv_recv_record(fd, reply, sizeof(reply), 0);
 
         if (got < 2)
             goto fail;
@@ -1016,7 +1018,7 @@ static int submit_file(const char *node_text, const char *filespec,
         goto fail;
 
     for (;;) {
-        ssize_t got = recv(fd, reply, sizeof(reply), 0);
+        ssize_t got = dniv_recv_record(fd, reply, sizeof(reply), 0);
 
         if (got < 2)
             goto fail;
@@ -1066,7 +1068,7 @@ static int list_directory(const char *node_text, const char *filespec,
         goto fail;
 
     for (;;) {
-        ssize_t got = recv(fd, reply, sizeof(reply), 0);
+        ssize_t got = dniv_recv_record(fd, reply, sizeof(reply), 0);
 
         if (got < 2)
             goto fail;

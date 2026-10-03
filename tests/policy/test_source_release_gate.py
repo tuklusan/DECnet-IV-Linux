@@ -591,6 +591,35 @@ def main() -> int:
         if marker not in dnhttpd:
             raise SystemExit(f"source-release gate: dnhttpd root-safety regression: {marker}")
 
+    record_io = read_text("userspace/common/record_io.h")
+    for marker in ("flags | MSG_TRUNC", "(size_t)got > cap", "errno = EMSGSIZE;"):
+        if marker not in record_io:
+            raise SystemExit(f"source-release gate: bounded sequenced-record receive safeguard missing: {marker}")
+    record_consumers = (
+        "userspace/dncopy/dncopy.c",
+        "userspace/dnfald/dnfald.c",
+        "userspace/dnhttpd/dnhttpd.c",
+        "userspace/dnlogin/dnlogin.c",
+        "userspace/dnmail/dnmail.c",
+        "userspace/dnmail/dnmaild.c",
+        "userspace/dnnice/dnnice.c",
+        "userspace/dnphone/dnphoned.c",
+        "userspace/dnphone/phone.c",
+    )
+    for path in record_consumers:
+        source = read_text(path)
+        if '#include "../common/record_io.h"' not in source or "dniv_recv_record(" not in source:
+            raise SystemExit(f"source-release gate: {path} is not using bounded sequenced-record receive")
+        if "recv(" in source:
+            raise SystemExit(f"source-release gate: raw fixed-buffer recv remains in {path}")
+    for marker in (
+        "socketpair(AF_UNIX, SOCK_SEQPACKET, 0, pair)",
+        'send(pair[0], "12345", 5U, MSG_EOR)',
+        "errno != EMSGSIZE",
+    ):
+        if marker not in dnmaild:
+            raise SystemExit(f"source-release gate: overlong-record selftest missing: {marker}")
+
     persistent_daemons = {
         "dnfald": dnfald,
         "dnhttpd": dnhttpd,

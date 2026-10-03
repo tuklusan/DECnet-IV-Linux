@@ -32,6 +32,8 @@
 #include <sys/time.h>
 #include <unistd.h>
 
+#include "../common/record_io.h"
+
 #define MAIL_OBJECT 27U
 #define MAIL_BACKLOG 8
 #define MAIL11_V3_LEN 16U
@@ -108,7 +110,7 @@ static int accept_mail_session(int fd)
 
 static int recv_field(int fd, char *buf, size_t cap, int allow_empty)
 {
-    ssize_t got = recv(fd, buf, cap - 1U, 0);
+    ssize_t got = dniv_recv_record(fd, buf, cap - 1U, 0);
     size_t i;
 
     if (got < 0 || (got == 0 && !allow_empty))
@@ -422,7 +424,7 @@ static int serve(int fd, const char *root, const char *sendmail_path,
         return -1;
     recipients[0] = '\0';
     for (;;) {
-        got = recv(fd, recipient, sizeof(recipient) - 1U, 0);
+        got = dniv_recv_record(fd, recipient, sizeof(recipient) - 1U, 0);
         if (got < 0)
             return -1;
         if (got == 1 && recipient[0] == '\0')
@@ -481,7 +483,7 @@ static int serve(int fd, const char *root, const char *sendmail_path,
     }
 
     for (;;) {
-        got = recv(fd, body, sizeof(body), 0);
+        got = dniv_recv_record(fd, body, sizeof(body), 0);
         if (got < 0)
             goto fail;
         if (got == 1 && body[0] == 0U)
@@ -536,6 +538,8 @@ static int selftest(void)
     char victim_buf[16];
     FILE *out = NULL;
     int victim_fd = -1;
+    int pair[2] = { -1, -1 };
+    unsigned char record_probe[4];
     int rc = 1;
 
     if (MAIL_OBJECT != 27U || MAIL11_V3_LEN != 16U)
@@ -550,6 +554,16 @@ static int selftest(void)
     if (snprintf(mailbox, sizeof(mailbox), "%s/mailbox.log", directory) >=
         (int)sizeof(mailbox))
         goto out;
+    if (socketpair(AF_UNIX, SOCK_SEQPACKET, 0, pair) ||
+        send(pair[0], "12345", 5U, MSG_EOR) != 5)
+        goto out;
+    errno = 0;
+    if (dniv_recv_record(pair[1], record_probe, sizeof(record_probe), 0) >= 0 ||
+        errno != EMSGSIZE)
+        goto out;
+    close(pair[0]);
+    close(pair[1]);
+    pair[0] = pair[1] = -1;
     if (symlink(victim, mailbox))
         goto out;
     out = open_mailbox(directory);
@@ -579,6 +593,10 @@ out:
         fclose(out);
     if (victim_fd >= 0)
         close(victim_fd);
+    if (pair[0] >= 0)
+        close(pair[0]);
+    if (pair[1] >= 0)
+        close(pair[1]);
     unlink(mailbox);
     unlink(victim);
     rmdir(directory);
