@@ -40,7 +40,7 @@ Forward compatibility is an active maintenance requirement. Full release accepta
 
 - `build.sh` validates end-user prerequisites and builds all delivered userspace plus the kernel module without requiring lab-only VDE2/Area-31 test infrastructure.
 - `install.sh` installs the module, commands, daemons, libraries, development headers and documentation. `DESTDIR` is supported. It records managed paths before writing them and refuses unmanaged target collisions, so a failed or interrupted install remains manifest-cleanable rather than silently untracked.
-- `uninstall.sh` removes only paths recorded by the installation manifest and refreshes module/library caches on a live system.
+- `uninstall.sh` removes only paths recorded by the installation manifest, requires `depmod` for the live kernel-module dependency cache, and refreshes the dynamic-library cache with `ldconfig` when the host provides that cache mechanism.
 
 The module is always compiled for the selected target kernel. Copying a module built for another kernel is unsupported.
 

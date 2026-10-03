@@ -248,6 +248,8 @@ def main() -> int:
     for marker in ("source tarball", "Disk images are not release artifacts", "x86_64", "aarch64", "Linux 6.8", "Forward compatibility", "DDCMP and IPv6 are explicitly outside", "not release blockers", "IPv4-only"):
         if marker not in delivery:
             raise SystemExit(f"source-release gate: delivery contract missing: {marker}")
+    if "refreshes the dynamic-library cache with `ldconfig` when the host provides that cache mechanism" not in delivery:
+        raise SystemExit("source-release gate: delivery dynamic-loader cache contract is stale")
     for stale in ("explicitly **pending**", "blocked until DDCMP", "DDCMP remains part of the standing", "Native DDCMP is part of the standing"):
         if stale in delivery:
             raise SystemExit(f"source-release gate: stale DDCMP release blocker remains: {stale}")
@@ -430,6 +432,10 @@ def main() -> int:
     for marker in ("Secure Boot", "MODULE_ROOT", "modprobe -r decnet_iv", "python3 -c 'import decnet'", "module vermagic", "binutils (including `ar`)", "reject existing symlinked parent components", "dnf install gcc make binutils", "dirname", "sha256sum", "earlier kernel builds remain valid managed entries", "repeated `//` separators", "pass the same value to `uninstall.sh`", "live install always uses `/lib/modules/<kernel-release>`", "custom `MODULE_ROOT` is rejected for live uninstall"):
         if marker not in install_doc:
             raise SystemExit(f"source-release gate: installation manual missing: {marker}")
+
+    for marker in ("host dynamic-loader mechanism", "installer does not modify `/etc/ld.so.conf`", "When `ldconfig` exists"):
+        if marker not in install_doc:
+            raise SystemExit(f"source-release gate: installation loader contract missing: {marker}")
 
     dnmultinet_make = read_text("userspace/dnmultinet/Makefile")
     if "all: check" not in dnmultinet_make or "test: check" not in dnmultinet_make:

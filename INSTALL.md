@@ -39,7 +39,8 @@ Core build requirements:
 - Bash 5.0+;
 - Python 3.10+;
 - standard `cat`, `head`, `install`, `ln`, `mkdir`, `chmod`, `rm`, `mv`, `find`, `sort`, `grep`, `sed`, `dirname`, `id`, `rmdir`, `uname`, and `sha256sum`;
-- `kmod` utilities, including `modinfo`, `depmod` and `modprobe`, for module verification and live installation/loading.
+- `kmod` utilities, including `modinfo`, `depmod` and `modprobe`, for module verification and live installation/loading;
+- the host dynamic-loader mechanism for installed shared libraries. On glibc-style systems `ldconfig` is used when available; systems without an `ldconfig` cache must already search the selected library directory or be configured by the administrator.
 
 The tarball needs `tar` with xz support for extraction. If Clang is selected instead of GCC, install the distribution's Clang/LLVM packages as well.
 
@@ -121,7 +122,7 @@ sudo ./install.sh
 
 The default userspace prefix is `/usr/local`. The module installs under `/lib/modules/<kernel-release>/extra/`. By default the installer obtains `<kernel-release>` from the built module's vermagic; if `KERNEL_RELEASE` is supplied it must match that vermagic exactly. The manifest is `/usr/local/share/decnet-iv-linux/install-manifest.txt`. Live installation requires `depmod` and preflights it before creating or changing the manifest, so module dependency metadata cannot be silently left stale. With the default module root, standard `/lib/modules/<kernel-release>/extra/decnet_iv.ko` entries from earlier kernel builds remain valid managed entries, so installing for a new kernel can preserve an older tracked module for fallback. A full uninstall removes every such tracked standard module copy and refreshes their dependency caches. Custom `MODULE_ROOT` is supported only together with non-empty `DESTDIR` for staged/package layouts; live install always uses `/lib/modules/<kernel-release>` so the installed module and the dependency cache refreshed by `depmod` refer to the same kernel module tree. Existing files outside the manifest are never overwritten; resolve any collision explicitly rather than forcing the installer.
 
-A different userspace prefix may be selected with `PREFIX=/opt/decnet`. Staged packaging may set a normalized absolute non-root `MODULE_ROOT` together with non-empty `DESTDIR`. `PREFIX`, `MODULE_ROOT` and non-empty `DESTDIR` reject `.`/`..` path components and repeated `//` separators; a trailing slash is normalized away.
+A different userspace prefix may be selected with `PREFIX=/opt/decnet`. The installer does not modify `/etc/ld.so.conf` or another system loader configuration: if the selected `PREFIX/lib` is not already on the host dynamic-loader search path, configure that path using the host's normal mechanism (for example an administrator-managed `ld.so.conf.d` entry plus `ldconfig` on glibc systems, an rpath, or an explicit runtime library path). Staged packaging may set a normalized absolute non-root `MODULE_ROOT` together with non-empty `DESTDIR`. `PREFIX`, `MODULE_ROOT` and non-empty `DESTDIR` reject `.`/`..` path components and repeated `//` separators; a trailing slash is normalized away.
 
 ### Secure Boot and module signing
 
@@ -168,7 +169,7 @@ For staged installation:
 DESTDIR=/tmp/dniv-stage ./uninstall.sh
 ```
 
-Uninstall is manifest-driven and refuses unsafe manifest paths. Live uninstall requires `depmod` and verifies it before removing any manifest-owned path, so dependency-cache refresh cannot be silently skipped after module removal. If installation used a non-default `PREFIX`, pass the same value to `uninstall.sh`. For staged/package installs that used custom `MODULE_ROOT`, pass the same `DESTDIR` and `MODULE_ROOT`; custom `MODULE_ROOT` is rejected for live uninstall for the same dependency-cache safety reason as live install.
+Uninstall is manifest-driven and refuses unsafe manifest paths. Live uninstall requires `depmod` and verifies it before removing any manifest-owned path, so the kernel module dependency cache cannot be silently skipped after module removal. When `ldconfig` exists, uninstall refreshes the host dynamic-library cache after removing libraries; systems without that cache mechanism use their normal loader-path rules. If installation used a non-default `PREFIX`, pass the same value to `uninstall.sh`. For staged/package installs that used custom `MODULE_ROOT`, pass the same `DESTDIR` and `MODULE_ROOT`; custom `MODULE_ROOT` is rejected for live uninstall for the same dependency-cache safety reason as live install.
 
 ## 12. Kernel upgrades
 
