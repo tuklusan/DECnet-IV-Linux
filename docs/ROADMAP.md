@@ -92,7 +92,7 @@ Deliver:
 - a configurable user-space MULTINET TCP gateway based on the proven PyDECnet implementation;
 - a repository-tracked Area-31 client workflow that consumes `MULTINET_REMOTE_HOST`, `MULTINET_REMOTE_PORT`, `VAX_ADDR`, `VAX_USERNAME` and `VAX_PASSWORD` only at runtime, checks that all required secrets are present before network activity, reports missing prerequisites clearly, and never logs secret values;
 - controlled routing through the MULTINET-connected Area-31 area router to the second Area-31 router at `VAX_ADDR`;
-- persistent paired Linux/VAX tests under `tests/lab` for routing/NICE information and counters, NSP/Session/object access and, as Phase 7 tools mature, login, DAP/FAL, PHONE, mail, task access and application-level experiments.
+- persistent paired Linux/VAX tests under `tests/lab` for routing/NICE information and counters, NSP/Session/object access and the delivered Phase 7 login, DAP/FAL, PHONE, mail and task-access tools, with application-level experiments remaining supplemental.
 
 Exit criteria: VDE2 and MULTINET pass separate positive, negative, restart and stress proofs; cross-runner VDE2 is demonstrated; then an exact candidate routes successfully between local VDE lab nodes, the MULTINET-facing Area-31 router and the VAX area router without one-off protocol patches or credential leakage.
 

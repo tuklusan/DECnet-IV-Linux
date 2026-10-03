@@ -22,10 +22,12 @@ MIM `1.13` is reachable through PYRTR `31.3`, but it has a stricter canonical bo
 
 ## Current proof status
 
-- Local/rootless VDE2 is green on exact candidate `5cf52c584e077d841a8a240fc7cf326b1d0b3f6b` at workflow run `36139326492`; the earlier enhanced proof `35959075714` remains the detailed restart/stress baseline.
-- MULTINET TCP is green on the same exact candidate at workflow run `36139328804`; the earlier enhanced three-router proof `35960257018` remains the detailed negative/restart/stress baseline.
-- Exact-head Area-31 interoperability is green again: run `36219353713` passed x86_64 and arm64 on candidate `bc95d47b44a8ce9ba43411a4e674add2ea0b5e31`. The bounded cleanup of only project-owned DNIVHT/DNIVTK procedures repaired stale remote QCOCAL test state; normal post-test deletion remains mandatory.
-- Cross-runner VDE2 is again the sole remaining Phase 8 exit dependency. Run `36219283281` proved the server reverse-endpoint banner but the arm64 client exhausted its direct persistent bastion-forward bootstrap before the inner banner appeared; the fallback was not selected. The harness now treats only direct outer TCP-connect or outer SSH-banner handshake timeouts as fallback-eligible and keeps every forwarded-target, inner-SSH, frame, adjacency and recovery failure hard.
+Phase 8 is complete on exact candidate `9b73e61bbd0f95b82410276f7b5dc3db94e219ba`. Its full acceptance parent is Repository Policy run `36258507655`.
+
+- Cross-runner VDE2 is green at run `36258564105`, including three marked frames, hard transport loss, adjacency expiry/recovery, bridge reconnect and client-switch restart on the unchanged candidate.
+- Local/rootless VDE2 is green at run `36258635481`; enhanced run `35959075714` remains the detailed restart/stress baseline.
+- MULTINET TCP is green at run `36258643588`; enhanced run `35960257018` remains the detailed negative/restart/stress baseline.
+- Area-31 interoperability is green on x86_64 and arm64 at run `36258654316`. Phase 9/production acceptance must re-prove the applicable external path rather than inherit Phase 8 evidence.
 
 ## VDE2
 
@@ -54,7 +56,7 @@ Only TCP connect/listen modes are accepted for normal project use. MULTINET/UDP 
 
 ## Runtime secret contract
 
-The Area-31 workflow will use these GitHub Actions secrets:
+The Area-31 workflow uses these GitHub Actions secrets:
 
 - `MULTINET_REMOTE_HOST`
 - `MULTINET_REMOTE_PORT`
@@ -73,10 +75,10 @@ Remote tests belong in the repository rather than in ad-hoc runner commands. Ful
 1. start a local VDE DECnet-IV-Linux topology and the MULTINET gateway in TCP client mode;
 2. establish the controlled adjacency to the remote Area-31 router and record routing state/counters;
 3. prove reachability to the VAX router at `VAX_ADDR`;
-4. query useful node, circuit, route, adjacency, executor and counter information through NICE/NML as those facilities become available;
+4. query the delivered node, circuit, route, adjacency, executor and counter information through NICE/NML;
 5. exercise NSP/MIRROR and Session/object access in both directions;
 6. use `VAX_USERNAME`/`VAX_PASSWORD` only when a VAX-side helper actually must be installed or invoked;
-7. accumulate reusable Linux/VAX pairs under `tests/lab`, including login, DAP/FAL file operations, PHONE, mail, task/object access and management/counter checks as each userspace feature lands;
+7. retain reusable Linux/VAX pairs under `tests/lab` for the delivered claimed login, DAP/FAL file operations, PHONE, mail, task/object access and management/counter paths wherever the remote-peer safety policy permits;
 8. run failure/reconnect, route withdrawal, restart, sustained-load and endurance cases only on project-controlled local/SIMH systems; remote HECnet peers beyond PYRTR remain non-disruptive observation/traffic peers, and MIM remains strictly read-only;
 9. incorporate only project-controlled local/SIMH systems into 4/8/16-node scale and endurance work; remote Area-31 systems provide non-disruptive interoperability evidence only.
 

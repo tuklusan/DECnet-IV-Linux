@@ -83,6 +83,24 @@ def main() -> int:
     for required in ("`scale4` and `scale8` on both x86_64 and aarch64", "distributed 16-node scale workflow"):
         if required not in test_lab_scale:
             raise SystemExit(f"source-release gate: current Phase 9 scale promotion text missing: {required}")
+    for stale in ("PP-10 remains open only until", "as Phase 7 tools become available"):
+        if stale in preproduction:
+            raise SystemExit(f"source-release gate: stale completed acceptance text remains in pre-production documentation: {stale}")
+    if "PP-10 is closed" not in preproduction or "e60660c3b7d311451fc854464fa1d7438222f7e2" not in preproduction:
+        raise SystemExit("source-release gate: PP-10 closure is not synchronized in pre-production documentation")
+    hecnet_lab = read_text("docs/HECNET_LAB.md")
+    for stale in ("sole remaining Phase 8 exit dependency", "The Area-31 workflow will use these GitHub Actions secrets", "as those facilities become available", "as each userspace feature lands"):
+        if stale in hecnet_lab:
+            raise SystemExit(f"source-release gate: stale Phase 8/Phase 7 text remains in HECnet documentation: {stale}")
+    for required in ("9b73e61bbd0f95b82410276f7b5dc3db94e219ba", "36258564105", "36258635481", "36258643588", "36258654316"):
+        if required not in hecnet_lab:
+            raise SystemExit(f"source-release gate: Phase 8 final evidence missing from HECnet documentation: {required}")
+    test_lab_status = read_text("docs/TEST_LAB.md")
+    if "As userspace matures" in test_lab_status:
+        raise SystemExit("source-release gate: stale Phase 7 maturity wording remains in lab documentation")
+    roadmap = read_text("docs/ROADMAP.md")
+    if "as Phase 7 tools mature" in roadmap:
+        raise SystemExit("source-release gate: stale Phase 7 maturity wording remains in roadmap")
     for forbidden in ("qemu-system", ".qcow2", "dniv.raw", "Release Image"):
         if forbidden in workflow:
             raise SystemExit(f"source-release gate: disk-image release behavior remains: {forbidden}")
