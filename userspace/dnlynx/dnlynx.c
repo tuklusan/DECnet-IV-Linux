@@ -24,6 +24,8 @@
 #include <sys/time.h>
 #include <unistd.h>
 
+#include "../common/record_io.h"
+
 #define DNLYNX_OBJECT "HTTP"
 #define DNLYNX_HEADER_MAX 8192U
 
@@ -173,7 +175,7 @@ static int run_http(int fd, const char *node, const char *path, int include_head
         return -1;
     }
     for (;;) {
-        ssize_t got=recv(fd,record,sizeof(record),0);
+        ssize_t got=dniv_recv_record(fd,record,sizeof(record),0);
         if (got==0) break;
         if (got<0) {
             fprintf(stderr,"dnlynx: HTTP stage=response-recv errno=%d\n",errno);

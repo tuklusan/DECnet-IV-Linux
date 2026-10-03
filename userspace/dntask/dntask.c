@@ -23,6 +23,8 @@
 #include <sys/time.h>
 #include <unistd.h>
 
+#include "../common/record_io.h"
+
 struct task_spec {
     uint16_t addr;
     char object[DN_MAXOBJL + 1];
@@ -218,7 +220,7 @@ static int run_output(int fd, int binary)
     unsigned char buf[DNBUFSIZE];
 
     for (;;) {
-        ssize_t got = recv(fd, buf, sizeof(buf), 0);
+        ssize_t got = dniv_recv_record(fd, buf, sizeof(buf), 0);
 
         if (got == 0)
             return 0;
@@ -251,7 +253,7 @@ static int run_interactive(int fd, int binary, int timeout_seconds)
             return -1;
         }
         if (fds[0].revents & POLLIN) {
-            ssize_t got = recv(fd, buf, sizeof(buf), 0);
+            ssize_t got = dniv_recv_record(fd, buf, sizeof(buf), 0);
 
             if (got == 0)
                 return 0;

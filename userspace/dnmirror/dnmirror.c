@@ -20,6 +20,8 @@
 #include <sys/time.h>
 #include <unistd.h>
 
+#include "../common/record_io.h"
+
 #include <linux/dn.h>
 
 #define DNIV_MIRROR_OBJECT 25U
@@ -136,7 +138,7 @@ static int serve_connection(int fd)
         return -1;
 
     for (;;) {
-        ssize_t got = recv(fd, in, sizeof(in), 0);
+        ssize_t got = dniv_recv_record(fd, in, sizeof(in), 0);
         size_t out_len;
 
         if (got == 0)

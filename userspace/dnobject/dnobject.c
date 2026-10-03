@@ -21,6 +21,8 @@
 #include <sys/time.h>
 #include <unistd.h>
 
+#include "../common/record_io.h"
+
 #include <linux/dn.h>
 
 #define DNIV_OBJECT_BACKLOG 8
@@ -74,7 +76,7 @@ static int serve_connection(int fd)
         return -1;
 
     for (;;) {
-        ssize_t got = recv(fd, buffer, sizeof(buffer), 0);
+        ssize_t got = dniv_recv_record(fd, buffer, sizeof(buffer), 0);
 
         if (got == 0)
             return 0;

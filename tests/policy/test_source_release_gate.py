@@ -633,11 +633,16 @@ def main() -> int:
         "userspace/dnfald/dnfald.c",
         "userspace/dnhttpd/dnhttpd.c",
         "userspace/dnlogin/dnlogin.c",
+        "userspace/dnlynx/dnlynx.c",
         "userspace/dnmail/dnmail.c",
         "userspace/dnmail/dnmaild.c",
+        "userspace/dnmirror/dnmirror.c",
         "userspace/dnnice/dnnice.c",
+        "userspace/dnnml/dnnml.c",
+        "userspace/dnobject/dnobject.c",
         "userspace/dnphone/dnphoned.c",
         "userspace/dnphone/phone.c",
+        "userspace/dntask/dntask.c",
     )
     for path in record_consumers:
         source = read_text(path)

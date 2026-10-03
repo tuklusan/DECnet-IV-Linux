@@ -28,6 +28,8 @@
 #include <sys/time.h>
 #include <unistd.h>
 
+#include "../common/record_io.h"
+
 #include <linux/decnet_iv.h>
 #include <linux/dn.h>
 #include <decnet_iv_nice.h>
@@ -565,7 +567,7 @@ static int serve_connection(int fd)
         __u16 active_links = 0U;
         ssize_t got;
 
-        got = recv(fd, in, sizeof(in), 0);
+        got = dniv_recv_record(fd, in, sizeof(in), 0);
         if (got == 0)
             return 0;
         if (got < 0)
