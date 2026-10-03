@@ -216,6 +216,22 @@ def main() -> int:
     if 'local-$(date -u +%Y%m%dT%H%M%SZ)-${BASHPID}-${reference}-${scenario}' not in run_interop:
         raise SystemExit("source-release gate: unique default interop session identifier missing")
 
+    socat_probe = read_text("tests/lab/probe-socat-rendezvous.sh")
+    for stale in (
+        'required=(VDE_SSH_HOST VDE_SSH_PORT VDE_SSH_USER VDE_SSH_KEY VDE_SSH_KNOWN_HOSTS GITHUB_RUN_ID)',
+        'remote_sock="/tmp/dniv-socat-${run_id}.sock"',
+    ):
+        if stale in socat_probe:
+            raise SystemExit(f"source-release gate: socat rendezvous is not run-attempt isolated: {stale}")
+    for required in (
+        "GITHUB_RUN_ATTEMPT",
+        'rendezvous="${run_id}-${run_attempt}"',
+        'remote_sock="/tmp/dniv-socat-${rendezvous}.sock"',
+        'python3 - "$ssh_config" "$remote_sock" "$rendezvous"',
+    ):
+        if required not in socat_probe:
+            raise SystemExit(f"source-release gate: socat run-attempt rendezvous safeguard missing: {required}")
+
     scale16_workflow = read_text(".github/workflows/scale16-distributed.yml")
     for stale in (
         'relay="/tmp/dniv-scale16-${GITHUB_RUN_ID}-${arch}.sock"',

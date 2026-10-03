@@ -21,7 +21,7 @@ case "$mode" in
     *) echo "usage: $0 --server|--client" >&2; exit 2 ;;
 esac
 
-required=(VDE_SSH_HOST VDE_SSH_PORT VDE_SSH_USER VDE_SSH_KEY VDE_SSH_KNOWN_HOSTS GITHUB_RUN_ID)
+required=(VDE_SSH_HOST VDE_SSH_PORT VDE_SSH_USER VDE_SSH_KEY VDE_SSH_KNOWN_HOSTS GITHUB_RUN_ID GITHUB_RUN_ATTEMPT)
 missing=()
 for name in "${required[@]}"; do
     [[ -n "${!name:-}" ]] || missing+=("$name")
@@ -32,7 +32,9 @@ if (( ${#missing[@]} )); then
 fi
 [[ "$VDE_SSH_PORT" =~ ^[0-9]+$ ]] || { echo "socat-rendezvous: bad SSH port" >&2; exit 2; }
 run_id=${GITHUB_RUN_ID//[^A-Za-z0-9_.-]/_}
-remote_sock="/tmp/dniv-socat-${run_id}.sock"
+run_attempt=${GITHUB_RUN_ATTEMPT//[^A-Za-z0-9_.-]/_}
+rendezvous="${run_id}-${run_attempt}"
+remote_sock="/tmp/dniv-socat-${rendezvous}.sock"
 
 work=$(mktemp -d /tmp/dniv-socat-rendezvous.XXXXXX)
 trap 'rm -rf "$work"' EXIT
@@ -63,7 +65,7 @@ EOF
 chmod 600 "$ssh_config"
 
 if [[ "$mode" == "--server" ]]; then
-    python3 - "$ssh_config" "$remote_sock" "$run_id" <<'PY'
+    python3 - "$ssh_config" "$remote_sock" "$rendezvous" <<'PY'
 import select
 import subprocess
 import sys
@@ -108,7 +110,7 @@ PY
 fi
 
 sleep 6
-python3 - "$ssh_config" "$remote_sock" "$run_id" <<'PY'
+python3 - "$ssh_config" "$remote_sock" "$rendezvous" <<'PY'
 import select
 import subprocess
 import sys
