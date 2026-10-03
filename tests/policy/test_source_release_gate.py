@@ -68,6 +68,11 @@ def main() -> int:
     preproduction = read_text("docs/PRE_PRODUCTION_TEST.md")
     if "`run-two-node.sh`" in preproduction:
         raise SystemExit("source-release gate: stale removed two-node harness remains in pre-production documentation")
+    for stale in ("Serial/synchronous DECnet media are outside this project's transport claim", "serial/synchronous DECnet media are not part of this project's transport claim"):
+        if stale in preproduction:
+            raise SystemExit(f"source-release gate: stale DDCMP scope exclusion remains: {stale}")
+    if "Native DDCMP serial/synchronous media remain part of the standing project goal" not in preproduction:
+        raise SystemExit("source-release gate: pre-production DDCMP scope is not synchronized with the standing project goal")
     for required in ("`tests/lab/dniv_lab.py`", "`tests/lab/dniv-smoke.sh`"):
         if required not in preproduction:
             raise SystemExit(f"source-release gate: active two-node harness documentation missing: {required}")
