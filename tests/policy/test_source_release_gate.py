@@ -548,6 +548,16 @@ def main() -> int:
         if marker not in dnmaild:
             raise SystemExit(f"source-release gate: dnmaild spool-safety regression: {marker}")
 
+    dnlynx = read_text("userspace/dnlynx/dnlynx.c")
+    for marker in (
+        "static int append_header_record",
+        "copied<(size_t)got",
+        "large, sizeof(large), &end, &copied",
+        "copied != sizeof(header)",
+    ):
+        if marker not in dnlynx:
+            raise SystemExit(f"source-release gate: dnlynx header/body record-boundary regression: {marker}")
+
     dnhttpd = read_text("userspace/dnhttpd/dnhttpd.c")
     for marker in (
         "O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK",

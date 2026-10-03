@@ -128,6 +128,29 @@ static ssize_t header_end(const unsigned char *buf, size_t len)
     return -1;
 }
 
+static int append_header_record(unsigned char *header, size_t cap,
+                                size_t *used,
+                                const unsigned char *record, size_t got,
+                                ssize_t *end, size_t *copied)
+{
+    size_t available;
+    size_t take;
+
+    if (!header || !cap || !used || !record || !end || !copied ||
+        *used > cap)
+        return -1;
+    available = cap - *used;
+    take = got < available ? got : available;
+    if (take)
+        memcpy(header + *used, record, take);
+    *used += take;
+    *copied = take;
+    *end = header_end(header, *used);
+    if (*end < 0 && (take < got || *used == cap))
+        return -1;
+    return 0;
+}
+
 static int status_code(const unsigned char *buf, size_t len)
 {
     if (len < 12U || (memcmp(buf,"HTTP/1.0 ",9U) && memcmp(buf,"HTTP/1.1 ",9U))) return -1;
@@ -158,12 +181,15 @@ static int run_http(int fd, const char *node, const char *path, int include_head
         }
         if (!have_header) {
             ssize_t end;
-            if (used+(size_t)got>sizeof(header)) {
+            size_t copied = 0U;
+
+            if (append_header_record(header, sizeof(header), &used,
+                                     record, (size_t)got,
+                                     &end, &copied)) {
                 fputs("dnlynx: HTTP stage=header-limit\n",stderr);
                 return -1;
             }
-            memcpy(header+used,record,(size_t)got); used+=(size_t)got;
-            end=header_end(header,used); if (end<0) continue;
+            if (end<0) continue;
             code=status_code(header,used);
             if (code<0) {
                 fputs("dnlynx: HTTP stage=status-line\n",stderr);
@@ -175,6 +201,11 @@ static int run_http(int fd, const char *node, const char *path, int include_head
                 return -1;
             }
             if (used>(size_t)end && fwrite(header+end,1,used-(size_t)end,stdout)!=used-(size_t)end) {
+                fputs("dnlynx: HTTP stage=body-output\n",stderr);
+                return -1;
+            }
+            if (copied<(size_t)got &&
+                fwrite(record+copied,1,(size_t)got-copied,stdout)!=(size_t)got-copied) {
                 fputs("dnlynx: HTTP stage=body-output\n",stderr);
                 return -1;
             }
@@ -199,7 +230,15 @@ static int run_http(int fd, const char *node, const char *path, int include_head
 static int selftest(void)
 {
     uint16_t address; char path[64];
+    unsigned char header[DNLYNX_HEADER_MAX];
+    unsigned char large[DNLYNX_HEADER_MAX + 16U];
     static const unsigned char ok[]="HTTP/1.0 200 OK\r\nContent-Length: 2\r\n\r\nOK";
+    size_t used = 0U;
+    size_t copied = 0U;
+    ssize_t end = -1;
+
+    memset(large, 'X', sizeof(large));
+    memcpy(large, ok, sizeof(ok) - 1U);
     if (parse_node("31.71",&address) || address != ((31U<<10)|71U) ||
         !parse_node("31.0",&address) || !parse_node("64.1",&address) ||
         normalize_path("/",path,sizeof(path)) || strcmp(path,"/") ||
@@ -208,7 +247,19 @@ static int selftest(void)
         !normalize_path("/bad\nheader",path,sizeof(path)) ||
         !valid_object("HTTP") || !valid_object("DNIVHT") ||
         valid_object("") || valid_object("1HTTP") || valid_object("BAD-NAME") ||
-        header_end(ok,sizeof(ok)-1U)!=38 || status_code(ok,sizeof(ok)-1U)!=200) return 1;
+        header_end(ok,sizeof(ok)-1U)!=38 || status_code(ok,sizeof(ok)-1U)!=200 ||
+        append_header_record(header, sizeof(header), &used,
+                             large, sizeof(large), &end, &copied) ||
+        end != 38 || used != sizeof(header) ||
+        copied != sizeof(header))
+        return 1;
+    used = 0U;
+    copied = 0U;
+    end = -1;
+    memset(large, 'X', sizeof(large));
+    if (!append_header_record(header, sizeof(header), &used,
+                              large, sizeof(large), &end, &copied))
+        return 1;
     puts("dnlynx selftest passed"); return 0;
 }
 
