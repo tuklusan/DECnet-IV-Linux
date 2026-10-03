@@ -1856,7 +1856,15 @@ int dniv_nsp_send_data(__u16 local_link, const __u8 *payload,
     remote_node = conn->remote_node;
     spin_unlock_irqrestore(&dniv_nsp_lock, flags);
 
-    return dniv_nsp_transmit(remote_node, wire, (__u16)len);
+    /*
+     * The segment is committed to the retransmit queue at this point.
+     * Immediate lower-layer transmission is best-effort; reporting its
+     * transient error to the socket caller would invite the same user bytes
+     * to be retried under a new NSP sequence number while the queued segment
+     * remains live.
+     */
+    (void)dniv_nsp_transmit(remote_node, wire, (__u16)len);
+    return 0;
 }
 
 
@@ -1952,7 +1960,15 @@ int dniv_nsp_send_interrupt(__u16 local_link, const __u8 *payload,
     remote_node = conn->remote_node;
     spin_unlock_irqrestore(&dniv_nsp_lock, flags);
 
-    return dniv_nsp_transmit(remote_node, wire, (__u16)len);
+    /*
+     * The segment is committed to the retransmit queue at this point.
+     * Immediate lower-layer transmission is best-effort; reporting its
+     * transient error to the socket caller would invite the same user bytes
+     * to be retried under a new NSP sequence number while the queued segment
+     * remains live.
+     */
+    (void)dniv_nsp_transmit(remote_node, wire, (__u16)len);
+    return 0;
 }
 
 int dniv_nsp_recv(__u16 local_link, struct dniv_nsp_rx_meta *meta,
