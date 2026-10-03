@@ -71,6 +71,29 @@ safe_root "$prefix" && safe_root "$module_root" || {
     echo "install.sh: PREFIX and MODULE_ROOT must be normalized absolute non-root paths" >&2
     exit 2
 }
+
+check_staged_parent() {
+    local target=$1 full current part i
+    local -a parts
+    [[ -n "$destdir" ]] || return 0
+    full="$destdir$target"
+    current=/
+    IFS=/ read -r -a parts <<<"${full#/}"
+    for ((i = 0; i + 1 < ${#parts[@]}; i++)); do
+        part=${parts[i]}
+        [[ -n "$part" ]] || continue
+        current="${current%/}/$part"
+        if [[ -L "$current" ]]; then
+            echo "install.sh: staged path crosses symlink parent: $current" >&2
+            return 1
+        fi
+        if [[ -e "$current" && ! -d "$current" ]]; then
+            echo "install.sh: staged path crosses non-directory parent: $current" >&2
+            return 1
+        fi
+    done
+}
+
 if [[ -z "$destdir" && ${EUID:-$(id -u)} -ne 0 ]]; then
     echo "install.sh: live installation requires root; use DESTDIR for staging" >&2
     exit 2
@@ -87,6 +110,7 @@ safe_managed_path() {
     esac
 }
 
+check_staged_parent "$manifest_rel" || exit 2
 mkdir -p "$(dirname "$manifest")"
 if [[ -e "$manifest" || -L "$manifest" ]]; then
     [[ -f "$manifest" && ! -L "$manifest" ]] || {
@@ -113,6 +137,7 @@ managed() {
 check_target() {
     local target=$1
     local full="$destdir$target"
+    check_staged_parent "$target" || exit 2
     if [[ -e "$full" || -L "$full" ]]; then
         managed "$target" || {
             echo "install.sh: refusing unmanaged existing target: $target" >&2
@@ -123,6 +148,7 @@ check_target() {
 
 record() {
     local target=$1
+    check_staged_parent "$target" || exit 2
     safe_managed_path "$target" || {
         echo "install.sh: unsafe install target: $target" >&2
         exit 2

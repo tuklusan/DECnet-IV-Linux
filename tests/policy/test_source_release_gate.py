@@ -33,6 +33,8 @@ def main() -> int:
             raise SystemExit(f"source-release gate: missing {path}")
     if (ROOT / ".github/workflows/release-image.yml").exists():
         raise SystemExit("source-release gate: obsolete release-image workflow remains")
+    if (ROOT / ".github/workflows/portability.yml").exists():
+        raise SystemExit("source-release gate: obsolete checkout-built portability workflow remains")
     workflow = read_text(".github/workflows/source-release.yml")
     for marker in (
         "Build source archive twice",
@@ -44,6 +46,8 @@ def main() -> int:
         "relative-DESTDIR negative unexpectedly succeeded",
         "module-vermagic negative unexpectedly succeeded",
         "managed-target-type negative unexpectedly succeeded",
+        "staged-parent-symlink negative unexpectedly succeeded",
+        "uninstall-parent-symlink negative unexpectedly succeeded",
         "validate-arm64:",
         "  portability:",
         "debian13",
@@ -87,12 +91,13 @@ def main() -> int:
         "module vermagic release",
         "required command not found: modinfo",
         "DESTDIR must be empty or a normalized absolute non-root path",
+        "staged path crosses symlink parent",
     ):
         if marker not in install:
             raise SystemExit(f"source-release gate: installer safety safeguard missing: {marker}")
 
     uninstall = read_text("uninstall.sh")
-    for marker in ("safe install manifest not found", "normalized absolute non-root path"):
+    for marker in ("safe install manifest not found", "normalized absolute non-root path", "staged path crosses symlink parent", "mapfile -t paths"):
         if marker not in uninstall:
             raise SystemExit(f"source-release gate: uninstaller safety safeguard missing: {marker}")
 
@@ -106,21 +111,12 @@ def main() -> int:
         "target kernel build tree was configured with GCC",
         "target kernel build tree was configured with Clang",
         'for command in bash make ar',
+        'grep sed uname; do need',
         'make clean KDIR="$kdir"',
     ):
         if marker not in build:
             raise SystemExit(f"source-release gate: end-user build safeguard missing: {marker}")
 
-    portability = read_text(".github/workflows/portability.yml")
-    for marker in (
-        'DNIV_EXPECTED_SHA="$GITHUB_SHA"',
-        'sha256sum -c "$(basename "$archive").sha256"',
-        'grep -Fqx "source_sha=$DNIV_EXPECTED_SHA" SOURCE-METADATA',
-    ):
-        if marker not in portability:
-            raise SystemExit(f"source-release gate: portability provenance safeguard missing: {marker}")
-    if "SOURCE-METADATA 2>/dev/null || true" in portability:
-        raise SystemExit("source-release gate: portability provenance check is fail-open")
     for marker in (
         "needs: package-amd64",
         "source-release-portability-${{ matrix.arch }}",
@@ -150,7 +146,7 @@ def main() -> int:
         raise SystemExit("source-release gate: repository still advertises disk-image delivery")
 
     install_doc = read_text("INSTALL.md")
-    for marker in ("Secure Boot", "MODULE_ROOT", "modprobe -r decnet_iv", "python3 -c 'import decnet'", "module vermagic", "binutils (including `ar`)"):
+    for marker in ("Secure Boot", "MODULE_ROOT", "modprobe -r decnet_iv", "python3 -c 'import decnet'", "module vermagic", "binutils (including `ar`)", "reject existing symlinked parent components", "dnf install gcc make binutils", "dirname", "sha256sum"):
         if marker not in install_doc:
             raise SystemExit(f"source-release gate: installation manual missing: {marker}")
 
@@ -160,6 +156,11 @@ def main() -> int:
     root_make = read_text("Makefile")
     if "$(MAKE) -C userspace/dnmultinet test" not in root_make:
         raise SystemExit("source-release gate: lab dnmultinet tests disappeared from repository unit coverage")
+
+    state = read_text("docs/PROJECT_STATE.md")
+    goal = state.split("## Goal", 1)[1].split("## References and licensing", 1)[0]
+    if "portable source release" not in goal or "Deliver reproducible x86_64/aarch64 images" in goal:
+        raise SystemExit("source-release gate: current project goal still advertises disk-image delivery")
 
     handover = read_text("docs/HANDOVER.md")
     if "four exact-SHA acceptance depths" not in handover:

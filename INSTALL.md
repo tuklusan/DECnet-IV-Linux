@@ -38,10 +38,10 @@ Core build requirements:
 - binutils (including `ar`) and libc development environment;
 - Bash 5.0+;
 - Python 3.10+;
-- standard `cat`, `head`, `install`, `ln`, `mkdir`, `chmod`, `rm`, `mv`, `find`, `sort`, `grep`, and `sed`;
+- standard `cat`, `head`, `install`, `ln`, `mkdir`, `chmod`, `rm`, `mv`, `find`, `sort`, `grep`, `sed`, `dirname`, `id`, `rmdir`, `uname`, and `sha256sum`;
 - `kmod` utilities, including `modinfo`, `depmod` and `modprobe`, for module verification and live installation/loading.
 
-The tarball needs tar with xz support for extraction.
+The tarball needs `tar` with xz support for extraction. If Clang is selected instead of GCC, install the distribution's Clang/LLVM packages as well.
 
 ### Debian/Ubuntu example
 
@@ -53,7 +53,7 @@ sudo apt-get install build-essential python3 kmod linux-headers-"$(uname -r)" xz
 ### Fedora/RHEL-family example
 
 ```sh
-sudo dnf install gcc make python3 kmod kernel-devel libstdc++-devel xz
+sudo dnf install gcc make binutils python3 kmod kernel-devel libstdc++-devel xz
 ```
 
 The installed kernel development package must match the kernel being targeted.
@@ -67,7 +67,7 @@ The native stack and C userspace do not require PyDECnet, Route20, SIMH, QEMU or
 - `dnmaild --sendmail`: a sendmail-compatible executable.
 - `dnmaild --smtp`: a reachable SMTP service.
 - VDE2/MULTINET/HECnet laboratory integration is optional; see `docs/HECNET_LAB.md`.
-- SIMH and Route20 are acceptance dependencies unless separately deployed by the administrator.
+- SIMH and Route20 are project acceptance references only; normal installation does not require them.
 
 ## 4. Verify and extract
 
@@ -111,7 +111,7 @@ rm -rf /tmp/dniv-stage
 DESTDIR=/tmp/dniv-stage ./install.sh
 ```
 
-This requires no root privilege and is the supported packaging/release-validation path. `DESTDIR` must be a normalized absolute non-root path. `install.sh` records each managed target in the installation manifest before writing it, refuses to overwrite an existing target that is not already managed, and preserves the manifest on failure. If a staged or live install is interrupted or otherwise fails, rerun `uninstall.sh` with the same `DESTDIR`, `PREFIX` and `MODULE_ROOT` values to clean the tracked partial installation before retrying.
+This requires no root privilege and is the supported packaging/release-validation path. `DESTDIR` must be a normalized absolute non-root path. For staged operations, `install.sh` and `uninstall.sh` reject existing symlinked parent components so file creation or removal cannot traverse outside the selected staging tree. `install.sh` records each managed target in the installation manifest before writing it, refuses to overwrite an existing target that is not already managed, and preserves the manifest on failure. If a staged or live install is interrupted or otherwise fails, rerun `uninstall.sh` with the same `DESTDIR`, `PREFIX` and `MODULE_ROOT` values to clean the tracked partial installation before retrying.
 
 ## 7. Live install
 

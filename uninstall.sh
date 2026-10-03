@@ -40,16 +40,49 @@ safe_root "$prefix" && safe_root "$module_root" || {
     echo "uninstall.sh: PREFIX and MODULE_ROOT must be normalized absolute non-root paths" >&2
     exit 2
 }
+
+check_staged_parent() {
+    local target=$1 full current part i
+    local -a parts
+    [[ -n "$destdir" ]] || return 0
+    full="$destdir$target"
+    current=/
+    IFS=/ read -r -a parts <<<"${full#/}"
+    for ((i = 0; i + 1 < ${#parts[@]}; i++)); do
+        part=${parts[i]}
+        [[ -n "$part" ]] || continue
+        current="${current%/}/$part"
+        if [[ -L "$current" ]]; then
+            echo "uninstall.sh: staged path crosses symlink parent: $current" >&2
+            return 1
+        fi
+        if [[ -e "$current" && ! -d "$current" ]]; then
+            echo "uninstall.sh: staged path crosses non-directory parent: $current" >&2
+            return 1
+        fi
+    done
+}
+
 if [[ -z "$destdir" && ${EUID:-$(id -u)} -ne 0 ]]; then echo "uninstall.sh: live uninstall requires root; use DESTDIR for staging" >&2; exit 2; fi
+check_staged_parent "$manifest_rel" || exit 2
 [[ -f "$manifest" && ! -L "$manifest" ]] || { echo "uninstall.sh: safe install manifest not found: $manifest" >&2; exit 2; }
-while IFS= read -r path; do
+mapfile -t paths <"$manifest"
+for path in "${paths[@]}"; do
+  [[ -z "$path" ]] && continue
   [[ "$path" == /* &&
       "$path" != *"/../"* && "$path" != *"/.." &&
       "$path" != *"/./"* && "$path" != *"/." ]] || { echo "uninstall.sh: unsafe manifest path: $path" >&2; exit 2; }
   case "$path" in "$prefix"/*|"$module_root"/*) ;; *) echo "uninstall.sh: manifest path outside managed roots: $path" >&2; exit 2 ;; esac
+  check_staged_parent "$path" || exit 2
+done
+for path in "${paths[@]}"; do
+  [[ -z "$path" ]] && continue
   rm -f -- "$destdir$path"
-done <"$manifest"
+done
 rm -f -- "$manifest"
-for dir in "$destdir$prefix/share/doc/decnet-iv-linux" "$destdir$prefix/share/decnet-iv-linux" "$destdir$prefix/include/netdnet"; do rmdir "$dir" 2>/dev/null || true; done
+for rel in "$prefix/share/doc/decnet-iv-linux" "$prefix/share/decnet-iv-linux" "$prefix/include/netdnet"; do
+  check_staged_parent "$rel" || exit 2
+  rmdir "$destdir$rel" 2>/dev/null || true
+done
 if [[ -z "$destdir" ]]; then command -v depmod >/dev/null 2>&1 && depmod -a "$kernel_release"; command -v ldconfig >/dev/null 2>&1 && ldconfig; fi
 echo "uninstall.sh: PASS"

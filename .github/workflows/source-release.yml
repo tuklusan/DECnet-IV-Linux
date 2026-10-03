@@ -123,6 +123,32 @@ jobs:
             echo "source-release: relative-DESTDIR negative unexpectedly succeeded" >&2
             exit 1
           fi
+
+          symlink_stage="$RUNNER_TEMP/symlink-parent-stage"
+          symlink_escape="$RUNNER_TEMP/symlink-parent-escape"
+          mkdir -p "$symlink_stage/usr/local" "$symlink_escape"
+          ln -s "$symlink_escape" "$symlink_stage/usr/local/share"
+          if DESTDIR="$symlink_stage" KERNEL_RELEASE="$KERNEL_RELEASE" ./install.sh; then
+            echo "source-release: staged-parent-symlink negative unexpectedly succeeded" >&2
+            exit 1
+          fi
+          test ! -e "$symlink_escape/decnet-iv-linux/install-manifest.txt"
+
+          uninstall_stage="$RUNNER_TEMP/uninstall-symlink-stage"
+          uninstall_escape="$RUNNER_TEMP/uninstall-symlink-escape"
+          DESTDIR="$uninstall_stage" KERNEL_RELEASE="$KERNEL_RELEASE" ./install.sh
+          mkdir -p "$uninstall_escape"
+          mv "$uninstall_stage/usr/local/bin" "$uninstall_stage/usr/local/bin.real"
+          ln -s "$uninstall_escape" "$uninstall_stage/usr/local/bin"
+          printf 'external-ncp\n' >"$uninstall_escape/ncp"
+          if DESTDIR="$uninstall_stage" KERNEL_RELEASE="$KERNEL_RELEASE" ./uninstall.sh; then
+            echo "source-release: uninstall-parent-symlink negative unexpectedly succeeded" >&2
+            exit 1
+          fi
+          grep -Fqx 'external-ncp' "$uninstall_escape/ncp"
+          rm "$uninstall_stage/usr/local/bin"
+          mv "$uninstall_stage/usr/local/bin.real" "$uninstall_stage/usr/local/bin"
+          DESTDIR="$uninstall_stage" KERNEL_RELEASE="$KERNEL_RELEASE" ./uninstall.sh
           if DESTDIR="$RUNNER_TEMP/wrong-release" KERNEL_RELEASE=0.0.0-wrong ./install.sh; then
             echo "source-release: module-vermagic negative unexpectedly succeeded" >&2
             exit 1
