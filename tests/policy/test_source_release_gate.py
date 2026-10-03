@@ -449,15 +449,19 @@ def main() -> int:
     ):
         if marker not in dnmultinet:
             raise SystemExit(f"source-release gate: dnmultinet config-safety regression: {marker}")
-    dnmultinet_make = read_text("userspace/dnmultinet/Makefile")
+    dnmultinet_selftest = read_text("userspace/dnmultinet/selftest.py")
     for marker in (
-        "unsafe VDE config token unexpectedly accepted",
-        "unsafe local-address config token unexpectedly accepted",
-        "IPv6 peer unexpectedly accepted",
-        "runtime peer config persistence unexpectedly accepted",
+        "VDE URL has invalid syntax",
+        "local address has invalid syntax",
+        "peer host must be an IPv4 address or hostname",
+        "refuses --config-out",
+        "MULTINET_REMOTE_HOST has invalid syntax",
     ):
-        if marker not in dnmultinet_make:
+        if marker not in dnmultinet_selftest:
             raise SystemExit(f"source-release gate: dnmultinet config-safety negative missing: {marker}")
+    dnmultinet_make = read_text("userspace/dnmultinet/Makefile")
+    if "$(PYTHON) selftest.py" not in dnmultinet_make:
+        raise SystemExit("source-release gate: dnmultinet config selftest is not in the normal build")
     if "all: check" not in dnmultinet_make or "test: check" not in dnmultinet_make:
         raise SystemExit("source-release gate: end-user dnmultinet build still coupled to lab-only tests")
     root_make = read_text("Makefile")

@@ -32,26 +32,8 @@ check:
 		$(PYTHON) dnmultinet.py --node 31.80 --name MNET80 --type l2router \
 		--vde vde:///tmp/dn31.ctl --mode connect --runtime-peer-env \
 		--validate-only | grep -Fqx 'dnmultinet: configuration valid'
-	@if $(PYTHON) dnmultinet.py --node 31.80 --name MNET80 \
-		--vde "$(printf 'vde:///tmp/x\\nlogging')" --mode listen --local-port 700 \
-		--validate-only >/dev/null 2>&1; then \
-		echo 'dnmultinet unsafe VDE config token unexpectedly accepted' >&2; exit 1; \
-	fi
-	@if $(PYTHON) dnmultinet.py --node 31.80 --name MNET80 --vde vde:///tmp/x \
-		--mode listen --local-address "$(printf '0.0.0.0\\nlogging')" --local-port 700 \
-		--validate-only >/dev/null 2>&1; then \
-		echo 'dnmultinet unsafe local-address config token unexpectedly accepted' >&2; exit 1; \
-	fi
-	@if $(PYTHON) dnmultinet.py --node 31.80 --name MNET80 --vde vde:///tmp/x \
-		--mode connect --peer-host ::1 --peer-port 700 --validate-only >/dev/null 2>&1; then \
-		echo 'dnmultinet IPv6 peer unexpectedly accepted' >&2; exit 1; \
-	fi
-	@if MULTINET_REMOTE_HOST=127.0.0.1 MULTINET_REMOTE_PORT=700 \
-		$(PYTHON) dnmultinet.py --node 31.80 --name MNET80 --vde vde:///tmp/x \
-		--mode connect --runtime-peer-env --config-out /tmp/dniv-runtime-peer.conf \
-		--validate-only >/dev/null 2>&1; then \
-		echo 'dnmultinet runtime peer config persistence unexpectedly accepted' >&2; exit 1; \
-	fi
+	$(PYTHON) -m py_compile selftest.py
+	$(PYTHON) selftest.py
 test: check
 	$(PYTHON) -m py_compile ../../tests/lab/area31-nice.py
 	$(CC) -std=c11 -Wall -Wextra -Werror -I../../include/uapi -I../../include \
