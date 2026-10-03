@@ -49,6 +49,7 @@ def main() -> int:
         "staged-parent-symlink negative unexpectedly succeeded",
         "uninstall-parent-symlink negative unexpectedly succeeded",
         "old_release=0.0.0-audit-old",
+        "custom-module-root foreign-manifest negative unexpectedly succeeded",
         "validate-arm64:",
         "  portability:",
         "debian13",
@@ -76,6 +77,18 @@ def main() -> int:
     for path in sorted((ROOT / "tools").iterdir()):
         if path.is_file() and f"tools/{path.name}" not in components:
             raise SystemExit(f"source-release gate: undocumented release/support tool: {path.name}")
+    for directory in ("tests/unit/", "tests/policy/", "tests/reference/", "tests/lab/", "tests/lab/vax/"):
+        if directory not in components:
+            raise SystemExit(f"source-release gate: undocumented test/lab source component: {directory}")
+    for directory in (ROOT / ".github/workflows", ROOT / "image/ubuntu-base", ROOT / "references", ROOT / ".githooks"):
+        for path in sorted(directory.iterdir()):
+            if path.is_file():
+                relative = path.relative_to(ROOT).as_posix()
+                if relative not in components:
+                    raise SystemExit(f"source-release gate: undocumented source-support component: {relative}")
+    for relative in ("README.md", "LICENSE", "docs/ARCHITECTURE.md", "docs/ROADMAP.md", "docs/HANDOVER.md", "docs/PROJECT_STATE.md", "scratch/RESUME.md", "docs/HECNET_LAB.md", "docs/TEST_LAB.md", "docs/PRE_PRODUCTION_TEST.md", "docs/PP_EVIDENCE.md", ".gitattributes", ".gitignore", "scratch/.gitignore", "scratch/README.md"):
+        if relative not in components:
+            raise SystemExit(f"source-release gate: undocumented governance/source-tree component: {relative}")
     builder = read_text("tools/build-source-release.sh")
     for marker in (
         "SOURCE-METADATA",
@@ -102,12 +115,13 @@ def main() -> int:
         "DESTDIR must be empty or a normalized absolute non-root path",
         "staged path crosses symlink parent",
         "safe_default_module_path",
+        "module_root_is_default",
     ):
         if marker not in install:
             raise SystemExit(f"source-release gate: installer safety safeguard missing: {marker}")
 
     uninstall = read_text("uninstall.sh")
-    for marker in ("safe install manifest not found", "normalized absolute non-root path", "staged path crosses symlink parent", "mapfile -t paths", "safe_default_module_path", "module_releases"):
+    for marker in ("safe install manifest not found", "normalized absolute non-root path", "staged path crosses symlink parent", "mapfile -t paths", "safe_default_module_path", "module_root_is_default", "module_releases"):
         if marker not in uninstall:
             raise SystemExit(f"source-release gate: uninstaller safety safeguard missing: {marker}")
 

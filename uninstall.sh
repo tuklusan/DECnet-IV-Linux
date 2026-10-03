@@ -17,6 +17,8 @@ set -euo pipefail
 destdir=${DESTDIR:-}
 prefix=${PREFIX:-/usr/local}
 kernel_release=${KERNEL_RELEASE:-$(uname -r)}
+module_root_is_default=1
+if [[ -n ${MODULE_ROOT:-} ]]; then module_root_is_default=0; fi
 module_root=${MODULE_ROOT:-/lib/modules/$kernel_release}
 
 while [[ "$prefix" != / && "$prefix" == */ ]]; do prefix=${prefix%/}; done
@@ -77,7 +79,7 @@ safe_managed_path() {
         "$path" != *"/../"* && "$path" != *"/.." &&
         "$path" != *"/./"* && "$path" != *"/." ]] || return 1
     case "$path" in "$prefix"/*|"$module_root"/*) return 0 ;; esac
-    safe_default_module_path "$path"
+    (( module_root_is_default )) && safe_default_module_path "$path"
 }
 
 if [[ -z "$destdir" && ${EUID:-$(id -u)} -ne 0 ]]; then echo "uninstall.sh: live uninstall requires root; use DESTDIR for staging" >&2; exit 2; fi
@@ -89,7 +91,7 @@ for path in "${paths[@]}"; do
   [[ -z "$path" ]] && continue
   safe_managed_path "$path" || { echo "uninstall.sh: manifest path outside managed roots: $path" >&2; exit 2; }
   check_staged_parent "$path" || exit 2
-  if safe_default_module_path "$path"; then
+  if (( module_root_is_default )) && safe_default_module_path "$path"; then
     rest=${path#/lib/modules/}
     module_releases+=("${rest%%/*}")
   fi

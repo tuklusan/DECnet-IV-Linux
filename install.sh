@@ -50,6 +50,8 @@ if [[ -n ${KERNEL_RELEASE:-} && "$KERNEL_RELEASE" != "$module_release" ]]; then
     exit 2
 fi
 kernel_release=${KERNEL_RELEASE:-$module_release}
+module_root_is_default=1
+if [[ -n ${MODULE_ROOT:-} ]]; then module_root_is_default=0; fi
 module_root=${MODULE_ROOT:-/lib/modules/$kernel_release}
 while [[ "$module_root" != / && "$module_root" == */ ]]; do module_root=${module_root%/}; done
 manifest_rel="$prefix/share/decnet-iv-linux/install-manifest.txt"
@@ -115,7 +117,7 @@ safe_managed_path() {
     case "$path" in
         "$prefix"/*|"$module_root"/*) return 0 ;;
     esac
-    safe_default_module_path "$path"
+    (( module_root_is_default )) && safe_default_module_path "$path"
 }
 
 check_staged_parent "$manifest_rel" || exit 2

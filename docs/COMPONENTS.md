@@ -124,10 +124,50 @@ Shared protocol/source headers:
 | `SOURCE-METADATA` | Generated release version/source-SHA/source-date provenance record. |
 | `INSTALL.md`, `docs/DELIVERY.md`, `docs/FEATURES.md`, `docs/COMPONENTS.md` | End-user install, delivery, feature and component contracts. |
 
+## Source-tree acceptance, lab and governance components
+
+These files are shipped in the source archive so the accepted source SHA can be reproduced and audited. They are not installed runtime components.
+
+| Source | Role |
+| --- | --- |
+| `.github/workflows/build.yml` | x86_64/aarch64 build bootstrap gate. |
+| `.github/workflows/source-release.yml` | Reproducible exact-artifact source release, install/uninstall and portability gate. |
+| `.github/workflows/repository-policy.yml` | Main-only policy enforcement and bounded acceptance dispatcher. |
+| `.github/workflows/project-state.yml` | Durable Project State/RESUME continuity gate. |
+| `.github/workflows/false-green.yml` | Acceptance-harness false-green regression. |
+| `.github/workflows/interop.yml` | Independent Ethernet interoperability workflow. |
+| `.github/workflows/area31-interop.yml` | Routed Area-31 interoperability workflow. |
+| `.github/workflows/kernel-diagnostics.yml` | Diagnostic-kernel E1 evidence workflow. |
+| `.github/workflows/multinet-proof.yml` | MULTINET transport proof workflow. |
+| `.github/workflows/reference-baselines.yml` | Independent reference implementation baseline workflow. |
+| `.github/workflows/scale16-distributed.yml` | Distributed 16-node scale workflow. |
+| `.github/workflows/vde2-cross-runner.yml` | Cross-runner VDE2 transport workflow. |
+| `.github/workflows/vde2-proof.yml` | VDE2 transport proof workflow. |
+| `.github/workflows/vm-lab.yml` | Disposable QEMU VM-lab workflow. |
+| `tests/unit/` | Deterministic protocol/UAPI unit tests. |
+| `tests/policy/` | Repository, workflow, evidence and release-policy regression tests. |
+| `tests/reference/` | Pinned independent-reference test selection/configuration. |
+| `tests/lab/` | Active interoperability, fault, stress, routing, NSP and service lab harnesses. |
+| `tests/lab/vax/` | VAX/VMS command-file generators used by real/reference peer tests. |
+| `image/ubuntu-base/README.md` | Disposable Ubuntu lab-foundation image documentation. |
+| `image/ubuntu-base/build-foundation.sh` | Lab-only foundation image builder. |
+| `image/ubuntu-base/images.env` | Pinned lab image/source metadata. |
+| `image/ubuntu-base/normalize-arm64-kernel.sh` | Lab-only arm64 kernel normalization helper. |
+| `references/README.md` | Reference-material use policy and index. |
+| `references/IMPLEMENTATIONS.md` | Pinned independent DECnet implementation references. |
+| `references/PROTOCOL_SPECS.md` | Protocol specification references. |
+| `references/LICENSING.md` | Reference-source licensing record. |
+| `README.md`, `LICENSE` | Project overview and governing source license. |
+| `docs/ARCHITECTURE.md`, `docs/ROADMAP.md` | Architecture and implementation roadmap. |
+| `docs/HANDOVER.md`, `docs/PROJECT_STATE.md`, `scratch/RESUME.md` | Durable execution/handover state. |
+| `docs/HECNET_LAB.md`, `docs/TEST_LAB.md`, `docs/PRE_PRODUCTION_TEST.md`, `docs/PP_EVIDENCE.md` | Lab constraints, pre-production plan and evidence ledger. |
+| `.gitattributes`, `.gitignore`, `scratch/.gitignore`, `scratch/README.md` | Repository/source-tree hygiene controls. |
+| `.githooks/commit-msg`, `.githooks/pre-commit`, `.githooks/pre-push` | Optional local repository policy hooks. |
+
 ## Pending project-goal component
 
 Native DDCMP is part of the standing project goal but has no implementation component in the current tracked tree. It is deliberately listed here as pending rather than being silently omitted or falsely described as delivered.
 
 ## Lab-only content
 
-`tests/`, `image/ubuntu-base/`, acceptance workflows and pinned independent-reference metadata remain in the source tree for reproducibility. QEMU/QCOW2 files they create are temporary acceptance infrastructure, not installed components and not release artifacts.
+The acceptance/test/image/reference components above remain in the source tree for reproducibility. QEMU/QCOW2 files they create are temporary acceptance infrastructure, not installed components and not release artifacts.

@@ -181,6 +181,19 @@ jobs:
           test ! -e "$RUNNER_TEMP/stage/usr/local/sbin/dnctl"
           test ! -e "$RUNNER_TEMP/stage/lib/modules/$KERNEL_RELEASE/extra/decnet_iv.ko"
           test ! -e "$RUNNER_TEMP/stage/lib/modules/$old_release/extra/decnet_iv.ko"
+
+          custom_stage="$RUNNER_TEMP/custom-module-root-stage"
+          custom_root=/opt/dniv-kmods
+          DESTDIR="$custom_stage" MODULE_ROOT="$custom_root" KERNEL_RELEASE="$KERNEL_RELEASE" ./install.sh
+          custom_manifest="$custom_stage/usr/local/share/decnet-iv-linux/install-manifest.txt"
+          printf '/lib/modules/%s/extra/decnet_iv.ko\n' "$old_release" >>"$custom_manifest"
+          if DESTDIR="$custom_stage" MODULE_ROOT="$custom_root" KERNEL_RELEASE="$KERNEL_RELEASE" ./install.sh; then
+            echo "source-release: custom-module-root foreign-manifest negative unexpectedly succeeded" >&2
+            exit 1
+          fi
+          sed -i '\|^/lib/modules/'"$old_release"'/extra/decnet_iv\.ko$|d' "$custom_manifest"
+          DESTDIR="$custom_stage" MODULE_ROOT="$custom_root" KERNEL_RELEASE="$KERNEL_RELEASE" ./uninstall.sh
+          test ! -e "$custom_stage$custom_root/extra/decnet_iv.ko"
       - name: Verify exact tree
         shell: bash
         run: |
