@@ -30,7 +30,8 @@ This catalogue describes the production source release. Lab-only helpers and ind
 - NSP segmentation/reassembly, sequencing, acknowledgements, retransmission and timers.
 - NSP data flow control, interrupt/out-of-band flow and resource limits.
 - Session Control connect/accept/reject behavior and object dispatch.
-- Native `AF_DECnet` / `SOCK_SEQPACKET` socket-facing ABI.
+- Native `AF_DECnet` / `SOCK_SEQPACKET` record ABI plus `SOCK_STREAM` compatibility with short-read preservation and `MSG_WAITALL` across NSP record boundaries.
+- Classic `DNPROTO_NSP` socket controls for access data, connect/accept data, peer/local disconnect data, link information, immediate/deferred accept, explicit accept and explicit reject (`DSO_CONACCESS`, `DSO_CONDATA`, `DSO_DISDATA`, `DSO_LINKINFO`, `DSO_ACCEPTMODE`, `DSO_CONACCEPT`, `DSO_CONREJECT`).
 - Versioned management UAPI for identity, counters, adjacencies, routes and NSP links.
 
 ## Management

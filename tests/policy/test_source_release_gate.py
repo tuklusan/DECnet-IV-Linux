@@ -62,11 +62,32 @@ def main() -> int:
     for forbidden in ("qemu-system", ".qcow2", "dniv.raw", "Release Image"):
         if forbidden in workflow:
             raise SystemExit(f"source-release gate: disk-image release behavior remains: {forbidden}")
+    readme = read_text("README.md")
+    for marker in ("SOCK_SEQPACKET", "SOCK_STREAM", "deferred accept/reject"):
+        if marker not in readme:
+            raise SystemExit(f"source-release gate: README feature inventory missing: {marker}")
+
     delivery = read_text("docs/DELIVERY.md")
     for marker in ("source tarball", "Disk images are not release artifacts", "x86_64", "aarch64", "Linux 6.8", "Forward compatibility", "native DDCMP", "explicitly **pending**"):
         if marker not in delivery:
             raise SystemExit(f"source-release gate: delivery contract missing: {marker}")
+    features = read_text("docs/FEATURES.md")
+    for marker in ("SOCK_SEQPACKET", "SOCK_STREAM", "DSO_CONACCESS", "DSO_CONDATA", "DSO_DISDATA", "DSO_LINKINFO", "DSO_ACCEPTMODE", "DSO_CONACCEPT", "DSO_CONREJECT"):
+        if marker not in features:
+            raise SystemExit(f"source-release gate: delivered socket feature missing from catalogue: {marker}")
+
+    kernel_readme = read_text("kernel/decnet/README.md")
+    for marker in ("SOCK_SEQPACKET", "SOCK_STREAM", "DSO_DISDATA", "DSO_ACCEPTMODE", "DSO_CONACCEPT", "DSO_CONREJECT"):
+        if marker not in kernel_readme:
+            raise SystemExit(f"source-release gate: kernel component README missing accepted socket surface: {marker}")
+    for stale in ("current follow-up candidate", "remain ordered Phase 5 follow-up work"):
+        if stale in kernel_readme:
+            raise SystemExit(f"source-release gate: kernel component README contains stale phase text: {stale}")
+
     components = read_text("docs/COMPONENTS.md")
+    for marker in ("SOCK_SEQPACKET", "SOCK_STREAM", "DNPROTO_NSP", "DSO_DISDATA", "DSO_ACCEPTMODE"):
+        if marker not in components:
+            raise SystemExit(f"source-release gate: component inventory missing accepted socket surface: {marker}")
     for directory in sorted(path.name for path in (ROOT / "userspace").iterdir() if path.is_dir()):
         if f"userspace/{directory}" not in components:
             raise SystemExit(f"source-release gate: undocumented userspace component: {directory}")

@@ -30,7 +30,7 @@ Kernel source responsibilities:
 | `decnet_iv_ethernet.c` | Native Ethernet framing, logical DECnet MAC handling, hello traffic and adjacency-facing link behavior. |
 | `decnet_iv_route.c` | Endnode/L1/L2 routing state, route selection, forwarding and convergence. |
 | `decnet_iv_nsp.c` | NSP logical links, sequencing, flow control, retransmission, timers and receive queues. |
-| `decnet_iv_socket.c` | Native `AF_DECnet` socket/UAPI boundary and Session Control object dispatch. |
+| `decnet_iv_socket.c` | Native `AF_DECnet` `SOCK_SEQPACKET`/`SOCK_STREAM` boundary, classic `DNPROTO_NSP` options (`DSO_CONACCESS`, `DSO_CONDATA`, `DSO_DISDATA`, `DSO_LINKINFO`, `DSO_ACCEPTMODE`, `DSO_CONACCEPT`, `DSO_CONREJECT`), and Session Control object dispatch. |
 
 Kernel-local interface headers:
 

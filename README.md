@@ -22,7 +22,7 @@ Based on original work by Supratim Sanyal of SANYALnet Labs. See `LICENSE` for t
 
 ## Delivered stack
 
-The source release contains the native Ethernet endnode/L1/L2 routing stack, NSP transport, native `AF_DECnet` / `SOCK_SEQPACKET` socket ABI, Session Control, NICE/NML management, UAPI headers, libraries, administration tools, DAP/FAL utilities and service, login, task/object access, PHONE, mail, MIRROR, DECnet HTTP client/server tools, and the MULTINET integration launcher.
+The source release contains the native Ethernet endnode/L1/L2 routing stack, NSP transport, native `AF_DECnet` / `SOCK_SEQPACKET` and `SOCK_STREAM` socket ABI, classic access/connect/disconnect-data and deferred accept/reject controls, Session Control, NICE/NML management, UAPI headers, libraries, administration tools, DAP/FAL utilities and service, login, task/object access, PHONE, mail, MIRROR, DECnet HTTP client/server tools, and the MULTINET integration launcher.
 
 See `docs/FEATURES.md`, `docs/COMPONENTS.md`, `docs/DELIVERY.md`, and `INSTALL.md`.
 
