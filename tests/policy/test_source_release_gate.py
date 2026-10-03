@@ -202,6 +202,7 @@ def main() -> int:
         'for command in bash make ar',
         'grep sed uname; do need',
         'make clean KDIR="$kdir"',
+        "need dirname",
     ):
         if marker not in build:
             raise SystemExit(f"source-release gate: end-user build safeguard missing: {marker}")
@@ -221,6 +222,10 @@ def main() -> int:
         'KBUILD_MODPOST_WARN=1 CC="$cc" KDIR=/tmp/linux-clang KERNEL_RELEASE="$clang_release" ./build.sh',
         'DESTDIR="$stage" KERNEL_RELEASE="$clang_release" ./install.sh',
         "KBUILD_MODPOST_WARN=1",
+        "linux_floor_commit=e8f897f4afef0031fe618a8e94127a0934896aba",
+        'test "$floor_release" = 6.8.0',
+        'KDIR=/tmp/linux-floor KERNEL_RELEASE="$floor_release" ./build.sh',
+        'DESTDIR="$floor_stage" KERNEL_RELEASE="$floor_release" ./install.sh',
         "run_case fedora44 fedora:44 clang",
     ):
         if marker not in workflow:
@@ -251,6 +256,8 @@ def main() -> int:
                 raise SystemExit(f"source-release gate: current diagnostic release contract missing in {label}: {marker}")
     if "Linux v7.3-rc5 commit `72d3fcf802c45d00b300f25b848a93c3a2bd7c7e`" not in test_lab:
         raise SystemExit("source-release gate: lab documentation current-kernel pin is stale")
+    if "Linux v6.8 commit `e8f897f4afef0031fe618a8e94127a0934896aba`" not in test_lab:
+        raise SystemExit("source-release gate: lab documentation kernel-floor pin is missing")
 
     dispatcher = read_text(".github/workflows/repository-policy.yml")
     if "SOURCE_RELEASE source-release.yml" not in dispatcher or "RELEASE_IMAGE release-image.yml" in dispatcher:

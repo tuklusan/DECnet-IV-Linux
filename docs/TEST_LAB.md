@@ -91,6 +91,8 @@ Pre-production keeps reusable Linux/VAX test pairs under `tests/lab` (with VAX-s
 
 The production object is the reproducible source tarball defined by `docs/DELIVERY.md` and `.github/workflows/source-release.yml`. `image/ubuntu-base/build-foundation.sh` and all derived QCOW2 files are lab-only infrastructure used to obtain independent disposable kernels for protocol, fault and stress testing. No VM disk file is a release artifact or installation requirement.
 
+The exact-artifact portability gate also prepares Torvalds Linux v6.8 commit `e8f897f4afef0031fe618a8e94127a0934896aba` on both supported architectures and requires the packaged source to complete `build.sh` plus staged install/uninstall against kernel release `6.8.0`. This makes the documented Linux 6.8 compatibility floor an executed release gate rather than only a version check.
+
 For direct host-TAP PyDECnet runs, a separate host `dnraw` loop injects marked DECnet-Ethernet unicast frames through the Linux bridge toward the candidate logical MAC. This preserves the same post-NIC-MAC-change lower-layer receive proof used by guest-backed references without coupling that check to PyDECnet routing/NSP convergence.
 
 Connect-control retransmission is proven separately from established-link data retransmission. Before a new MIRROR `connect()`, the host blackholes reference-to-candidate unicast so Connect Confirm replies are lost while candidate CI/RCI traffic still reaches PyDECnet. Blocking connect must terminate with `EHOSTUNREACH`; packet capture must show the initial CI plus every configured RCI carrying a unique connect-data marker. After fault removal, a fresh marked CI and marked MIRROR record must succeed without restarting either endpoint.

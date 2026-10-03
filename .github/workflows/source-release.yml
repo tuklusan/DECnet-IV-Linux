@@ -413,6 +413,36 @@ jobs:
                   test -s "$stage/usr/local/lib/libdnet.so.1.0"
                   test -s "$stage/lib/modules/$kernel_release/extra/decnet_iv.ko"
                   DESTDIR="$stage" KERNEL_RELEASE="$kernel_release" ./uninstall.sh
+
+                  if [[ "$DNIV_DISTRO" == debian13 ]]; then
+                    linux_floor_repo=https://github.com/torvalds/linux.git
+                    linux_floor_commit=e8f897f4afef0031fe618a8e94127a0934896aba
+                    rm -rf /tmp/linux-floor
+                    git -C /tmp init -q linux-floor
+                    git -C /tmp/linux-floor remote add origin "$linux_floor_repo"
+                    git -C /tmp/linux-floor fetch --depth=1 origin "$linux_floor_commit"
+                    git -C /tmp/linux-floor checkout -q --detach FETCH_HEAD
+                    test "$(git -C /tmp/linux-floor rev-parse HEAD)" = "$linux_floor_commit"
+                    rm -rf /tmp/linux-floor/.git
+                    make -C /tmp/linux-floor defconfig >/dev/null
+                    /tmp/linux-floor/scripts/config --file /tmp/linux-floor/.config --enable MODULES
+                    /tmp/linux-floor/scripts/config --file /tmp/linux-floor/.config --disable MODVERSIONS
+                    /tmp/linux-floor/scripts/config --file /tmp/linux-floor/.config --disable MODULE_SIG_ALL
+                    /tmp/linux-floor/scripts/config --file /tmp/linux-floor/.config --disable MODULE_SIG_FORCE
+                    make -C /tmp/linux-floor olddefconfig >/dev/null
+                    make -C /tmp/linux-floor modules_prepare -j2 >/dev/null
+                    floor_release=$(cat /tmp/linux-floor/include/config/kernel.release)
+                    test "$floor_release" = 6.8.0
+                    KBUILD_MODPOST_WARN=1 CC="$cc" KDIR=/tmp/linux-floor KERNEL_RELEASE="$floor_release" ./build.sh
+                    floor_stage=/tmp/dniv-stage-floor
+                    rm -rf "$floor_stage"
+                    DESTDIR="$floor_stage" KERNEL_RELEASE="$floor_release" ./install.sh
+                    test -s "$floor_stage/usr/local/bin/ncp"
+                    test -s "$floor_stage/usr/local/sbin/dnctl"
+                    test -s "$floor_stage/usr/local/lib/libdnet.so.1.0"
+                    test -s "$floor_stage/lib/modules/$floor_release/extra/decnet_iv.ko"
+                    DESTDIR="$floor_stage" KERNEL_RELEASE="$floor_release" ./uninstall.sh
+                  fi
                 fi
               ' 2>&1 | tee "$log"
           }
