@@ -705,7 +705,7 @@ def main() -> int:
         "action.sa_flags = SA_RESTART | SA_NOCLDSTOP;",
         "return sigaction(SIGCHLD, &action, NULL);",
         "if (!once && install_child_reaper())",
-        "if (selftest_reaper())",
+        "if (selftest_reaper() || selftest_config_line_bound())",
         "if (!strchr(line, '\\n') && !feof(file))",
         "config line %u exceeds %zu bytes",
         "static int selftest_config_line_bound(void)",
