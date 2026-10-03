@@ -211,7 +211,7 @@ jobs:
           arch='${{ matrix.arch }}'
           side='${{ matrix.side }}'
           tap="ds${arch:0:1}${side}${GITHUB_RUN_ID: -4}"
-          relay="/tmp/dniv-scale16-${GITHUB_RUN_ID}-${arch}.sock"
+          relay="/tmp/dniv-scale16-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${arch}.sock"
           dpipe="$RUNNER_TEMP/vde2-build/src/dpipe"
           plug="$RUNNER_TEMP/vde2-build/src/vde_plug2tap"
           log="$DNIV_SCRATCH_DIR/cross-cable.log"
@@ -265,10 +265,10 @@ jobs:
             exit 1
           fi
 
-          cable_ready="/tmp/dniv-scale16-${GITHUB_RUN_ID}-${arch}-cable-${side}.ready"
+          cable_ready="/tmp/dniv-scale16-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${arch}-cable-${side}.ready"
           peer_side=a
           [[ "$side" == a ]] && peer_side=b
-          cable_peer="/tmp/dniv-scale16-${GITHUB_RUN_ID}-${arch}-cable-${peer_side}.ready"
+          cable_peer="/tmp/dniv-scale16-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${arch}-cable-${peer_side}.ready"
           barrier_log="$DNIV_SCRATCH_DIR/cable-barrier.log"
           barrier_ok=0
           for attempt in $(seq 1 8); do
@@ -295,7 +295,7 @@ jobs:
           rm -rf "$DNIV_LAB_ARTIFACTS"
           mkdir -p "$DNIV_LAB_ARTIFACTS"
           set +e
-          python3 tests/lab/dniv_scale16_distributed.py             "$DNIV_LAB_BASE" "$DNIV_LAB_KERNEL" "$DNIV_LAB_INITRD"             --side "$side" --cross-tap "$tap"             --ssh-config "$DNIV_SCALE_SSH_CONFIG"             --sync-token "${GITHUB_RUN_ID}-${arch}" 2>&1 | tee "$DNIV_SCRATCH_DIR/scale16.log"
+          python3 tests/lab/dniv_scale16_distributed.py             "$DNIV_LAB_BASE" "$DNIV_LAB_KERNEL" "$DNIV_LAB_INITRD"             --side "$side" --cross-tap "$tap"             --ssh-config "$DNIV_SCALE_SSH_CONFIG"             --sync-token "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${arch}" 2>&1 | tee "$DNIV_SCRATCH_DIR/scale16.log"
           rc=${PIPESTATUS[0]}
           set -e
           if [[ "$rc" -ne 0 ]]; then cat "$log" >&2 || true; fi

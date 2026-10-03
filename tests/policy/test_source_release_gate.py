@@ -216,6 +216,23 @@ def main() -> int:
     if 'local-$(date -u +%Y%m%dT%H%M%SZ)-${BASHPID}-${reference}-${scenario}' not in run_interop:
         raise SystemExit("source-release gate: unique default interop session identifier missing")
 
+    scale16_workflow = read_text(".github/workflows/scale16-distributed.yml")
+    for stale in (
+        'relay="/tmp/dniv-scale16-${GITHUB_RUN_ID}-${arch}.sock"',
+        'cable_ready="/tmp/dniv-scale16-${GITHUB_RUN_ID}-${arch}-cable-${side}.ready"',
+        '--sync-token "${GITHUB_RUN_ID}-${arch}"',
+    ):
+        if stale in scale16_workflow:
+            raise SystemExit(f"source-release gate: scale16 shared rendezvous omits run attempt: {stale}")
+    for required in (
+        'relay="/tmp/dniv-scale16-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${arch}.sock"',
+        'cable_ready="/tmp/dniv-scale16-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${arch}-cable-${side}.ready"',
+        'cable_peer="/tmp/dniv-scale16-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${arch}-cable-${peer_side}.ready"',
+        '--sync-token "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${arch}"',
+    ):
+        if required not in scale16_workflow:
+            raise SystemExit(f"source-release gate: scale16 run-attempt isolation missing: {required}")
+
     area31_smoke = read_text("tests/lab/dniv-area31-smoke.sh")
     for stale in (
         "/tmp/dniv-area31-native.err",
