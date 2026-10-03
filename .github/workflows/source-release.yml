@@ -194,14 +194,13 @@ jobs:
           fi
 
           fake_gcc="$RUNNER_TEMP/gcc-11"
-          cat >"$fake_gcc" <<'EOF_FAKE_GCC'
-#!/usr/bin/env bash
-case "$1" in
-  --version) printf 'gcc (GCC) 11.5.0\n' ;;
-  -dumpfullversion|-dumpversion) printf '11.5.0\n' ;;
-  *) exit 99 ;;
-esac
-EOF_FAKE_GCC
+          printf '%s\n' \
+            '#!/usr/bin/env bash' \
+            'case "$1" in' \
+            "  --version) printf 'gcc (GCC) 11.5.0\\n' ;;" \
+            "  -dumpfullversion|-dumpversion) printf '11.5.0\\n' ;;" \
+            '  *) exit 99 ;;' \
+            'esac' >"$fake_gcc"
           chmod +x "$fake_gcc"
           if CC="$fake_gcc" KDIR="$KDIR" KERNEL_RELEASE="$KERNEL_RELEASE" ./build.sh >/dev/null 2>&1; then
             echo "source-release: below-gcc-floor negative unexpectedly succeeded" >&2
@@ -209,14 +208,13 @@ EOF_FAKE_GCC
           fi
 
           fake_clang="$RUNNER_TEMP/clang-15"
-          cat >"$fake_clang" <<'EOF_FAKE_CLANG'
-#!/usr/bin/env bash
-case "$1" in
-  --version) printf 'clang version 15.0.7\n' ;;
-  -dumpfullversion|-dumpversion) printf '15.0.7\n' ;;
-  *) exit 99 ;;
-esac
-EOF_FAKE_CLANG
+          printf '%s\n' \
+            '#!/usr/bin/env bash' \
+            'case "$1" in' \
+            "  --version) printf 'clang version 15.0.7\\n' ;;" \
+            "  -dumpfullversion|-dumpversion) printf '15.0.7\\n' ;;" \
+            '  *) exit 99 ;;' \
+            'esac' >"$fake_clang"
           chmod +x "$fake_clang"
           if CC="$fake_clang" KDIR="$KDIR" KERNEL_RELEASE="$KERNEL_RELEASE" ./build.sh >/dev/null 2>&1; then
             echo "source-release: below-clang-floor negative unexpectedly succeeded" >&2
