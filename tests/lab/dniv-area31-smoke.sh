@@ -15,6 +15,12 @@
 
 set -eu
 
+scratch=
+cleanup_scratch() {
+    [ -z "$scratch" ] || rm -rf -- "$scratch"
+}
+trap cleanup_scratch EXIT HUP INT TERM
+
 fail() {
     echo "DNIV-AREA31-NATIVE-FAIL reason=$1"
     poweroff -f || true
@@ -72,6 +78,8 @@ vax_user=$(cat "$user_file")
 vax_password=$(cat "$password_file")
 [ -n "$vax_user" ] || fail empty-vax-user
 [ -n "$vax_password" ] || fail empty-vax-password
+
+scratch=$(mktemp -d /tmp/dniv-area31.XXXXXX) || fail scratch-dir
 
 parse_node "$linux_node" || fail bad-linux-node
 parse_node "$gateway_node" || fail bad-gateway-node
@@ -132,7 +140,7 @@ for _ in $(seq 1 320); do
 done
 [ "$route_ready" -eq 1 ] || fail vax-route
 
-remote_log=/tmp/dniv-area31-native.err
+remote_log="$scratch/native.err"
 remote_ready=0
 for _ in $(seq 1 120); do
     : >"$remote_log"
@@ -210,8 +218,8 @@ if [ -n "$qcocal" ]; then
     DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
         /usr/local/bin/dncopy --put-text /run/dniv-area31/DNIVHT.COM "$qcocal" DNIVHT.COM \
         >/dev/null 2>&1 || fail qcocal-http-install
-    http_out=/tmp/dniv-qcocal-http.out
-    http_err=/tmp/dniv-qcocal-http.err
+    http_out="$scratch/qcocal-http.out"
+    http_err="$scratch/qcocal-http.err"
     if ! DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
         /usr/local/bin/dnlynx -i -o DNIVHT "$qcocal" / >"$http_out" 2>"$http_err"; then
         sed -n '1p' "$http_err" >&2 || true

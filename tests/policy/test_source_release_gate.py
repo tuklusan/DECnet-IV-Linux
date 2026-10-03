@@ -210,6 +210,24 @@ def main() -> int:
     if ".github/workflows/area31-interop.yml" not in handover_status:
         raise SystemExit("source-release gate: handover does not identify the implemented Area-31 workflow")
 
+    area31_smoke = read_text("tests/lab/dniv-area31-smoke.sh")
+    for stale in (
+        "/tmp/dniv-area31-native.err",
+        "/tmp/dniv-qcocal-http.out",
+        "/tmp/dniv-qcocal-http.err",
+    ):
+        if stale in area31_smoke:
+            raise SystemExit(f"source-release gate: predictable Area-31 guest scratch path remains: {stale}")
+    for required in (
+        "mktemp -d /tmp/dniv-area31.XXXXXX",
+        'remote_log="$scratch/native.err"',
+        'http_out="$scratch/qcocal-http.out"',
+        'http_err="$scratch/qcocal-http.err"',
+        "trap cleanup_scratch EXIT HUP INT TERM",
+    ):
+        if required not in area31_smoke:
+            raise SystemExit(f"source-release gate: Area-31 guest scratch safeguard missing: {required}")
+
     state_status = read_text("docs/PROJECT_STATE.md").split("## Resume point", 1)[0]
     if "server timed out/client hung in join step" in state_status:
         raise SystemExit("source-release gate: stale pre-closure cross-runner status remains in project state")
