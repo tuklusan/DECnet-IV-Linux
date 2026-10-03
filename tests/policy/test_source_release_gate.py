@@ -65,6 +65,13 @@ def main() -> int:
         value = read_text(doc)
         if "Fedora 42" in value or "Fedora 44" not in value:
             raise SystemExit(f"source-release gate: stale Fedora portability documentation remains in {doc}")
+    test_lab_scale = read_text("docs/TEST_LAB.md")
+    for stale in ("Full acceptance initially dispatches `scale4`", "`scale8` and `scale16` exist but are not promotion-green"):
+        if stale in test_lab_scale:
+            raise SystemExit(f"source-release gate: stale Phase 9 scale promotion text remains: {stale}")
+    for required in ("`scale4` and `scale8` on both x86_64 and aarch64", "distributed 16-node scale workflow"):
+        if required not in test_lab_scale:
+            raise SystemExit(f"source-release gate: current Phase 9 scale promotion text missing: {required}")
     for forbidden in ("qemu-system", ".qcow2", "dniv.raw", "Release Image"):
         if forbidden in workflow:
             raise SystemExit(f"source-release gate: disk-image release behavior remains: {forbidden}")
