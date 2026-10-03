@@ -33,7 +33,7 @@ case "$profile" in
     kasan|kcsan|lockdebug|kmemleak) ;;
     *) echo "install-diagnostic-module: unsupported profile: $profile" >&2; exit 2 ;;
 esac
-[[ "$krel" == "7.0.0-dniv-$profile" ]] || {
+[[ "$krel" == "7.3.0-rc5-dniv-$profile" ]] || {
     echo "install-diagnostic-module: unexpected kernel release: $krel" >&2
     exit 2
 }

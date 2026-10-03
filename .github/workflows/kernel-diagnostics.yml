@@ -278,7 +278,7 @@ jobs:
               ;;
           esac
           krel=$(cat "$DNIV_DIAG_DIR/kernelrelease")
-          test "$krel" = "7.0.0-dniv-${{ inputs.profile }}"
+          test "$krel" = "7.3.0-rc5-dniv-${{ inputs.profile }}"
           printf 'CACHE_HIT=%s\nKERNEL_RELEASE=%s\n' \
             '${{ steps.diagnostic-cache.outputs.cache-hit }}' "$krel" >> "$DNIV_SCRATCH_DIR/diagnostic-kernel.env"
 

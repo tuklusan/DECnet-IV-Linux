@@ -53,7 +53,7 @@ test "$(git -C "$output/src" rev-parse HEAD)" = "$linux_commit"
 
 # The exact source commit is verified above. Drop SCM metadata before invoking
 # Kbuild so scripts/setlocalversion cannot append an environment-dependent '+'
-# merely because the shallow pinned checkout does not contain the v7.0 tag.
+# merely because the shallow pinned checkout does not contain the pinned v7.3-rc5 tag.
 rm -rf "$output/src/.git"
 
 cp "$base_config" "$output/build/.config"
@@ -191,7 +191,7 @@ fi
 export KBUILD_BUILD_USER=dniv
 export KBUILD_BUILD_HOST=diagnostic
 export KBUILD_BUILD_VERSION=1
-export KBUILD_BUILD_TIMESTAMP="Sun Apr 12 20:48:06 UTC 2026"
+export KBUILD_BUILD_TIMESTAMP="Sun Sep 27 20:55:01 UTC 2026"
 make -C "$output/src" O="$output/build" ARCH="$karch" -j"$jobs" "$image_target"
 make -C "$output/src" O="$output/build" ARCH="$karch" -j"$jobs" modules
 [[ -s "$output/build/Module.symvers" ]] || {
@@ -205,7 +205,7 @@ make -C "$output/src" O="$output/build" ARCH="$karch" -j"$jobs" modules
 # both hosted architectures despite the completed kernel image.
 krel=$(make -s -C "$output/src" O="$output/build" ARCH="$karch" kernelrelease)
 echo "build-diagnostic-kernel: kernelrelease=$krel"
-[[ "$krel" == "7.0.0-dniv-$profile" ]] || {
+[[ "$krel" == "7.3.0-rc5-dniv-$profile" ]] || {
     echo "build-diagnostic-kernel: unexpected kernel release: $krel" >&2
     exit 1
 }

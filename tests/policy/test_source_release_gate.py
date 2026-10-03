@@ -190,6 +190,28 @@ def main() -> int:
         if marker not in diagnostic_kernel:
             raise SystemExit(f"source-release gate: current upstream kernel pin missing: {marker}")
 
+    diagnostic_installer = read_text("tests/lab/install-diagnostic-module.sh")
+    diagnostic_workflow = read_text(".github/workflows/kernel-diagnostics.yml")
+    test_lab = read_text("docs/TEST_LAB.md")
+    for label, value in (
+        ("diagnostic builder", diagnostic_kernel),
+        ("diagnostic installer", diagnostic_installer),
+        ("diagnostic workflow", diagnostic_workflow),
+        ("lab documentation", test_lab),
+    ):
+        if "7.0.0-dniv-" in value or "pinned upstream Linux v7.0 commit" in value:
+            raise SystemExit(f"source-release gate: stale Linux 7.0 diagnostic contract remains in {label}")
+    for marker in ("7.3.0-rc5-dniv-",):
+        for label, value in (
+            ("diagnostic builder", diagnostic_kernel),
+            ("diagnostic installer", diagnostic_installer),
+            ("diagnostic workflow", diagnostic_workflow),
+        ):
+            if marker not in value:
+                raise SystemExit(f"source-release gate: current diagnostic release contract missing in {label}: {marker}")
+    if "Linux v7.3-rc5 commit `72d3fcf802c45d00b300f25b848a93c3a2bd7c7e`" not in test_lab:
+        raise SystemExit("source-release gate: lab documentation current-kernel pin is stale")
+
     dispatcher = read_text(".github/workflows/repository-policy.yml")
     if "SOURCE_RELEASE source-release.yml" not in dispatcher or "RELEASE_IMAGE release-image.yml" in dispatcher:
         raise SystemExit("source-release gate: acceptance dispatcher not synchronized")
