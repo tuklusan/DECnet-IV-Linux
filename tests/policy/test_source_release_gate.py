@@ -16,6 +16,7 @@
 """Lock the portable source-release contract."""
 
 from pathlib import Path
+import os
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -127,9 +128,15 @@ def main() -> int:
     roadmap = read_text("docs/ROADMAP.md")
     if "as Phase 7 tools mature" in roadmap:
         raise SystemExit("source-release gate: stale Phase 7 maturity wording remains in roadmap")
-    for forbidden in ("qemu-system", ".qcow2", "dniv.raw", "Release Image"):
+    for forbidden in ("qemu-system", "dniv.raw", "Release Image"):
         if forbidden in workflow:
             raise SystemExit(f"source-release gate: disk-image release behavior remains: {forbidden}")
+    qcow2_lines = [line for line in workflow.splitlines() if ".qcow2" in line]
+    for line in qcow2_lines:
+        if "-name '*.qcow2'" not in line and "audit.qcow2" not in line:
+            raise SystemExit(f"source-release gate: unexpected qcow2 release behavior remains: {line.strip()}")
+    if not any("-name '*.qcow2'" in line for line in qcow2_lines) or not any("audit.qcow2" in line for line in qcow2_lines):
+        raise SystemExit("source-release gate: generated-payload qcow2 negative is incomplete")
     readme = read_text("README.md")
     for marker in ("SOCK_SEQPACKET", "SOCK_STREAM", "deferred accept/reject"):
         if marker not in readme:
@@ -233,6 +240,9 @@ def main() -> int:
         if marker not in uninstall:
             raise SystemExit(f"source-release gate: uninstaller safety safeguard missing: {marker}")
 
+    build_path = ROOT / "build.sh"
+    if not os.access(build_path, os.X_OK):
+        raise SystemExit("source-release gate: build.sh is not executable")
     build = read_text("build.sh")
     for marker in (
         "include/config/kernel.release",
