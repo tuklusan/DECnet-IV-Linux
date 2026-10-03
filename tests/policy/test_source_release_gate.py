@@ -617,10 +617,12 @@ def main() -> int:
         if marker not in socket_source:
             raise SystemExit(f"source-release gate: socket partial-record continuation safeguard missing: {marker}")
     nsp_source = read_text("kernel/decnet/decnet_iv_nsp.c")
-    if nsp_source.count("(void)dniv_nsp_transmit(remote_node, wire, (__u16)len);") < 2:
-        raise SystemExit("source-release gate: queued NSP data/interrupt transmit ownership safeguard missing")
+    if nsp_source.count("(void)dniv_nsp_transmit(remote_node, wire, (__u16)len);") < 3:
+        raise SystemExit("source-release gate: queued NSP data/interrupt/control transmit ownership safeguard missing")
     if "reporting its\n     * transient error to the socket caller would invite the same user bytes" not in nsp_source:
         raise SystemExit("source-release gate: queued NSP transmit duplicate-send rationale missing")
+    if "the NSP timer still owns." not in nsp_source:
+        raise SystemExit("source-release gate: retained NSP control transmit ownership rationale missing")
 
     record_io = read_text("userspace/common/record_io.h")
     for marker in ("flags | MSG_TRUNC", "(size_t)got > cap", "errno = EMSGSIZE;"):

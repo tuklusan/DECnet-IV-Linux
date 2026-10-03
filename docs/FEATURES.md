@@ -31,7 +31,7 @@ This catalogue describes the production source release. Lab-only helpers and ind
 - NSP data flow control, interrupt/out-of-band flow and resource limits.
 - Session Control connect/accept/reject behavior and object dispatch.
 - Native `AF_DECnet` / `SOCK_SEQPACKET` record ABI plus `SOCK_STREAM` compatibility with short-read preservation and `MSG_WAITALL` across NSP record boundaries.
-- Multi-segment socket writes preserve an in-progress NSP record across short/partial sends, and once an NSP data/interrupt segment is committed to the retransmit queue its immediate Ethernet transmit result cannot cause the same user bytes to be resubmitted under a new sequence number.
+- Multi-segment socket writes preserve an in-progress NSP record across short/partial sends, and once NSP data, interrupt or retained connection-control traffic is committed to retransmission state, an immediate Ethernet transmit result cannot contradict that accepted queue/state ownership.
 - Classic `DNPROTO_NSP` socket controls for access data, connect/accept data, peer/local disconnect data, link information, immediate/deferred accept, explicit accept and explicit reject (`DSO_CONACCESS`, `DSO_CONDATA`, `DSO_DISDATA`, `DSO_LINKINFO`, `DSO_ACCEPTMODE`, `DSO_CONACCEPT`, `DSO_CONREJECT`).
 - Versioned management UAPI for identity, counters, adjacencies, routes and NSP links.
 

@@ -1669,9 +1669,16 @@ static int dniv_nsp_send_control(__u16 local_link,
     dniv_nsp_set_state_locked(conn, next_state, jiffies);
     spin_unlock_irqrestore(&dniv_nsp_lock, flags);
 
-    ret = dniv_nsp_transmit(remote_node, wire, (__u16)len);
+    /*
+     * The control message is retained for retransmission before this point.
+     * Once queued, the operation is accepted even if the immediate Ethernet
+     * attempt fails; reporting that transient result would contradict the
+     * retained control state and can make callers tear down a message that
+     * the NSP timer still owns.
+     */
+    (void)dniv_nsp_transmit(remote_node, wire, (__u16)len);
     dniv_nsp_notify_link(local_link);
-    return ret;
+    return 0;
 }
 
 int dniv_nsp_connect(__u16 remote_node, const __u8 *payload,
