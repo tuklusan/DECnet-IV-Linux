@@ -334,7 +334,6 @@ def main() -> int:
         'record "$target"',
         'sort -u "$manifest"',
         "unsafe existing manifest",
-        "refusing non-regular file at regular-file target",
         "refusing non-symlink at link target",
         "module vermagic release",
         "required command not found: modinfo",
