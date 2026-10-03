@@ -28,7 +28,7 @@ See `docs/FEATURES.md`, `docs/COMPONENTS.md`, `docs/DELIVERY.md`, and `INSTALL.m
 
 ## Supported target
 
-The current production compatibility floor is Linux 6.12 or later on x86_64 or aarch64, with a matching configured kernel build/header tree. GCC or Clang may be used. Python 3.10 or later is required for the delivered `dnmultinet` launcher.
+The current production compatibility floor is Linux 6.8 or later on x86_64 or aarch64, with a matching configured kernel build/header tree. GCC or Clang may be used. Python 3.10 or later is required for the delivered `dnmultinet` launcher.
 
 Forward compatibility is maintained by continuously compiling against maintained distro kernels and current upstream kernel lines. Unknown future kernel API changes cannot be guaranteed in advance; compatibility defects discovered by the forward build gates are blocking until corrected.
 

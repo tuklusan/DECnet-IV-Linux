@@ -47,7 +47,7 @@ archive="$output_dir/$name.tar.xz"
 (
   cd "$work"
   find "$name" -print0 | LC_ALL=C sort -z |
-    tar --null --files-from=- --no-recursion --format=posix --owner=0 --group=0 --numeric-owner --mtime="@$epoch" --pax-option=delete=atime,delete=ctime -cJf "$archive"
+    tar --create --xz --file="$archive" --format=posix --owner=0 --group=0 --numeric-owner       --mtime="@$epoch" --pax-option=delete=atime,delete=ctime --no-recursion       --null --files-from=-
 )
 (cd "$output_dir" && sha256sum "$(basename "$archive")" >"$(basename "$archive").sha256")
 printf '%s\n' "$archive"

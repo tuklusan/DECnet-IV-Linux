@@ -18,7 +18,7 @@ This manual installs DECnet-IV-Linux from the production source tarball onto an 
 
 ## 1. Supported machines and kernel
 
-Supported CPU architectures are x86_64 and aarch64. The production kernel floor is Linux 6.12 or later.
+Supported CPU architectures are x86_64 and aarch64. The production kernel floor is Linux 6.8 or later.
 
 The selected kernel must have a matching external-module build tree. For the running kernel:
 
@@ -32,7 +32,7 @@ To target another installed kernel, set both `KERNEL_RELEASE` and `KDIR`.
 
 Core build requirements:
 
-- Linux 6.12+ with matching kernel headers/development tree;
+- Linux 6.8+ with matching kernel headers/development tree;
 - GNU make 4.0+;
 - GCC 12+ or Clang 16+;
 - binutils and libc development environment;

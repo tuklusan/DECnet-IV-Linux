@@ -35,7 +35,7 @@ Historical behavior is implemented, replaced by a documented modern equivalent, 
 
 ## Source distribution and target systems
 
-The production deliverable is a source tarball, not a Linux distribution image. It targets existing x86_64 and aarch64 Linux systems with Linux 6.12 or later, matching external-module kernel headers/build tree, a supported C compiler and the dependencies listed in `INSTALL.md`. The kernel module is built on the target for the selected kernel; no prebuilt project kernel or `decnet_iv.ko` is required.
+The production deliverable is a source tarball, not a Linux distribution image. It targets existing x86_64 and aarch64 Linux systems with Linux 6.8 or later, matching external-module kernel headers/build tree, a supported C compiler and the dependencies listed in `INSTALL.md`. The kernel module is built on the target for the selected kernel; no prebuilt project kernel or `decnet_iv.ko` is required.
 
 Forward compatibility is maintained by portability/compatibility gates against maintained distro kernels and current validated upstream kernel lines. Unknown future kernel API changes are corrected when published and retained as compatibility regressions.
 

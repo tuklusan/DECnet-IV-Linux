@@ -26,8 +26,8 @@ for command in bash make "$cc" "$python" install ln rm find sort grep sed; do ne
 test -r "$kdir/Makefile" || { echo "build.sh: matching kernel build tree not found: $kdir" >&2; exit 2; }
 case "$(uname -m)" in x86_64|aarch64) ;; *) echo "build.sh: supported architectures are x86_64 and aarch64" >&2; exit 2 ;; esac
 kernel_version=$(make -s -C "$kdir" kernelversion)
-first=$(printf '%s\n%s\n' 6.12 "$kernel_version" | sort -V | head -1)
-[[ "$first" == 6.12 ]] || { echo "build.sh: Linux 6.12 or later required; target reports $kernel_version" >&2; exit 2; }
+first=$(printf '%s\n%s\n' 6.8 "$kernel_version" | sort -V | head -1)
+[[ "$first" == 6.8 ]] || { echo "build.sh: Linux 6.8 or later required; target reports $kernel_version" >&2; exit 2; }
 compiler_line=$("$cc" --version | head -1)
 printf 'DECnet-IV-Linux build\n  kernel release: %s\n  kernel version: %s\n  kernel build:   %s\n  compiler:       %s\n' "$kernel_release" "$kernel_version" "$kdir" "$compiler_line"
 make userspace CC="$cc" PYTHON="$python"

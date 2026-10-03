@@ -41,7 +41,7 @@ def main() -> int:
         if forbidden in workflow:
             raise SystemExit(f"source-release gate: disk-image release behavior remains: {forbidden}")
     delivery = read_text("docs/DELIVERY.md")
-    for marker in ("source tarball", "Disk images are not release artifacts", "x86_64", "aarch64", "Linux 6.12", "Forward compatibility"):
+    for marker in ("source tarball", "Disk images are not release artifacts", "x86_64", "aarch64", "Linux 6.8", "Forward compatibility"):
         if marker not in delivery:
             raise SystemExit(f"source-release gate: delivery contract missing: {marker}")
     components = read_text("docs/COMPONENTS.md")

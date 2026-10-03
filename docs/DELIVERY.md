@@ -30,7 +30,7 @@ The tarball is generated from one exact accepted source commit, contains no `.gi
 
 ## Target systems
 
-The production target is an existing modern Linux installation on x86_64 or aarch64. The initial compatibility floor is Linux 6.12 or later. The target kernel must expose an external-module build tree matching the kernel for which `decnet_iv.ko` will be loaded, normally `/lib/modules/$(uname -r)/build`.
+The production target is an existing modern Linux installation on x86_64 or aarch64. The initial compatibility floor is Linux 6.8 or later. The target kernel must expose an external-module build tree matching the kernel for which `decnet_iv.ko` will be loaded, normally `/lib/modules/$(uname -r)/build`.
 
 The release is distribution-neutral. Debian/Ubuntu and Fedora/RHEL-family package names in `INSTALL.md` are examples; the real requirements are a supported compiler, libc development environment, GNU make, matching kernel development tree, Python where applicable, and standard module-management utilities.
 
