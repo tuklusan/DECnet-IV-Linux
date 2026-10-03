@@ -121,6 +121,7 @@ def main() -> int:
         'sha256sum -c "$(basename "$archive").sha256"',
         'grep -Fqx "source_sha=$DNIV_EXPECTED_SHA" SOURCE-METADATA',
         "run_case debian13 debian:13 gcc",
+        "bc bison flex libelf-dev libssl-dev",
         'if [[ "$DNIV_COMPILER" == clang ]]',
         'kbase=$(make -s -C "$KDIR" kernelversion)',
         "run_case fedora42 fedora:42 clang",

@@ -277,7 +277,7 @@ jobs:
                   export DEBIAN_FRONTEND=noninteractive
                   apt-get update
                   if [[ "$DNIV_ARCH" == amd64 ]]; then kh=linux-headers-amd64; else kh=linux-headers-arm64; fi
-                  apt-get install -y build-essential clang llvm lld python3 kmod xz-utils curl "$kh"
+                  apt-get install -y build-essential clang llvm lld python3 kmod xz-utils curl bc bison flex libelf-dev libssl-dev "$kh"
                   KDIR=$(find /usr/src -maxdepth 1 -type d -name "linux-headers-*" ! -name "*-common" | sort -V | tail -1)
                 else
                   dnf -y install gcc clang llvm lld make python3 kmod kernel-devel findutils \
