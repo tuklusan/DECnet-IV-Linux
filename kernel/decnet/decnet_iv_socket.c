@@ -64,6 +64,7 @@ struct dniv_sock {
     __u8 *stream_rx;
     __u32 stream_rx_len;
     __u32 stream_rx_off;
+    __u32 tx_record_len;
     bool tx_record_open;
     bool bound;
     bool listening;
@@ -753,6 +754,7 @@ static int dniv_sock_connect_impl(struct socket *sock,
         if (status < 0) {
             dniv_nsp_conn_release(dsk->local_link);
             dsk->local_link = 0U;
+            dsk->tx_record_len = 0U;
             dsk->tx_record_open = false;
             sock->state = SS_UNCONNECTED;
             ret = status;
@@ -768,6 +770,7 @@ static int dniv_sock_connect_impl(struct socket *sock,
         if (ret)
             goto out;
         dsk->local_link = link;
+        dsk->tx_record_len = 0U;
         dsk->tx_record_open = false;
         dsk->peer = *addr;
         sock->state = SS_CONNECTING;
@@ -784,6 +787,7 @@ static int dniv_sock_connect_impl(struct socket *sock,
         if (dsk->local_link)
             dniv_nsp_conn_release(dsk->local_link);
         dsk->local_link = 0U;
+        dsk->tx_record_len = 0U;
         dsk->tx_record_open = false;
         sock->state = SS_UNCONNECTED;
     }
@@ -871,6 +875,11 @@ static int dniv_sock_sendmsg(struct socket *sock, struct msghdr *msg,
         goto out;
     }
     ret = 0;
+    if (!(msg->msg_flags & MSG_OOB) &&
+        dsk->tx_record_len > DNBUFSIZE - size) {
+        ret = -EMSGSIZE;
+        goto out;
+    }
     timeo = sock_sndtimeo(sk, msg->msg_flags & MSG_DONTWAIT);
     if (msg->msg_flags & MSG_OOB) {
         for (;;) {
@@ -915,13 +924,21 @@ static int dniv_sock_sendmsg(struct socket *sock, struct msghdr *msg,
         while (off < size) {
         __u16 chunk = (__u16)min_t(size_t, segment_size, size - off);
         __u8 bom = (!dsk->tx_record_open && off == 0U) ? 1U : 0U;
-        __u8 eom = off + chunk == size;
+        __u8 eom = (off + chunk == size) &&
+                   (sock->type == SOCK_STREAM ||
+                    (msg->msg_flags & MSG_EOR));
 
         ret = dniv_nsp_send_data(dsk->local_link, data + off, chunk,
                                  bom, eom);
         if (!ret) {
             off += chunk;
-            dsk->tx_record_open = eom ? false : true;
+            dsk->tx_record_len += chunk;
+            if (eom) {
+                dsk->tx_record_open = false;
+                dsk->tx_record_len = 0U;
+            } else {
+                dsk->tx_record_open = true;
+            }
             continue;
         }
         if (ret != -EAGAIN || !timeo)
@@ -1397,6 +1414,7 @@ static int dniv_sock_accept_impl(struct socket *sock, struct socket *newsock,
     newdsk->stream_rx = NULL;
     newdsk->stream_rx_len = 0U;
     newdsk->stream_rx_off = 0U;
+    newdsk->tx_record_len = 0U;
     newdsk->tx_record_open = false;
     dniv_sockaddr_set_node(&newdsk->peer, ci.remote_node);
     newdsk->local_link = link;
@@ -1778,6 +1796,7 @@ static int dniv_sock_create(struct net *net, struct socket *sock,
     dsk->stream_rx = NULL;
     dsk->stream_rx_len = 0U;
     dsk->stream_rx_off = 0U;
+    dsk->tx_record_len = 0U;
     dsk->tx_record_open = false;
     dsk->bound = false;
     dsk->listening = false;

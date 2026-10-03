@@ -645,10 +645,16 @@ def main() -> int:
 
     socket_source = read_text("kernel/decnet/decnet_iv_socket.c")
     for marker in (
+        "__u32 tx_record_len;",
         "bool tx_record_open;",
         "__u8 bom = (!dsk->tx_record_open && off == 0U) ? 1U : 0U;",
-        "dsk->tx_record_open = eom ? false : true;",
+        "dsk->tx_record_len > DNBUFSIZE - size",
+        "(sock->type == SOCK_STREAM ||",
+        "(msg->msg_flags & MSG_EOR));",
+        "dsk->tx_record_len += chunk;",
+        "dsk->tx_record_len = 0U;",
         "dsk->tx_record_open = false;",
+        "dsk->tx_record_open = true;",
     ):
         if marker not in socket_source:
             raise SystemExit(f"source-release gate: socket partial-record continuation safeguard missing: {marker}")
