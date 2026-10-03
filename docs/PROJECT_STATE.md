@@ -93,10 +93,10 @@ Implementation order:
 | Route20 reference READY bounds | amd64 180s; ARM64 600s |
 | Host-TAP PyDECnet READY bound | 60 seconds after process launch/application marker |
 | E1 controller budget | amd64 300s; ARM64 360s |
-| Local VDE2 transport proof | enhanced green, run `35959075714` |
-| Local MULTINET TCP proof | enhanced green, run `35960257018` |
-| Cross-runner VDE2 join | secrets configured; run `36142699326` reached real SSH rendezvous but server timed out/client hung in join step |
-| Area-31/VAX integration | dual-architecture green on `5cf52c584e077d841a8a240fc7cf326b1d0b3f6b`, run `36139333328` |
+| Local VDE2 transport proof | final Phase 8 green, run `36258635481` |
+| Local MULTINET TCP proof | final Phase 8 green, run `36258643588` |
+| Cross-runner VDE2 join | final Phase 8 green on both hosted architectures, run `36258564105` |
+| Area-31/VAX integration | final Phase 8 green, run `36258654316` |
 | Compact evidence retention | 30 days maximum |
 
 ## Resume point
@@ -1960,3 +1960,6 @@ Fresh-disk audit scan 1 of exact accepted source artifact `11266991181` from can
 
 
 Continued fresh-disk audit of superseded exact artifact `11266991181` also found a live-install dependency-cache defect. `INSTALL.md` declares `depmod` required for live module installation/loading, but `install.sh` and `uninstall.sh` silently skipped dependency-cache refresh when `depmod` was absent and could still report success after changing module files. The clean-scan count remains zero. The successor fail-closes live install/uninstall on missing `depmod` before manifest mutation/removal, runs the required refresh unconditionally once preflight passes, documents that behavior, and locks both preflights in the source-release policy gate. The IPv4-only MULTINET reference correction from `2d57bdc0112680dc3bec8334e9dd1baa384e8aeb` is preserved, and DDCMP/IPv6 remain out of scope. Restart targeted `PROFILE=targeted`, `SCOPE=source-release` acceptance and then fresh-disk audit scan 1/3 on the resulting exact artifact.
+
+
+Continued fresh-disk audit of superseded exact artifact `11266991181` found additional stale live continuity state. `docs/HANDOVER.md` still described the already-implemented Area-31 workflow as future work; the current `docs/PROJECT_STATE.md` infrastructure table still recorded an old cross-runner VDE2 timeout despite Phase 8 closure; and the current checkpoint in `scratch/RESUME.md` still said Phase 7 was active, cross-runner VDE2 unproven and Area-31 planned. The clean-scan count remains zero. The successor synchronizes those live sections to the final Phase 7/8 evidence while preserving historical chronology, and adds source-release regressions scoped to the live checkpoint sections. Restart targeted `PROFILE=targeted`, `SCOPE=source-release` acceptance and then fresh-disk audit scan 1/3 on the resulting exact artifact.

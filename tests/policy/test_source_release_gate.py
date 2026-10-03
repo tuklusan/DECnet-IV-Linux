@@ -135,6 +135,27 @@ def main() -> int:
             raise SystemExit(f"source-release gate: stale completed acceptance text remains in pre-production documentation: {stale}")
     if "PP-10 is closed" not in preproduction or "e60660c3b7d311451fc854464fa1d7438222f7e2" not in preproduction:
         raise SystemExit("source-release gate: PP-10 closure is not synchronized in pre-production documentation")
+    handover_status = read_text("docs/HANDOVER.md")
+    if "When its repository-tracked workflow is added" in handover_status:
+        raise SystemExit("source-release gate: stale pre-implementation Area-31 wording remains in handover")
+    if ".github/workflows/area31-interop.yml" not in handover_status:
+        raise SystemExit("source-release gate: handover does not identify the implemented Area-31 workflow")
+
+    state_status = read_text("docs/PROJECT_STATE.md").split("## Resume point", 1)[0]
+    if "server timed out/client hung in join step" in state_status:
+        raise SystemExit("source-release gate: stale pre-closure cross-runner status remains in project state")
+    for required in ("36258564105", "36258635481", "36258643588", "36258654316"):
+        if required not in state_status:
+            raise SystemExit(f"source-release gate: final Phase 8 infrastructure evidence missing from project state: {required}")
+
+    resume_status = read_text("scratch/RESUME.md").split("## Next action", 1)[0]
+    for stale in ("Phase 7 is active on `main`", "cross-runner VDE2 is still unproven", "Area-31 remote integration is still planned"):
+        if stale in resume_status:
+            raise SystemExit(f"source-release gate: stale current checkpoint remains in scratch resume: {stale}")
+    for required in ("Phase 9 is active on `main`", "36258564105", "36258635481", "36258643588", "36258654316"):
+        if required not in resume_status:
+            raise SystemExit(f"source-release gate: current Phase 8/9 checkpoint missing from scratch resume: {required}")
+
     hecnet_lab = read_text("docs/HECNET_LAB.md")
     for stale in ("sole remaining Phase 8 exit dependency", "The Area-31 workflow will use these GitHub Actions secrets", "as those facilities become available", "as each userspace feature lands"):
         if stale in hecnet_lab:

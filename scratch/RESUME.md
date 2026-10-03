@@ -21,7 +21,7 @@ Owner scope boundary: DDCMP and IPv6 are explicitly out of scope. They are not c
 
 Annotated tag `PHASE-4-COMPLETE` is verified on closure commit `571333bfd7aaa8b2fcc88715c1d61442af151f3c`; the temporary tag workflow has been removed.
 
-Phase 4 is complete on exact protocol candidate `6c185b6d01f8a57ee9f0ea6a6c37d7112ddb77d2`. Phase 5 is complete on exact protocol candidate `2d54dbf252120b42a5c2a60fa202371382af5dc9`. Phase 6 is complete on exact protocol candidate `c11045a70e7deb59870fff5f8bc22213e0df2bc0`; Phase 7 is active on `main`. Phase 3 remains frozen at tag `PHASE-3-COMPLETE` on commit `ae1bcb82a1539ccadda0661664205e360bd760b7`.
+Phase 4 is complete on exact protocol candidate `6c185b6d01f8a57ee9f0ea6a6c37d7112ddb77d2`. Phase 5 is complete on exact protocol candidate `2d54dbf252120b42a5c2a60fa202371382af5dc9`. Phase 6 is complete on exact protocol candidate `c11045a70e7deb59870fff5f8bc22213e0df2bc0`. Phase 7 is complete on exact userspace candidate `a967af2787638ab49bf1a929a27ef9f7ab8564e9`. Phase 8 is complete on exact candidate `9b73e61bbd0f95b82410276f7b5dc3db94e219ba`; Phase 9 is active on `main`. Phase 3 remains frozen at tag `PHASE-3-COMPLETE` on commit `ae1bcb82a1539ccadda0661664205e360bd760b7`.
 
 The final Phase 3 acceptance set was green: Repository Policy `35343324826`, Build Bootstrap `35343357536`, Project State Gate `35343359444`, External Reference Baselines `35343361139`, Python QEMU VM Lab `35343362922`, and Independent Ethernet Interoperability run `35343364812`. The interoperability matrix passed all eight amd64/ARM64 Route20/PyDECnet routing/endnode role jobs.
 
@@ -41,8 +41,8 @@ Temporary Phase 3 Route20 crash instrumentation and the temporary tagging workfl
 - Route20 READY bounds: amd64 180s, ARM64 600s.
 - Host-TAP PyDECnet: starts on the architecture-matched runner and requires its `DECnet/Python is running` application marker within 60 seconds.
 - E1 controller bounds: amd64 300s, ARM64 360s.
-- Local VDE2 transport proof: green, run `35440502997`; cross-runner VDE2 is still unproven.
-- Local MULTINET TCP proof: green, run `35440787624`; Area-31 remote integration is still planned.
+- Local VDE2 transport proof: final Phase 8 green, run `36258635481`; cross-runner VDE2 is green on both hosted architectures in run `36258564105`.
+- Local MULTINET TCP proof: final Phase 8 green, run `36258643588`; Area-31/VAX integration is green in run `36258654316`.
 - Remote branch invariant: only `refs/heads/main`.
 - Acceptance concurrency is isolated by run/scenario instead of globally by architecture: E1-E4, independent references and interop suites can use separate hosted runners concurrently. Exact-SHA and parent-run binding are unchanged, so parallelism does not weaken candidate identity.
 
@@ -1887,3 +1887,6 @@ Fresh-disk audit scan 1 of exact accepted source artifact `11266991181` from can
 
 
 Continued fresh-disk audit of superseded exact artifact `11266991181` also found a live-install dependency-cache defect. `INSTALL.md` declares `depmod` required for live module installation/loading, but `install.sh` and `uninstall.sh` silently skipped dependency-cache refresh when `depmod` was absent and could still report success after changing module files. The clean-scan count remains zero. The successor fail-closes live install/uninstall on missing `depmod` before manifest mutation/removal, runs the required refresh unconditionally once preflight passes, documents that behavior, and locks both preflights in the source-release policy gate. The IPv4-only MULTINET reference correction from `2d57bdc0112680dc3bec8334e9dd1baa384e8aeb` is preserved, and DDCMP/IPv6 remain out of scope. Restart targeted `PROFILE=targeted`, `SCOPE=source-release` acceptance and then fresh-disk audit scan 1/3 on the resulting exact artifact.
+
+
+Continued fresh-disk audit of superseded exact artifact `11266991181` found additional stale live continuity state. `docs/HANDOVER.md` still described the already-implemented Area-31 workflow as future work; the current `docs/PROJECT_STATE.md` infrastructure table still recorded an old cross-runner VDE2 timeout despite Phase 8 closure; and the current checkpoint in `scratch/RESUME.md` still said Phase 7 was active, cross-runner VDE2 unproven and Area-31 planned. The clean-scan count remains zero. The successor synchronizes those live sections to the final Phase 7/8 evidence while preserving historical chronology, and adds source-release regressions scoped to the live checkpoint sections. Restart targeted `PROFILE=targeted`, `SCOPE=source-release` acceptance and then fresh-disk audit scan 1/3 on the resulting exact artifact.
