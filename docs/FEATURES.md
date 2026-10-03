@@ -74,7 +74,7 @@ This catalogue describes the production source release. Lab-only helpers and ind
 
 - `dnmail` MAIL-11 client including optional v3 Session capability negotiation and multiple-recipient delivery.
 - `dnmaild` object 27 service with legacy/v3 negotiation, local spool delivery, sendmail-compatible execution and bounded direct SMTP delivery; the local `mailbox.log` spool is opened inside `--root` without following symbolic links and rejects multiply linked/non-regular targets.
-- Persistent `dnfald`, `dnhttpd`, `dnmaild`, `dnphoned`, `dnmirror` and `dnobject` loops isolate malformed or aborted client sessions; explicit bounded/once modes still report session failures.
+- Persistent `dnetd`, `dnfald`, `dnhttpd`, `dnmaild`, `dnphoned`, `dnmirror` and `dnobject` loops isolate malformed or aborted client sessions; explicit bounded/once modes still report session failures.
 
 ## Generic object dispatch
 

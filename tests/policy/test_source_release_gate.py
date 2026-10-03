@@ -579,6 +579,19 @@ def main() -> int:
         for marker in ("if (once) {", "return 1;", "continue;"):
             if marker not in source:
                 raise SystemExit(f"source-release gate: {daemon} once/default session isolation contract missing: {marker}")
+    dnetd = read_text("userspace/dnetd/dnetd.c")
+    dnetd_isolation = '''            if (policy < 0) {
+                perror("dnetd: accept policy");
+                close(fd);
+                if (once) {
+                    close_listeners(services, service_count);
+                    return 1;
+                }
+                continue;
+            }'''
+    if dnetd_isolation not in dnetd:
+        raise SystemExit("source-release gate: dnetd accept-policy session isolation contract missing")
+
     dnmirror = persistent_daemons["dnmirror"]
     if 'perror("dnmirror: access");' not in dnmirror or "if (once) {" not in dnmirror:
         raise SystemExit("source-release gate: dnmirror access-session isolation contract missing")

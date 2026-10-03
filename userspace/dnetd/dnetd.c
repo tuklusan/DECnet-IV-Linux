@@ -512,8 +512,11 @@ int main(int argc, char **argv)
             if (policy < 0) {
                 perror("dnetd: accept policy");
                 close(fd);
-                close_listeners(services, service_count);
-                return 1;
+                if (once) {
+                    close_listeners(services, service_count);
+                    return 1;
+                }
+                continue;
             }
             if (policy > 0) {
                 if (once) {
