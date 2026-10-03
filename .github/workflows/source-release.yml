@@ -319,6 +319,23 @@ jobs:
           test "$(stat -c %h -- "$manifest_hardlink_victim")" = 2
           rm -f "$manifest_hardlink"
 
+          uninstall_manifest_hardlink_stage="$RUNNER_TEMP/uninstall-manifest-hardlink-stage"
+          uninstall_manifest_hardlink_victim="$RUNNER_TEMP/uninstall-manifest-hardlink-victim"
+          DESTDIR="$uninstall_manifest_hardlink_stage" KERNEL_RELEASE="$KERNEL_RELEASE" ./install.sh
+          uninstall_manifest="$uninstall_manifest_hardlink_stage/usr/local/share/decnet-iv-linux/install-manifest.txt"
+          cp "$uninstall_manifest" "$uninstall_manifest_hardlink_victim"
+          cp "$uninstall_manifest_hardlink_victim" "$RUNNER_TEMP/uninstall-manifest-hardlink-expected"
+          rm -f "$uninstall_manifest"
+          ln "$uninstall_manifest_hardlink_victim" "$uninstall_manifest"
+          if DESTDIR="$uninstall_manifest_hardlink_stage" KERNEL_RELEASE="$KERNEL_RELEASE" ./uninstall.sh; then
+            echo "source-release: hard-linked-uninstall-manifest negative unexpectedly succeeded" >&2
+            exit 1
+          fi
+          cmp "$RUNNER_TEMP/uninstall-manifest-hardlink-expected" "$uninstall_manifest_hardlink_victim"
+          test "$(stat -c %h -- "$uninstall_manifest_hardlink_victim")" = 2
+          test -e "$uninstall_manifest_hardlink_stage/usr/local/bin/ncp"
+          rm -rf "$uninstall_manifest_hardlink_stage"
+
           target_hardlink_stage="$RUNNER_TEMP/target-hardlink-stage"
           target_hardlink_victim="$RUNNER_TEMP/target-hardlink-victim"
           DESTDIR="$target_hardlink_stage" KERNEL_RELEASE="$KERNEL_RELEASE" ./install.sh

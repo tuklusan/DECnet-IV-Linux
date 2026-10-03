@@ -415,7 +415,693 @@ def main() -> int:
             raise SystemExit(f"source-release gate: installer safety safeguard missing: {marker}")
 
     uninstall = read_text("uninstall.sh")
-    for marker in ("safe install manifest not found", "normalized absolute non-root path", "\"$path\" != *$'\\n'*", "\"$path\" != *$'\\r'*", '"$path" != *"//"*', "staged path crosses symlink parent", "mapfile -t paths", "safe_default_module_path", "module_root_is_default", "module_releases", "required command not found: depmod", 'if [[ -z "$destdir" && -n ${MODULE_ROOT:-} ]]; then', "custom MODULE_ROOT is supported only with non-empty DESTDIR"):
+    for marker in ("safe install manifest not found", "normalized absolute non-root path", "\"$path\" != *
+        if marker not in uninstall:
+            raise SystemExit(f"source-release gate: uninstaller safety safeguard missing: {marker}")
+
+    build_path = ROOT / "build.sh"
+    if not os.access(build_path, os.X_OK):
+        raise SystemExit("source-release gate: build.sh is not executable")
+    build = read_text("build.sh")
+    for marker in (
+        "include/config/kernel.release",
+        "kernelrelease",
+        "does not match KDIR release",
+        "Clang 16 or later required",
+        "GCC-compatible compiler 12 or later required",
+        "target kernel build tree was configured with GCC",
+        "target kernel build tree was configured with Clang",
+        'for command in bash make ar',
+        'grep sed uname; do need',
+        'make clean KDIR="$kdir"',
+        "need dirname",
+    ):
+        if marker not in build:
+            raise SystemExit(f"source-release gate: end-user build safeguard missing: {marker}")
+
+    for marker in (
+        "needs: package-amd64",
+        "source-release-portability-${{ matrix.arch }}",
+        'source_dir="$RUNNER_TEMP/release"',
+        'sha256sum -c "$(basename "$archive").sha256"',
+        'grep -Fqx "source_sha=$DNIV_EXPECTED_SHA" SOURCE-METADATA',
+        "run_case debian13 debian:13 gcc",
+        "git bc bison flex libelf-dev libssl-dev",
+        'if [[ "$DNIV_COMPILER" == clang ]]',
+        "tests/lab/build-diagnostic-kernel.sh",
+        "git -C /tmp/linux-clang fetch --depth=1 origin",
+        'test "$(git -C /tmp/linux-clang rev-parse HEAD)" = "$linux_commit"',
+        'KBUILD_MODPOST_WARN=1 CC="$cc" KDIR=/tmp/linux-clang KERNEL_RELEASE="$clang_release" ./build.sh',
+        'DESTDIR="$stage" KERNEL_RELEASE="$clang_release" ./install.sh',
+        "manifest-temp-symlink-stage",
+        "install-manifest.txt.tmp.$BASHPID",
+        "foreign-victim",
+        "manifest-hardlink-stage",
+        "hard-linked-manifest negative unexpectedly succeeded",
+        "uninstall-manifest-hardlink-stage",
+        "hard-linked-uninstall-manifest negative unexpectedly succeeded",
+        "target-hardlink-stage",
+        "hard-linked-managed-target negative unexpectedly succeeded",
+        "KBUILD_MODPOST_WARN=1",
+        "linux_floor_commit=e8f897f4afef0031fe618a8e94127a0934896aba",
+        'test "$floor_release" = 6.8.0',
+        'KDIR=/tmp/linux-floor KERNEL_RELEASE="$floor_release" ./build.sh',
+        'DESTDIR="$floor_stage" KERNEL_RELEASE="$floor_release" ./install.sh',
+        "run_case fedora44 fedora:44 clang",
+    ):
+        if marker not in workflow:
+            raise SystemExit(f"source-release gate: exact-artifact portability safeguard missing: {marker}")
+    diagnostic_kernel = read_text("tests/lab/build-diagnostic-kernel.sh")
+    for marker in ("Linux v7.3-rc5", "linux_commit=72d3fcf802c45d00b300f25b848a93c3a2bd7c7e"):
+        if marker not in diagnostic_kernel:
+            raise SystemExit(f"source-release gate: current upstream kernel pin missing: {marker}")
+
+    diagnostic_installer = read_text("tests/lab/install-diagnostic-module.sh")
+    diagnostic_workflow = read_text(".github/workflows/kernel-diagnostics.yml")
+    test_lab = read_text("docs/TEST_LAB.md")
+    for label, value in (
+        ("diagnostic builder", diagnostic_kernel),
+        ("diagnostic installer", diagnostic_installer),
+        ("diagnostic workflow", diagnostic_workflow),
+        ("lab documentation", test_lab),
+    ):
+        if "7.0.0-dniv-" in value or "pinned upstream Linux v7.0 commit" in value:
+            raise SystemExit(f"source-release gate: stale Linux 7.0 diagnostic contract remains in {label}")
+    for marker in ("7.3.0-rc5-dniv-",):
+        for label, value in (
+            ("diagnostic builder", diagnostic_kernel),
+            ("diagnostic installer", diagnostic_installer),
+            ("diagnostic workflow", diagnostic_workflow),
+        ):
+            if marker not in value:
+                raise SystemExit(f"source-release gate: current diagnostic release contract missing in {label}: {marker}")
+    if "Linux v7.3-rc5 commit `72d3fcf802c45d00b300f25b848a93c3a2bd7c7e`" not in test_lab:
+        raise SystemExit("source-release gate: lab documentation current-kernel pin is stale")
+    if "Linux v6.8 commit `e8f897f4afef0031fe618a8e94127a0934896aba`" not in test_lab:
+        raise SystemExit("source-release gate: lab documentation kernel-floor pin is missing")
+
+    dispatcher = read_text(".github/workflows/repository-policy.yml")
+    if "SOURCE_RELEASE source-release.yml" not in dispatcher or "RELEASE_IMAGE release-image.yml" in dispatcher:
+        raise SystemExit("source-release gate: acceptance dispatcher not synchronized")
+    if "dispatch_and_record PORTABILITY portability.yml" in dispatcher:
+        raise SystemExit("source-release gate: full acceptance duplicates portability outside exact release artifact")
+    attributes = read_text(".gitattributes")
+    if "filter=lfs" in attributes or "qcow2" in attributes.lower():
+        raise SystemExit("source-release gate: repository still advertises disk-image delivery")
+
+    install_doc = read_text("INSTALL.md")
+    for marker in ("Secure Boot", "MODULE_ROOT", "modprobe -r decnet_iv", "python3 -c 'import decnet'", "module vermagic", "binutils (including `ar`)", "reject existing symlinked parent components", "dnf install gcc make binutils", "dirname", "basename", "mktemp", "stat", "sha256sum", "earlier kernel builds remain valid managed entries", "repeated `//` separators", "CR/LF line breaks", "line-oriented", "pass the same value to `uninstall.sh`", "live install always uses `/lib/modules/<kernel-release>`", "custom `MODULE_ROOT` is rejected for live uninstall"):
+        if marker not in install_doc:
+            raise SystemExit(f"source-release gate: installation manual missing: {marker}")
+
+    for marker in ("host dynamic-loader mechanism", "installer does not modify `/etc/ld.so.conf`", "When `ldconfig` exists", "removed from the environment passed to PyDECnet"):
+        if marker not in install_doc:
+            raise SystemExit(f"source-release gate: installation loader contract missing: {marker}")
+
+    dnmultinet = read_text("userspace/dnmultinet/dnmultinet.py")
+    for marker in (
+        "def safe_config_token",
+        "shlex.split(value, comments=False, posix=True)",
+        "ipaddress.IPv4Address",
+        'env.pop("MULTINET_REMOTE_HOST", None)',
+        'env.pop("MULTINET_REMOTE_PORT", None)',
+        "--runtime-peer-env refuses --config-out to avoid persisting runtime peer values",
+    ):
+        if marker not in dnmultinet:
+            raise SystemExit(f"source-release gate: dnmultinet config-safety regression: {marker}")
+    dnmultinet_selftest = read_text("userspace/dnmultinet/selftest.py")
+    for marker in (
+        "VDE URL has invalid syntax",
+        "local address has invalid syntax",
+        "peer host must be an IPv4 address or hostname",
+        "refuses --config-out",
+        "MULTINET_REMOTE_HOST has invalid syntax",
+        "runtime MULTINET peer variables leaked to child environment",
+    ):
+        if marker not in dnmultinet_selftest:
+            raise SystemExit(f"source-release gate: dnmultinet config-safety negative missing: {marker}")
+    dnmultinet_make = read_text("userspace/dnmultinet/Makefile")
+    if "$(PYTHON) selftest.py" not in dnmultinet_make:
+        raise SystemExit("source-release gate: dnmultinet config selftest is not in the normal build")
+    if "all: check" not in dnmultinet_make or "test: check" not in dnmultinet_make:
+        raise SystemExit("source-release gate: end-user dnmultinet build still coupled to lab-only tests")
+    root_make = read_text("Makefile")
+    if "$(MAKE) -C userspace/dnmultinet test" not in root_make:
+        raise SystemExit("source-release gate: lab dnmultinet tests disappeared from repository unit coverage")
+
+    dncopy = read_text("userspace/dncopy/dncopy.c")
+    retrieve_start = dncopy.find("static int retrieve_file")
+    retrieve_end = dncopy.find("static int store_file", retrieve_start)
+    retrieve = dncopy[retrieve_start:retrieve_end]
+    connect_marker = 'msg[2] = 2U; /* CONNECT data stream */'
+    local_open_marker = 'out = fopen(local_path, "wb");'
+    if (
+        retrieve_start < 0
+        or retrieve_end < 0
+        or connect_marker not in retrieve
+        or local_open_marker not in retrieve
+        or retrieve.find(local_open_marker) < retrieve.find(connect_marker)
+        or "int close_out = 0;" not in retrieve
+        or "if (close_out)" not in retrieve
+        or "Do not clobber an existing local destination until the remote file has" not in retrieve
+    ):
+        raise SystemExit("source-release gate: dncopy local retrieval destination is not deferred until remote OPEN/CONNECT")
+
+    dnfald = read_text("userspace/dnfald/dnfald.c")
+    for marker in (
+        "open(root, O_RDONLY | O_DIRECTORY | O_CLOEXEC)",
+        "openat(rootfd, name, flags, 0666)",
+        "O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK",
+        "st.st_nlink != 1",
+        "fgetxattr(fd, DNFAL_XATTR_RFM",
+        "fsetxattr(fd, DNFAL_XATTR_RFM",
+        "renameat(rootfd, oldname, rootfd, newname)",
+        "fdopendir(dirfd)",
+        "unlinkat(rootfd, name, 0)",
+        'open_regular_at(rootfd, "ESCAPE.TXT", 0)',
+        'open_regular_at(rootfd, "HARD.TXT", 1)',
+        "mkfifo(fifo_path, 0600)",
+        'open_regular_at(rootfd, "FIFO.TXT", 1)',
+        "errno = EPROTO;",
+    ):
+        if marker not in dnfald:
+            raise SystemExit(f"source-release gate: dnfald root-safety regression: {marker}")
+
+    dnmaild = read_text("userspace/dnmail/dnmaild.c")
+    for marker in (
+        'openat(rootfd, "mailbox.log",',
+        "O_APPEND | O_NOFOLLOW | O_CLOEXEC",
+        "st.st_nlink != 1",
+        'char directory[] = "/tmp/dnmaild-selftest.XXXXXX"',
+        "symlink(victim, mailbox)",
+        "link(victim, mailbox)",
+        "open_mailbox(directory)",
+        "O_NONBLOCK, 0600)",
+    ):
+        if marker not in dnmaild:
+            raise SystemExit(f"source-release gate: dnmaild spool-safety regression: {marker}")
+
+    dnlynx = read_text("userspace/dnlynx/dnlynx.c")
+    for marker in (
+        "static int append_header_record",
+        "copied<(size_t)got",
+        "large, sizeof(large), &end, &copied",
+        "copied != sizeof(header)",
+    ):
+        if marker not in dnlynx:
+            raise SystemExit(f"source-release gate: dnlynx header/body record-boundary regression: {marker}")
+
+    dnhttpd = read_text("userspace/dnhttpd/dnhttpd.c")
+    for marker in (
+        "O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK",
+        "fstat(fd, &st)",
+        "S_ISREG(st.st_mode)",
+        "st.st_nlink != 1",
+        'open_root_file(directory, "escape.html")',
+        'open_root_file(directory, "hard.html")',
+        'open_root_file(directory, "pipe.html")',
+        "static int read_bounded_file",
+        "ftruncate(good_fd, (off_t)sizeof(boundary))",
+        "ftruncate(good_fd, (off_t)sizeof(boundary) + 1)",
+    ):
+        if marker not in dnhttpd:
+            raise SystemExit(f"source-release gate: dnhttpd root-safety regression: {marker}")
+
+    socket_source = read_text("kernel/decnet/decnet_iv_socket.c")
+    for marker in (
+        "bool tx_record_open;",
+        "__u8 bom = (!dsk->tx_record_open && off == 0U) ? 1U : 0U;",
+        "dsk->tx_record_open = eom ? false : true;",
+        "dsk->tx_record_open = false;",
+    ):
+        if marker not in socket_source:
+            raise SystemExit(f"source-release gate: socket partial-record continuation safeguard missing: {marker}")
+    nsp_source = read_text("kernel/decnet/decnet_iv_nsp.c")
+    if nsp_source.count("(void)dniv_nsp_transmit(remote_node, wire, (__u16)len);") < 3:
+        raise SystemExit("source-release gate: queued NSP data/interrupt/control transmit ownership safeguard missing")
+    if "reporting its\n     * transient error to the socket caller would invite the same user bytes" not in nsp_source:
+        raise SystemExit("source-release gate: queued NSP transmit duplicate-send rationale missing")
+    if "the NSP timer still owns." not in nsp_source:
+        raise SystemExit("source-release gate: retained NSP control transmit ownership rationale missing")
+
+    record_io = read_text("userspace/common/record_io.h")
+    for marker in ("flags | MSG_TRUNC", "(size_t)got > cap", "errno = EMSGSIZE;"):
+        if marker not in record_io:
+            raise SystemExit(f"source-release gate: bounded sequenced-record receive safeguard missing: {marker}")
+    record_consumers = (
+        "userspace/dncopy/dncopy.c",
+        "userspace/dnfald/dnfald.c",
+        "userspace/dnhttpd/dnhttpd.c",
+        "userspace/dnlogin/dnlogin.c",
+        "userspace/dnlynx/dnlynx.c",
+        "userspace/dnmail/dnmail.c",
+        "userspace/dnmail/dnmaild.c",
+        "userspace/dnmirror/dnmirror.c",
+        "userspace/dnnice/dnnice.c",
+        "userspace/dnnml/dnnml.c",
+        "userspace/dnobject/dnobject.c",
+        "userspace/dnphone/dnphoned.c",
+        "userspace/dnphone/phone.c",
+        "userspace/dntask/dntask.c",
+    )
+    for path in record_consumers:
+        source = read_text(path)
+        if '#include "../common/record_io.h"' not in source or "dniv_recv_record(" not in source:
+            raise SystemExit(f"source-release gate: {path} is not using bounded sequenced-record receive")
+        if "recv(" in source:
+            raise SystemExit(f"source-release gate: raw fixed-buffer recv remains in {path}")
+    for marker in (
+        "socketpair(AF_UNIX, SOCK_SEQPACKET, 0, pair)",
+        'send(pair[0], "12345", 5U, MSG_EOR)',
+        "errno != EMSGSIZE",
+    ):
+        if marker not in dnmaild:
+            raise SystemExit(f"source-release gate: overlong-record selftest missing: {marker}")
+
+    persistent_daemons = {
+        "dnfald": dnfald,
+        "dnhttpd": dnhttpd,
+        "dnmaild": dnmaild,
+        "dnphoned": read_text("userspace/dnphone/dnphoned.c"),
+        "dnmirror": read_text("userspace/dnmirror/dnmirror.c"),
+        "dnobject": read_text("userspace/dnobject/dnobject.c"),
+    }
+    for daemon, source in persistent_daemons.items():
+        if f'perror("{daemon}: session");' not in source or "continue;" not in source:
+            raise SystemExit(f"source-release gate: {daemon} no longer isolates failed client sessions")
+    for daemon in ("dnfald", "dnphoned"):
+        source = persistent_daemons[daemon]
+        if "int failed = 0;" not in source or "failed = 1;" not in source or "return failed ? 1 : 0;" not in source:
+            raise SystemExit(f"source-release gate: {daemon} bounded-session failure accounting missing")
+    for daemon in ("dnhttpd", "dnmaild", "dnmirror", "dnobject"):
+        source = persistent_daemons[daemon]
+        for marker in ("if (once) {", "return 1;", "continue;"):
+            if marker not in source:
+                raise SystemExit(f"source-release gate: {daemon} once/default session isolation contract missing: {marker}")
+    dnetd = read_text("userspace/dnetd/dnetd.c")
+    for marker in (
+        "static void reap_children(int signo)",
+        "while (waitpid(-1, NULL, WNOHANG) > 0)",
+        "action.sa_flags = SA_RESTART | SA_NOCLDSTOP;",
+        "return sigaction(SIGCHLD, &action, NULL);",
+        "if (!once && install_child_reaper())",
+        "if (selftest_reaper())",
+    ):
+        if marker not in dnetd:
+            raise SystemExit(f"source-release gate: dnetd child-reaping safeguard missing: {marker}")
+    for marker in (
+        "if (token) {",
+        "errno = E2BIG;",
+        'char too_many[] =',
+        "parse_line(too_many",
+    ):
+        if marker not in dnetd:
+            raise SystemExit(f"source-release gate: dnetd argument-limit regression: {marker}")
+    dnetd_isolation = '''            if (policy < 0) {
+                perror("dnetd: accept policy");
+                close(fd);
+                if (once) {
+                    close_listeners(services, service_count);
+                    return 1;
+                }
+                continue;
+            }'''
+    if dnetd_isolation not in dnetd:
+        raise SystemExit("source-release gate: dnetd accept-policy session isolation contract missing")
+
+    dnmirror = persistent_daemons["dnmirror"]
+    if 'perror("dnmirror: access");' not in dnmirror or "if (once) {" not in dnmirror:
+        raise SystemExit("source-release gate: dnmirror access-session isolation contract missing")
+
+    state = read_text("docs/PROJECT_STATE.md")
+    goal = state.split("## Goal", 1)[1].split("## References and licensing", 1)[0]
+    if "portable source release" not in goal or "Deliver reproducible x86_64/aarch64 images" in goal:
+        raise SystemExit("source-release gate: current project goal still advertises disk-image delivery")
+
+    scratch_readme = read_text("scratch/README.md")
+    for stale in ("sealed format-2 QCOW2 checkpoint", "rolling VM checkpoint safeguards", "Resume exists only for files that were explicitly uploaded as artifacts"):
+        if stale in scratch_readme:
+            raise SystemExit(f"source-release gate: stale VM persistence contract remains in scratch documentation: {stale}")
+    for required in ("source-independent architecture foundation", "Actions cache", "never accepted as resume input"):
+        if required not in scratch_readme:
+            raise SystemExit(f"source-release gate: current VM persistence contract missing from scratch documentation: {required}")
+
+    handover = read_text("docs/HANDOVER.md")
+    if "four exact-SHA acceptance depths" not in handover:
+        raise SystemExit("source-release gate: handover acceptance-depth model is stale")
+    for path in ("README.md", "docs/ROADMAP.md", "docs/ARCHITECTURE.md", "docs/PRE_PRODUCTION_TEST.md"):
+        value = read_text(path)
+        for stale in ("self-booting QCOW2/RAW images", "Release images remain QCOW2-first", "exact release image"):
+            if stale in value:
+                raise SystemExit(f"source-release gate: stale release-image contract in {path}: {stale}")
+    print("source-release gate passed")
+    return 0
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+\\n'*", "\"$path\" != *
+        if marker not in uninstall:
+            raise SystemExit(f"source-release gate: uninstaller safety safeguard missing: {marker}")
+
+    build_path = ROOT / "build.sh"
+    if not os.access(build_path, os.X_OK):
+        raise SystemExit("source-release gate: build.sh is not executable")
+    build = read_text("build.sh")
+    for marker in (
+        "include/config/kernel.release",
+        "kernelrelease",
+        "does not match KDIR release",
+        "Clang 16 or later required",
+        "GCC-compatible compiler 12 or later required",
+        "target kernel build tree was configured with GCC",
+        "target kernel build tree was configured with Clang",
+        'for command in bash make ar',
+        'grep sed uname; do need',
+        'make clean KDIR="$kdir"',
+        "need dirname",
+    ):
+        if marker not in build:
+            raise SystemExit(f"source-release gate: end-user build safeguard missing: {marker}")
+
+    for marker in (
+        "needs: package-amd64",
+        "source-release-portability-${{ matrix.arch }}",
+        'source_dir="$RUNNER_TEMP/release"',
+        'sha256sum -c "$(basename "$archive").sha256"',
+        'grep -Fqx "source_sha=$DNIV_EXPECTED_SHA" SOURCE-METADATA',
+        "run_case debian13 debian:13 gcc",
+        "git bc bison flex libelf-dev libssl-dev",
+        'if [[ "$DNIV_COMPILER" == clang ]]',
+        "tests/lab/build-diagnostic-kernel.sh",
+        "git -C /tmp/linux-clang fetch --depth=1 origin",
+        'test "$(git -C /tmp/linux-clang rev-parse HEAD)" = "$linux_commit"',
+        'KBUILD_MODPOST_WARN=1 CC="$cc" KDIR=/tmp/linux-clang KERNEL_RELEASE="$clang_release" ./build.sh',
+        'DESTDIR="$stage" KERNEL_RELEASE="$clang_release" ./install.sh',
+        "manifest-temp-symlink-stage",
+        "install-manifest.txt.tmp.$BASHPID",
+        "foreign-victim",
+        "manifest-hardlink-stage",
+        "hard-linked-manifest negative unexpectedly succeeded",
+        "target-hardlink-stage",
+        "hard-linked-managed-target negative unexpectedly succeeded",
+        "KBUILD_MODPOST_WARN=1",
+        "linux_floor_commit=e8f897f4afef0031fe618a8e94127a0934896aba",
+        'test "$floor_release" = 6.8.0',
+        'KDIR=/tmp/linux-floor KERNEL_RELEASE="$floor_release" ./build.sh',
+        'DESTDIR="$floor_stage" KERNEL_RELEASE="$floor_release" ./install.sh',
+        "run_case fedora44 fedora:44 clang",
+    ):
+        if marker not in workflow:
+            raise SystemExit(f"source-release gate: exact-artifact portability safeguard missing: {marker}")
+    diagnostic_kernel = read_text("tests/lab/build-diagnostic-kernel.sh")
+    for marker in ("Linux v7.3-rc5", "linux_commit=72d3fcf802c45d00b300f25b848a93c3a2bd7c7e"):
+        if marker not in diagnostic_kernel:
+            raise SystemExit(f"source-release gate: current upstream kernel pin missing: {marker}")
+
+    diagnostic_installer = read_text("tests/lab/install-diagnostic-module.sh")
+    diagnostic_workflow = read_text(".github/workflows/kernel-diagnostics.yml")
+    test_lab = read_text("docs/TEST_LAB.md")
+    for label, value in (
+        ("diagnostic builder", diagnostic_kernel),
+        ("diagnostic installer", diagnostic_installer),
+        ("diagnostic workflow", diagnostic_workflow),
+        ("lab documentation", test_lab),
+    ):
+        if "7.0.0-dniv-" in value or "pinned upstream Linux v7.0 commit" in value:
+            raise SystemExit(f"source-release gate: stale Linux 7.0 diagnostic contract remains in {label}")
+    for marker in ("7.3.0-rc5-dniv-",):
+        for label, value in (
+            ("diagnostic builder", diagnostic_kernel),
+            ("diagnostic installer", diagnostic_installer),
+            ("diagnostic workflow", diagnostic_workflow),
+        ):
+            if marker not in value:
+                raise SystemExit(f"source-release gate: current diagnostic release contract missing in {label}: {marker}")
+    if "Linux v7.3-rc5 commit `72d3fcf802c45d00b300f25b848a93c3a2bd7c7e`" not in test_lab:
+        raise SystemExit("source-release gate: lab documentation current-kernel pin is stale")
+    if "Linux v6.8 commit `e8f897f4afef0031fe618a8e94127a0934896aba`" not in test_lab:
+        raise SystemExit("source-release gate: lab documentation kernel-floor pin is missing")
+
+    dispatcher = read_text(".github/workflows/repository-policy.yml")
+    if "SOURCE_RELEASE source-release.yml" not in dispatcher or "RELEASE_IMAGE release-image.yml" in dispatcher:
+        raise SystemExit("source-release gate: acceptance dispatcher not synchronized")
+    if "dispatch_and_record PORTABILITY portability.yml" in dispatcher:
+        raise SystemExit("source-release gate: full acceptance duplicates portability outside exact release artifact")
+    attributes = read_text(".gitattributes")
+    if "filter=lfs" in attributes or "qcow2" in attributes.lower():
+        raise SystemExit("source-release gate: repository still advertises disk-image delivery")
+
+    install_doc = read_text("INSTALL.md")
+    for marker in ("Secure Boot", "MODULE_ROOT", "modprobe -r decnet_iv", "python3 -c 'import decnet'", "module vermagic", "binutils (including `ar`)", "reject existing symlinked parent components", "dnf install gcc make binutils", "dirname", "basename", "mktemp", "stat", "sha256sum", "earlier kernel builds remain valid managed entries", "repeated `//` separators", "CR/LF line breaks", "line-oriented", "pass the same value to `uninstall.sh`", "live install always uses `/lib/modules/<kernel-release>`", "custom `MODULE_ROOT` is rejected for live uninstall"):
+        if marker not in install_doc:
+            raise SystemExit(f"source-release gate: installation manual missing: {marker}")
+
+    for marker in ("host dynamic-loader mechanism", "installer does not modify `/etc/ld.so.conf`", "When `ldconfig` exists", "removed from the environment passed to PyDECnet"):
+        if marker not in install_doc:
+            raise SystemExit(f"source-release gate: installation loader contract missing: {marker}")
+
+    dnmultinet = read_text("userspace/dnmultinet/dnmultinet.py")
+    for marker in (
+        "def safe_config_token",
+        "shlex.split(value, comments=False, posix=True)",
+        "ipaddress.IPv4Address",
+        'env.pop("MULTINET_REMOTE_HOST", None)',
+        'env.pop("MULTINET_REMOTE_PORT", None)',
+        "--runtime-peer-env refuses --config-out to avoid persisting runtime peer values",
+    ):
+        if marker not in dnmultinet:
+            raise SystemExit(f"source-release gate: dnmultinet config-safety regression: {marker}")
+    dnmultinet_selftest = read_text("userspace/dnmultinet/selftest.py")
+    for marker in (
+        "VDE URL has invalid syntax",
+        "local address has invalid syntax",
+        "peer host must be an IPv4 address or hostname",
+        "refuses --config-out",
+        "MULTINET_REMOTE_HOST has invalid syntax",
+        "runtime MULTINET peer variables leaked to child environment",
+    ):
+        if marker not in dnmultinet_selftest:
+            raise SystemExit(f"source-release gate: dnmultinet config-safety negative missing: {marker}")
+    dnmultinet_make = read_text("userspace/dnmultinet/Makefile")
+    if "$(PYTHON) selftest.py" not in dnmultinet_make:
+        raise SystemExit("source-release gate: dnmultinet config selftest is not in the normal build")
+    if "all: check" not in dnmultinet_make or "test: check" not in dnmultinet_make:
+        raise SystemExit("source-release gate: end-user dnmultinet build still coupled to lab-only tests")
+    root_make = read_text("Makefile")
+    if "$(MAKE) -C userspace/dnmultinet test" not in root_make:
+        raise SystemExit("source-release gate: lab dnmultinet tests disappeared from repository unit coverage")
+
+    dncopy = read_text("userspace/dncopy/dncopy.c")
+    retrieve_start = dncopy.find("static int retrieve_file")
+    retrieve_end = dncopy.find("static int store_file", retrieve_start)
+    retrieve = dncopy[retrieve_start:retrieve_end]
+    connect_marker = 'msg[2] = 2U; /* CONNECT data stream */'
+    local_open_marker = 'out = fopen(local_path, "wb");'
+    if (
+        retrieve_start < 0
+        or retrieve_end < 0
+        or connect_marker not in retrieve
+        or local_open_marker not in retrieve
+        or retrieve.find(local_open_marker) < retrieve.find(connect_marker)
+        or "int close_out = 0;" not in retrieve
+        or "if (close_out)" not in retrieve
+        or "Do not clobber an existing local destination until the remote file has" not in retrieve
+    ):
+        raise SystemExit("source-release gate: dncopy local retrieval destination is not deferred until remote OPEN/CONNECT")
+
+    dnfald = read_text("userspace/dnfald/dnfald.c")
+    for marker in (
+        "open(root, O_RDONLY | O_DIRECTORY | O_CLOEXEC)",
+        "openat(rootfd, name, flags, 0666)",
+        "O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK",
+        "st.st_nlink != 1",
+        "fgetxattr(fd, DNFAL_XATTR_RFM",
+        "fsetxattr(fd, DNFAL_XATTR_RFM",
+        "renameat(rootfd, oldname, rootfd, newname)",
+        "fdopendir(dirfd)",
+        "unlinkat(rootfd, name, 0)",
+        'open_regular_at(rootfd, "ESCAPE.TXT", 0)',
+        'open_regular_at(rootfd, "HARD.TXT", 1)',
+        "mkfifo(fifo_path, 0600)",
+        'open_regular_at(rootfd, "FIFO.TXT", 1)',
+        "errno = EPROTO;",
+    ):
+        if marker not in dnfald:
+            raise SystemExit(f"source-release gate: dnfald root-safety regression: {marker}")
+
+    dnmaild = read_text("userspace/dnmail/dnmaild.c")
+    for marker in (
+        'openat(rootfd, "mailbox.log",',
+        "O_APPEND | O_NOFOLLOW | O_CLOEXEC",
+        "st.st_nlink != 1",
+        'char directory[] = "/tmp/dnmaild-selftest.XXXXXX"',
+        "symlink(victim, mailbox)",
+        "link(victim, mailbox)",
+        "open_mailbox(directory)",
+        "O_NONBLOCK, 0600)",
+    ):
+        if marker not in dnmaild:
+            raise SystemExit(f"source-release gate: dnmaild spool-safety regression: {marker}")
+
+    dnlynx = read_text("userspace/dnlynx/dnlynx.c")
+    for marker in (
+        "static int append_header_record",
+        "copied<(size_t)got",
+        "large, sizeof(large), &end, &copied",
+        "copied != sizeof(header)",
+    ):
+        if marker not in dnlynx:
+            raise SystemExit(f"source-release gate: dnlynx header/body record-boundary regression: {marker}")
+
+    dnhttpd = read_text("userspace/dnhttpd/dnhttpd.c")
+    for marker in (
+        "O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK",
+        "fstat(fd, &st)",
+        "S_ISREG(st.st_mode)",
+        "st.st_nlink != 1",
+        'open_root_file(directory, "escape.html")',
+        'open_root_file(directory, "hard.html")',
+        'open_root_file(directory, "pipe.html")',
+        "static int read_bounded_file",
+        "ftruncate(good_fd, (off_t)sizeof(boundary))",
+        "ftruncate(good_fd, (off_t)sizeof(boundary) + 1)",
+    ):
+        if marker not in dnhttpd:
+            raise SystemExit(f"source-release gate: dnhttpd root-safety regression: {marker}")
+
+    socket_source = read_text("kernel/decnet/decnet_iv_socket.c")
+    for marker in (
+        "bool tx_record_open;",
+        "__u8 bom = (!dsk->tx_record_open && off == 0U) ? 1U : 0U;",
+        "dsk->tx_record_open = eom ? false : true;",
+        "dsk->tx_record_open = false;",
+    ):
+        if marker not in socket_source:
+            raise SystemExit(f"source-release gate: socket partial-record continuation safeguard missing: {marker}")
+    nsp_source = read_text("kernel/decnet/decnet_iv_nsp.c")
+    if nsp_source.count("(void)dniv_nsp_transmit(remote_node, wire, (__u16)len);") < 3:
+        raise SystemExit("source-release gate: queued NSP data/interrupt/control transmit ownership safeguard missing")
+    if "reporting its\n     * transient error to the socket caller would invite the same user bytes" not in nsp_source:
+        raise SystemExit("source-release gate: queued NSP transmit duplicate-send rationale missing")
+    if "the NSP timer still owns." not in nsp_source:
+        raise SystemExit("source-release gate: retained NSP control transmit ownership rationale missing")
+
+    record_io = read_text("userspace/common/record_io.h")
+    for marker in ("flags | MSG_TRUNC", "(size_t)got > cap", "errno = EMSGSIZE;"):
+        if marker not in record_io:
+            raise SystemExit(f"source-release gate: bounded sequenced-record receive safeguard missing: {marker}")
+    record_consumers = (
+        "userspace/dncopy/dncopy.c",
+        "userspace/dnfald/dnfald.c",
+        "userspace/dnhttpd/dnhttpd.c",
+        "userspace/dnlogin/dnlogin.c",
+        "userspace/dnlynx/dnlynx.c",
+        "userspace/dnmail/dnmail.c",
+        "userspace/dnmail/dnmaild.c",
+        "userspace/dnmirror/dnmirror.c",
+        "userspace/dnnice/dnnice.c",
+        "userspace/dnnml/dnnml.c",
+        "userspace/dnobject/dnobject.c",
+        "userspace/dnphone/dnphoned.c",
+        "userspace/dnphone/phone.c",
+        "userspace/dntask/dntask.c",
+    )
+    for path in record_consumers:
+        source = read_text(path)
+        if '#include "../common/record_io.h"' not in source or "dniv_recv_record(" not in source:
+            raise SystemExit(f"source-release gate: {path} is not using bounded sequenced-record receive")
+        if "recv(" in source:
+            raise SystemExit(f"source-release gate: raw fixed-buffer recv remains in {path}")
+    for marker in (
+        "socketpair(AF_UNIX, SOCK_SEQPACKET, 0, pair)",
+        'send(pair[0], "12345", 5U, MSG_EOR)',
+        "errno != EMSGSIZE",
+    ):
+        if marker not in dnmaild:
+            raise SystemExit(f"source-release gate: overlong-record selftest missing: {marker}")
+
+    persistent_daemons = {
+        "dnfald": dnfald,
+        "dnhttpd": dnhttpd,
+        "dnmaild": dnmaild,
+        "dnphoned": read_text("userspace/dnphone/dnphoned.c"),
+        "dnmirror": read_text("userspace/dnmirror/dnmirror.c"),
+        "dnobject": read_text("userspace/dnobject/dnobject.c"),
+    }
+    for daemon, source in persistent_daemons.items():
+        if f'perror("{daemon}: session");' not in source or "continue;" not in source:
+            raise SystemExit(f"source-release gate: {daemon} no longer isolates failed client sessions")
+    for daemon in ("dnfald", "dnphoned"):
+        source = persistent_daemons[daemon]
+        if "int failed = 0;" not in source or "failed = 1;" not in source or "return failed ? 1 : 0;" not in source:
+            raise SystemExit(f"source-release gate: {daemon} bounded-session failure accounting missing")
+    for daemon in ("dnhttpd", "dnmaild", "dnmirror", "dnobject"):
+        source = persistent_daemons[daemon]
+        for marker in ("if (once) {", "return 1;", "continue;"):
+            if marker not in source:
+                raise SystemExit(f"source-release gate: {daemon} once/default session isolation contract missing: {marker}")
+    dnetd = read_text("userspace/dnetd/dnetd.c")
+    for marker in (
+        "static void reap_children(int signo)",
+        "while (waitpid(-1, NULL, WNOHANG) > 0)",
+        "action.sa_flags = SA_RESTART | SA_NOCLDSTOP;",
+        "return sigaction(SIGCHLD, &action, NULL);",
+        "if (!once && install_child_reaper())",
+        "if (selftest_reaper())",
+    ):
+        if marker not in dnetd:
+            raise SystemExit(f"source-release gate: dnetd child-reaping safeguard missing: {marker}")
+    for marker in (
+        "if (token) {",
+        "errno = E2BIG;",
+        'char too_many[] =',
+        "parse_line(too_many",
+    ):
+        if marker not in dnetd:
+            raise SystemExit(f"source-release gate: dnetd argument-limit regression: {marker}")
+    dnetd_isolation = '''            if (policy < 0) {
+                perror("dnetd: accept policy");
+                close(fd);
+                if (once) {
+                    close_listeners(services, service_count);
+                    return 1;
+                }
+                continue;
+            }'''
+    if dnetd_isolation not in dnetd:
+        raise SystemExit("source-release gate: dnetd accept-policy session isolation contract missing")
+
+    dnmirror = persistent_daemons["dnmirror"]
+    if 'perror("dnmirror: access");' not in dnmirror or "if (once) {" not in dnmirror:
+        raise SystemExit("source-release gate: dnmirror access-session isolation contract missing")
+
+    state = read_text("docs/PROJECT_STATE.md")
+    goal = state.split("## Goal", 1)[1].split("## References and licensing", 1)[0]
+    if "portable source release" not in goal or "Deliver reproducible x86_64/aarch64 images" in goal:
+        raise SystemExit("source-release gate: current project goal still advertises disk-image delivery")
+
+    scratch_readme = read_text("scratch/README.md")
+    for stale in ("sealed format-2 QCOW2 checkpoint", "rolling VM checkpoint safeguards", "Resume exists only for files that were explicitly uploaded as artifacts"):
+        if stale in scratch_readme:
+            raise SystemExit(f"source-release gate: stale VM persistence contract remains in scratch documentation: {stale}")
+    for required in ("source-independent architecture foundation", "Actions cache", "never accepted as resume input"):
+        if required not in scratch_readme:
+            raise SystemExit(f"source-release gate: current VM persistence contract missing from scratch documentation: {required}")
+
+    handover = read_text("docs/HANDOVER.md")
+    if "four exact-SHA acceptance depths" not in handover:
+        raise SystemExit("source-release gate: handover acceptance-depth model is stale")
+    for path in ("README.md", "docs/ROADMAP.md", "docs/ARCHITECTURE.md", "docs/PRE_PRODUCTION_TEST.md"):
+        value = read_text(path)
+        for stale in ("self-booting QCOW2/RAW images", "Release images remain QCOW2-first", "exact release image"):
+            if stale in value:
+                raise SystemExit(f"source-release gate: stale release-image contract in {path}: {stale}")
+    print("source-release gate passed")
+    return 0
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+\\r'*", '"$path" != *"//"*', "staged path crosses symlink parent", "mapfile -t paths", "safe_default_module_path", "module_root_is_default", "module_releases", "required command not found: stat", '$(stat -c %h -- "$manifest") == 1', "required command not found: depmod", 'if [[ -z "$destdir" && -n ${MODULE_ROOT:-} ]]; then', "custom MODULE_ROOT is supported only with non-empty DESTDIR"):
         if marker not in uninstall:
             raise SystemExit(f"source-release gate: uninstaller safety safeguard missing: {marker}")
 

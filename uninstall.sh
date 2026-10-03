@@ -90,11 +90,12 @@ if [[ -z "$destdir" && -n ${MODULE_ROOT:-} ]]; then
   exit 2
 fi
 if [[ -z "$destdir" && ${EUID:-$(id -u)} -ne 0 ]]; then echo "uninstall.sh: live uninstall requires root; use DESTDIR for staging" >&2; exit 2; fi
+command -v stat >/dev/null 2>&1 || { echo "uninstall.sh: required command not found: stat" >&2; exit 2; }
 if [[ -z "$destdir" ]]; then
   command -v depmod >/dev/null 2>&1 || { echo "uninstall.sh: required command not found: depmod" >&2; exit 2; }
 fi
 check_staged_parent "$manifest_rel" || exit 2
-[[ -f "$manifest" && ! -L "$manifest" ]] || { echo "uninstall.sh: safe install manifest not found: $manifest" >&2; exit 2; }
+[[ -f "$manifest" && ! -L "$manifest" && $(stat -c %h -- "$manifest") == 1 ]] || { echo "uninstall.sh: safe install manifest not found: $manifest" >&2; exit 2; }
 mapfile -t paths <"$manifest"
 module_releases=()
 for path in "${paths[@]}"; do

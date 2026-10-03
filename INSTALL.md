@@ -169,7 +169,7 @@ For staged installation:
 DESTDIR=/tmp/dniv-stage ./uninstall.sh
 ```
 
-Uninstall is manifest-driven and refuses unsafe manifest paths. Live uninstall requires `depmod` and verifies it before removing any manifest-owned path, so the kernel module dependency cache cannot be silently skipped after module removal. When `ldconfig` exists, uninstall refreshes the host dynamic-library cache after removing libraries; systems without that cache mechanism use their normal loader-path rules. If installation used a non-default `PREFIX`, pass the same value to `uninstall.sh`. For staged/package installs that used custom `MODULE_ROOT`, pass the same `DESTDIR` and `MODULE_ROOT`; custom `MODULE_ROOT` is rejected for live uninstall for the same dependency-cache safety reason as live install.
+Uninstall is manifest-driven, requires the manifest itself to be a single-link regular file, and refuses unsafe manifest paths. Live uninstall requires `depmod` and verifies it before removing any manifest-owned path, so the kernel module dependency cache cannot be silently skipped after module removal. When `ldconfig` exists, uninstall refreshes the host dynamic-library cache after removing libraries; systems without that cache mechanism use their normal loader-path rules. If installation used a non-default `PREFIX`, pass the same value to `uninstall.sh`. For staged/package installs that used custom `MODULE_ROOT`, pass the same `DESTDIR` and `MODULE_ROOT`; custom `MODULE_ROOT` is rejected for live uninstall for the same dependency-cache safety reason as live install.
 
 ## 12. Kernel upgrades
 
