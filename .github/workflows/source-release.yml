@@ -277,10 +277,10 @@ jobs:
                   export DEBIAN_FRONTEND=noninteractive
                   apt-get update
                   if [[ "$DNIV_ARCH" == amd64 ]]; then kh=linux-headers-amd64; else kh=linux-headers-arm64; fi
-                  apt-get install -y build-essential clang llvm lld python3 kmod xz-utils curl bc bison flex libelf-dev libssl-dev "$kh"
+                  apt-get install -y build-essential clang llvm lld python3 kmod xz-utils git bc bison flex libelf-dev libssl-dev "$kh"
                   KDIR=$(find /usr/src -maxdepth 1 -type d -name "linux-headers-*" ! -name "*-common" | sort -V | tail -1)
                 else
-                  dnf -y install gcc clang llvm lld make python3 kmod kernel-devel findutils \
+                  dnf -y install gcc clang llvm lld make python3 kmod kernel-devel findutils git \
                     bc bison flex elfutils-libelf-devel openssl-devel perl curl xz tar
                   KDIR=$(find /usr/src/kernels -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
                 fi
@@ -306,14 +306,20 @@ jobs:
                 if [[ "$DNIV_COMPILER" == clang ]]; then
                   make clean KDIR="$KDIR" >/dev/null 2>&1 || true
                   make userspace CC="$cc"
-                  kbase=$(make -s -C "$KDIR" kernelversion)
-                  case "$kbase" in [0-9]*.[0-9]*.[0-9]*) ;; *) echo "bad kernel base version: $kbase" >&2; exit 2 ;; esac
-                  curl -fsSLo /tmp/linux.tar.xz "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-${kbase}.tar.xz"
-                  rm -rf "/tmp/linux-${kbase}"
-                  tar -C /tmp -xf /tmp/linux.tar.xz
-                  LLVM=1 make -C "/tmp/linux-${kbase}" defconfig >/dev/null
-                  LLVM=1 make -C "/tmp/linux-${kbase}" modules_prepare -j2 >/dev/null
-                  LLVM=1 make -C "/tmp/linux-${kbase}" M="$PWD/kernel/decnet" decnet_iv.o
+                  linux_repo=$(sed -n 's/^linux_repo=//p' tests/lab/build-diagnostic-kernel.sh)
+                  linux_commit=$(sed -n 's/^linux_commit=//p' tests/lab/build-diagnostic-kernel.sh)
+                  test -n "$linux_repo"
+                  test -n "$linux_commit"
+                  rm -rf /tmp/linux-clang
+                  git -C /tmp init -q linux-clang
+                  git -C /tmp/linux-clang remote add origin "$linux_repo"
+                  git -C /tmp/linux-clang fetch --depth=1 origin "$linux_commit"
+                  git -C /tmp/linux-clang checkout -q --detach FETCH_HEAD
+                  test "$(git -C /tmp/linux-clang rev-parse HEAD)" = "$linux_commit"
+                  rm -rf /tmp/linux-clang/.git
+                  LLVM=1 make -C /tmp/linux-clang defconfig >/dev/null
+                  LLVM=1 make -C /tmp/linux-clang modules_prepare -j2 >/dev/null
+                  LLVM=1 make -C /tmp/linux-clang M="$PWD/kernel/decnet" decnet_iv.o
                   test -s kernel/decnet/decnet_iv.o
                 else
                   CC="$cc" KDIR="$KDIR" KERNEL_RELEASE="$kernel_release" ./build.sh

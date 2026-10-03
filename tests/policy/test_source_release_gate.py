@@ -121,9 +121,11 @@ def main() -> int:
         'sha256sum -c "$(basename "$archive").sha256"',
         'grep -Fqx "source_sha=$DNIV_EXPECTED_SHA" SOURCE-METADATA',
         "run_case debian13 debian:13 gcc",
-        "bc bison flex libelf-dev libssl-dev",
+        "git bc bison flex libelf-dev libssl-dev",
         'if [[ "$DNIV_COMPILER" == clang ]]',
-        'kbase=$(make -s -C "$KDIR" kernelversion)',
+        "tests/lab/build-diagnostic-kernel.sh",
+        "git -C /tmp/linux-clang fetch --depth=1 origin",
+        'test "$(git -C /tmp/linux-clang rev-parse HEAD)" = "$linux_commit"',
         "run_case fedora42 fedora:42 clang",
     ):
         if marker not in workflow:
