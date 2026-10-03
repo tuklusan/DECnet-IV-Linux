@@ -48,6 +48,7 @@ def main() -> int:
         "managed-target-type negative unexpectedly succeeded",
         "staged-parent-symlink negative unexpectedly succeeded",
         "uninstall-parent-symlink negative unexpectedly succeeded",
+        "old_release=0.0.0-audit-old",
         "validate-arm64:",
         "  portability:",
         "debian13",
@@ -67,6 +68,14 @@ def main() -> int:
     for directory in sorted(path.name for path in (ROOT / "userspace").iterdir() if path.is_dir()):
         if f"userspace/{directory}" not in components:
             raise SystemExit(f"source-release gate: undocumented userspace component: {directory}")
+    source_components = list((ROOT / "kernel/decnet").glob("decnet_iv_*.[ch]"))
+    source_components += list((ROOT / "include").glob("decnet_iv_*.h"))
+    for path in sorted(source_components):
+        if path.name not in components:
+            raise SystemExit(f"source-release gate: undocumented kernel/protocol source component: {path.name}")
+    for path in sorted((ROOT / "tools").iterdir()):
+        if path.is_file() and f"tools/{path.name}" not in components:
+            raise SystemExit(f"source-release gate: undocumented release/support tool: {path.name}")
     builder = read_text("tools/build-source-release.sh")
     for marker in (
         "SOURCE-METADATA",
@@ -92,12 +101,13 @@ def main() -> int:
         "required command not found: modinfo",
         "DESTDIR must be empty or a normalized absolute non-root path",
         "staged path crosses symlink parent",
+        "safe_default_module_path",
     ):
         if marker not in install:
             raise SystemExit(f"source-release gate: installer safety safeguard missing: {marker}")
 
     uninstall = read_text("uninstall.sh")
-    for marker in ("safe install manifest not found", "normalized absolute non-root path", "staged path crosses symlink parent", "mapfile -t paths"):
+    for marker in ("safe install manifest not found", "normalized absolute non-root path", "staged path crosses symlink parent", "mapfile -t paths", "safe_default_module_path", "module_releases"):
         if marker not in uninstall:
             raise SystemExit(f"source-release gate: uninstaller safety safeguard missing: {marker}")
 
@@ -146,7 +156,7 @@ def main() -> int:
         raise SystemExit("source-release gate: repository still advertises disk-image delivery")
 
     install_doc = read_text("INSTALL.md")
-    for marker in ("Secure Boot", "MODULE_ROOT", "modprobe -r decnet_iv", "python3 -c 'import decnet'", "module vermagic", "binutils (including `ar`)", "reject existing symlinked parent components", "dnf install gcc make binutils", "dirname", "sha256sum"):
+    for marker in ("Secure Boot", "MODULE_ROOT", "modprobe -r decnet_iv", "python3 -c 'import decnet'", "module vermagic", "binutils (including `ar`)", "reject existing symlinked parent components", "dnf install gcc make binutils", "dirname", "sha256sum", "earlier kernel builds remain valid managed entries"):
         if marker not in install_doc:
             raise SystemExit(f"source-release gate: installation manual missing: {marker}")
 

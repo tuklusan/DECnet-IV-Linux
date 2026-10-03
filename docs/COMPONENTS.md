@@ -32,6 +32,27 @@ Kernel source responsibilities:
 | `decnet_iv_nsp.c` | NSP logical links, sequencing, flow control, retransmission, timers and receive queues. |
 | `decnet_iv_socket.c` | Native `AF_DECnet` socket/UAPI boundary and Session Control object dispatch. |
 
+Kernel-local interface headers:
+
+| Source | Responsibility |
+| --- | --- |
+| `kernel/decnet/decnet_iv_ethernet.h` | Ethernet/adjacency interface used by routing, NSP and management code. |
+| `kernel/decnet/decnet_iv_route.h` | Routing-table update, lookup, aging and snapshot interface. |
+| `kernel/decnet/decnet_iv_nsp.h` | NSP connection, send/receive, flow-control and snapshot interface. |
+| `kernel/decnet/decnet_iv_socket.h` | Socket subsystem lifecycle interface. |
+| `kernel/decnet/Makefile` | External-module build definition for `decnet_iv.ko`. |
+| `kernel/decnet/README.md` | Kernel-module source layout and build notes. |
+
+Shared protocol/source headers:
+
+| Source | Responsibility |
+| --- | --- |
+| `include/decnet_iv_wire.h` | Phase IV Ethernet/routing wire layouts, limits and encode/decode helpers. |
+| `include/decnet_iv_route_metric.h` | Routing metric bounds, arithmetic and candidate comparison helpers. |
+| `include/decnet_iv_nsp_wire.h` | NSP packet types, acknowledgement fields and wire encode/decode helpers. |
+| `include/decnet_iv_nsp_state.h` | NSP sequence/state, timeout and flow-control helpers. |
+| `include/decnet_iv_nice.h` | NICE request parsing and response/counter encoding helpers. |
+
 ## Libraries
 
 | Source directory | Installed result | Purpose |
@@ -81,9 +102,27 @@ Kernel source responsibilities:
 | `userspace/dnetd` | `dnetd` | Object-to-program service dispatcher. |
 | `userspace/dnmultinet` | `dnmultinet` | Python launcher/config generator for optional PyDECnet VDE-to-MULTINET routing. |
 
-## Build and release support
+## Build, release and acceptance support
 
-`build.sh`, `install.sh`, `uninstall.sh`, `tools/build-source-release.sh`, `INSTALL.md`, `docs/DELIVERY.md`, and `docs/FEATURES.md` define the portable source-release path.
+| Source | Role |
+| --- | --- |
+| `Makefile` | Top-level product, kernel, userspace and unit-test build orchestration. |
+| `build.sh` | End-user prerequisite validation and product build for the selected target kernel. |
+| `install.sh` | Manifested staged/live installation. |
+| `uninstall.sh` | Manifest-validated removal and cache refresh. |
+| `tools/build-source-release.sh` | Reproducible source-tarball constructor and generated/binary-payload guard. |
+| `tools/integrity_scan.py` | Exact-tree integrity baseline/verification. |
+| `tools/evidence_guard.py` | Acceptance evidence preflight, manifesting and verification. |
+| `tools/scratch_state.py` | Acceptance scratch-state lineage and result tracking. |
+| `tools/workflow_guard.sh` | Exact-SHA/main/workflow lineage guard. |
+| `tools/project_state_gate.py` | Durable Project State/RESUME continuity gate. |
+| `tools/repo_policy.py` | Main-only repository and acceptance policy enforcement. |
+| `tools/workflow_budget_gate.py` | Hosted-runner workflow budget/concurrency policy check. |
+| `tools/license_monkey.py` | Tracked-source license-header enforcement. |
+| `tools/install-hooks.sh` | Local Git hook installer for repository policy checks. |
+| `tools/e4_convergence_regression.py` | E4 convergence sampling regression guard. |
+| `SOURCE-METADATA` | Generated release version/source-SHA/source-date provenance record. |
+| `INSTALL.md`, `docs/DELIVERY.md`, `docs/FEATURES.md`, `docs/COMPONENTS.md` | End-user install, delivery, feature and component contracts. |
 
 ## Pending project-goal component
 

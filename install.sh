@@ -99,6 +99,14 @@ if [[ -z "$destdir" && ${EUID:-$(id -u)} -ne 0 ]]; then
     exit 2
 fi
 
+safe_default_module_path() {
+    local path=$1 rest release
+    case "$path" in /lib/modules/*/extra/decnet_iv.ko) ;; *) return 1 ;; esac
+    rest=${path#/lib/modules/}
+    release=${rest%%/*}
+    [[ -n "$release" && "$rest" == "$release/extra/decnet_iv.ko" ]]
+}
+
 safe_managed_path() {
     local path=$1
     [[ "$path" == /* &&
@@ -106,8 +114,8 @@ safe_managed_path() {
        "$path" != *"/./"* && "$path" != *"/." ]] || return 1
     case "$path" in
         "$prefix"/*|"$module_root"/*) return 0 ;;
-        *) return 1 ;;
     esac
+    safe_default_module_path "$path"
 }
 
 check_staged_parent "$manifest_rel" || exit 2
@@ -123,6 +131,7 @@ if [[ -e "$manifest" || -L "$manifest" ]]; then
             echo "install.sh: unsafe existing manifest path: $path" >&2
             exit 2
         }
+        check_staged_parent "$path" || exit 2
     done <"$manifest"
 else
     : >"$manifest"

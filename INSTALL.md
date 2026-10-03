@@ -119,7 +119,7 @@ This requires no root privilege and is the supported packaging/release-validatio
 sudo ./install.sh
 ```
 
-The default userspace prefix is `/usr/local`. The module installs under `/lib/modules/<kernel-release>/extra/`. By default the installer obtains `<kernel-release>` from the built module's vermagic; if `KERNEL_RELEASE` is supplied it must match that vermagic exactly. The manifest is `/usr/local/share/decnet-iv-linux/install-manifest.txt`. The installer refreshes `depmod` and `ldconfig` when available. Existing files outside that manifest are never overwritten; resolve any collision explicitly rather than forcing the installer.
+The default userspace prefix is `/usr/local`. The module installs under `/lib/modules/<kernel-release>/extra/`. By default the installer obtains `<kernel-release>` from the built module's vermagic; if `KERNEL_RELEASE` is supplied it must match that vermagic exactly. The manifest is `/usr/local/share/decnet-iv-linux/install-manifest.txt`. Standard `/lib/modules/<kernel-release>/extra/decnet_iv.ko` entries from earlier kernel builds remain valid managed entries, so installing for a new kernel can preserve an older tracked module for fallback. A full uninstall removes every such tracked standard module copy and refreshes their dependency caches. Custom `MODULE_ROOT` installations remain bound to the explicitly supplied root and must be uninstalled with the same setting. Existing files outside the manifest are never overwritten; resolve any collision explicitly rather than forcing the installer.
 
 A different userspace prefix may be selected with `PREFIX=/opt/decnet`. Systems whose module tree is not rooted at `/lib/modules/<kernel-release>` may set a normalized absolute non-root `MODULE_ROOT`. `PREFIX`, `MODULE_ROOT` and non-empty `DESTDIR` reject `.`/`..` path components.
 
@@ -177,7 +177,7 @@ After installing a new kernel:
 1. install matching headers;
 2. use a clean copy of the accepted source release;
 3. build for the exact target release, for example `KERNEL_RELEASE="$target" KDIR="/lib/modules/$target/build" ./build.sh`;
-4. install the resulting module and userspace with `sudo KERNEL_RELEASE="$target" ./install.sh`; the installer independently checks the module vermagic before writing anything;
+4. install the resulting module and userspace with `sudo KERNEL_RELEASE="$target" ./install.sh`; the installer independently checks the module vermagic before writing anything and preserves any older manifest-managed standard `/lib/modules/<release>/extra/decnet_iv.ko` copy;
 5. after booting that kernel, load `decnet_iv` and verify identity, adjacencies and required services.
 
 Never reuse a `decnet_iv.ko` on a kernel for which it was not built.

@@ -63,17 +63,36 @@ check_staged_parent() {
     done
 }
 
+safe_default_module_path() {
+    local path=$1 rest release
+    case "$path" in /lib/modules/*/extra/decnet_iv.ko) ;; *) return 1 ;; esac
+    rest=${path#/lib/modules/}
+    release=${rest%%/*}
+    [[ -n "$release" && "$rest" == "$release/extra/decnet_iv.ko" ]]
+}
+
+safe_managed_path() {
+    local path=$1
+    [[ "$path" == /* &&
+        "$path" != *"/../"* && "$path" != *"/.." &&
+        "$path" != *"/./"* && "$path" != *"/." ]] || return 1
+    case "$path" in "$prefix"/*|"$module_root"/*) return 0 ;; esac
+    safe_default_module_path "$path"
+}
+
 if [[ -z "$destdir" && ${EUID:-$(id -u)} -ne 0 ]]; then echo "uninstall.sh: live uninstall requires root; use DESTDIR for staging" >&2; exit 2; fi
 check_staged_parent "$manifest_rel" || exit 2
 [[ -f "$manifest" && ! -L "$manifest" ]] || { echo "uninstall.sh: safe install manifest not found: $manifest" >&2; exit 2; }
 mapfile -t paths <"$manifest"
+module_releases=()
 for path in "${paths[@]}"; do
   [[ -z "$path" ]] && continue
-  [[ "$path" == /* &&
-      "$path" != *"/../"* && "$path" != *"/.." &&
-      "$path" != *"/./"* && "$path" != *"/." ]] || { echo "uninstall.sh: unsafe manifest path: $path" >&2; exit 2; }
-  case "$path" in "$prefix"/*|"$module_root"/*) ;; *) echo "uninstall.sh: manifest path outside managed roots: $path" >&2; exit 2 ;; esac
+  safe_managed_path "$path" || { echo "uninstall.sh: manifest path outside managed roots: $path" >&2; exit 2; }
   check_staged_parent "$path" || exit 2
+  if safe_default_module_path "$path"; then
+    rest=${path#/lib/modules/}
+    module_releases+=("${rest%%/*}")
+  fi
 done
 for path in "${paths[@]}"; do
   [[ -z "$path" ]] && continue
@@ -84,5 +103,12 @@ for rel in "$prefix/share/doc/decnet-iv-linux" "$prefix/share/decnet-iv-linux" "
   check_staged_parent "$rel" || exit 2
   rmdir "$destdir$rel" 2>/dev/null || true
 done
-if [[ -z "$destdir" ]]; then command -v depmod >/dev/null 2>&1 && depmod -a "$kernel_release"; command -v ldconfig >/dev/null 2>&1 && ldconfig; fi
+if [[ -z "$destdir" ]]; then
+  if command -v depmod >/dev/null 2>&1; then
+    printf '%s\n' "$kernel_release" "${module_releases[@]}" | sort -u | while IFS= read -r release; do
+      [[ -z "$release" ]] || depmod -a "$release"
+    done
+  fi
+  command -v ldconfig >/dev/null 2>&1 && ldconfig
+fi
 echo "uninstall.sh: PASS"
