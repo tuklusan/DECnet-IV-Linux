@@ -286,6 +286,18 @@ static bool dniv_listener_remove_pending_locked(struct dniv_sock *dsk,
     return false;
 }
 
+static void dniv_reject_unowned(__u16 local_link, __u16 reason)
+{
+    /*
+     * Session Control owns these inbound requests only long enough to reject
+     * them.  Keep the DI retry state until DC/timeout, but detach the NSP
+     * connection so terminal completion recycles the slot instead of leaving
+     * an ownerless CLOSED entry behind.
+     */
+    (void)dniv_nsp_reject(local_link, reason, NULL, 0U);
+    (void)dniv_nsp_conn_detach(local_link);
+}
+
 static void dniv_sock_notify(__u16 local_link)
 {
     struct dniv_nsp_ci_snapshot ci;
@@ -334,7 +346,7 @@ static void dniv_sock_notify(__u16 local_link)
         }
 
         if (reject_reason)
-            dniv_nsp_reject(local_link, reject_reason, NULL, 0U);
+            dniv_reject_unowned(local_link, reject_reason);
     } else if (local_link) {
         struct dniv_nsp_conn_snapshot snapshot;
 
@@ -620,7 +632,7 @@ static void dniv_listener_unregister(struct dniv_sock *dsk)
     spin_unlock_irqrestore(&dniv_listener_lock, flags);
 
     while (count)
-        dniv_nsp_reject(pending[--count], DNIV_REASON_OBJECT_BUSY, NULL, 0U);
+        dniv_reject_unowned(pending[--count], DNIV_REASON_OBJECT_BUSY);
 }
 
 static int dniv_sock_release(struct socket *sock)
@@ -1325,8 +1337,7 @@ static int dniv_sock_accept_impl(struct socket *sock, struct socket *newsock,
             ret = dniv_ci_decode(payload, ci.payload_len, &target, &source,
                                  &access, &conndata);
             if (ret || !dniv_selector_match(&dsk->local, &target)) {
-                dniv_nsp_reject(link, DNIV_REASON_INVALID_DESTINATION,
-                                NULL, 0U);
+                dniv_reject_unowned(link, DNIV_REASON_INVALID_DESTINATION);
                 continue;
             }
             break;
@@ -1350,7 +1361,7 @@ static int dniv_sock_accept_impl(struct socket *sock, struct socket *newsock,
 
     newsk = sk_alloc(sock_net(sk), PF_DECnet, GFP_KERNEL, &dniv_proto, kern);
     if (!newsk) {
-        dniv_nsp_reject(link, DNIV_REASON_OBJECT_BUSY, NULL, 0U);
+        dniv_reject_unowned(link, DNIV_REASON_OBJECT_BUSY);
         ret = -ENOMEM;
         goto out;
     }

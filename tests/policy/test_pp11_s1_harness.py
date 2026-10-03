@@ -31,6 +31,7 @@ PY_BACKLOG = (ROOT / "tests/lab/pydecnet-backlog.py").read_text(encoding="utf-8"
 ACKRANGE = (ROOT / "tests/lab/inject-nsp-ackrange.py").read_text(encoding="utf-8")
 INTFLOW = (ROOT / "tests/lab/inject-nsp-intflow.py").read_text(encoding="utf-8")
 PCAP = (ROOT / "tests/lab/validate-interop-pcap.py").read_text(encoding="utf-8")
+SOCKET = (ROOT / "kernel/decnet/decnet_iv_socket.c").read_text(encoding="utf-8")
 
 
 def main() -> int:
@@ -137,6 +138,22 @@ def main() -> int:
         raise SystemExit("pp11-s1 regression: interrupt retransmit pressure count changed")
     if "candidate_sequence_wraps" not in PCAP or "candidate_no_resources_dc" not in PCAP:
         raise SystemExit("pp11-s1 regression: missing independent PCAP pressure evidence")
+    unowned_reject_markers = (
+        "static void dniv_reject_unowned(__u16 local_link, __u16 reason)",
+        "(void)dniv_nsp_reject(local_link, reason, NULL, 0U);",
+        "(void)dniv_nsp_conn_detach(local_link);",
+        "dniv_reject_unowned(local_link, reject_reason);",
+        "dniv_reject_unowned(pending[--count], DNIV_REASON_OBJECT_BUSY);",
+        "dniv_reject_unowned(link, DNIV_REASON_INVALID_DESTINATION);",
+        "dniv_reject_unowned(link, DNIV_REASON_OBJECT_BUSY);",
+    )
+    for marker in unowned_reject_markers:
+        if marker not in SOCKET:
+            raise SystemExit(
+                f"pp11-s1 regression: missing unowned-reject recycle guard: {marker}"
+            )
+    if SOCKET.count("dniv_reject_unowned(") != 5:
+        raise SystemExit("pp11-s1 regression: unowned reject paths changed")
     print("pp11-s1 regression passed")
     return 0
 
