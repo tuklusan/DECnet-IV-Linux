@@ -63,4 +63,4 @@ The VM lab may continue to create disposable disks internally to obtain independ
 
 The production tarball must document every delivered project-goal surface in `docs/FEATURES.md` and every installed/source component in `docs/COMPONENTS.md`. A project-goal component cannot disappear merely because the delivery format changed.
 
-The standing project goal includes native DDCMP. No DDCMP implementation exists in the current tracked source tree, so DDCMP is explicitly **pending** and is not claimed as a delivered feature by the current pre-production source archive. A final release claiming the complete DECnet-IV-Linux project goal is blocked until DDCMP is implemented, documented, installed where applicable, and accepted, unless the project owner explicitly changes that scope.
+DDCMP and IPv6 are explicitly outside the current project and release scope by owner decision. They are not claimed product features, are not release blockers, and do not generate PP/reference/device acceptance requirements. MULTINET project acceptance is IPv4-only.

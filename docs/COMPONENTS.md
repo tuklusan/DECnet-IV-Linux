@@ -164,9 +164,9 @@ These files are shipped in the source archive so the accepted source SHA can be 
 | `.gitattributes`, `.gitignore`, `scratch/.gitignore`, `scratch/README.md` | Repository/source-tree hygiene controls. |
 | `.githooks/commit-msg`, `.githooks/pre-commit`, `.githooks/pre-push` | Optional local repository policy hooks. |
 
-## Pending project-goal component
+## Explicit scope exclusions
 
-Native DDCMP is part of the standing project goal but has no implementation component in the current tracked tree. It is deliberately listed here as pending rather than being silently omitted or falsely described as delivered.
+No DDCMP implementation component and no IPv6 transport component are required or claimed. Both are outside the current project and release scope by owner decision; their absence is not a release blocker and does not create PP/reference/device acceptance requirements.
 
 ## Lab-only content
 

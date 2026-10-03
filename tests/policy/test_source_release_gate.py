@@ -83,11 +83,22 @@ def main() -> int:
     preproduction = read_text("docs/PRE_PRODUCTION_TEST.md")
     if "`run-two-node.sh`" in preproduction:
         raise SystemExit("source-release gate: stale removed two-node harness remains in pre-production documentation")
-    for stale in ("Serial/synchronous DECnet media are outside this project's transport claim", "serial/synchronous DECnet media are not part of this project's transport claim"):
+    for stale in (
+        "Native DDCMP serial/synchronous media remain part of the standing project goal",
+        "DDCMP remains part of the standing DECnet-IV-Linux project goal",
+        "Native DDCMP is part of the standing project goal",
+        "native DDCMP project-goal surface",
+        "IPv4/IPv6 cases where supported",
+    ):
         if stale in preproduction:
-            raise SystemExit(f"source-release gate: stale DDCMP scope exclusion remains: {stale}")
-    if "Native DDCMP serial/synchronous media remain part of the standing project goal" not in preproduction:
-        raise SystemExit("source-release gate: pre-production DDCMP scope is not synchronized with the standing project goal")
+            raise SystemExit(f"source-release gate: stale DDCMP/IPv6 in-scope wording remains: {stale}")
+    for required in (
+        "DDCMP is explicitly outside project scope",
+        "IPv6 is explicitly outside project scope",
+        "IPv4 cases",
+    ):
+        if required not in preproduction:
+            raise SystemExit(f"source-release gate: pre-production owner scope boundary missing: {required}")
     for required in ("`tests/lab/dniv_lab.py`", "`tests/lab/dniv-smoke.sh`"):
         if required not in preproduction:
             raise SystemExit(f"source-release gate: active two-node harness documentation missing: {required}")
@@ -125,13 +136,27 @@ def main() -> int:
             raise SystemExit(f"source-release gate: README feature inventory missing: {marker}")
 
     delivery = read_text("docs/DELIVERY.md")
-    for marker in ("source tarball", "Disk images are not release artifacts", "x86_64", "aarch64", "Linux 6.8", "Forward compatibility", "native DDCMP", "explicitly **pending**"):
+    for marker in ("source tarball", "Disk images are not release artifacts", "x86_64", "aarch64", "Linux 6.8", "Forward compatibility", "DDCMP and IPv6 are explicitly outside", "not release blockers", "IPv4-only"):
         if marker not in delivery:
             raise SystemExit(f"source-release gate: delivery contract missing: {marker}")
+    for stale in ("explicitly **pending**", "blocked until DDCMP", "DDCMP remains part of the standing", "Native DDCMP is part of the standing"):
+        if stale in delivery:
+            raise SystemExit(f"source-release gate: stale DDCMP release blocker remains: {stale}")
+    for doc, marker in (
+        ("docs/HANDOVER.md", "DDCMP and IPv6 are explicitly out of scope"),
+        ("docs/ROADMAP.md", "DDCMP and IPv6 are explicitly outside project/release scope"),
+        ("docs/PROJECT_STATE.md", "Owner scope boundary: DDCMP and IPv6 are explicitly out of scope"),
+        ("scratch/RESUME.md", "Owner scope boundary: DDCMP and IPv6 are explicitly out of scope"),
+    ):
+        if marker not in read_text(doc):
+            raise SystemExit(f"source-release gate: owner scope boundary missing from {doc}: {marker}")
     features = read_text("docs/FEATURES.md")
     for marker in ("SOCK_SEQPACKET", "SOCK_STREAM", "DSO_CONACCESS", "DSO_CONDATA", "DSO_DISDATA", "DSO_LINKINFO", "DSO_ACCEPTMODE", "DSO_CONACCEPT", "DSO_CONREJECT"):
         if marker not in features:
             raise SystemExit(f"source-release gate: delivered socket feature missing from catalogue: {marker}")
+    for marker in ("## Explicit scope exclusions", "DDCMP and IPv6 transport support are outside", "IPv4-only"):
+        if marker not in features:
+            raise SystemExit(f"source-release gate: feature scope boundary missing: {marker}")
 
     kernel_readme = read_text("kernel/decnet/README.md")
     for marker in ("SOCK_SEQPACKET", "SOCK_STREAM", "DSO_DISDATA", "DSO_ACCEPTMODE", "DSO_CONACCEPT", "DSO_CONREJECT"):
@@ -142,6 +167,9 @@ def main() -> int:
             raise SystemExit(f"source-release gate: kernel component README contains stale phase text: {stale}")
 
     components = read_text("docs/COMPONENTS.md")
+    for marker in ("## Explicit scope exclusions", "No DDCMP implementation component and no IPv6 transport component are required or claimed", "not a release blocker"):
+        if marker not in components:
+            raise SystemExit(f"source-release gate: component scope boundary missing: {marker}")
     for marker in ("SOCK_SEQPACKET", "SOCK_STREAM", "DNPROTO_NSP", "DSO_DISDATA", "DSO_ACCEPTMODE"):
         if marker not in components:
             raise SystemExit(f"source-release gate: component inventory missing accepted socket surface: {marker}")

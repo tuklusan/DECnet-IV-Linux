@@ -90,9 +90,9 @@ This catalogue describes the production source release. Lab-only helpers and ind
 
 The release is tested against pinned Route20 and PyDECnet, LinuxDECnet compatibility behavior, SIMH-hosted DEC operating systems where applicable, VDE2 distributed Ethernet, MULTINET TCP and controlled HECnet Area-31 peers. Those references are not embedded product components.
 
-## Pending project-goal feature
+## Explicit scope exclusions
 
-DDCMP remains part of the standing DECnet-IV-Linux project goal, but no native DDCMP implementation is present in the current tracked tree. It is therefore not claimed as delivered by this pre-production source archive and remains blocking for any final release that claims the complete project goal.
+DDCMP and IPv6 transport support are outside the current project and release scope by owner decision. Neither is claimed as a delivered feature, neither blocks release, and neither creates PP/reference/device acceptance requirements. MULTINET project acceptance is IPv4-only.
 
 ## Scope boundary
 

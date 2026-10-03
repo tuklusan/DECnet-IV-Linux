@@ -28,6 +28,7 @@ This is the stable resume entry point for DECnet-IV-Linux.
 10. Owner constraints are release policy: PP-11 S3-S6 are skipped for this release; from `## Timing/scheduler tests` onward execute only practically possible tests, remote-host test programs are user-mode C/C++ only, and impossible requirements are recorded exactly as `Not tested in lab environment`; PP-13 is skipped for the first release.
 11. PYRTR `31.3` is the disruptive-test boundary. Remote HECnet systems beyond it must not be rebooted, stopped, reconfigured or otherwise state-changed. MIM `1.13` is stricter: access it only read-only with valid DECnet methods, never for load/stress/fault testing, and only copy required resources away from it.
 12. Local test infrastructure may install pinned `tuklusan/simh` and, when useful, build one or more local RSX-11M-PLUS V4.6 SIMH instances from resources copied read-only from MIM; every acquisition, checksum, build, configuration and DECnet setup step must be documented.
+13. Owner scope boundary: DDCMP and IPv6 are explicitly out of scope. They are not claimed product features, are not release blockers, and do not generate PP/reference/device acceptance requirements. MULTINET acceptance is IPv4-only. Historical chronology may retain superseded DDCMP wording, but current contracts must not.
 
 Repository files are authoritative. Do not reconstruct current state from chat history or stale workflow runs.
 
