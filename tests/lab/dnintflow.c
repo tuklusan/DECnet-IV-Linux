@@ -154,7 +154,7 @@ int main(int argc, char **argv)
         }
         errno = 0;
         if (!send_oob(fd, "DNIV-IPR-65", MSG_DONTWAIT) ||
-            (errno != EAGAIN && errno != EWOULDBLOCK && errno != ENOBUFS)) {
+            (errno != EAGAIN && errno != EWOULDBLOCK && errno != ENOSPC)) {
             fprintf(stderr, "65th pressure interrupt was not bounded: errno=%d\n",
                     errno);
             close(fd);

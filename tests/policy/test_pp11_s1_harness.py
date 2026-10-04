@@ -138,6 +138,8 @@ def main() -> int:
         raise SystemExit("pp11-s1 regression: malformed/RX pressure count changed")
     if "credit=100 interrupts=64" not in INTFLOW:
         raise SystemExit("pp11-s1 regression: interrupt retransmit pressure count changed")
+    if "errno != ENOSPC" not in INTFLOW or "errno != ENOBUFS" in INTFLOW:
+        raise SystemExit("pp11-s1 regression: interrupt queue bound must accept kernel ENOSPC")
     if "candidate_sequence_wraps" not in PCAP or "candidate_no_resources_dc" not in PCAP:
         raise SystemExit("pp11-s1 regression: missing independent PCAP pressure evidence")
     unowned_reject_markers = (
