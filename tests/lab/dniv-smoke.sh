@@ -908,6 +908,81 @@ e4)
     esac
     ;;
 
+
+pp11s2)
+    pp11_s2_resource() {
+        stage=$1
+        links=$(/usr/local/sbin/dnctl links 2>/dev/null | grep -c '^link ' || true)
+        adjs=$(/usr/local/sbin/dnctl adjacencies 2>/dev/null | grep -c ' UP ' || true)
+        routes=$(/usr/local/sbin/dnctl routes 2>/dev/null | grep -c . || true)
+        mem_kb=$(awk '/^MemAvailable:/ {print $2; exit}' /proc/meminfo)
+        slab_kb=$(awk '/^Slab:/ {print $2; exit}' /proc/meminfo)
+        echo "DNIV-PP11-S2-RESOURCE session=$session node=$name stage=$stage links=$links adj=$adjs routes=$routes mem_kb=$mem_kb slab_kb=$slab_kb"
+    }
+
+    case "$role" in
+        A|B)
+            if [ -z "$peer" ] || [ -z "$peer_node" ] || [ -z "$dest_node" ]; then
+                echo "DNIV-LAB-FAIL session=$session node=$name reason=pp11-s2-missing-args"
+                exit 1
+            fi
+            modprobe decnet_iv default_area="$area" default_node="$node" default_name="$name"                 default_node_type=3 hello_interval=2
+            /usr/local/sbin/dnctl set "$area.$node" "$name"
+            iface=$(find_iface || true)
+            [ -n "$iface" ] || { echo "DNIV-LAB-FAIL session=$session node=$name reason=pp11-s2-no-interface"; exit 1; }
+            ip link set "$iface" up
+            if ! wait_any_adjacency_up "$peer_node" 240; then
+                echo "DNIV-LAB-FAIL session=$session node=$name reason=pp11-s2-no-router"
+                exit 1
+            fi
+            count=$probe_override
+            [ -n "$count" ] || count=1850
+            case "$count" in ''|*[!0-9]*|0) echo "DNIV-LAB-FAIL session=$session node=$name reason=pp11-s2-bad-count"; exit 1 ;; esac
+            pp11_s2_resource initial
+            echo "DNIV-PP11-S2-TRAFFIC-READY session=$session node=$name count=$count"
+            i=0
+            while [ "$i" -lt "$count" ]; do
+                i=$((i + 1))
+                /usr/local/sbin/dnraw --short "$iface" "$peer" "$area.$node" "$dest_node" 0                     "DNIV-PP11-S2-VALID-$session-$name-$i" || {
+                        echo "DNIV-LAB-FAIL session=$session node=$name reason=pp11-s2-valid-send index=$i"
+                        exit 1
+                    }
+                if [ $((i % 25)) -eq 0 ]; then
+                    pp11_s2_resource "probe-$i"
+                fi
+                sleep 2
+            done
+            pp11_s2_resource final
+            marker="DNIV-PP11-S2-PASS session=$session node=$name count=$i"
+            if [ "$hold_after_pass" = 1 ]; then
+                sync
+                echo "$marker"
+                while :; do sleep 60; done
+            fi
+            poweroff_pass "$marker"
+            ;;
+        R)
+            modprobe decnet_iv default_area="$area" default_node="$node" default_name="$name"                 default_node_type=2 router_priority=64 hello_interval=2 ethernet_cost=4
+            /usr/local/sbin/dnctl set "$area.$node" "$name"
+            for path in /sys/class/net/*; do
+                candidate=$(basename "$path")
+                [ "$candidate" = lo ] || ip link set "$candidate" up
+            done
+            echo "DNIV-PP11-S2-ROUTER-READY session=$session node=$name"
+            index=0
+            while :; do
+                index=$((index + 1))
+                pp11_s2_resource "minute-$index"
+                sleep 60
+            done
+            ;;
+        *)
+            echo "DNIV-LAB-FAIL session=$session node=$name reason=pp11-s2-bad-role"
+            exit 1
+            ;;
+    esac
+    ;;
+
 pp11s1)
     case "$role" in
         A|B) ;;

@@ -26,6 +26,7 @@ on:
           - phase2
           - e1
           - pp11s1
+          - pp11s2
           - e2
           - e3
           - e4
@@ -246,6 +247,9 @@ jobs:
           set +e
           if [[ "${DNIV_LAB_MODE}" == pp11s1 ]]; then
             python3 tests/lab/dniv_pp11_s1.py "$DNIV_LAB_BASE" "$DNIV_LAB_KERNEL" "$DNIV_LAB_INITRD" 2>&1 | \
+              tee "$DNIV_SCRATCH_DIR/two-node.log"
+          elif [[ "${DNIV_LAB_MODE}" == pp11s2 ]]; then
+            python3 tests/lab/dniv_pp11_s2.py "$DNIV_LAB_BASE" "$DNIV_LAB_KERNEL" "$DNIV_LAB_INITRD" 2>&1 | \
               tee "$DNIV_SCRATCH_DIR/two-node.log"
           elif [[ "${DNIV_LAB_MODE}" == e2 ]]; then
             python3 tests/lab/dniv_e2.py "$DNIV_LAB_BASE" "$DNIV_LAB_KERNEL" "$DNIV_LAB_INITRD" 2>&1 | \

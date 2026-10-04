@@ -283,12 +283,12 @@ jobs:
             esac
           fi
           case "$profile" in fast|targeted|consolidated|full) ;; *) echo "bad acceptance profile: $profile" >&2; exit 2 ;; esac
-          case "$scope" in all|socket|routing|pp11-pressure|source-release) ;; *) echo "bad acceptance scope: $scope" >&2; exit 2 ;; esac
-          if [[ "$profile" == targeted && "$scope" != pp11-pressure && "$scope" != source-release ]]; then
-            echo "targeted acceptance requires SCOPE=pp11-pressure or SCOPE=source-release" >&2
+          case "$scope" in all|socket|routing|pp11-pressure|pp11-s2|source-release) ;; *) echo "bad acceptance scope: $scope" >&2; exit 2 ;; esac
+          if [[ "$profile" == targeted && "$scope" != pp11-pressure && "$scope" != pp11-s2 && "$scope" != source-release ]]; then
+            echo "targeted acceptance requires SCOPE=pp11-pressure, SCOPE=pp11-s2, or SCOPE=source-release" >&2
             exit 2
           fi
-          if [[ "$profile" != targeted && ( "$scope" == pp11-pressure || "$scope" == source-release ) ]]; then
+          if [[ "$profile" != targeted && ( "$scope" == pp11-pressure || "$scope" == pp11-s2 || "$scope" == source-release ) ]]; then
             echo "targeted-only scope requires PROFILE=targeted" >&2
             exit 2
           fi
@@ -440,9 +440,16 @@ jobs:
               -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
           fi
 
-          dispatch_and_record INTEROP interop.yml \
-            -f profile="$profile" -f scope="$scope" \
-            -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
+          if [[ "$profile" == targeted && "$scope" == pp11-s2 ]]; then
+            printf 'VM_LAB_PP11_S2=vm-lab.yml:pp11s2:virtio-net-pci:1vcpu\\n' >> "$DNIV_SCRATCH_DIR/dispatch.env"
+            dispatch_and_record VM_LAB_PP11_S2 vm-lab.yml \
+              -f lab_mode=pp11s2 -f nic_model=virtio-net-pci -f vcpus=1 \
+              -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
+          else
+            dispatch_and_record INTEROP interop.yml \
+              -f profile="$profile" -f scope="$scope" \
+              -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
+          fi
 
           if [[ "$profile" == consolidated || "$profile" == full ]]; then
             dispatch_and_record VDE2_LOCAL vde2-proof.yml \
