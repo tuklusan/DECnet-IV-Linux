@@ -98,7 +98,7 @@ static int send_packet(int fd, unsigned char code, const char *source,
     memcpy(buf + 1U, source, source_len + 1U);
     if (tail_len)
         memcpy(buf + 1U + source_len + 1U, tail, tail_len);
-    return send(fd, buf, total, MSG_EOR | MSG_NOSIGNAL) == (ssize_t)total ? 0 : -1;
+    return dniv_send_record(fd, buf, total, 0);
 }
 
 static int selftest(void)
@@ -168,7 +168,7 @@ int main(int argc, char **argv)
         buf[0] = PHONE_CONNECT;
         memcpy(buf + 1U, source, sl + 1U);
         memcpy(buf + 1U + sl + 1U, remote, rl + 1U);
-        if (send(fd, buf, total, MSG_EOR | MSG_NOSIGNAL) != (ssize_t)total)
+        if (dniv_send_record(fd, buf, total, 0))
             goto fail;
     }
     if (dniv_recv_record(fd, &reply, 1U, 0) != 1 || reply != PHONE_REPLYOK)
@@ -183,7 +183,7 @@ int main(int argc, char **argv)
         dial[0] = PHONE_DIAL;
         memcpy(dial + 1U, source, sl + 1U);
         dial[total - 1U] = 1U;
-        if (send(fd, dial, total, MSG_EOR | MSG_NOSIGNAL) != (ssize_t)total)
+        if (dniv_send_record(fd, dial, total, 0))
             goto fail;
     }
     if (dniv_recv_record(fd, &reply, 1U, 0) != 1 || reply != PHONE_REPLYOK)

@@ -21,6 +21,8 @@
 #include <sys/time.h>
 #include <unistd.h>
 
+#include "../common/record_io.h"
+
 #include <netdnet/dnetdb.h>
 
 #define DNPING_DEFAULT_COUNT 10
@@ -176,7 +178,7 @@ int main(int argc, char **argv)
                 perror("dnping: gettimeofday");
             break;
         }
-        if (send(fd, tx, (size_t)size, MSG_EOR | MSG_NOSIGNAL) != size) {
+        if (dniv_send_record(fd, tx, (size_t)size, 0)) {
             if (!quiet)
                 perror("dnping: send");
             break;

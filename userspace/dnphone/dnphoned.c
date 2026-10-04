@@ -82,7 +82,7 @@ static int user_match(const char *target, const char *user)
 
 static int send_code(int fd, unsigned char code)
 {
-    return send(fd, &code, 1U, MSG_EOR | MSG_NOSIGNAL) == 1 ? 0 : -1;
+    return dniv_send_record(fd, &code, 1U, 0);
 }
 
 static int serve(int fd, const char *user)
@@ -104,8 +104,7 @@ static int serve(int fd, const char *user)
 
         if (len < 0 || (size_t)len >= sizeof(line))
             return -1;
-        return send(fd, line, (size_t)len, MSG_EOR | MSG_NOSIGNAL) == len ?
-            0 : -1;
+        return dniv_send_record(fd, line, (size_t)len, 0);
     }
     if (got < 4 || buf[0] != PHONE_CONNECT)
         return -1;

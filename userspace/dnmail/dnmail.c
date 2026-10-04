@@ -123,7 +123,7 @@ fail:
 
 static int send_record(int fd, const void *data, size_t len)
 {
-    return send(fd, data, len, MSG_EOR | MSG_NOSIGNAL) == (ssize_t)len ? 0 : -1;
+    return dniv_send_record(fd, data, len, 0);
 }
 
 static int recv_ack(int fd)

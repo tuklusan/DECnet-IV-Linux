@@ -156,8 +156,7 @@ static int serve_connection(int fd)
             out_len = 1U;
         }
 
-        if (send(fd, out, out_len, MSG_EOR | MSG_NOSIGNAL) !=
-            (ssize_t)out_len)
+        if (dniv_send_record(fd, out, out_len, 0))
             return -1;
     }
 }

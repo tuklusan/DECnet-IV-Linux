@@ -82,7 +82,7 @@ static int serve_connection(int fd)
             return 0;
         if (got < 0)
             return -1;
-        if (send(fd, buffer, (size_t)got, MSG_EOR | MSG_NOSIGNAL) != got)
+        if (dniv_send_record(fd, buffer, (size_t)got, 0))
             return -1;
     }
 }

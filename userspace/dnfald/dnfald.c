@@ -107,7 +107,7 @@ static int make_listener(void)
 
 static int send_record(int fd, const unsigned char *buf, size_t len)
 {
-    return send(fd, buf, len, MSG_EOR | MSG_NOSIGNAL) == (ssize_t)len ? 0 : -1;
+    return dniv_send_record(fd, buf, len, 0);
 }
 
 static int parse_attributes(const unsigned char *buf, size_t len,

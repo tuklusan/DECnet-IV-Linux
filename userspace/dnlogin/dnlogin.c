@@ -239,7 +239,7 @@ static int perform_handshake(int fd)
         return -1;
     }
     len = make_bind_accept(out);
-    if (send(fd, out, len, MSG_EOR | MSG_NOSIGNAL) != (ssize_t)len) {
+    if (dniv_send_record(fd, out, len, 0)) {
         perror("dnlogin: bind accept");
         return -1;
     }
@@ -249,7 +249,7 @@ static int perform_handshake(int fd)
         return -1;
     }
     len = make_cterm_initiate(out, sizeof(out));
-    if (!len || send(fd, out, len, MSG_EOR | MSG_NOSIGNAL) != (ssize_t)len) {
+    if (!len || dniv_send_record(fd, out, len, 0)) {
         perror("dnlogin: CTERM initiate");
         return -1;
     }
@@ -290,7 +290,7 @@ static int send_common(int fd, const unsigned char *body, size_t body_len)
     record[1] = 0U;
     put_le16(record + 2, (uint16_t)body_len);
     memcpy(record + 4, body, body_len);
-    return send(fd, record, total, MSG_EOR | MSG_NOSIGNAL) == (ssize_t)total ? 0 : -1;
+    return dniv_send_record(fd, record, total, 0);
 }
 
 static int is_terminator(unsigned char c)

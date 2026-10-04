@@ -259,7 +259,7 @@ static int open_fal(const char *node_text, const struct access_options *options)
 
 static int send_record(int fd, const unsigned char *buf, size_t len)
 {
-    return send(fd, buf, len, MSG_EOR | MSG_NOSIGNAL) == (ssize_t)len ? 0 : -1;
+    return dniv_send_record(fd, buf, len, 0);
 }
 
 static int exchange_config(int fd)

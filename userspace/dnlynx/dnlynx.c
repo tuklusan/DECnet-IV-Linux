@@ -170,7 +170,7 @@ static int run_http(int fd, const char *node, const char *path, int include_head
         fputs("dnlynx: HTTP stage=request-format\n", stderr);
         return -1;
     }
-    if (send(fd,request,(size_t)n,MSG_EOR|MSG_NOSIGNAL)!=n) {
+    if (dniv_send_record(fd, request, (size_t)n, 0)) {
         fprintf(stderr,"dnlynx: HTTP stage=request-send errno=%d\n",errno);
         return -1;
     }

@@ -20,6 +20,44 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
+static inline int dniv_send_record(int fd, const void *buf, size_t len, int flags)
+{
+    const unsigned char *p = buf;
+    size_t off = 0U;
+
+    if (!len) {
+        ssize_t sent;
+
+        do {
+            sent = send(fd, buf, 0U, flags | MSG_EOR | MSG_NOSIGNAL);
+        } while (sent < 0 && errno == EINTR);
+        if (sent < 0)
+            return -1;
+        if (sent != 0) {
+            errno = EIO;
+            return -1;
+        }
+        return 0;
+    }
+
+    while (off < len) {
+        ssize_t sent = send(fd, p + off, len - off,
+                            flags | MSG_EOR | MSG_NOSIGNAL);
+
+        if (sent < 0) {
+            if (errno == EINTR)
+                continue;
+            return -1;
+        }
+        if (!sent) {
+            errno = EIO;
+            return -1;
+        }
+        off += (size_t)sent;
+    }
+    return 0;
+}
+
 static inline ssize_t dniv_recv_record(int fd, void *buf, size_t cap, int flags)
 {
     ssize_t got;

@@ -127,8 +127,7 @@ static int send_ack(int fd)
 {
     const unsigned char ack[4] = { 1U, 0U, 0U, 0U };
 
-    return send(fd, ack, sizeof(ack), MSG_EOR | MSG_NOSIGNAL) ==
-        (ssize_t)sizeof(ack) ? 0 : -1;
+    return dniv_send_record(fd, ack, sizeof(ack), 0);
 }
 
 static int write_all(int fd, const void *data, size_t len)
@@ -143,8 +142,10 @@ static int write_all(int fd, const void *data, size_t len)
                 continue;
             return -1;
         }
-        if (!done)
+        if (!done) {
+            errno = EIO;
             return -1;
+        }
         p += done;
         len -= (size_t)done;
     }

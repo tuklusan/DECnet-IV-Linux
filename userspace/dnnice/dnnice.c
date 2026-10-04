@@ -746,8 +746,7 @@ int main(int argc, char **argv)
         close(fd);
         return 1;
     }
-    if (send(fd, request, request_len, MSG_EOR | MSG_NOSIGNAL) !=
-        (ssize_t)request_len) {
+    if (dniv_send_record(fd, request, request_len, 0)) {
         perror("dnnice: send");
         close(fd);
         return 1;

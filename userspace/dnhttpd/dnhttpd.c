@@ -182,10 +182,10 @@ static int serve(int fd, const char *root)
                          code, reason, n);
         if (h < 0 || (size_t)h >= sizeof(header))
             return -1;
-        if (send(fd, header, (size_t)h, MSG_EOR | MSG_NOSIGNAL) != h)
+        if (dniv_send_record(fd, header, (size_t)h, 0))
             return -1;
     }
-    if (n && send(fd, body, n, MSG_EOR | MSG_NOSIGNAL) != (ssize_t)n)
+    if (n && dniv_send_record(fd, body, n, 0))
         return -1;
     return 0;
 }

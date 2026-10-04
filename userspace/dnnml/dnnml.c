@@ -467,8 +467,7 @@ static int collect_node_status(__s8 entity_code,
 
 static int send_nice_code(int fd, signed char code)
 {
-    return send(fd, &code, sizeof(code), MSG_EOR | MSG_NOSIGNAL) ==
-           (ssize_t)sizeof(code) ? 0 : -1;
+    return dniv_send_record(fd, &code, sizeof(code), 0);
 }
 
 static int serve_multiple_circuits(int fd, __s8 entity_code, __u8 info,
@@ -510,8 +509,7 @@ static int serve_multiple_circuits(int fd, __s8 entity_code, __u8 info,
                     traffic.rx_frames, traffic.tx_frames))
                 return -1;
         }
-        if (send(fd, out, out_len, MSG_EOR | MSG_NOSIGNAL) !=
-            (ssize_t)out_len)
+        if (dniv_send_record(fd, out, out_len, 0))
             return -1;
     }
     return send_nice_code(fd, -128);
@@ -541,8 +539,7 @@ static int serve_multiple_nodes(int fd, __s8 entity_code, __u8 info,
                 nodes[i].node_type, nodes[i].cost, nodes[i].hops,
                 nodes[i].circuit, nodes[i].next_node))
             return -1;
-        if (send(fd, out, out_len, MSG_EOR | MSG_NOSIGNAL) !=
-            (ssize_t)out_len)
+        if (dniv_send_record(fd, out, out_len, 0))
             return -1;
     }
     return send_nice_code(fd, -128);
@@ -610,8 +607,7 @@ static int serve_connection(int fd)
                         return -1;
                     continue;
                 }
-                if (send(fd, out, out_len, MSG_EOR | MSG_NOSIGNAL) !=
-                    (ssize_t)out_len)
+                if (dniv_send_record(fd, out, out_len, 0))
                     return -1;
                 continue;
             }
@@ -652,13 +648,11 @@ static int serve_connection(int fd)
             if (build_failed) {
                 const signed char error = -1;
 
-                if (send(fd, &error, sizeof(error),
-                         MSG_EOR | MSG_NOSIGNAL) != (ssize_t)sizeof(error))
+                if (dniv_send_record(fd, &error, sizeof(error), 0))
                     return -1;
                 continue;
             }
-            if (send(fd, out, out_len, MSG_EOR | MSG_NOSIGNAL) !=
-                (ssize_t)out_len)
+            if (dniv_send_record(fd, out, out_len, 0))
                 return -1;
             continue;
         }
@@ -693,14 +687,12 @@ static int serve_connection(int fd)
         default: {
             const signed char error = -1;
 
-            if (send(fd, &error, sizeof(error),
-                     MSG_EOR | MSG_NOSIGNAL) != (ssize_t)sizeof(error))
+            if (dniv_send_record(fd, &error, sizeof(error), 0))
                 return -1;
             continue;
         }
         }
-        if (send(fd, out, out_len, MSG_EOR | MSG_NOSIGNAL) !=
-            (ssize_t)out_len)
+        if (dniv_send_record(fd, out, out_len, 0))
             return -1;
     }
 }

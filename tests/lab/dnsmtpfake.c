@@ -32,8 +32,10 @@ static int write_all(int fd, const void *data, size_t len)
                 continue;
             return -1;
         }
-        if (!done)
+        if (!done) {
+            errno = EIO;
             return -1;
+        }
         p += done;
         len -= (size_t)done;
     }

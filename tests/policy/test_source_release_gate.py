@@ -868,9 +868,17 @@ def main() -> int:
         raise SystemExit("source-release gate: retained NSP control transmit ownership rationale missing")
 
     record_io = read_text("userspace/common/record_io.h")
-    for marker in ("flags | MSG_TRUNC", "(size_t)got > cap", "errno = EMSGSIZE;"):
+    for marker in (
+        "while (off < len)",
+        "errno == EINTR",
+        "errno = EIO;",
+        "flags | MSG_EOR | MSG_NOSIGNAL",
+        "flags | MSG_TRUNC",
+        "(size_t)got > cap",
+        "errno = EMSGSIZE;",
+    ):
         if marker not in record_io:
-            raise SystemExit(f"source-release gate: bounded sequenced-record receive safeguard missing: {marker}")
+            raise SystemExit(f"source-release gate: sequenced-record I/O safeguard missing: {marker}")
     record_consumers = (
         "userspace/dncopy/dncopy.c",
         "userspace/dnfald/dnfald.c",
@@ -893,6 +901,20 @@ def main() -> int:
             raise SystemExit(f"source-release gate: {path} is not using bounded sequenced-record receive")
         if "recv(" in source:
             raise SystemExit(f"source-release gate: raw fixed-buffer recv remains in {path}")
+    record_senders = record_consumers + ("userspace/dnping/dnping.c",)
+    for path in record_senders:
+        source = read_text(path)
+        if '#include "../common/record_io.h"' not in source or "dniv_send_record(" not in source:
+            raise SystemExit(f"source-release gate: {path} is not retrying short sequenced-record sends")
+        raw_source = source
+        if path == "userspace/dnmail/dnmaild.c":
+            raw_source = raw_source.replace('send(pair[0], "12345", 5U, MSG_EOR)', "")
+        if "send(" in raw_source:
+            raise SystemExit(f"source-release gate: raw sequenced-record send remains in {path}")
+    smtp_fake = read_text("tests/lab/dnsmtpfake.c")
+    for source, name in ((dnmaild, "dnmaild"), (smtp_fake, "dnsmtpfake")):
+        if "if (!done) {\n            errno = EIO;\n            return -1;\n        }" not in source:
+            raise SystemExit(f"source-release gate: {name} zero-write failure leaves errno undefined")
     for marker in (
         "socketpair(AF_UNIX, SOCK_SEQPACKET, 0, pair)",
         'send(pair[0], "12345", 5U, MSG_EOR)',

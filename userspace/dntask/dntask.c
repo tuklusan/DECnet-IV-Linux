@@ -269,8 +269,7 @@ static int run_interactive(int fd, int binary, int timeout_seconds)
                 return -1;
             if (!binary && buf[got - 1] == '\n')
                 got--;
-            if (got && send(fd, buf, (size_t)got,
-                            MSG_EOR | MSG_NOSIGNAL) != got)
+            if (got && dniv_send_record(fd, buf, (size_t)got, 0))
                 return -1;
         }
         if (fds[0].revents & (POLLERR | POLLHUP | POLLNVAL))
