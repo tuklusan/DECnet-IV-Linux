@@ -161,7 +161,7 @@ cterm_ready=0
 for _ in $(seq 1 10); do
     : >"$cterm_log"
     if DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
-        /usr/local/sbin/dnlogin --probe "$target" >/dev/null 2>"$cterm_log"; then
+        /usr/local/bin/dnlogin --probe "$target" >/dev/null 2>"$cterm_log"; then
         cterm_ready=1
         break
     fi

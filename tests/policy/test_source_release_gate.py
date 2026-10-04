@@ -265,12 +265,15 @@ def main() -> int:
     ):
         if forbidden in area31_smoke:
             raise SystemExit(f"source-release gate: remote Area-31 state-change path remains: {forbidden}")
+    if "/usr/local/sbin/dnlogin --probe" in area31_smoke:
+        raise SystemExit("source-release gate: PP-12 CTERM probe uses stale sbin dnlogin path")
     for required in (
         "DNIV-AREA31-QCOCAL-READONLY-PASS",
         "DNIV-AREA31-PP12-QCOCAL-READONLY-PASS",
         "DNIV-AREA31-PP12-CLIENTS-PASS",
         'cterm_log="$scratch/cterm.err"',
         'for _ in $(seq 1 10)',
+        "/usr/local/bin/dnlogin --probe",
         "sed -n '1,4p' \"$cterm_log\" >&2",
     ):
         if required not in area31_smoke:
