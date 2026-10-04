@@ -867,7 +867,7 @@ jobs:
           retention-days: 30
           compression-level: 6
           overwrite: false
-pp12-real-peers:
+  pp12-real-peers:
     if: ${{ inputs.pp12_real_peers }}
     needs:
       - package-amd64
