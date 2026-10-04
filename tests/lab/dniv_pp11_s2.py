@@ -98,7 +98,7 @@ def forwarded_timestamps(path: Path, marker: str, router_mac: str) -> list[float
         off += 16
         frame = data[off:off + incl]
         off += incl
-        if len(frame) < 37 or frame[12:14] != b"\\x60\\x03" or needle not in frame:
+        if len(frame) < 37 or frame[12:14].hex() != "6003" or needle not in frame:
             continue
         plen = int.from_bytes(frame[14:16], "little")
         if 16 + plen > len(frame):

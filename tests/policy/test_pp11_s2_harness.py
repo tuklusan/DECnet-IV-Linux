@@ -44,6 +44,7 @@ def main() -> int:
         "magic = data[:4].hex()",
         '"d4c3b2a1"',
         '"a1b23c4d"',
+        'frame[12:14].hex() != "6003"',
         '"DN70": require_forwarded',
         '"DN73": require_forwarded',
         '"DN71": require_forwarded',
