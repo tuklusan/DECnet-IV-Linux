@@ -37,6 +37,10 @@ def main() -> int:
         "MAX_SLAB_GROWTH_KB = 65536",
         "MAX_LINKS = 32",
         "MIN_FORWARDED = 1000",
+        "MIN_TRAFFIC_SPAN_SECONDS = FAULT_DURATION - 10.0",
+        "MAX_VALID_GAP_SECONDS = 30.0",
+        "span < MIN_TRAFFIC_SPAN_SECONDS",
+        "max_gap > MAX_VALID_GAP_SECONDS",
         '"DN70": require_forwarded',
         '"DN73": require_forwarded',
         '"DN71": require_forwarded',
@@ -59,8 +63,11 @@ def main() -> int:
         "DNIV-PP11-S2-VALID-",
         "DNIV-PP11-S2-RESOURCE",
         "DNIV-PP11-S2-PASS",
-        "sleep 3",
-        "i % 25",
+        "pp11-s2-valid-hold-send",
+        'pp11_s2_resource "hold-$i"',
+        "sleep 2",
+        "i % 20",
+        "sleep 45",
     ):
         if marker not in SMOKE:
             raise SystemExit(f"pp11-s2 regression: missing guest guard: {marker}")

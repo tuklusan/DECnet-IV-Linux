@@ -21,10 +21,11 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import struct
 import sys
 import time
 
-from dniv_scale import Lab, decnet_mac, guest, marker_sources, wait_for_markers
+from dniv_scale import Lab, decnet_mac, guest, wait_for_markers
 
 FAULT_EVENTS = 10000
 FAULT_DURATION = 3600.0
@@ -33,6 +34,8 @@ MAX_SLAB_GROWTH_KB = 65536
 MAX_LINKS = 32
 MIN_RESOURCE_SAMPLES = 50
 MIN_FORWARDED = 1000
+MIN_TRAFFIC_SPAN_SECONDS = FAULT_DURATION - 10.0
+MAX_VALID_GAP_SECONDS = 30.0
 FATAL = (
     "BUG: KASAN:", "BUG: KCSAN:", "kernel BUG at", "Kernel panic", "Oops:",
     "general protection fault", "use-after-free", "double free", "WARNING: CPU:",
@@ -72,13 +75,61 @@ def pcap_faults(paths: list[Path]) -> int:
     return sum(path.read_bytes().count(marker) for path in paths if path.exists())
 
 
-def require_forwarded(path: Path, session: str, node: str, router_mac: str) -> int:
+def forwarded_timestamps(path: Path, marker: str, router_mac: str) -> list[float]:
+    data = path.read_bytes()
+    if len(data) < 24:
+        return []
+    magic = data[:4]
+    if magic == b"\\xd4\\xc3\\xb2\\xa1":
+        endian, divisor = "<", 1_000_000.0
+    elif magic == b"\\xa1\\xb2\\xc3\\xd4":
+        endian, divisor = ">", 1_000_000.0
+    elif magic == b"\\x4d\\x3c\\xb2\\xa1":
+        endian, divisor = "<", 1_000_000_000.0
+    elif magic == b"\\xa1\\xb2\\x3c\\x4d":
+        endian, divisor = ">", 1_000_000_000.0
+    else:
+        raise RuntimeError(f"unsupported pcap magic in {path}")
+    needle = marker.encode()
+    out: list[float] = []
+    off = 24
+    while off + 16 <= len(data):
+        sec, frac, incl, _ = struct.unpack_from(endian + "IIII", data, off)
+        off += 16
+        frame = data[off:off + incl]
+        off += incl
+        if len(frame) < 37 or frame[12:14] != b"\\x60\\x03" or needle not in frame:
+            continue
+        plen = int.from_bytes(frame[14:16], "little")
+        if 16 + plen > len(frame):
+            continue
+        route = frame[16:16 + plen]
+        if len(route) < 21 or (route[0] & 0xc7) != 0x06:
+            continue
+        source = ":".join(f"{value:02x}" for value in frame[6:12])
+        if source == router_mac and route[18] == 1:
+            out.append(sec + frac / divisor)
+    return out
+
+
+def require_forwarded(path: Path, session: str, node: str,
+                      router_mac: str) -> tuple[int, float, float]:
     marker = f"DNIV-PP11-S2-VALID-{session}-{node}-"
-    seen = marker_sources(path, marker)
-    count = sum(1 for source, visit in seen if source == router_mac and visit == 1)
+    times = forwarded_timestamps(path, marker, router_mac)
+    count = len(times)
     if count < MIN_FORWARDED:
         raise RuntimeError(f"pp11-s2: forwarded valid traffic {node}={count} < {MIN_FORWARDED}")
-    return count
+    span = times[-1] - times[0]
+    if span < MIN_TRAFFIC_SPAN_SECONDS:
+        raise RuntimeError(
+            f"pp11-s2: valid traffic span {node}={span:.3f}s < {MIN_TRAFFIC_SPAN_SECONDS:.3f}s"
+        )
+    max_gap = max((right - left for left, right in zip(times, times[1:])), default=0.0)
+    if max_gap > MAX_VALID_GAP_SECONDS:
+        raise RuntimeError(
+            f"pp11-s2: valid traffic gap {node}={max_gap:.3f}s > {MAX_VALID_GAP_SECONDS:.3f}s"
+        )
+    return count, span, max_gap
 
 
 def main() -> int:
@@ -201,8 +252,12 @@ def main() -> int:
             f"{item.name}_SLAB_FINAL_KB={final_row[4]}",
             f"{item.name}_FINAL_ADJ={final_row[1]}",
         ])
-    for node, count in forwarded.items():
-        summary.append(f"{node}_FORWARDED_VALID={count}")
+    for node, (count, span, max_gap) in forwarded.items():
+        summary.extend([
+            f"{node}_FORWARDED_VALID={count}",
+            f"{node}_VALID_SPAN_SECONDS={span:.3f}",
+            f"{node}_MAX_VALID_GAP_SECONDS={max_gap:.3f}",
+        ])
     host_lines = [line for line in read_text(host_resources).splitlines() if line.strip()]
     if len(host_lines) < 4 * MIN_RESOURCE_SAMPLES:
         raise RuntimeError(f"pp11-s2: host resource samples={len(host_lines)}")
@@ -211,6 +266,8 @@ def main() -> int:
         f"LIMIT_MAX_SLAB_GROWTH_KB={MAX_SLAB_GROWTH_KB}",
         f"LIMIT_MAX_LINKS={MAX_LINKS}",
         f"LIMIT_MIN_FORWARDED={MIN_FORWARDED}",
+        f"LIMIT_MIN_TRAFFIC_SPAN_SECONDS={MIN_TRAFFIC_SPAN_SECONDS:.3f}",
+        f"LIMIT_MAX_VALID_GAP_SECONDS={MAX_VALID_GAP_SECONDS:.3f}",
         "RESULT=PASS",
     ])
     (work / "summary.env").write_text("\n".join(summary) + "\n", encoding="utf-8")

@@ -947,17 +947,28 @@ pp11s2)
                         echo "DNIV-LAB-FAIL session=$session node=$name reason=pp11-s2-valid-send index=$i"
                         exit 1
                     }
-                if [ $((i % 25)) -eq 0 ]; then
+                if [ $((i % 20)) -eq 0 ]; then
                     pp11_s2_resource "probe-$i"
                 fi
-                sleep 3
+                sleep 2
             done
-            pp11_s2_resource final
+            pp11_s2_resource threshold
             marker="DNIV-PP11-S2-PASS session=$session node=$name count=$i"
             if [ "$hold_after_pass" = 1 ]; then
                 sync
                 echo "$marker"
-                while :; do sleep 60; done
+                while :; do
+                    i=$((i + 1))
+                    /usr/local/sbin/dnraw --short "$iface" "$peer" "$area.$node" "$dest_node" 0 \
+                        "DNIV-PP11-S2-VALID-$session-$name-$i" || {
+                            echo "DNIV-LAB-FAIL session=$session node=$name reason=pp11-s2-valid-hold-send index=$i"
+                            exit 1
+                        }
+                    if [ $((i % 20)) -eq 0 ]; then
+                        pp11_s2_resource "hold-$i"
+                    fi
+                    sleep 2
+                done
             fi
             poweroff_pass "$marker"
             ;;
@@ -973,7 +984,7 @@ pp11s2)
             while :; do
                 index=$((index + 1))
                 pp11_s2_resource "minute-$index"
-                sleep 60
+                sleep 45
             done
             ;;
         *)
