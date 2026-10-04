@@ -758,6 +758,17 @@ def main() -> int:
         if stale in dnetdb_source:
             raise SystemExit("source-release gate: libdnet node database returns before draining a rejected physical line")
 
+    nsp_wire = read_text("include/decnet_iv_nsp_wire.h")
+    nsp_unit = read_text("tests/unit/test_phase5_nsp.c")
+    if "if (pkt->type == DNIV_NSP_ACK_CONN) {\n        if (len != 3U)" not in nsp_wire:
+        raise SystemExit("source-release gate: NSP Connect Acknowledgment must reject trailing bytes")
+    for marker in (
+        "const unsigned char bad_ca_trailing[] = {0x24,0x03,0x00,0xaa};",
+        "dniv_nsp_parse(bad_ca_trailing, sizeof(bad_ca_trailing), &p)",
+    ):
+        if marker not in nsp_unit:
+            raise SystemExit(f"source-release gate: NSP Connect Acknowledgment trailing-byte regression coverage missing: {marker}")
+
     main_source = read_text("kernel/decnet/decnet_iv_main.c")
     init_start = main_source.index("static int __init dniv_init(void)")
     exit_start = main_source.index("static void __exit dniv_exit(void)")

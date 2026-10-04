@@ -172,7 +172,7 @@ static inline int dniv_nsp_parse(const __u8 *buf, __u32 len,
     }
 
     if (pkt->type == DNIV_NSP_ACK_CONN) {
-        if (len < 3U)
+        if (len != 3U)
             return DNIV_NSP_MALFORMED;
         pkt->dst = dniv_nsp_get_le16(buf + 1U);
         return DNIV_NSP_OK;
