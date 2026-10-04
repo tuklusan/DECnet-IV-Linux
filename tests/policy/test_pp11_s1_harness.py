@@ -137,6 +137,14 @@ def main() -> int:
         raise SystemExit("pp11-s1 regression: pressure backlog boundary changed")
     if "malformed_control=96 rx_future=32" not in ACKRANGE:
         raise SystemExit("pp11-s1 regression: malformed/RX pressure count changed")
+    for marker in (
+        'pp11_wait_link_metric_range "$rx_link" rx 32 64 160',
+        'channel-limit=32 total=$rx_total',
+    ):
+        if marker not in INTEROP_SMOKE:
+            raise SystemExit(
+                f"pp11-s1 regression: RX aggregate/channel-bound guard changed: {marker}"
+            )
     if "credit=100 interrupts=64" not in INTFLOW:
         raise SystemExit("pp11-s1 regression: interrupt retransmit pressure count changed")
     if "errno != ENOSPC" not in INTFLOW_CLIENT or "errno != ENOBUFS" in INTFLOW_CLIENT:

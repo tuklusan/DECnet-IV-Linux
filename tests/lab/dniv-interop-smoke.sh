@@ -209,6 +209,27 @@ pp11_wait_link_metric_exact() {
     return 1
 }
 
+pp11_wait_link_metric_range() {
+    link=$1
+    key=$2
+    minimum=$3
+    maximum=$4
+    tries=$5
+    i=0
+    while [ "$i" -lt "$tries" ]; do
+        value=$(pp11_link_metric "$link" "$key")
+        if [ "$value" -gt "$maximum" ]; then
+            return 2
+        fi
+        if [ "$value" -ge "$minimum" ]; then
+            return 0
+        fi
+        i=$((i + 1))
+        sleep 0.1
+    done
+    return 1
+}
+
 pp11_wait_link_count_exact() {
     target=$1
     tries=$2
@@ -1187,11 +1208,16 @@ EOF_DNIV_SENDMAIL
                 echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=pp11-rx-link round=$round"
                 exit 1
             }
-            if ! pp11_wait_link_metric_exact "$rx_link" rx 32 160; then
+            # rx= is the aggregate of the independently bounded data and
+            # other-data receive subchannels.  The injected 32 future Link
+            # Service records fill the other-data channel; concurrently ready
+            # normal data may legitimately make the aggregate exceed 32.
+            if ! pp11_wait_link_metric_range "$rx_link" rx 32 64 160; then
                 echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=pp11-rx-limit round=$round link=$rx_link"
                 exit 1
             fi
-            echo "DNIV-INTEROP-PP11-RX-LIMIT session=$session scenario=$scenario round=$round link=$rx_link count=32"
+            rx_total=$(pp11_link_metric "$rx_link" rx)
+            echo "DNIV-INTEROP-PP11-RX-LIMIT session=$session scenario=$scenario round=$round link=$rx_link channel-limit=32 total=$rx_total"
             if ! pp11_require_seq_live "$seq_pid" "$seq_log" "$seq_lines" "$round" rx; then
                 echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=pp11-rx-mirror round=$round"
                 exit 1
