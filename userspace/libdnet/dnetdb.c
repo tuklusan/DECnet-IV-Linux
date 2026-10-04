@@ -117,6 +117,7 @@ static int uppercase_copy(char *dst, size_t cap, const char *src)
 static int read_node_line(FILE *file, char *line, size_t cap)
 {
     size_t used = 0U;
+    int line_error = 0;
     int ch;
 
     if (!file || !line || cap < 2U) {
@@ -124,20 +125,21 @@ static int read_node_line(FILE *file, char *line, size_t cap)
         return -1;
     }
     while ((ch = fgetc(file)) != EOF) {
-        if (ch == '\0') {
-            errno = EINVAL;
-            return -1;
-        }
-        if (used + 1U >= cap) {
-            errno = E2BIG;
-            return -1;
-        }
-        line[used++] = (char)ch;
+        if (ch == '\0' && !line_error)
+            line_error = EINVAL;
+        if (used + 1U >= cap && !line_error)
+            line_error = E2BIG;
+        if (!line_error)
+            line[used++] = (char)ch;
         if (ch == '\n')
             break;
     }
     if (ferror(file)) {
         errno = EIO;
+        return -1;
+    }
+    if (line_error) {
+        errno = line_error;
         return -1;
     }
     if (!used)

@@ -646,16 +646,27 @@ def main() -> int:
     dnetdb_source = read_text("userspace/libdnet/dnetdb.c")
     for marker in (
         "static int read_node_line(FILE *file, char *line, size_t cap)",
+        "int line_error = 0;",
         "while ((ch = fgetc(file)) != EOF)",
-        "if (ch == '\\0')",
-        "if (used + 1U >= cap)",
-        "errno = E2BIG;",
+        "if (ch == '\\0' && !line_error)",
+        "line_error = EINVAL;",
+        "if (used + 1U >= cap && !line_error)",
+        "line_error = E2BIG;",
+        "if (!line_error)",
+        "if (line_error) {",
+        "errno = line_error;",
         "int line_rc = read_node_line(file, line, sizeof(line));",
     ):
         if marker not in dnetdb_source:
             raise SystemExit(f"source-release gate: libdnet node-database line-bound safeguard missing: {marker}")
     if "while (fgets(line, sizeof(line), file))" in dnetdb_source:
         raise SystemExit("source-release gate: libdnet node database still fragments overlong physical lines through fgets")
+    for stale in (
+        "if (ch == '\\0') {\\n            errno = EINVAL;\\n            return -1;",
+        "if (used + 1U >= cap) {\\n            errno = E2BIG;\\n            return -1;",
+    ):
+        if stale in dnetdb_source:
+            raise SystemExit("source-release gate: libdnet node database returns before draining a rejected physical line")
 
     main_source = read_text("kernel/decnet/decnet_iv_main.c")
     init_start = main_source.index("static int __init dniv_init(void)")
