@@ -156,9 +156,22 @@ if [ "$remote_ready" -ne 1 ]; then
 fi
 rm -f "$remote_log"
 
-DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
-    /usr/local/sbin/dnlogin --probe "$target" >/dev/null 2>&1 ||
+cterm_log="$scratch/cterm.err"
+cterm_ready=0
+for _ in $(seq 1 10); do
+    : >"$cterm_log"
+    if DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
+        /usr/local/sbin/dnlogin --probe "$target" >/dev/null 2>"$cterm_log"; then
+        cterm_ready=1
+        break
+    fi
+    sleep 1
+done
+if [ "$cterm_ready" -ne 1 ]; then
+    sed -n '1,4p' "$cterm_log" >&2 || true
     fail cterm-access
+fi
+rm -f "$cterm_log"
 DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
     /usr/local/bin/dncopy --probe "$target" >/dev/null 2>&1 ||
     fail fal-access

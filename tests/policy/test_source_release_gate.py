@@ -269,6 +269,9 @@ def main() -> int:
         "DNIV-AREA31-QCOCAL-READONLY-PASS",
         "DNIV-AREA31-PP12-QCOCAL-READONLY-PASS",
         "DNIV-AREA31-PP12-CLIENTS-PASS",
+        'cterm_log="$scratch/cterm.err"',
+        'for _ in $(seq 1 10)',
+        "sed -n '1,4p' \"$cterm_log\" >&2",
     ):
         if required not in area31_smoke:
             raise SystemExit(f"source-release gate: remote Area-31 read-only safeguard missing: {required}")
