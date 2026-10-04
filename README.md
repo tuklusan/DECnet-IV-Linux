@@ -18,8 +18,6 @@ DECnet Phase IV for modern Linux, delivered as portable source.
 
 The production deliverable is a versioned source tarball. It builds the out-of-tree kernel module and the complete DECnet/Linux userspace directly on the target x86_64 or aarch64 Linux system against that system's installed kernel headers. Disk images are not release artifacts.
 
-Based on original work by Supratim Sanyal of SANYALnet Labs. See `LICENSE` for the governing terms.
-
 ## Delivered stack
 
 The source release contains the native Ethernet endnode/L1/L2 routing stack, NSP transport, native `AF_DECnet` / `SOCK_SEQPACKET` and `SOCK_STREAM` socket ABI, classic access/connect/disconnect-data and deferred accept/reject controls, Session Control, NICE/NML management, UAPI headers, libraries, administration tools, DAP/FAL utilities and service, login, task/object access, PHONE, mail, MIRROR, DECnet HTTP client/server tools, and the MULTINET integration launcher.

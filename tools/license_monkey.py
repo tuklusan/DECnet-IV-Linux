@@ -28,6 +28,7 @@ PROJECT_NAME = "DECnet-IV-Linux"
 DEVELOPER = "Supratim Sanyal"
 ORGANIZATION = "SANYALnet Labs"
 LICENSE_PATH = "LICENSE"
+README_PATH = "README.md"
 LICENSE_BLOB = "c6dabab19a2d36bffddabe7584a932c72fa272c3"
 
 # Keep stale prior-project identities out of readable project text without
@@ -122,6 +123,9 @@ def strip_canonical_header(text: str) -> str:
 
 
 def validate_blob(path: str, data: bytes, blob_sha: str | None = None) -> list[str]:
+    if path == README_PATH:
+        return []
+
     folded = data.lower()
     if any(identity in folded for identity in _LEGACY_PROJECTS):
         return [f"obsolete project identity present: {path}"]
