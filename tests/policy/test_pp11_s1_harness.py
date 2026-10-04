@@ -109,7 +109,477 @@ def main() -> int:
         'fault=pp11-retransmit-%s round=%s\\n',
         'pressure "$pressure_round" >>"$int_log" 2>&1 &',
         '--name "pp11-retransmit-$pressure_round"',
-        "window_link=${window_link%$'\\\\r'}",
+        "window_link=${window_link%
+        "int_link=${int_link%
+    )
+    for marker in pressure_fault_evidence:
+        if marker not in INTEROP_RUN:
+            raise SystemExit(
+                f"pp11-s1 regression: missing fail-closed pressure evidence declaration: {marker}"
+            )
+    smoke_markers = (
+        'while [ "$round" -le 3 ]',
+        "count=256",
+        "count=32",
+        "accepted=64 busy=1",
+        "count=20",
+        "count=64",
+        "PP11-MIRROR-LIVE",
+        "pp11_wait_round_recovery",
+    )
+    for marker in smoke_markers:
+        if marker not in INTEROP_SMOKE:
+            raise SystemExit(f"pp11-s1 regression: missing pressure guest marker: {marker}")
+    if "#define PRESSURE_RECORDS 650U" not in SEQWRAP or             "#define PRESSURE_PAUSE_NS 250000000L" not in SEQWRAP:
+        raise SystemExit("pp11-s1 regression: pressure sequence-wrap duration/count changed")
+    if "#define PRESSURE_BACKLOG 64U" not in BACKLOG or             "PRESSURE_COUNT = 65" not in PY_BACKLOG:
+        raise SystemExit("pp11-s1 regression: pressure backlog boundary changed")
+    if "malformed_control=96 rx_future=32" not in ACKRANGE:
+        raise SystemExit("pp11-s1 regression: malformed/RX pressure count changed")
+    if "credit=100 interrupts=64" not in INTFLOW:
+        raise SystemExit("pp11-s1 regression: interrupt retransmit pressure count changed")
+    if "candidate_sequence_wraps" not in PCAP or "candidate_no_resources_dc" not in PCAP:
+        raise SystemExit("pp11-s1 regression: missing independent PCAP pressure evidence")
+    unowned_reject_markers = (
+        "static void dniv_reject_unowned(__u16 local_link, __u16 reason)",
+        "(void)dniv_nsp_reject(local_link, reason, NULL, 0U);",
+        "(void)dniv_nsp_conn_detach(local_link);",
+        "dniv_reject_unowned(local_link, reject_reason);",
+        "dniv_reject_unowned(pending[--count], DNIV_REASON_OBJECT_BUSY);",
+        "dniv_reject_unowned(link, DNIV_REASON_INVALID_DESTINATION);",
+        "dniv_reject_unowned(link, DNIV_REASON_OBJECT_BUSY);",
+    )
+    for marker in unowned_reject_markers:
+        if marker not in SOCKET:
+            raise SystemExit(
+                f"pp11-s1 regression: missing unowned-reject recycle guard: {marker}"
+            )
+    if SOCKET.count("dniv_reject_unowned(") != 5:
+        raise SystemExit("pp11-s1 regression: unowned reject paths changed")
+    print("pp11-s1 regression passed")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+\\r'}",
+        "int_link=${int_link%    )
+    for marker in pressure_fault_evidence:
+        if marker not in INTEROP_RUN:
+            raise SystemExit(
+                f"pp11-s1 regression: missing fail-closed pressure evidence declaration: {marker}"
+            )
+    smoke_markers = (
+        'while [ "$round" -le 3 ]',
+        "count=256",
+        "count=32",
+        "accepted=64 busy=1",
+        "count=20",
+        "count=64",
+        "PP11-MIRROR-LIVE",
+        "pp11_wait_round_recovery",
+    )
+    for marker in smoke_markers:
+        if marker not in INTEROP_SMOKE:
+            raise SystemExit(f"pp11-s1 regression: missing pressure guest marker: {marker}")
+    if "#define PRESSURE_RECORDS 650U" not in SEQWRAP or             "#define PRESSURE_PAUSE_NS 250000000L" not in SEQWRAP:
+        raise SystemExit("pp11-s1 regression: pressure sequence-wrap duration/count changed")
+    if "#define PRESSURE_BACKLOG 64U" not in BACKLOG or             "PRESSURE_COUNT = 65" not in PY_BACKLOG:
+        raise SystemExit("pp11-s1 regression: pressure backlog boundary changed")
+    if "malformed_control=96 rx_future=32" not in ACKRANGE:
+        raise SystemExit("pp11-s1 regression: malformed/RX pressure count changed")
+    if "credit=100 interrupts=64" not in INTFLOW:
+        raise SystemExit("pp11-s1 regression: interrupt retransmit pressure count changed")
+    if "candidate_sequence_wraps" not in PCAP or "candidate_no_resources_dc" not in PCAP:
+        raise SystemExit("pp11-s1 regression: missing independent PCAP pressure evidence")
+    unowned_reject_markers = (
+        "static void dniv_reject_unowned(__u16 local_link, __u16 reason)",
+        "(void)dniv_nsp_reject(local_link, reason, NULL, 0U);",
+        "(void)dniv_nsp_conn_detach(local_link);",
+        "dniv_reject_unowned(local_link, reject_reason);",
+        "dniv_reject_unowned(pending[--count], DNIV_REASON_OBJECT_BUSY);",
+        "dniv_reject_unowned(link, DNIV_REASON_INVALID_DESTINATION);",
+        "dniv_reject_unowned(link, DNIV_REASON_OBJECT_BUSY);",
+    )
+    for marker in unowned_reject_markers:
+        if marker not in SOCKET:
+            raise SystemExit(
+                f"pp11-s1 regression: missing unowned-reject recycle guard: {marker}"
+            )
+    if SOCKET.count("dniv_reject_unowned(") != 5:
+        raise SystemExit("pp11-s1 regression: unowned reject paths changed")
+    print("pp11-s1 regression passed")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+\\r'}",
+    )
+    for marker in pressure_fault_evidence:
+        if marker not in INTEROP_RUN:
+            raise SystemExit(
+                f"pp11-s1 regression: missing fail-closed pressure evidence declaration: {marker}"
+            )
+    smoke_markers = (
+        'while [ "$round" -le 3 ]',
+        "count=256",
+        "count=32",
+        "accepted=64 busy=1",
+        "count=20",
+        "count=64",
+        "PP11-MIRROR-LIVE",
+        "pp11_wait_round_recovery",
+    )
+    for marker in smoke_markers:
+        if marker not in INTEROP_SMOKE:
+            raise SystemExit(f"pp11-s1 regression: missing pressure guest marker: {marker}")
+    if "#define PRESSURE_RECORDS 650U" not in SEQWRAP or             "#define PRESSURE_PAUSE_NS 250000000L" not in SEQWRAP:
+        raise SystemExit("pp11-s1 regression: pressure sequence-wrap duration/count changed")
+    if "#define PRESSURE_BACKLOG 64U" not in BACKLOG or             "PRESSURE_COUNT = 65" not in PY_BACKLOG:
+        raise SystemExit("pp11-s1 regression: pressure backlog boundary changed")
+    if "malformed_control=96 rx_future=32" not in ACKRANGE:
+        raise SystemExit("pp11-s1 regression: malformed/RX pressure count changed")
+    if "credit=100 interrupts=64" not in INTFLOW:
+        raise SystemExit("pp11-s1 regression: interrupt retransmit pressure count changed")
+    if "candidate_sequence_wraps" not in PCAP or "candidate_no_resources_dc" not in PCAP:
+        raise SystemExit("pp11-s1 regression: missing independent PCAP pressure evidence")
+    unowned_reject_markers = (
+        "static void dniv_reject_unowned(__u16 local_link, __u16 reason)",
+        "(void)dniv_nsp_reject(local_link, reason, NULL, 0U);",
+        "(void)dniv_nsp_conn_detach(local_link);",
+        "dniv_reject_unowned(local_link, reject_reason);",
+        "dniv_reject_unowned(pending[--count], DNIV_REASON_OBJECT_BUSY);",
+        "dniv_reject_unowned(link, DNIV_REASON_INVALID_DESTINATION);",
+        "dniv_reject_unowned(link, DNIV_REASON_OBJECT_BUSY);",
+    )
+    for marker in unowned_reject_markers:
+        if marker not in SOCKET:
+            raise SystemExit(
+                f"pp11-s1 regression: missing unowned-reject recycle guard: {marker}"
+            )
+    if SOCKET.count("dniv_reject_unowned(") != 5:
+        raise SystemExit("pp11-s1 regression: unowned reject paths changed")
+    print("pp11-s1 regression passed")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+\\r'}",
+        "int_link=${int_link%$'\\\\r'}",
+    )
+    for marker in pressure_fault_evidence:
+        if marker not in INTEROP_RUN:
+            raise SystemExit(
+                f"pp11-s1 regression: missing fail-closed pressure evidence declaration: {marker}"
+            )
+    smoke_markers = (
+        'while [ "$round" -le 3 ]',
+        "count=256",
+        "count=32",
+        "accepted=64 busy=1",
+        "count=20",
+        "count=64",
+        "PP11-MIRROR-LIVE",
+        "pp11_wait_round_recovery",
+    )
+    for marker in smoke_markers:
+        if marker not in INTEROP_SMOKE:
+            raise SystemExit(f"pp11-s1 regression: missing pressure guest marker: {marker}")
+    if "#define PRESSURE_RECORDS 650U" not in SEQWRAP or             "#define PRESSURE_PAUSE_NS 250000000L" not in SEQWRAP:
+        raise SystemExit("pp11-s1 regression: pressure sequence-wrap duration/count changed")
+    if "#define PRESSURE_BACKLOG 64U" not in BACKLOG or             "PRESSURE_COUNT = 65" not in PY_BACKLOG:
+        raise SystemExit("pp11-s1 regression: pressure backlog boundary changed")
+    if "malformed_control=96 rx_future=32" not in ACKRANGE:
+        raise SystemExit("pp11-s1 regression: malformed/RX pressure count changed")
+    if "credit=100 interrupts=64" not in INTFLOW:
+        raise SystemExit("pp11-s1 regression: interrupt retransmit pressure count changed")
+    if "candidate_sequence_wraps" not in PCAP or "candidate_no_resources_dc" not in PCAP:
+        raise SystemExit("pp11-s1 regression: missing independent PCAP pressure evidence")
+    unowned_reject_markers = (
+        "static void dniv_reject_unowned(__u16 local_link, __u16 reason)",
+        "(void)dniv_nsp_reject(local_link, reason, NULL, 0U);",
+        "(void)dniv_nsp_conn_detach(local_link);",
+        "dniv_reject_unowned(local_link, reject_reason);",
+        "dniv_reject_unowned(pending[--count], DNIV_REASON_OBJECT_BUSY);",
+        "dniv_reject_unowned(link, DNIV_REASON_INVALID_DESTINATION);",
+        "dniv_reject_unowned(link, DNIV_REASON_OBJECT_BUSY);",
+    )
+    for marker in unowned_reject_markers:
+        if marker not in SOCKET:
+            raise SystemExit(
+                f"pp11-s1 regression: missing unowned-reject recycle guard: {marker}"
+            )
+    if SOCKET.count("dniv_reject_unowned(") != 5:
+        raise SystemExit("pp11-s1 regression: unowned reject paths changed")
+    print("pp11-s1 regression passed")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+\\r'}",
+        "int_link=${int_link%    )
+    for marker in pressure_fault_evidence:
+        if marker not in INTEROP_RUN:
+            raise SystemExit(
+                f"pp11-s1 regression: missing fail-closed pressure evidence declaration: {marker}"
+            )
+    smoke_markers = (
+        'while [ "$round" -le 3 ]',
+        "count=256",
+        "count=32",
+        "accepted=64 busy=1",
+        "count=20",
+        "count=64",
+        "PP11-MIRROR-LIVE",
+        "pp11_wait_round_recovery",
+    )
+    for marker in smoke_markers:
+        if marker not in INTEROP_SMOKE:
+            raise SystemExit(f"pp11-s1 regression: missing pressure guest marker: {marker}")
+    if "#define PRESSURE_RECORDS 650U" not in SEQWRAP or             "#define PRESSURE_PAUSE_NS 250000000L" not in SEQWRAP:
+        raise SystemExit("pp11-s1 regression: pressure sequence-wrap duration/count changed")
+    if "#define PRESSURE_BACKLOG 64U" not in BACKLOG or             "PRESSURE_COUNT = 65" not in PY_BACKLOG:
+        raise SystemExit("pp11-s1 regression: pressure backlog boundary changed")
+    if "malformed_control=96 rx_future=32" not in ACKRANGE:
+        raise SystemExit("pp11-s1 regression: malformed/RX pressure count changed")
+    if "credit=100 interrupts=64" not in INTFLOW:
+        raise SystemExit("pp11-s1 regression: interrupt retransmit pressure count changed")
+    if "candidate_sequence_wraps" not in PCAP or "candidate_no_resources_dc" not in PCAP:
+        raise SystemExit("pp11-s1 regression: missing independent PCAP pressure evidence")
+    unowned_reject_markers = (
+        "static void dniv_reject_unowned(__u16 local_link, __u16 reason)",
+        "(void)dniv_nsp_reject(local_link, reason, NULL, 0U);",
+        "(void)dniv_nsp_conn_detach(local_link);",
+        "dniv_reject_unowned(local_link, reject_reason);",
+        "dniv_reject_unowned(pending[--count], DNIV_REASON_OBJECT_BUSY);",
+        "dniv_reject_unowned(link, DNIV_REASON_INVALID_DESTINATION);",
+        "dniv_reject_unowned(link, DNIV_REASON_OBJECT_BUSY);",
+    )
+    for marker in unowned_reject_markers:
+        if marker not in SOCKET:
+            raise SystemExit(
+                f"pp11-s1 regression: missing unowned-reject recycle guard: {marker}"
+            )
+    if SOCKET.count("dniv_reject_unowned(") != 5:
+        raise SystemExit("pp11-s1 regression: unowned reject paths changed")
+    print("pp11-s1 regression passed")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+\\r'}",
+    )
+    for marker in pressure_fault_evidence:
+        if marker not in INTEROP_RUN:
+            raise SystemExit(
+                f"pp11-s1 regression: missing fail-closed pressure evidence declaration: {marker}"
+            )
+    smoke_markers = (
+        'while [ "$round" -le 3 ]',
+        "count=256",
+        "count=32",
+        "accepted=64 busy=1",
+        "count=20",
+        "count=64",
+        "PP11-MIRROR-LIVE",
+        "pp11_wait_round_recovery",
+    )
+    for marker in smoke_markers:
+        if marker not in INTEROP_SMOKE:
+            raise SystemExit(f"pp11-s1 regression: missing pressure guest marker: {marker}")
+    if "#define PRESSURE_RECORDS 650U" not in SEQWRAP or             "#define PRESSURE_PAUSE_NS 250000000L" not in SEQWRAP:
+        raise SystemExit("pp11-s1 regression: pressure sequence-wrap duration/count changed")
+    if "#define PRESSURE_BACKLOG 64U" not in BACKLOG or             "PRESSURE_COUNT = 65" not in PY_BACKLOG:
+        raise SystemExit("pp11-s1 regression: pressure backlog boundary changed")
+    if "malformed_control=96 rx_future=32" not in ACKRANGE:
+        raise SystemExit("pp11-s1 regression: malformed/RX pressure count changed")
+    if "credit=100 interrupts=64" not in INTFLOW:
+        raise SystemExit("pp11-s1 regression: interrupt retransmit pressure count changed")
+    if "candidate_sequence_wraps" not in PCAP or "candidate_no_resources_dc" not in PCAP:
+        raise SystemExit("pp11-s1 regression: missing independent PCAP pressure evidence")
+    unowned_reject_markers = (
+        "static void dniv_reject_unowned(__u16 local_link, __u16 reason)",
+        "(void)dniv_nsp_reject(local_link, reason, NULL, 0U);",
+        "(void)dniv_nsp_conn_detach(local_link);",
+        "dniv_reject_unowned(local_link, reject_reason);",
+        "dniv_reject_unowned(pending[--count], DNIV_REASON_OBJECT_BUSY);",
+        "dniv_reject_unowned(link, DNIV_REASON_INVALID_DESTINATION);",
+        "dniv_reject_unowned(link, DNIV_REASON_OBJECT_BUSY);",
+    )
+    for marker in unowned_reject_markers:
+        if marker not in SOCKET:
+            raise SystemExit(
+                f"pp11-s1 regression: missing unowned-reject recycle guard: {marker}"
+            )
+    if SOCKET.count("dniv_reject_unowned(") != 5:
+        raise SystemExit("pp11-s1 regression: unowned reject paths changed")
+    print("pp11-s1 regression passed")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+\\r'}",
+    )
+    for marker in pressure_fault_evidence:
+        if marker not in INTEROP_RUN:
+            raise SystemExit(
+                f"pp11-s1 regression: missing fail-closed pressure evidence declaration: {marker}"
+            )
+    smoke_markers = (
+        'while [ "$round" -le 3 ]',
+        "count=256",
+        "count=32",
+        "accepted=64 busy=1",
+        "count=20",
+        "count=64",
+        "PP11-MIRROR-LIVE",
+        "pp11_wait_round_recovery",
+    )
+    for marker in smoke_markers:
+        if marker not in INTEROP_SMOKE:
+            raise SystemExit(f"pp11-s1 regression: missing pressure guest marker: {marker}")
+    if "#define PRESSURE_RECORDS 650U" not in SEQWRAP or             "#define PRESSURE_PAUSE_NS 250000000L" not in SEQWRAP:
+        raise SystemExit("pp11-s1 regression: pressure sequence-wrap duration/count changed")
+    if "#define PRESSURE_BACKLOG 64U" not in BACKLOG or             "PRESSURE_COUNT = 65" not in PY_BACKLOG:
+        raise SystemExit("pp11-s1 regression: pressure backlog boundary changed")
+    if "malformed_control=96 rx_future=32" not in ACKRANGE:
+        raise SystemExit("pp11-s1 regression: malformed/RX pressure count changed")
+    if "credit=100 interrupts=64" not in INTFLOW:
+        raise SystemExit("pp11-s1 regression: interrupt retransmit pressure count changed")
+    if "candidate_sequence_wraps" not in PCAP or "candidate_no_resources_dc" not in PCAP:
+        raise SystemExit("pp11-s1 regression: missing independent PCAP pressure evidence")
+    unowned_reject_markers = (
+        "static void dniv_reject_unowned(__u16 local_link, __u16 reason)",
+        "(void)dniv_nsp_reject(local_link, reason, NULL, 0U);",
+        "(void)dniv_nsp_conn_detach(local_link);",
+        "dniv_reject_unowned(local_link, reject_reason);",
+        "dniv_reject_unowned(pending[--count], DNIV_REASON_OBJECT_BUSY);",
+        "dniv_reject_unowned(link, DNIV_REASON_INVALID_DESTINATION);",
+        "dniv_reject_unowned(link, DNIV_REASON_OBJECT_BUSY);",
+    )
+    for marker in unowned_reject_markers:
+        if marker not in SOCKET:
+            raise SystemExit(
+                f"pp11-s1 regression: missing unowned-reject recycle guard: {marker}"
+            )
+    if SOCKET.count("dniv_reject_unowned(") != 5:
+        raise SystemExit("pp11-s1 regression: unowned reject paths changed")
+    print("pp11-s1 regression passed")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+\\r'}",
+        "int_link=${int_link%    )
+    for marker in pressure_fault_evidence:
+        if marker not in INTEROP_RUN:
+            raise SystemExit(
+                f"pp11-s1 regression: missing fail-closed pressure evidence declaration: {marker}"
+            )
+    smoke_markers = (
+        'while [ "$round" -le 3 ]',
+        "count=256",
+        "count=32",
+        "accepted=64 busy=1",
+        "count=20",
+        "count=64",
+        "PP11-MIRROR-LIVE",
+        "pp11_wait_round_recovery",
+    )
+    for marker in smoke_markers:
+        if marker not in INTEROP_SMOKE:
+            raise SystemExit(f"pp11-s1 regression: missing pressure guest marker: {marker}")
+    if "#define PRESSURE_RECORDS 650U" not in SEQWRAP or             "#define PRESSURE_PAUSE_NS 250000000L" not in SEQWRAP:
+        raise SystemExit("pp11-s1 regression: pressure sequence-wrap duration/count changed")
+    if "#define PRESSURE_BACKLOG 64U" not in BACKLOG or             "PRESSURE_COUNT = 65" not in PY_BACKLOG:
+        raise SystemExit("pp11-s1 regression: pressure backlog boundary changed")
+    if "malformed_control=96 rx_future=32" not in ACKRANGE:
+        raise SystemExit("pp11-s1 regression: malformed/RX pressure count changed")
+    if "credit=100 interrupts=64" not in INTFLOW:
+        raise SystemExit("pp11-s1 regression: interrupt retransmit pressure count changed")
+    if "candidate_sequence_wraps" not in PCAP or "candidate_no_resources_dc" not in PCAP:
+        raise SystemExit("pp11-s1 regression: missing independent PCAP pressure evidence")
+    unowned_reject_markers = (
+        "static void dniv_reject_unowned(__u16 local_link, __u16 reason)",
+        "(void)dniv_nsp_reject(local_link, reason, NULL, 0U);",
+        "(void)dniv_nsp_conn_detach(local_link);",
+        "dniv_reject_unowned(local_link, reject_reason);",
+        "dniv_reject_unowned(pending[--count], DNIV_REASON_OBJECT_BUSY);",
+        "dniv_reject_unowned(link, DNIV_REASON_INVALID_DESTINATION);",
+        "dniv_reject_unowned(link, DNIV_REASON_OBJECT_BUSY);",
+    )
+    for marker in unowned_reject_markers:
+        if marker not in SOCKET:
+            raise SystemExit(
+                f"pp11-s1 regression: missing unowned-reject recycle guard: {marker}"
+            )
+    if SOCKET.count("dniv_reject_unowned(") != 5:
+        raise SystemExit("pp11-s1 regression: unowned reject paths changed")
+    print("pp11-s1 regression passed")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+\\r'}",
+    )
+    for marker in pressure_fault_evidence:
+        if marker not in INTEROP_RUN:
+            raise SystemExit(
+                f"pp11-s1 regression: missing fail-closed pressure evidence declaration: {marker}"
+            )
+    smoke_markers = (
+        'while [ "$round" -le 3 ]',
+        "count=256",
+        "count=32",
+        "accepted=64 busy=1",
+        "count=20",
+        "count=64",
+        "PP11-MIRROR-LIVE",
+        "pp11_wait_round_recovery",
+    )
+    for marker in smoke_markers:
+        if marker not in INTEROP_SMOKE:
+            raise SystemExit(f"pp11-s1 regression: missing pressure guest marker: {marker}")
+    if "#define PRESSURE_RECORDS 650U" not in SEQWRAP or             "#define PRESSURE_PAUSE_NS 250000000L" not in SEQWRAP:
+        raise SystemExit("pp11-s1 regression: pressure sequence-wrap duration/count changed")
+    if "#define PRESSURE_BACKLOG 64U" not in BACKLOG or             "PRESSURE_COUNT = 65" not in PY_BACKLOG:
+        raise SystemExit("pp11-s1 regression: pressure backlog boundary changed")
+    if "malformed_control=96 rx_future=32" not in ACKRANGE:
+        raise SystemExit("pp11-s1 regression: malformed/RX pressure count changed")
+    if "credit=100 interrupts=64" not in INTFLOW:
+        raise SystemExit("pp11-s1 regression: interrupt retransmit pressure count changed")
+    if "candidate_sequence_wraps" not in PCAP or "candidate_no_resources_dc" not in PCAP:
+        raise SystemExit("pp11-s1 regression: missing independent PCAP pressure evidence")
+    unowned_reject_markers = (
+        "static void dniv_reject_unowned(__u16 local_link, __u16 reason)",
+        "(void)dniv_nsp_reject(local_link, reason, NULL, 0U);",
+        "(void)dniv_nsp_conn_detach(local_link);",
+        "dniv_reject_unowned(local_link, reject_reason);",
+        "dniv_reject_unowned(pending[--count], DNIV_REASON_OBJECT_BUSY);",
+        "dniv_reject_unowned(link, DNIV_REASON_INVALID_DESTINATION);",
+        "dniv_reject_unowned(link, DNIV_REASON_OBJECT_BUSY);",
+    )
+    for marker in unowned_reject_markers:
+        if marker not in SOCKET:
+            raise SystemExit(
+                f"pp11-s1 regression: missing unowned-reject recycle guard: {marker}"
+            )
+    if SOCKET.count("dniv_reject_unowned(") != 5:
+        raise SystemExit("pp11-s1 regression: unowned reject paths changed")
+    print("pp11-s1 regression passed")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+\\r'}",
         "int_link=${int_link%$'\\\\r'}",
     )
     for marker in pressure_fault_evidence:
