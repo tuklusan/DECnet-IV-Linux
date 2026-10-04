@@ -300,15 +300,29 @@ def main() -> int:
     roadmap = read_text("docs/ROADMAP.md")
     if "as Phase 7 tools mature" in roadmap:
         raise SystemExit("source-release gate: stale Phase 7 maturity wording remains in roadmap")
+    pp12_marker = "\n  pp12-real-peers:\n"
+    if pp12_marker not in workflow:
+        raise SystemExit("source-release gate: PP-12 lab-only job boundary missing")
+    release_workflow, pp12_workflow = workflow.split(pp12_marker, 1)
     for forbidden in ("qemu-system", "dniv.raw", "Release Image"):
-        if forbidden in workflow:
+        if forbidden in release_workflow:
             raise SystemExit(f"source-release gate: disk-image release behavior remains: {forbidden}")
-    qcow2_lines = [line for line in workflow.splitlines() if ".qcow2" in line]
+    qcow2_lines = [line for line in release_workflow.splitlines() if ".qcow2" in line]
     for line in qcow2_lines:
         if "-name '*.qcow2'" not in line and "audit.qcow2" not in line:
             raise SystemExit(f"source-release gate: unexpected qcow2 release behavior remains: {line.strip()}")
     if not any("-name '*.qcow2'" in line for line in qcow2_lines) or not any("audit.qcow2" in line for line in qcow2_lines):
         raise SystemExit("source-release gate: generated-payload qcow2 negative is incomplete")
+    for marker in (
+        "qemu-system-",
+        "DNIV_PP12_CANDIDATE_IMAGE",
+        'candidate="$RUNNER_TEMP/pp12-candidate-',
+        'path: ${{ env.DNIV_SCRATCH_DIR }}/',
+    ):
+        if marker not in pp12_workflow:
+            raise SystemExit(f"source-release gate: PP-12 lab-only image safeguard missing: {marker}")
+    if "path: ${{ env.DNIV_PP12_CANDIDATE_IMAGE }}" in pp12_workflow:
+        raise SystemExit("source-release gate: PP-12 disposable candidate image is uploaded as evidence")
     readme = read_text("README.md")
     for marker in ("SOCK_SEQPACKET", "SOCK_STREAM", "deferred accept/reject"):
         if marker not in readme:
