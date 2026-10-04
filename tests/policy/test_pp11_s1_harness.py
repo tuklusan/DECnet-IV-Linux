@@ -109,7 +109,9 @@ def main() -> int:
         'fault=pp11-retransmit-%s round=%s\\n',
         'pressure "$pressure_round" >>"$int_log" 2>&1 &',
         '--name "pp11-retransmit-$pressure_round"',
-        "window_link=${window_link%    )
+        "window_link=${window_link%$'\\\\r'}",
+        "int_link=${int_link%$'\\\\r'}",
+    )
     for marker in pressure_fault_evidence:
         if marker not in INTEROP_RUN:
             raise SystemExit(
