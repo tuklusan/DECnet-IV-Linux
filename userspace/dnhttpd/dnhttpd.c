@@ -229,7 +229,11 @@ static int selftest(void)
             (int)sizeof(fifo_path))
         goto out;
     file = fopen(good, "wb");
-    if (!file || fputs("ok\n", file) == EOF || fclose(file)) {
+    if (!file)
+        goto out;
+    if (fputs("ok\n", file) == EOF)
+        goto out;
+    if (fclose(file)) {
         file = NULL;
         goto out;
     }

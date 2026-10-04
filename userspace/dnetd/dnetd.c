@@ -456,16 +456,24 @@ static int selftest_config_line_bound(void)
     if (fd < 0)
         return -1;
     if (write(fd, overlong, sizeof(overlong) - 1U) !=
-        (ssize_t)(sizeof(overlong) - 1U) || close(fd)) {
-        close(fd);
+        (ssize_t)(sizeof(overlong) - 1U)) {
+        (void)close(fd);
+        unlink(path);
+        return -1;
+    }
+    if (close(fd)) {
         unlink(path);
         return -1;
     }
 
     errno = 0;
     rc = load_config(path, "/usr/local/sbin", services, &count);
-    unlink(path);
-    return rc < 0 && errno == E2BIG ? 0 : -1;
+    {
+        int saved_errno = errno;
+
+        unlink(path);
+        return rc < 0 && saved_errno == E2BIG ? 0 : -1;
+    }
 }
 
 static int run_selftest(void)

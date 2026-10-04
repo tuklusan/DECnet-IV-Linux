@@ -566,8 +566,14 @@ static int retrieve_file(const char *node_text, const char *filespec,
         return -1;
     }
     fd = open_fal(node_text, options);
-    if (fd < 0)
+    if (fd < 0) {
+        int saved_errno = errno;
+
+        if (in != stdin)
+            (void)fclose(in);
+        errno = saved_errno;
         return -1;
+    }
     if (exchange_config(fd))
         goto fail;
 

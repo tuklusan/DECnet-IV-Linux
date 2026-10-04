@@ -581,7 +581,11 @@ static int selftest(void)
         goto out;
     unlink(mailbox);
     out = open_mailbox(directory);
-    if (!out || fputs("ok\n", out) == EOF || fclose(out)) {
+    if (!out)
+        goto out;
+    if (fputs("ok\n", out) == EOF)
+        goto out;
+    if (fclose(out)) {
         out = NULL;
         goto out;
     }

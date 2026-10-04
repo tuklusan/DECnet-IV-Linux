@@ -566,6 +566,15 @@ def main() -> int:
         raise SystemExit("source-release gate: lab dnmultinet tests disappeared from repository unit coverage")
 
     dncopy = read_text("userspace/dncopy/dncopy.c")
+    if "if (fd < 0)\n        return -1;\n    if (exchange_config(fd))" in dncopy:
+        raise SystemExit("source-release gate: dncopy store leaks local input when FAL open fails")
+    for marker in (
+        "if (fd < 0) {\n        int saved_errno = errno;",
+        "if (in != stdin)\n            (void)fclose(in);",
+        "errno = saved_errno;\n        return -1;",
+    ):
+        if marker not in dncopy:
+            raise SystemExit(f"source-release gate: dncopy FAL-open input cleanup missing: {marker}")
     retrieve_start = dncopy.find("static int retrieve_file")
     retrieve_end = dncopy.find("static int store_file", retrieve_start)
     retrieve = dncopy[retrieve_start:retrieve_end]
@@ -615,6 +624,14 @@ def main() -> int:
             raise SystemExit(f"source-release gate: dnfald root-safety regression: {marker}")
 
     dnmaild = read_text("userspace/dnmail/dnmaild.c")
+    if 'if (!out || fputs("ok\\n", out) == EOF || fclose(out))' in dnmaild:
+        raise SystemExit("source-release gate: dnmaild selftest collapses write/close state and can leak or re-close a stream")
+    for marker in (
+        'if (fputs("ok\\n", out) == EOF)\n        goto out;',
+        'if (fclose(out)) {\n        out = NULL;\n        goto out;\n    }',
+    ):
+        if marker not in dnmaild:
+            raise SystemExit(f"source-release gate: dnmaild selftest stream cleanup regression: {marker}")
     if 'if (fputs("--\\n", out) == EOF || fclose(out))' in dnmaild:
         raise SystemExit("source-release gate: dnmaild can re-close an invalid stream after final spool close failure")
     for marker in (
@@ -647,6 +664,14 @@ def main() -> int:
             raise SystemExit(f"source-release gate: dnlynx header/body record-boundary regression: {marker}")
 
     dnhttpd = read_text("userspace/dnhttpd/dnhttpd.c")
+    if 'if (!file || fputs("ok\\n", file) == EOF || fclose(file))' in dnhttpd:
+        raise SystemExit("source-release gate: dnhttpd selftest collapses write/close state and can leak or re-close a stream")
+    for marker in (
+        'if (fputs("ok\\n", file) == EOF)\n        goto out;',
+        'if (fclose(file)) {\n        file = NULL;\n        goto out;\n    }',
+    ):
+        if marker not in dnhttpd:
+            raise SystemExit(f"source-release gate: dnhttpd selftest stream cleanup regression: {marker}")
     for marker in (
         "O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK",
         "fstat(fd, &st)",
@@ -781,6 +806,15 @@ def main() -> int:
             if marker not in source:
                 raise SystemExit(f"source-release gate: {daemon} once/default session isolation contract missing: {marker}")
     dnetd = read_text("userspace/dnetd/dnetd.c")
+    if "(ssize_t)(sizeof(overlong) - 1U) || close(fd))" in dnetd:
+        raise SystemExit("source-release gate: dnetd config-bound selftest can close one descriptor twice")
+    for marker in (
+        "if (close(fd)) {\n        unlink(path);\n        return -1;\n    }",
+        "int saved_errno = errno;\n\n        unlink(path);",
+        "rc < 0 && saved_errno == E2BIG",
+    ):
+        if marker not in dnetd:
+            raise SystemExit(f"source-release gate: dnetd config-bound selftest cleanup regression: {marker}")
     for marker in (
         "static void reap_children(int signo)",
         "while (waitpid(-1, NULL, WNOHANG) > 0)",
