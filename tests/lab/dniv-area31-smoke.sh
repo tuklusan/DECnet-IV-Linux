@@ -168,6 +168,17 @@ DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
     /usr/local/bin/dncopy --dir "$target" '*.*;*' >/dev/null 2>&1 ||
     fail fal-directory
 
+pp12_source=0
+if [ -r /etc/dniv-source-release-sha ]; then
+    pp12_source=1
+    DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
+        /usr/local/bin/sethost --probe "$target" >/dev/null 2>&1 || fail sethost-access
+    /usr/local/bin/ncp tell "$target" show executor summary >/dev/null 2>&1 || fail ncp-remote
+    /usr/local/bin/dnnice "$target" summary >/dev/null 2>&1 || fail dnnice-remote
+    /usr/local/bin/dnping -q -c 2 -i 100000 -s 16 -w 6 "$target" >/dev/null 2>&1 || fail dnping-remote
+    echo "DNIV-AREA31-PP12-CLIENTS-PASS"
+fi
+
 if [ -n "$qcocal" ]; then
     qcocal_route_ready=0
     for _ in $(seq 1 320); do
@@ -218,6 +229,17 @@ if [ -n "$qcocal" ]; then
     DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
         /usr/local/bin/dncopy --put-text /run/dniv-area31/DNIVHT.COM "$qcocal" DNIVHT.COM \
         >/dev/null 2>&1 || fail qcocal-http-install
+    if [ "$pp12_source" -eq 1 ]; then
+        DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
+            /usr/local/bin/dntype "$qcocal" DNIVHT.COM 2>/dev/null | grep -Fq 'QCOCAL-DECNET-HTTP-PASS' || fail qcocal-dntype
+        DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
+            /usr/local/bin/dndir "$qcocal" 'DNIVHT.COM;*' 2>/dev/null | grep -Fiq 'DNIVHT.COM' || fail qcocal-dndir
+        DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
+            /usr/local/bin/dnrename "$qcocal" DNIVHT.COM DNIVHX.COM >/dev/null 2>&1 || fail qcocal-dnrename-out
+        DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
+            /usr/local/bin/dnrename "$qcocal" DNIVHX.COM DNIVHT.COM >/dev/null 2>&1 || fail qcocal-dnrename-back
+        echo "DNIV-AREA31-PP12-DAP-ALIASES-PASS"
+    fi
     http_out="$scratch/qcocal-http.out"
     http_err="$scratch/qcocal-http.err"
     if ! DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \

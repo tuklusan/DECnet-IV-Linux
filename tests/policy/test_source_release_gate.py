@@ -85,6 +85,11 @@ def main() -> int:
         "debian13",
         "fedora44",
         "actions/download-artifact@",
+        "pp12_real_peers:",
+        "pp12-real-peers:",
+        "prepare-pp12-source-image.sh",
+        "DNIV-PP12-LIFECYCLE-PASS",
+        "source-release-pp12-${{ matrix.arch }}",
     ):
         if marker not in workflow:
             raise SystemExit(f"source-release gate: workflow safeguard missing: {marker}")
@@ -519,6 +524,14 @@ def main() -> int:
     dispatcher = read_text(".github/workflows/repository-policy.yml")
     if "SOURCE_RELEASE source-release.yml" not in dispatcher or "RELEASE_IMAGE release-image.yml" in dispatcher:
         raise SystemExit("source-release gate: acceptance dispatcher not synchronized")
+    for marker in (
+        "all|socket|routing|pp11-pressure|pp11-s2|pp12|source-release",
+        'scope" == pp12',
+        '-f pp12_real_peers="$pp12_real_peers"',
+        "-f pp12_real_peers=true",
+    ):
+        if marker not in dispatcher:
+            raise SystemExit(f"source-release gate: PP-12 dispatcher safeguard missing: {marker}")
     if "dispatch_and_record PORTABILITY portability.yml" in dispatcher:
         raise SystemExit("source-release gate: full acceptance duplicates portability outside exact release artifact")
     attributes = read_text(".gitattributes")

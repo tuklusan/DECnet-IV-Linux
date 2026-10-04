@@ -283,12 +283,12 @@ jobs:
             esac
           fi
           case "$profile" in fast|targeted|consolidated|full) ;; *) echo "bad acceptance profile: $profile" >&2; exit 2 ;; esac
-          case "$scope" in all|socket|routing|pp11-pressure|pp11-s2|source-release) ;; *) echo "bad acceptance scope: $scope" >&2; exit 2 ;; esac
-          if [[ "$profile" == targeted && "$scope" != pp11-pressure && "$scope" != pp11-s2 && "$scope" != source-release ]]; then
-            echo "targeted acceptance requires SCOPE=pp11-pressure, SCOPE=pp11-s2, or SCOPE=source-release" >&2
+          case "$scope" in all|socket|routing|pp11-pressure|pp11-s2|pp12|source-release) ;; *) echo "bad acceptance scope: $scope" >&2; exit 2 ;; esac
+          if [[ "$profile" == targeted && "$scope" != pp11-pressure && "$scope" != pp11-s2 && "$scope" != pp12 && "$scope" != source-release ]]; then
+            echo "targeted acceptance requires SCOPE=pp11-pressure, SCOPE=pp11-s2, SCOPE=pp12, or SCOPE=source-release" >&2
             exit 2
           fi
-          if [[ "$profile" != targeted && ( "$scope" == pp11-pressure || "$scope" == pp11-s2 || "$scope" == source-release ) ]]; then
+          if [[ "$profile" != targeted && ( "$scope" == pp11-pressure || "$scope" == pp11-s2 || "$scope" == pp12 || "$scope" == source-release ) ]]; then
             echo "targeted-only scope requires PROFILE=targeted" >&2
             exit 2
           fi
@@ -366,9 +366,12 @@ jobs:
               -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
           fi
 
-          if [[ "$profile" == targeted && "$scope" == source-release ]]; then
+          if [[ "$profile" == targeted && ( "$scope" == source-release || "$scope" == pp12 ) ]]; then
+            pp12_real_peers=false
+            [[ "$scope" != pp12 ]] || pp12_real_peers=true
             dispatch_and_record SOURCE_RELEASE source-release.yml \
-              -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
+              -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA" \
+              -f pp12_real_peers="$pp12_real_peers"
           else
           printf 'VM_LAB_E1=vm-lab.yml:e1\n' >> "$DNIV_SCRATCH_DIR/dispatch.env"
           dispatch_and_record VM_LAB_E1 vm-lab.yml \
@@ -464,7 +467,8 @@ jobs:
 
           if [[ "$profile" == full ]]; then
             dispatch_and_record SOURCE_RELEASE source-release.yml \
-              -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
+              -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA" \
+              -f pp12_real_peers=true
           fi
           fi
 

@@ -23,6 +23,10 @@ on:
       expected_sha:
         required: false
         type: string
+      pp12_real_peers:
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -858,6 +862,218 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: source-release-portability-${{ matrix.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.DNIV_SCRATCH_DIR }}/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 6
+          overwrite: false
+pp12-real-peers:
+    if: ${{ inputs.pp12_real_peers }}
+    needs:
+      - package-amd64
+      - validate-arm64
+      - portability
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: amd64
+            qemu_package: qemu-system-x86
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+            qemu_package: qemu-system-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 75
+    env:
+      DNIV_SCRATCH_DIR: ${{ github.workspace }}/scratch/runtime/${{ github.run_id }}/${{ github.run_attempt }}/pp12-${{ matrix.arch }}
+      DNIV_OUTER_BASE_DIR: ${{ github.workspace }}/scratch/outer/${{ matrix.arch }}
+      DNIV_AREA31_ARCH: ${{ matrix.arch }}
+    steps:
+      - name: Check out exact repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.expected_sha || github.sha }}
+          fetch-depth: 0
+      - name: Initialize PP-12 state
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate=$(git rev-parse HEAD)
+          if [[ -n '${{ inputs.expected_sha }}' ]]; then test "$candidate" = '${{ inputs.expected_sha }}'; fi
+          python3 tools/scratch_state.py init --dir "$DNIV_SCRATCH_DIR" \
+            --workflow source-release --job pp12-real-peers --arch '${{ matrix.arch }}' \
+            --mode exact-source-real-peer --source-sha "$candidate" \
+            --parent-run-id '${{ inputs.parent_run_id }}' --expected-sha '${{ inputs.expected_sha }}'
+          tools/workflow_guard.sh "$DNIV_SCRATCH_DIR" "$candidate" main
+          python3 tools/integrity_scan.py --rev "$candidate" --pass-id pass-1 \
+            --output "$DNIV_SCRATCH_DIR/integrity/pass-1.json"
+      - name: Verify PP-12 remote prerequisites
+        shell: bash
+        env:
+          MULTINET_REMOTE_HOST: ${{ secrets.MULTINET_REMOTE_HOST }}
+          MULTINET_REMOTE_PORT: ${{ secrets.MULTINET_REMOTE_PORT }}
+          VAX_ADDR: ${{ secrets.VAX_ADDR }}
+          VAX_USERNAME: ${{ secrets.VAX_USERNAME }}
+          VAX_PASSWORD: ${{ secrets.VAX_PASSWORD }}
+        run: |
+          set -euo pipefail
+          required=(MULTINET_REMOTE_HOST MULTINET_REMOTE_PORT VAX_ADDR VAX_USERNAME VAX_PASSWORD)
+          missing=()
+          for name in "${required[@]}"; do
+            value=${!name:-}
+            if [[ -z "$value" ]]; then missing+=("$name"); else printf '::add-mask::%s\n' "$value"; fi
+          done
+          if (( ${#missing[@]} )); then
+            printf 'missing required PP-12 secret: %s\n' "${missing[@]}" >&2
+            exit 2
+          fi
+      - name: Download exact source release
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: decnet-iv-linux-source-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release
+      - name: Install PP-12 dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get -o Acquire::Retries=3 update
+          sudo apt-get -o Acquire::Retries=3 install -y python3-venv libpcap-dev vde2 libvdeplug-dev \
+            iproute2 ${{ matrix.qemu_package }} qemu-utils e2fsprogs curl build-essential xz-utils
+      - name: Compute stable architecture foundation identity
+        id: foundation-id
+        shell: bash
+        run: |
+          set -euo pipefail
+          fingerprint=$(cat image/ubuntu-base/images.env image/ubuntu-base/build-foundation.sh | sha256sum | cut -c1-16)
+          session="outer-v2-${{ matrix.arch }}-$fingerprint"
+          echo "DNIV_FOUNDATION_FINGERPRINT=$fingerprint" >> "$GITHUB_ENV"
+          echo "DNIV_OUTER_SESSION_ID=$session" >> "$GITHUB_ENV"
+          echo "session_id=$session" >> "$GITHUB_OUTPUT"
+      - name: Restore immutable architecture foundation
+        id: outer-base
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ${{ env.DNIV_OUTER_BASE_DIR }}
+          key: ${{ steps.foundation-id.outputs.session_id }}
+      - name: Download pinned Ubuntu Base on foundation miss
+        if: ${{ steps.outer-base.outputs.cache-hit != 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          . image/ubuntu-base/images.env
+          if [[ '${{ matrix.arch }}' == amd64 ]]; then file=$UBUNTU_BASE_AMD64; sha=$UBUNTU_BASE_AMD64_SHA256; else file=$UBUNTU_BASE_ARM64; sha=$UBUNTU_BASE_ARM64_SHA256; fi
+          curl -fL "$UBUNTU_BASE_URL/$file" -o "$RUNNER_TEMP/$file"
+          echo "$sha  $RUNNER_TEMP/$file" | sha256sum -c -
+          echo "UBUNTU_BASE_TARBALL=$RUNNER_TEMP/$file" >> "$GITHUB_ENV"
+      - name: Build immutable architecture foundation on cache miss
+        if: ${{ steps.outer-base.outputs.cache-hit != 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo -v
+          rm -rf "$DNIV_OUTER_BASE_DIR"
+          mkdir -p "$DNIV_OUTER_BASE_DIR/boot"
+          image/ubuntu-base/build-foundation.sh '${{ matrix.arch }}' "$UBUNTU_BASE_TARBALL" "$DNIV_OUTER_BASE_DIR/base.qcow2" "$DNIV_OUTER_BASE_DIR/boot"
+          . image/ubuntu-base/images.env
+          cat >"$DNIV_OUTER_BASE_DIR/session.env" <<EOF_SESSION
+          FORMAT=2
+          SESSION_ID=$DNIV_OUTER_SESSION_ID
+          ARCH=${{ matrix.arch }}
+          FOUNDATION_FINGERPRINT=$DNIV_FOUNDATION_FINGERPRINT
+          UBUNTU_BASE_RELEASE=$UBUNTU_BASE_RELEASE
+          UBUNTU_APT_SNAPSHOT=$UBUNTU_APT_SNAPSHOT
+          EOF_SESSION
+          (cd "$DNIV_OUTER_BASE_DIR" && sha256sum base.qcow2 boot/vmlinuz boot/initrd.img session.env >SHA256SUMS)
+      - name: Save immutable architecture foundation
+        if: ${{ steps.outer-base.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ${{ env.DNIV_OUTER_BASE_DIR }}
+          key: ${{ steps.foundation-id.outputs.session_id }}
+      - name: Verify foundation and build exact source-release image
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd "$DNIV_OUTER_BASE_DIR" && sha256sum -c SHA256SUMS)
+          qemu-img check -q -f qcow2 "$DNIV_OUTER_BASE_DIR/base.qcow2"
+          archive=$(find "$RUNNER_TEMP/release" -maxdepth 1 -name 'DECnet-IV-Linux-*.tar.xz' -print -quit)
+          test -n "$archive"
+          test -s "$archive.sha256"
+          candidate="$RUNNER_TEMP/pp12-candidate-${{ matrix.arch }}.qcow2"
+          DNIV_PP12_EVIDENCE_DIR="$DNIV_SCRATCH_DIR" tests/lab/prepare-pp12-source-image.sh \
+            "$DNIV_OUTER_BASE_DIR/base.qcow2" "$archive" "$archive.sha256" "$candidate" "$GITHUB_SHA" \
+            2>&1 | tee "$DNIV_SCRATCH_DIR/prepare-pp12.log"
+          echo "DNIV_PP12_CANDIDATE_IMAGE=$candidate" >> "$GITHUB_ENV"
+          echo "DNIV_AREA31_CANDIDATE_IMAGE=$candidate" >> "$GITHUB_ENV"
+          echo "DNIV_AREA31_KERNEL=$DNIV_OUTER_BASE_DIR/boot/vmlinuz" >> "$GITHUB_ENV"
+          echo "DNIV_AREA31_INITRD=$DNIV_OUTER_BASE_DIR/boot/initrd.img" >> "$GITHUB_ENV"
+      - name: Exercise live install lifecycle and warm reboot
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ '${{ matrix.arch }}' == amd64 ]]; then
+            qemu_bin=qemu-system-x86_64; qemu_args=(-m 512); console='console=ttyS0'; lifecycle_timeout=900
+          else
+            qemu_bin=qemu-system-aarch64
+            if [[ -r /dev/kvm && -w /dev/kvm ]]; then machine='virt,gic-version=host'; cpu=host; else machine='virt,gic-version=3'; cpu=max; fi
+            qemu_args=(-machine "$machine" -cpu "$cpu" -m 1024)
+            console='earlycon=pl011,0x09000000 console=ttyAMA0'
+            lifecycle_timeout=1500
+          fi
+          accel=tcg
+          [[ -r /dev/kvm && -w /dev/kvm ]] && accel=kvm
+          log="$DNIV_SCRATCH_DIR/pp12-lifecycle.serial.log"
+          timeout "$lifecycle_timeout" "$qemu_bin" -name dniv-pp12 -accel "$accel" "${qemu_args[@]}" \
+            -kernel "$DNIV_AREA31_KERNEL" -initrd "$DNIV_AREA31_INITRD" \
+            -append "root=LABEL=dniv-root rootfstype=ext4 rw dniv.pp12=1 $console" \
+            -drive "file=$DNIV_PP12_CANDIDATE_IMAGE,if=virtio,format=qcow2" \
+            -netdev user,id=lan -device virtio-net-pci,netdev=lan,mac=52:54:12:31:12:01 \
+            -display none -monitor none -serial "file:$log"
+          grep -Fq 'DNIV-PP12-BOOT1-PASS' "$log"
+          grep -Fq 'DNIV-PP12-LIFECYCLE-PASS' "$log"
+          ! grep -Fq 'DNIV-PP12-LIFECYCLE-FAIL' "$log"
+          qemu-img check -q -f qcow2 "$DNIV_PP12_CANDIDATE_IMAGE"
+      - name: Bind provisional Area-31 identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          seed=$((16#${GITHUB_SHA:0:8} % 124))
+          gateway_num=$((900 + seed))
+          linux_num=$((900 + ((seed + 1) % 124)))
+          printf 'DNIV_AREA31_SEED=%s\n' "$seed" >> "$GITHUB_ENV"
+          printf 'DNIV_AREA31_GATEWAY_NODE=31.%s\n' "$gateway_num" >> "$GITHUB_ENV"
+          printf 'DNIV_AREA31_GATEWAY_NAME=DG%04d\n' "$gateway_num" >> "$GITHUB_ENV"
+          printf 'DNIV_AREA31_LINUX_NODE=31.%s\n' "$linux_num" >> "$GITHUB_ENV"
+          printf 'DNIV_AREA31_LINUX_NAME=DL%04d\n' "$linux_num" >> "$GITHUB_ENV"
+          printf 'DNIV_QCOCAL_NODE=\n' >> "$GITHUB_ENV"
+      - name: Prove exact source release against real OpenVMS peers
+        shell: bash
+        env:
+          MULTINET_REMOTE_HOST: ${{ secrets.MULTINET_REMOTE_HOST }}
+          MULTINET_REMOTE_PORT: ${{ secrets.MULTINET_REMOTE_PORT }}
+          VAX_ADDR: ${{ secrets.VAX_ADDR }}
+          VAX_USERNAME: ${{ secrets.VAX_USERNAME }}
+          VAX_PASSWORD: ${{ secrets.VAX_PASSWORD }}
+        run: |
+          set -euo pipefail
+          tests/lab/prove-area31.sh --preflight-only
+          tests/lab/prove-area31.sh 2>&1 | tee "$DNIV_SCRATCH_DIR/pp12-area31.log"
+          grep -Fq 'area31-proof: native Linux routing NICE NSP Session path pass' "$DNIV_SCRATCH_DIR/pp12-area31.log"
+      - name: Verify exact tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/integrity_scan.py --rev "$GITHUB_SHA" --pass-id final \
+            --baseline "$DNIV_SCRATCH_DIR/integrity/pass-1.json" --output "$DNIV_SCRATCH_DIR/integrity/final.json"
+          python3 tools/scratch_state.py mark --dir "$DNIV_SCRATCH_DIR" --status success --note 'PP-12 exact source release and real-peer proof passed'
+          python3 tools/scratch_state.py verify --dir "$DNIV_SCRATCH_DIR"
+      - name: Preserve PP-12 evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: source-release-pp12-${{ matrix.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ env.DNIV_SCRATCH_DIR }}/
           if-no-files-found: error
           retention-days: 30
