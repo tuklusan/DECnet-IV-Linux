@@ -65,7 +65,7 @@ This catalogue describes the production source release. Lab-only helpers and ind
 
 - `dncopy`, `dntype`, `dndir`, `dndel`, `dnrename`, `dnsubmit`, `dnprint`.
 - `dncopy` retrieval opens a named local destination only after the remote DAP file OPEN and data-stream CONNECT have succeeded, so an unreachable/missing remote source cannot truncate an existing local file.
-- `dnfald` FAL object 17 service with DAP configuration plus the implemented file/directory/delete/rename/submit/print operations; `--root` pins the served directory and file data operations reject symbolic-link, hard-link and non-regular leaf escapes without blocking on special files.
+- `dnfald` FAL object 17 service with DAP configuration plus the implemented file/directory/delete/rename/submit/print operations; `--root` pins the served directory and file data operations reject symbolic-link, hard-link and non-regular leaf escapes without blocking on special files. A failed CREATE, including a final stream flush/close error, removes the incomplete target instead of leaving failed transfer data behind.
 - Optional Session access-data policy for user/password/account before DAP exchange.
 
 ## PHONE

@@ -429,8 +429,10 @@ static int serve_create(int fd, int rootfd,
             break;
         goto fail;
     }
-    if (fclose(out))
-        return -1;
+    if (fclose(out)) {
+        out = NULL;
+        goto fail_unlink;
+    }
     out = NULL;
     {
         const unsigned char complete[] = {
@@ -442,6 +444,7 @@ static int serve_create(int fd, int rootfd,
 fail:
     if (out)
         fclose(out);
+fail_unlink:
     unlinkat(rootfd, name, 0);
     return -1;
 }

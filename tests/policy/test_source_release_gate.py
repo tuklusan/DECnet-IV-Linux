@@ -584,6 +584,17 @@ def main() -> int:
         raise SystemExit("source-release gate: dncopy local retrieval destination is not deferred until remote OPEN/CONNECT")
 
     dnfald = read_text("userspace/dnfald/dnfald.c")
+    create_start = dnfald.find("static int serve_create")
+    create_end = dnfald.find("static int serve_rename", create_start)
+    create_body = dnfald[create_start:create_end]
+    if (
+        create_start < 0
+        or create_end < 0
+        or "if (fclose(out)) {" not in create_body
+        or "goto fail_unlink;" not in create_body
+        or "fail_unlink:\n    unlinkat(rootfd, name, 0);" not in create_body
+    ):
+        raise SystemExit("source-release gate: dnfald CREATE close failure can leave a failed partial target")
     for marker in (
         "open(root, O_RDONLY | O_DIRECTORY | O_CLOEXEC)",
         "openat(rootfd, name, flags, 0666)",
