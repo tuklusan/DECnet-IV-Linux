@@ -685,6 +685,18 @@ def main() -> int:
         if marker not in dnmaild:
             raise SystemExit(f"source-release gate: dnmaild spool-safety regression: {marker}")
 
+    dnwindow = read_text("tests/lab/dnwindow.c")
+    for marker in (
+        "ssize_t sent = send(fd, buf, total, flags | MSG_EOR | MSG_NOSIGNAL);",
+        "if (sent < 0)",
+        "if ((size_t)sent != total) {",
+        "errno = EIO;",
+    ):
+        if marker not in dnwindow:
+            raise SystemExit(f"source-release gate: window probe send/errno regression: {marker}")
+    if "if (send(fd, buf, total, flags | MSG_EOR | MSG_NOSIGNAL) != (ssize_t)total)" in dnwindow:
+        raise SystemExit("source-release gate: window probe again leaves errno undefined on short success")
+
     dnflow = read_text("tests/lab/dnflow.c")
     for marker in (
         "ssize_t sent;",

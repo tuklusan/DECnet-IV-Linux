@@ -55,8 +55,16 @@ static int send_tag(int fd, unsigned int tag, int flags)
     }
     buf[0] = 0U;
     total = (size_t)len + 1U;
-    if (send(fd, buf, total, flags | MSG_EOR | MSG_NOSIGNAL) != (ssize_t)total)
-        return -1;
+    {
+        ssize_t sent = send(fd, buf, total, flags | MSG_EOR | MSG_NOSIGNAL);
+
+        if (sent < 0)
+            return -1;
+        if ((size_t)sent != total) {
+            errno = EIO;
+            return -1;
+        }
+    }
     return 0;
 }
 
