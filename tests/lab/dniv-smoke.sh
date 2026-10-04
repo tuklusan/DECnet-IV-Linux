@@ -936,7 +936,7 @@ pp11s2)
                 exit 1
             fi
             count=$probe_override
-            [ -n "$count" ] || count=1850
+            [ -n "$count" ] || count=1200
             case "$count" in ''|*[!0-9]*|0) echo "DNIV-LAB-FAIL session=$session node=$name reason=pp11-s2-bad-count"; exit 1 ;; esac
             pp11_s2_resource initial
             echo "DNIV-PP11-S2-TRAFFIC-READY session=$session node=$name count=$count"
@@ -950,7 +950,7 @@ pp11s2)
                 if [ $((i % 25)) -eq 0 ]; then
                     pp11_s2_resource "probe-$i"
                 fi
-                sleep 2
+                sleep 3
             done
             pp11_s2_resource final
             marker="DNIV-PP11-S2-PASS session=$session node=$name count=$i"

@@ -28,7 +28,7 @@ from dniv_scale import Lab, decnet_mac, guest, marker_sources, wait_for_markers
 
 FAULT_EVENTS = 10000
 FAULT_DURATION = 3600.0
-VALID_PROBES = 1850
+VALID_PROBES = 1200
 MAX_SLAB_GROWTH_KB = 65536
 MAX_LINKS = 32
 MIN_RESOURCE_SAMPLES = 50

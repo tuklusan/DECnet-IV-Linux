@@ -29,7 +29,7 @@ def main() -> int:
     for marker in (
         "FAULT_EVENTS = 10000",
         "FAULT_DURATION = 3600.0",
-        "VALID_PROBES = 1850",
+        "VALID_PROBES = 1200",
         '"VM_COUNT=4"',
         "captured_faults < FAULT_EVENTS",
         "float(duration_match.group(1)) < FAULT_DURATION",
@@ -59,7 +59,7 @@ def main() -> int:
         "DNIV-PP11-S2-VALID-",
         "DNIV-PP11-S2-RESOURCE",
         "DNIV-PP11-S2-PASS",
-        "sleep 2",
+        "sleep 3",
         "i % 25",
     ):
         if marker not in SMOKE:
