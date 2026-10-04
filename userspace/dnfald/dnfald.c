@@ -532,15 +532,30 @@ static int serve_directory(int fd, int rootfd,
             return -1;
         }
     }
-    while ((ent = readdir(dir)) != NULL) {
+    for (;;) {
         size_t len;
 
+        errno = 0;
+        ent = readdir(dir);
+        if (!ent) {
+            int read_errno = errno;
+            int close_rc = closedir(dir);
+
+            if (read_errno) {
+                errno = read_errno;
+                return -1;
+            }
+            if (close_rc)
+                return -1;
+            break;
+        }
         if (!strcmp(ent->d_name, ".") || !strcmp(ent->d_name, "..") ||
             ent->d_name[0] == '.' || fnmatch(pattern, ent->d_name, 0))
             continue;
         len = strlen(ent->d_name);
         if (len > 127U || len + 4U > sizeof(msg)) {
-            closedir(dir);
+            (void)closedir(dir);
+            errno = ENAMETOOLONG;
             return -1;
         }
         msg[0] = 15U;
@@ -549,11 +564,13 @@ static int serve_directory(int fd, int rootfd,
         msg[3] = (unsigned char)len;
         memcpy(msg + 4U, ent->d_name, len);
         if (send_record(fd, msg, len + 4U)) {
-            closedir(dir);
+            int saved_errno = errno;
+
+            (void)closedir(dir);
+            errno = saved_errno;
             return -1;
         }
     }
-    closedir(dir);
     {
         const unsigned char complete[] = {
             DAP_ACCESS_COMPLETE, 0U, DAP_ACCOMP_RESPONSE

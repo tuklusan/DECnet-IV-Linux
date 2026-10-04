@@ -608,6 +608,19 @@ def main() -> int:
         or "fail_unlink:\n    unlinkat(rootfd, name, 0);" not in create_body
     ):
         raise SystemExit("source-release gate: dnfald CREATE close failure can leave a failed partial target")
+    directory_start = dnfald.find("static int serve_directory")
+    directory_end = dnfald.find("static int serve_erase", directory_start)
+    directory_body = dnfald[directory_start:directory_end]
+    for marker in (
+        "errno = 0;\n        ent = readdir(dir);",
+        "int read_errno = errno;",
+        "int close_rc = closedir(dir);",
+        "if (read_errno) {\n                errno = read_errno;\n                return -1;\n            }",
+        "if (close_rc)\n                return -1;",
+    ):
+        if directory_start < 0 or directory_end < 0 or marker not in directory_body:
+            raise SystemExit(f"source-release gate: dnfald directory error handling regression: {marker}")
+
     for marker in (
         "open(root, O_RDONLY | O_DIRECTORY | O_CLOEXEC)",
         "openat(rootfd, name, flags, 0666)",
