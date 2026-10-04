@@ -44,7 +44,7 @@ static int parse_node(const char *text, uint16_t *address)
 {
     char *end; unsigned long area, node;
     errno = 0; area = strtoul(text, &end, 10);
-    if (errno || end == text || *end != '.' || area > 63U) return -1;
+    if (errno || end == text || *end != '.' || area < 1U || area > 63U) return -1;
     errno = 0; node = strtoul(end + 1, &end, 10);
     if (errno || *end || node == 0U || node > 1023U) return -1;
     *address = (uint16_t)((area << 10) | node);
@@ -242,7 +242,8 @@ static int selftest(void)
     memset(large, 'X', sizeof(large));
     memcpy(large, ok, sizeof(ok) - 1U);
     if (parse_node("31.71",&address) || address != ((31U<<10)|71U) ||
-        !parse_node("31.0",&address) || !parse_node("64.1",&address) ||
+        !parse_node("0.1",&address) || !parse_node("31.0",&address) ||
+        !parse_node("64.1",&address) ||
         normalize_path("/",path,sizeof(path)) || strcmp(path,"/") ||
         normalize_path("/index.html",path,sizeof(path)) || strcmp(path,"/index.html") ||
         !normalize_path("index.html",path,sizeof(path)) ||

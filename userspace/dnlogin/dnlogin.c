@@ -94,7 +94,7 @@ static int parse_node(const char *text, uint16_t *address)
 
     errno = 0;
     area = strtoul(text, &end, 10);
-    if (errno || end == text || *end != '.' || area > 63U)
+    if (errno || end == text || *end != '.' || area < 1U || area > 63U)
         return -1;
     text = end + 1;
     errno = 0;
@@ -717,7 +717,8 @@ static int selftest(void)
 
     if (parse_node("31.70", &addr) || addr != (uint16_t)((31U << 10) | 70U))
         return 1;
-    if (!parse_node("64.1", &addr) || !parse_node("31.0", &addr))
+    if (!parse_node("0.1", &addr) || !parse_node("64.1", &addr) ||
+        !parse_node("31.0", &addr))
         return 1;
     if (make_bind_accept(bind) != sizeof(bind) || bind[0] != FOUND_BIND_ACCEPT ||
         get_le16(bind + 4) != 193U)

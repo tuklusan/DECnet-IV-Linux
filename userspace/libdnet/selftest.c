@@ -36,6 +36,12 @@ int main(void)
     if (!compat || !dnet_ntoa(compat) || strcmp(dnet_ntoa(compat), "1.1023"))
         return 1;
     errno = 0;
+    if (dnet_pton(AF_DECnet, "0.1", &addr) != 0 || errno != EINVAL)
+        return 1;
+    errno = 0;
+    if (dnet_pton(AF_DECnet, "31.0", &addr) != 0 || errno != EINVAL)
+        return 1;
+    errno = 0;
     if (dnet_pton(AF_DECnet, "64.1", &addr) != 0 || errno != EINVAL)
         return 1;
     errno = 0;

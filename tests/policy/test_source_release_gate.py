@@ -685,6 +685,53 @@ def main() -> int:
         if marker not in dnmaild:
             raise SystemExit(f"source-release gate: dnmaild spool-safety regression: {marker}")
 
+    address_range_markers = {
+        "userspace/dnmail/dnmail.c": (
+            "area < 1U || area > 63U",
+            '!parse_target("0.23::ALICE", &addr, &user)',
+        ),
+        "userspace/dntask/dntask.c": (
+            "area < 1U || area > 63U",
+            '!parse_spec("0.71::TASK", &spec)',
+        ),
+        "userspace/dnlogin/dnlogin.c": (
+            "area < 1U || area > 63U",
+            '!parse_node("0.1", &addr)',
+        ),
+        "userspace/dncopy/dncopy.c": (
+            "area < 1 || area > 63",
+            '!parse_node("0.1", &addr)',
+        ),
+        "userspace/dnphone/phone.c": (
+            "area < 1U || area > 63U",
+            '!parse_target("0.23::ALICE", &addr, &user)',
+        ),
+        "userspace/dnlynx/dnlynx.c": (
+            "area < 1U || area > 63U",
+            '!parse_node("0.1",&address)',
+        ),
+    }
+    for path, markers in address_range_markers.items():
+        source = read_text(path)
+        for marker in markers:
+            if marker not in source:
+                raise SystemExit(f"source-release gate: DECnet area-zero parser regression: {path}: {marker}")
+
+    libdnet_numeric = read_text("userspace/libdnet/libdnet.c")
+    libdnet_selftest = read_text("userspace/libdnet/selftest.c")
+    for marker in (
+        "area < 1U || area > 63U",
+        "node < 1U || node > 1023U",
+    ):
+        if marker not in libdnet_numeric:
+            raise SystemExit(f"source-release gate: libdnet numeric address range regression: {marker}")
+    for marker in (
+        'dnet_pton(AF_DECnet, "0.1", &addr)',
+        'dnet_pton(AF_DECnet, "31.0", &addr)',
+    ):
+        if marker not in libdnet_selftest:
+            raise SystemExit(f"source-release gate: libdnet zero address regression coverage missing: {marker}")
+
     dnwindow = read_text("tests/lab/dnwindow.c")
     for marker in (
         "ssize_t sent = send(fd, buf, total, flags | MSG_EOR | MSG_NOSIGNAL);",

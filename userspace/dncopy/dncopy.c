@@ -91,7 +91,7 @@ static int parse_node(const char *s, uint16_t *addr)
     unsigned long area = strtoul(s, &end, 10);
     unsigned long node;
 
-    if (!s[0] || *end != '.' || area > 63)
+    if (!s[0] || *end != '.' || area < 1 || area > 63)
         return -1;
     node = strtoul(end + 1, &end, 10);
     if (*end || node == 0 || node > 1023)
@@ -1150,7 +1150,8 @@ static int selftest(void)
 
     if (parse_node("31.70", &addr) || addr != (uint16_t)((31U << 10) | 70U))
         return 1;
-    if (!parse_node("64.1", &addr) || !parse_node("31.0", &addr))
+    if (!parse_node("0.1", &addr) || !parse_node("64.1", &addr) ||
+        !parse_node("31.0", &addr))
         return 1;
     if (make_config(config, sizeof(config)) != 12U ||
         config[0] != DAP_CONFIG || config[2] != 0 || config[3] != 4 ||

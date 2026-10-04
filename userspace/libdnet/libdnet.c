@@ -55,14 +55,14 @@ static int parse_numeric(const char *text, struct dn_naddr *out)
     }
     errno = 0;
     area = strtoul(text, &end, 10);
-    if (errno || end == text || *end != '.' || area > 63U) {
+    if (errno || end == text || *end != '.' || area < 1U || area > 63U) {
         errno = EINVAL;
         return -1;
     }
     text = end + 1;
     errno = 0;
     node = strtoul(text, &end, 10);
-    if (errno || end == text || *end || node > 1023U) {
+    if (errno || end == text || *end || node < 1U || node > 1023U) {
         errno = EINVAL;
         return -1;
     }

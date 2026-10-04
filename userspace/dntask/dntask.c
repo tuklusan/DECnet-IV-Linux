@@ -50,7 +50,7 @@ static int parse_node(const char *text, uint16_t *addr)
 
     errno = 0;
     area = strtoul(text, &end, 10);
-    if (errno || end == text || *end != '.' || area > 63U)
+    if (errno || end == text || *end != '.' || area < 1U || area > 63U)
         return -1;
     node = strtoul(end + 1, &end, 10);
     if (errno || *end || node == 0U || node > 1023U)
@@ -291,6 +291,7 @@ static int selftest(void)
         strcmp(spec.password, "PASS") || strcmp(spec.account, "ACCT"))
         return 1;
     if (!parse_spec("64.1::TASK", &spec) ||
+        !parse_spec("0.71::TASK", &spec) ||
         !parse_spec("31.0::TASK", &spec) ||
         !parse_spec("31.71::THIS_OBJECT_NAME_IS_TOO_LONG", &spec))
         return 1;

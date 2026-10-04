@@ -62,7 +62,7 @@ static int parse_target(const char *text, uint16_t *addr, const char **user)
     node[len] = '\0';
     errno = 0;
     area = strtoul(node, &end, 10);
-    if (errno || end == node || *end != '.' || area > 63U)
+    if (errno || end == node || *end != '.' || area < 1U || area > 63U)
         return -1;
     n = strtoul(end + 1, &end, 10);
     if (errno || *end || n == 0U || n > 1023U)
@@ -164,7 +164,8 @@ static int selftest(void)
 
     if (parse_target("1.23::ALICE,BOB", &addr, &user) ||
         addr != 1047U || strcmp(user, "ALICE,BOB") ||
-        !parse_target("1.0::ALICE", &addr, &user))
+        !parse_target("1.0::ALICE", &addr, &user) ||
+        !parse_target("0.23::ALICE", &addr, &user))
         return 1;
     puts("dnmail selftest passed");
     return 0;
