@@ -685,6 +685,20 @@ def main() -> int:
         if marker not in dnmaild:
             raise SystemExit(f"source-release gate: dnmaild spool-safety regression: {marker}")
 
+    dnflow = read_text("tests/lab/dnflow.c")
+    for marker in (
+        "ssize_t sent;",
+        "errno = EMSGSIZE;",
+        "sent = send(fd, buf, n + 1U, MSG_EOR | MSG_NOSIGNAL | flags);",
+        "if (sent < 0)",
+        "if ((size_t)sent != n + 1U) {",
+        "errno = EIO;",
+    ):
+        if marker not in dnflow:
+            raise SystemExit(f"source-release gate: flow probe send/errno regression: {marker}")
+    if "return send(fd, buf, n + 1U, MSG_EOR | MSG_NOSIGNAL | flags) ==" in dnflow:
+        raise SystemExit("source-release gate: flow probe again collapses send result and leaves errno undefined on short success")
+
     dnlynx = read_text("userspace/dnlynx/dnlynx.c")
     for marker in (
         "static int append_header_record",

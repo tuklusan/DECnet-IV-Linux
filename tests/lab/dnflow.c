@@ -46,12 +46,22 @@ static int send_record(int fd, const char *tag, int flags)
     unsigned char buf[128];
     size_t n = strlen(tag);
 
-    if (n + 1U > sizeof(buf))
+    ssize_t sent;
+
+    if (n + 1U > sizeof(buf)) {
+        errno = EMSGSIZE;
         return -1;
+    }
     buf[0] = 0U;
     memcpy(buf + 1U, tag, n);
-    return send(fd, buf, n + 1U, MSG_EOR | MSG_NOSIGNAL | flags) ==
-           (ssize_t)(n + 1U) ? 0 : -1;
+    sent = send(fd, buf, n + 1U, MSG_EOR | MSG_NOSIGNAL | flags);
+    if (sent < 0)
+        return -1;
+    if ((size_t)sent != n + 1U) {
+        errno = EIO;
+        return -1;
+    }
+    return 0;
 }
 
 int main(int argc, char **argv)
