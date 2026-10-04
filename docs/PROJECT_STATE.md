@@ -18,9 +18,16 @@ This is the authoritative continuity record for DECnet-IV-Linux. Read `docs/HAND
 
 ## Goal
 
-Build a complete native DECnet Phase IV stack for maintained Linux as an out-of-tree kernel module plus DECnet/Linux userspace. Deliver a reproducible portable source release for existing x86_64/aarch64 Linux systems and prove behavior against independent implementations and real DEC systems.
+Build a complete native DECnet Phase IV stack for maintained Linux as an out-of-tree kernel module plus DECnet/Linux userspace. The final production deliverable is a reproducible versioned source tarball for existing x86_64/aarch64 Linux systems, with checksum/release notes, complete source, build/install/uninstall scripts and a detailed step-by-step `INSTALL.md`; disk images, prebuilt kernels/initrds and prebuilt modules are not product deliverables. Prove the packaged source and resulting stack against the required compatibility, independent-implementation, real-DEC and pre-production acceptance gates.
 
 Owner scope boundary: DDCMP and IPv6 are explicitly out of scope. They are not claimed product features, are not release blockers, and do not generate PP/reference/device acceptance requirements. MULTINET acceptance is IPv4-only. Historical chronology below may retain superseded DDCMP wording; this current contract and later chronology supersede it.
+
+### Current completion sequence
+
+1. Qualify one exact source-release artifact and complete the owner-mandated **3/3 successive zero-defect fresh-disk scans** of those exact packaged bytes. Any defect resets/keeps the count at 0/3 and requires repair, new exact-SHA targeted/source-release acceptance and a newly downloaded artifact before scanning restarts.
+2. After 3/3, resume canonical pre-production testing at the remaining blocker: PP-11 S1 pressure. S1 must close before S2; then continue the remaining applicable PP requirements in dependency order.
+3. Run final exact-SHA/full release acceptance against the release candidate.
+4. Publish the source tarball, checksum and release notes. The detailed `INSTALL.md` shipped in the tarball is the end-user build/install/configuration/uninstall manual. No disk image is published as the product.
 
 ## References and licensing
 
@@ -2082,3 +2089,5 @@ Fresh-disk audit scan 1 of exact accepted source artifact `11289527933` for cand
 Owner-requested repository infrastructure cleanup excludes the root `README.md` from License Monkey validation and removes its redundant visible near-top license/attribution sentence; the canonical root `LICENSE` remains unchanged. Because this changes the exact packaged source tree while targeted acceptance of `c3d23ec947738fc4835fa9384ae7c40adc3f3012` was still running, that candidate and any artifact it produces are superseded. Clean-scan count remains zero; restart targeted `PROFILE=targeted`, `SCOPE=source-release` acceptance from this successor before auditing packaged bytes.
 
 Owner follow-up README adjustment at `c6704c47701188e53f39e018dd0471098e56cdc9` added the final visible `LICENSE` section and copyright/attribution text to the root README while retaining the earlier License Monkey exclusion. Because this changes the exact packaged source tree, candidate `7fc20a73ef517178f4d48ae51bccc540b13b829e` and any acceptance artifact it produces are superseded. Clean-scan count remains zero; targeted `PROFILE=targeted`, `SCOPE=source-release` acceptance must restart from the continuity-synchronized successor before packaged-source auditing resumes.
+
+Project-instruction synchronization: the current repository instructions now make the completion order explicit. The immediate gate is three successive zero-defect fresh-disk scans (3/3) of one exact accepted source-release artifact; any defect resets/keeps the count at 0/3 and requires a repaired exact-SHA artifact before scanning restarts. After 3/3, canonical pre-production testing resumes with blocking PP-11 S1 pressure before S2, followed by the remaining applicable PP/release gates and final full acceptance. The final production deliverable is explicitly the reproducible versioned source tarball plus checksum/release notes, complete source, build/install/uninstall scripts and detailed step-by-step `INSTALL.md`; disk images, prebuilt kernels/initrds and prebuilt modules are lab/intermediate artifacts only. This instruction-only change supersedes any still-running acceptance for the prior exact tree and requires fresh targeted/source-release acceptance before the audit resumes. DDCMP and IPv6 remain out of scope.

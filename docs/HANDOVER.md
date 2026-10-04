@@ -16,12 +16,21 @@
 
 This is the stable resume entry point for DECnet-IV-Linux.
 
+## Current completion priority
+
+The immediate release-conversion gate is the mandatory fresh-disk audit of the exact accepted source-release artifact. The audit must reach **3/3 successive zero-defect scans**. Every scan starts from a newly downloaded copy of the exact packaged source bytes, records the tarball filename and SHA-256, and inspects those packaged bytes rather than a checkout. Any newly found defect keeps or resets the count to **0/3**, is fixed directly on `main`, updates `docs/PROJECT_STATE.md` and `scratch/RESUME.md`, and requires new exact-SHA targeted/source-release acceptance plus a new artifact before scan 1 restarts.
+
+After 3/3 closes, resume the canonical pre-production dependency chain in `docs/PRE_PRODUCTION_TEST.md` and `docs/PP_EVIDENCE.md`: finish blocking PP-11 S1 pressure work first, then S2 and the remaining applicable PP requirements in order, honoring all owner-authorized skips and lab constraints. Final production delivery follows only after the applicable PP/release gates are green.
+
+The **final production deliverable is source**, not a disk image: one reproducible versioned source tarball plus checksum and release notes, containing the complete kernel/userspace source, `build.sh`, `install.sh`, `uninstall.sh`, and the detailed step-by-step `INSTALL.md` dependency/build/install/configuration/uninstall manual. QCOW2/RAW/IMG/ISO files, prebuilt kernels/initrds and prebuilt `decnet_iv.ko` files are lab-only or intermediate artifacts and are never the product.
+
+
 1. Read `docs/PROJECT_STATE.md` completely. Its `Resume point` and `Next action` section describe the live protocol/repository state.
 2. Read `scratch/RESUME.md` completely. It records exact acceptance lineage and the persistent architecture-foundation model.
 3. Read `docs/ROADMAP.md` completely and confirm the next action follows the ordered dependency plan.
 4. Read `docs/ARCHITECTURE.md`, `docs/DELIVERY.md`, `INSTALL.md`, `docs/FEATURES.md`, `docs/COMPONENTS.md`, `docs/TEST_LAB.md`, `docs/HECNET_LAB.md` and `docs/PRE_PRODUCTION_TEST.md` before changing architecture, delivery/install behavior, lab construction, distributed transport or acceptance tests.
 5. Perform substantive work directly on `main`. Every substantive commit must refresh both `docs/PROJECT_STATE.md` and `scratch/RESUME.md` in the same commit. Acceptance applies only to the exact unchanged `main` commit that passes the documented exact-SHA gates.
-6. The production deliverable is the exact reproducible source tarball defined by `docs/DELIVERY.md`; disk images are never release artifacts. Mutable workflow state belongs below ignored `scratch/runtime/`. Persistent VM input is limited to verified source-independent architecture foundations keyed by architecture plus foundation fingerprint; exact candidate images and writable node overlays remain disposable lab state.
+6. The production deliverable is the exact reproducible source tarball defined by `docs/DELIVERY.md`, with checksum, release notes and the detailed `INSTALL.md` build/install manual; disk images and prebuilt kernel/module payloads are never release artifacts. Mutable workflow state belongs below ignored `scratch/runtime/`. Persistent VM input is limited to verified source-independent architecture foundations keyed by architecture plus foundation fingerprint; exact candidate images and writable node overlays remain disposable lab state.
 7. Development uses four exact-SHA acceptance depths: targeted for one named expensive development gate, fast for ordinary increments, consolidated at related-work checkpoints, and full for phase/release promotion. Targeted/fast/consolidated evidence never substitutes for the complete full gate; scheduled weekly full acceptance re-proves the current main candidate. Full interoperability uses one scenario per job (14 jobs at present) so independent cases run in parallel.
 8. Area-31/VAX interoperability is implemented in the repository-tracked `.github/workflows/area31-interop.yml` gate and is part of full acceptance. It consumes only runtime secrets, verifies the required secret names before network activity, explains missing prerequisites without exposing values, and never substitutes remote success for local exact-SHA acceptance.
 9. Read `docs/PP_EVIDENCE.md` before advancing pre-production work. It is the canonical proof index; raw proof remains in run-attempt-qualified retained artifacts and logs.

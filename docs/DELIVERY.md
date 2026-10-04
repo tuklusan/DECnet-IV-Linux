@@ -24,6 +24,8 @@ A production release publishes:
 2. `DECnet-IV-Linux-<version>.tar.xz.sha256`;
 3. release notes identifying the exact source commit and accepted compatibility matrix.
 
+The source tarball itself contains the complete in-scope kernel/userspace source, `build.sh`, `install.sh`, `uninstall.sh`, and the detailed step-by-step `INSTALL.md` manual. `INSTALL.md` is part of the release contract, not optional project prose: it must identify prerequisites, supported kernel/compiler/Python floors, matching kernel-header requirements, build commands, staged/live installation, configuration, module loading/unloading, Secure Boot considerations, verification, upgrades and uninstall behavior.
+
 Disk images are not release artifacts. No QCOW2, RAW, IMG, ISO, prebuilt kernel, initrd or prebuilt `decnet_iv.ko` is a production deliverable. VM disk files created by the acceptance lab are disposable test infrastructure only.
 
 The tarball is generated from one exact accepted source commit, contains no `.git` directory and no generated object/module/disk-image payloads, and carries `SOURCE-METADATA` with release version, source SHA and source-date epoch.
@@ -43,6 +45,12 @@ Forward compatibility is an active maintenance requirement. Full release accepta
 - `uninstall.sh` removes only paths recorded by a single-link regular installation manifest, rejects aliased/hard-linked manifest trust roots, requires `depmod` for the live kernel-module dependency cache, and refreshes the dynamic-library cache with `ldconfig` when the host provides that cache mechanism.
 
 The module is always compiled for the selected target kernel. Copying a module built for another kernel is unsupported.
+
+## Release completion sequence
+
+Before final production delivery, the exact packaged source bytes must pass the owner-mandated manual fresh-disk audit: **three successive zero-defect scans (3/3)**. Each scan uses a freshly downloaded copy of the exact accepted artifact and records its tarball filename and SHA-256. Any new defect invalidates the candidate for this audit, keeps/resets the counter to 0/3, is repaired on `main`, and requires a new exact-SHA targeted/source-release acceptance artifact before scanning restarts.
+
+Reaching 3/3 does not bypass pre-production testing. It closes the source-delivery conversion audit, after which the project resumes the remaining applicable `docs/PRE_PRODUCTION_TEST.md` dependency chain. Blocking PP-11 S1 pressure must close before S2. Final publication occurs only after the remaining applicable PP/release gates and final exact-SHA acceptance are green.
 
 ## Release acceptance
 
