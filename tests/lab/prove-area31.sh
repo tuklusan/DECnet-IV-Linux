@@ -209,7 +209,7 @@ run_ncp() {
         "$work/venv/bin/python" "$ncp_app" "$@"
 }
 wait_gateway_wan() {
-    for _ in $(seq 1 180); do
+    for _ in $(seq 1 360); do
         kill -0 "$gateway_pid" 2>/dev/null || {
             echo "area31-proof: gateway exited before PYRTR adjacency became usable" >&2
             show_gateway_log

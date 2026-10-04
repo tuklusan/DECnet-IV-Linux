@@ -276,6 +276,8 @@ def main() -> int:
         if required not in area31_smoke:
             raise SystemExit(f"source-release gate: remote Area-31 read-only safeguard missing: {required}")
     area31_driver = read_text("tests/lab/prove-area31.sh")
+    if "for _ in $(seq 1 360); do" not in area31_driver:
+        raise SystemExit("source-release gate: bounded PYRTR convergence window missing")
     for forbidden in ("make-http-com.py", "make-task-com.py"):
         if forbidden in area31_driver:
             raise SystemExit(f"source-release gate: remote Area-31 program-generation path remains: {forbidden}")
