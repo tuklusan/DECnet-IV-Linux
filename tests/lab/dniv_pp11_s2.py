@@ -79,14 +79,14 @@ def forwarded_timestamps(path: Path, marker: str, router_mac: str) -> list[float
     data = path.read_bytes()
     if len(data) < 24:
         return []
-    magic = data[:4]
-    if magic == b"\\xd4\\xc3\\xb2\\xa1":
+    magic = data[:4].hex()
+    if magic == "d4c3b2a1":
         endian, divisor = "<", 1_000_000.0
-    elif magic == b"\\xa1\\xb2\\xc3\\xd4":
+    elif magic == "a1b2c3d4":
         endian, divisor = ">", 1_000_000.0
-    elif magic == b"\\x4d\\x3c\\xb2\\xa1":
+    elif magic == "4d3cb2a1":
         endian, divisor = "<", 1_000_000_000.0
-    elif magic == b"\\xa1\\xb2\\x3c\\x4d":
+    elif magic == "a1b23c4d":
         endian, divisor = ">", 1_000_000_000.0
     else:
         raise RuntimeError(f"unsupported pcap magic in {path}")
