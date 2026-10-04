@@ -615,6 +615,14 @@ def main() -> int:
             raise SystemExit(f"source-release gate: dnfald root-safety regression: {marker}")
 
     dnmaild = read_text("userspace/dnmail/dnmaild.c")
+    if 'if (fputs("--\\n", out) == EOF || fclose(out))' in dnmaild:
+        raise SystemExit("source-release gate: dnmaild can re-close an invalid stream after final spool close failure")
+    for marker in (
+        'if (fputs("--\\n", out) == EOF)\n        goto fail;',
+        'if (fclose(out)) {\n        out = NULL;\n        goto fail;\n    }',
+    ):
+        if marker not in dnmaild:
+            raise SystemExit("source-release gate: dnmaild final spool close failure is not invalidated before cleanup")
     for marker in (
         'openat(rootfd, "mailbox.log",',
         "O_APPEND | O_NOFOLLOW | O_CLOEXEC",

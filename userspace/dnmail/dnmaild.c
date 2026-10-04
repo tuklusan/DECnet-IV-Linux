@@ -501,8 +501,12 @@ static int serve(int fd, const char *root, const char *sendmail_path,
             smtp_write_record(smtp_fd, body, (size_t)got))
             goto fail;
     }
-    if (fputs("--\n", out) == EOF || fclose(out))
+    if (fputs("--\n", out) == EOF)
         goto fail;
+    if (fclose(out)) {
+        out = NULL;
+        goto fail;
+    }
     out = NULL;
     if (mail_fd >= 0) {
         int finish_rc = finish_sendmail(mail_fd, mail_child);
