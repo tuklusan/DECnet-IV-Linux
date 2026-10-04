@@ -628,6 +628,15 @@ def main() -> int:
             raise SystemExit(f"source-release gate: dnfald root-safety regression: {marker}")
 
     dnmaild = read_text("userspace/dnmail/dnmaild.c")
+    for marker in (
+        "int close_errno = 0;",
+        "if (close(input_fd))\n        close_errno = errno;",
+        "if (close_errno) {\n                errno = close_errno;\n                return -1;\n            }",
+        "if (finish_sendmail(-1, child) >= 0 || errno != EBADF)",
+        "if (waitpid(child, NULL, WNOHANG) != -1 || errno != ECHILD)",
+    ):
+        if marker not in dnmaild:
+            raise SystemExit(f"source-release gate: dnmaild sendmail-close cleanup regression: {marker}")
     if 'if (!out || fputs("ok\\n", out) == EOF || fclose(out))' in dnmaild:
         raise SystemExit("source-release gate: dnmaild selftest collapses write/close state and can leak or re-close a stream")
     for marker in (

@@ -194,16 +194,22 @@ static void abort_sendmail(int input_fd, pid_t child)
 static int finish_sendmail(int input_fd, pid_t child)
 {
     static const struct timespec delay = { .tv_sec = 0, .tv_nsec = 100000000L };
+    int close_errno = 0;
     int status;
     int i;
 
     if (close(input_fd))
-        return -1;
+        close_errno = errno;
     for (i = 0; i < 300; i++) {
         pid_t rc = waitpid(child, &status, WNOHANG);
 
-        if (rc == child)
+        if (rc == child) {
+            if (close_errno) {
+                errno = close_errno;
+                return -1;
+            }
             return WIFEXITED(status) && WEXITSTATUS(status) == 0 ? 0 : -1;
+        }
         if (rc < 0 && errno != EINTR)
             return -1;
         nanosleep(&delay, NULL);
@@ -548,6 +554,20 @@ static int selftest(void)
 
     if (MAIL_OBJECT != 27U || MAIL11_V3_LEN != 16U)
         return 1;
+    {
+        pid_t child = fork();
+
+        if (child < 0)
+            return 1;
+        if (!child)
+            _exit(0);
+        errno = 0;
+        if (finish_sendmail(-1, child) >= 0 || errno != EBADF)
+            return 1;
+        errno = 0;
+        if (waitpid(child, NULL, WNOHANG) != -1 || errno != ECHILD)
+            return 1;
+    }
     if (!mkdtemp(directory))
         return 1;
     victim_fd = mkstemp(victim);
