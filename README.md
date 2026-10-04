@@ -51,3 +51,14 @@ The build compiles userspace and `decnet_iv.ko` against the selected target kern
 - `.github/workflows/` — exact-source build, portability and acceptance gates.
 
 Start with `docs/HANDOVER.md` when resuming project work.
+
+## LICENSE ##
+
+Copyright (c) 2026 Supratim Sanyal of SANYALnet Labs.
+Proprietary rights reserved except as expressly licensed.
+
+Attribution is required: "Based on original work by Supratim Sanyal of
+SANYALnet Labs."
+
+See LICENSE for full terms, warranty disclaimer, termination, patent,
+trademark, and governing-law provisions.
