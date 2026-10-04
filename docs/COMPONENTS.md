@@ -59,7 +59,7 @@ Shared protocol/source headers:
 | --- | --- | --- |
 | `userspace/libdnet` | `libdnet.so.1.0`, `libdnet.a`, `netdnet` headers | DECnet/Linux compatibility and node/address API. |
 | `userspace/libdnet` | `libdnet_daemon.so.1.0`, `libdnet_daemon.a` | Daemon helpers. |
-| `userspace/common` | Source-only helper header; not installed separately | Shared bounded DECnet sequenced-record receive helper used by native userspace clients/services. |
+| `userspace/common` | Source-only helper header; not installed separately | Shared DECnet sequenced-record I/O helpers: bounded receive plus reliable short-send retry with final `MSG_EOR` preservation. |
 
 The default installed library layout also includes the compatibility links `libdnet.so.1` -> `libdnet.so.1.0`, `libdnet.so` -> `libdnet.so.1`, `libdnet_daemon.so.1` -> `libdnet_daemon.so.1.0`, and `libdnet_daemon.so` -> `libdnet_daemon.so.1`. Installation also places the two `netdnet` headers and the two project `linux/` UAPI headers under the selected prefix, installs `README.md`, `INSTALL.md`, `LICENSE`, `DELIVERY.md`, `FEATURES.md`, `COMPONENTS.md`, `ARCHITECTURE.md` and release `SOURCE-METADATA` below `share/doc/decnet-iv-linux`, and maintains `share/decnet-iv-linux/install-manifest.txt`. The exact default manifest is acceptance-checked on both amd64 and arm64.
 
