@@ -566,15 +566,19 @@ def main() -> int:
         raise SystemExit("source-release gate: lab dnmultinet tests disappeared from repository unit coverage")
 
     dncopy = read_text("userspace/dncopy/dncopy.c")
-    if "if (fd < 0)\n        return -1;\n    if (exchange_config(fd))" in dncopy:
-        raise SystemExit("source-release gate: dncopy store leaks local input when FAL open fails")
-    for marker in (
-        "if (fd < 0) {\n        int saved_errno = errno;",
-        "if (in != stdin)\n            (void)fclose(in);",
-        "errno = saved_errno;\n        return -1;",
+    store_start = dncopy.find("static int store_file")
+    store_end = dncopy.find("static int rename_file", store_start)
+    store_body = dncopy[store_start:store_end]
+    if (
+        store_start < 0
+        or store_end < 0
+        or "if (fd < 0) {\n        int saved_errno = errno;" not in store_body
+        or "if (in != stdin)\n            (void)fclose(in);" not in store_body
+        or "errno = saved_errno;\n        return -1;" not in store_body
     ):
-        if marker not in dncopy:
-            raise SystemExit(f"source-release gate: dncopy FAL-open input cleanup missing: {marker}")
+        raise SystemExit("source-release gate: dncopy store does not close local input when FAL open fails")
+    if "if (fd < 0)\n        return -1;" in store_body:
+        raise SystemExit("source-release gate: dncopy store leaks local input when FAL open fails")
     retrieve_start = dncopy.find("static int retrieve_file")
     retrieve_end = dncopy.find("static int store_file", retrieve_start)
     retrieve = dncopy[retrieve_start:retrieve_end]

@@ -566,14 +566,8 @@ static int retrieve_file(const char *node_text, const char *filespec,
         return -1;
     }
     fd = open_fal(node_text, options);
-    if (fd < 0) {
-        int saved_errno = errno;
-
-        if (in != stdin)
-            (void)fclose(in);
-        errno = saved_errno;
+    if (fd < 0)
         return -1;
-    }
     if (exchange_config(fd))
         goto fail;
 
@@ -709,8 +703,14 @@ static int store_file(const char *local_path, const char *node_text,
         }
     }
     fd = open_fal(node_text, options);
-    if (fd < 0)
+    if (fd < 0) {
+        int saved_errno = errno;
+
+        if (in != stdin)
+            (void)fclose(in);
+        errno = saved_errno;
         return -1;
+    }
     if (exchange_config(fd))
         goto fail;
 
