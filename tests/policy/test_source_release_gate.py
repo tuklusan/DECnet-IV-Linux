@@ -627,6 +627,12 @@ def main() -> int:
         if marker not in dnfald:
             raise SystemExit(f"source-release gate: dnfald root-safety regression: {marker}")
 
+    smtp_fake = read_text("tests/lab/dnsmtpfake.c")
+    if "if (fclose(out))\n        goto out;\n    out = NULL;" in smtp_fake:
+        raise SystemExit("source-release gate: SMTP lab helper can re-close an invalid stream after final output close failure")
+    if "if (fclose(out)) {\n        out = NULL;\n        goto out;\n    }" not in smtp_fake:
+        raise SystemExit("source-release gate: SMTP lab helper final output close failure is not invalidated before cleanup")
+
     dnmaild = read_text("userspace/dnmail/dnmaild.c")
     for marker in (
         "int close_errno = 0;",

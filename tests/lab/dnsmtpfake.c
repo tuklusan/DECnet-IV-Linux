@@ -135,8 +135,10 @@ int main(int argc, char **argv)
         if (fputs(line, out) == EOF)
             goto out;
     }
-    if (fclose(out))
+    if (fclose(out)) {
+        out = NULL;
         goto out;
+    }
     out = NULL;
     if (write_all(fd, "250 stored\r\n", 12U) ||
         expect_line(fd, "QUIT\r\n") ||
