@@ -93,8 +93,6 @@ if [ -n "$qcocal" ]; then
     [ "$qcocal" != "$linux_node" ] || fail duplicate-qcocal-node
     [ "$qcocal" != "$gateway_node" ] || fail duplicate-qcocal-node
     [ "$qcocal" != "$target" ] || fail duplicate-qcocal-node
-    [ -r /run/dniv-area31/DNIVHT.COM ] || fail no-qcocal-http
-    [ -r /run/dniv-area31/DNIVTK.COM ] || fail no-qcocal-task
 fi
 
 iface=
@@ -193,91 +191,17 @@ if [ -n "$qcocal" ]; then
     DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
         /usr/local/bin/dncopy --probe "$qcocal" >/dev/null 2>&1 ||
         fail qcocal-fal-access
-
-    qcocal_listing=
-    if ! qcocal_listing=$(DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
-        /usr/local/bin/dncopy --dir "$qcocal" '*.*;*' 2>/dev/null); then
-        fail qcocal-http-preflight
-    fi
-    for stale_file in DNIVHT.COM DNIVTK.COM; do
-        stale_attempt=0
-        while printf '%s\n' "$qcocal_listing" | grep -Fiq "$stale_file"; do
-            stale_attempt=$((stale_attempt + 1))
-            if [ "$stale_attempt" -gt 8 ]; then
-                unset qcocal_listing
-                fail qcocal-stale-cleanup
-            fi
-            DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
-                /usr/local/bin/dndel "$qcocal" "$stale_file" >/dev/null 2>&1 ||
-                {
-                    unset qcocal_listing
-                    fail qcocal-stale-cleanup
-                }
-            echo "DNIV-AREA31-QCOCAL-STALE-CLEANUP file=$stale_file"
-            if ! qcocal_listing=$(DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
-                /usr/local/bin/dncopy --dir "$qcocal" '*.*;*' 2>/dev/null); then
-                unset qcocal_listing
-                fail qcocal-stale-recheck
-            fi
-        done
-    done
-    if printf '%s\n' "$qcocal_listing" | grep -Eiq 'DNIV(HT|TK)\.COM'; then
-        unset qcocal_listing
-        fail qcocal-stale-cleanup
-    fi
-    unset qcocal_listing
     DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
-        /usr/local/bin/dncopy --put-text /run/dniv-area31/DNIVHT.COM "$qcocal" DNIVHT.COM \
-        >/dev/null 2>&1 || fail qcocal-http-install
+        /usr/local/bin/dndir "$qcocal" '*.*;*' >/dev/null 2>&1 ||
+        fail qcocal-directory
     if [ "$pp12_source" -eq 1 ]; then
-        DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
-            /usr/local/bin/dntype "$qcocal" DNIVHT.COM 2>/dev/null | grep -Fq 'QCOCAL-DECNET-HTTP-PASS' || fail qcocal-dntype
-        DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
-            /usr/local/bin/dndir "$qcocal" 'DNIVHT.COM;*' 2>/dev/null | grep -Fiq 'DNIVHT.COM' || fail qcocal-dndir
-        DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
-            /usr/local/bin/dnrename "$qcocal" DNIVHT.COM DNIVHX.COM >/dev/null 2>&1 || fail qcocal-dnrename-out
-        DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
-            /usr/local/bin/dnrename "$qcocal" DNIVHX.COM DNIVHT.COM >/dev/null 2>&1 || fail qcocal-dnrename-back
-        echo "DNIV-AREA31-PP12-DAP-ALIASES-PASS"
+        /usr/local/bin/dnnice "$qcocal" summary >/dev/null 2>&1 ||
+            fail qcocal-nice
+        /usr/local/bin/dnping -q -c 2 -i 100000 -s 16 -w 6 "$qcocal" >/dev/null 2>&1 ||
+            fail qcocal-mirror
+        echo "DNIV-AREA31-PP12-QCOCAL-READONLY-PASS"
     fi
-    http_out="$scratch/qcocal-http.out"
-    http_err="$scratch/qcocal-http.err"
-    if ! DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
-        /usr/local/bin/dnlynx -i -o DNIVHT "$qcocal" / >"$http_out" 2>"$http_err"; then
-        sed -n '1p' "$http_err" >&2 || true
-        sed -n '1{s/\r$//;/^HTTP\/1\.[01] [0-9][0-9][0-9] /p;}' "$http_out" >&2 || true
-        DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
-            /usr/local/bin/dndel "$qcocal" DNIVHT.COM >/dev/null 2>&1 || true
-        rm -f "$http_out" "$http_err"
-        fail qcocal-http-client
-    fi
-    if ! grep -Fq 'QCOCAL-DECNET-HTTP-PASS' "$http_out"; then
-        sed -n '1{s/\r$//;/^HTTP\/1\.[01] [0-9][0-9][0-9] /p;}' "$http_out" >&2 || true
-        DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
-            /usr/local/bin/dndel "$qcocal" DNIVHT.COM >/dev/null 2>&1 || true
-        rm -f "$http_out" "$http_err"
-        fail qcocal-http-client
-    fi
-    rm -f "$http_out" "$http_err"
-    DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
-        /usr/local/bin/dndel "$qcocal" DNIVHT.COM >/dev/null 2>&1 ||
-        fail qcocal-http-cleanup
-    echo "DNIV-AREA31-QCOCAL-HTTP-PASS"
-
-    DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
-        /usr/local/bin/dncopy --put-text /run/dniv-area31/DNIVTK.COM "$qcocal" DNIVTK.COM \
-        >/dev/null 2>&1 || fail qcocal-task-install
-    if ! DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
-        /usr/local/bin/dntask "$qcocal::DNIVTK" 2>/dev/null | \
-        grep -Fq 'QCOCAL-DECNET-TASK-PASS'; then
-        DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
-            /usr/local/bin/dndel "$qcocal" DNIVTK.COM >/dev/null 2>&1 || true
-        fail qcocal-task-client
-    fi
-    DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
-        /usr/local/bin/dndel "$qcocal" DNIVTK.COM >/dev/null 2>&1 ||
-        fail qcocal-task-cleanup
-    echo "DNIV-AREA31-QCOCAL-TASK-PASS"
+    echo "DNIV-AREA31-QCOCAL-READONLY-PASS"
 fi
 
 survey_live=0

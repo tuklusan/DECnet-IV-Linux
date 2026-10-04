@@ -255,6 +255,27 @@ def main() -> int:
             raise SystemExit(f"source-release gate: scale16 run-attempt isolation missing: {required}")
 
     area31_smoke = read_text("tests/lab/dniv-area31-smoke.sh")
+    for forbidden in (
+        "/usr/local/bin/dncopy --put-text",
+        "/usr/local/bin/dndel",
+        "/usr/local/bin/dnrename",
+        "/usr/local/bin/dntask",
+        "DNIVHT.COM",
+        "DNIVTK.COM",
+    ):
+        if forbidden in area31_smoke:
+            raise SystemExit(f"source-release gate: remote Area-31 state-change path remains: {forbidden}")
+    for required in (
+        "DNIV-AREA31-QCOCAL-READONLY-PASS",
+        "DNIV-AREA31-PP12-QCOCAL-READONLY-PASS",
+        "DNIV-AREA31-PP12-CLIENTS-PASS",
+    ):
+        if required not in area31_smoke:
+            raise SystemExit(f"source-release gate: remote Area-31 read-only safeguard missing: {required}")
+    area31_driver = read_text("tests/lab/prove-area31.sh")
+    for forbidden in ("make-http-com.py", "make-task-com.py"):
+        if forbidden in area31_driver:
+            raise SystemExit(f"source-release gate: remote Area-31 program-generation path remains: {forbidden}")
     for stale in (
         "/tmp/dniv-area31-native.err",
         "/tmp/dniv-qcocal-http.out",
