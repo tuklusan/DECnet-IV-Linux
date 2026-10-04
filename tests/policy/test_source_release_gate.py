@@ -286,8 +286,6 @@ def main() -> int:
     for required in (
         "mktemp -d /tmp/dniv-area31.XXXXXX",
         'remote_log="$scratch/native.err"',
-        'http_out="$scratch/qcocal-http.out"',
-        'http_err="$scratch/qcocal-http.err"',
         "trap cleanup_scratch EXIT HUP INT TERM",
     ):
         if required not in area31_smoke:
