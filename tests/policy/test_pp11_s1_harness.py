@@ -30,6 +30,7 @@ BACKLOG = (ROOT / "tests/lab/dnbacklog.c").read_text(encoding="utf-8")
 PY_BACKLOG = (ROOT / "tests/lab/pydecnet-backlog.py").read_text(encoding="utf-8")
 ACKRANGE = (ROOT / "tests/lab/inject-nsp-ackrange.py").read_text(encoding="utf-8")
 INTFLOW = (ROOT / "tests/lab/inject-nsp-intflow.py").read_text(encoding="utf-8")
+INTFLOW_CLIENT = (ROOT / "tests/lab/dnintflow.c").read_text(encoding="utf-8")
 PCAP = (ROOT / "tests/lab/validate-interop-pcap.py").read_text(encoding="utf-8")
 SOCKET = (ROOT / "kernel/decnet/decnet_iv_socket.c").read_text(encoding="utf-8")
 
@@ -138,7 +139,7 @@ def main() -> int:
         raise SystemExit("pp11-s1 regression: malformed/RX pressure count changed")
     if "credit=100 interrupts=64" not in INTFLOW:
         raise SystemExit("pp11-s1 regression: interrupt retransmit pressure count changed")
-    if "errno != ENOSPC" not in INTFLOW or "errno != ENOBUFS" in INTFLOW:
+    if "errno != ENOSPC" not in INTFLOW_CLIENT or "errno != ENOBUFS" in INTFLOW_CLIENT:
         raise SystemExit("pp11-s1 regression: interrupt queue bound must accept kernel ENOSPC")
     if "candidate_sequence_wraps" not in PCAP or "candidate_no_resources_dc" not in PCAP:
         raise SystemExit("pp11-s1 regression: missing independent PCAP pressure evidence")
