@@ -121,7 +121,7 @@ def main() -> int:
     smoke_markers = (
         'while [ "$round" -le 3 ]',
         "count=256",
-        "count=32",
+        "channel-limit=32",
         "accepted=64 busy=1",
         "count=20",
         "count=64",
