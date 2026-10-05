@@ -184,7 +184,13 @@ if [ -r /etc/dniv-source-release-sha ]; then
     pp12_source=1
     DNACCESS_USER="$vax_user" DNACCESS_PASSWORD="$vax_password" \
         /usr/local/bin/sethost --probe "$target" >/dev/null 2>&1 || fail sethost-access
-    /usr/local/bin/ncp tell "$target" show executor summary >/dev/null 2>&1 || fail ncp-remote
+    ncp_log="$scratch/ncp.err"
+    : >"$ncp_log"
+    if ! /usr/local/bin/ncp tell "$target" show executor summary >/dev/null 2>"$ncp_log"; then
+        sed -n '1,6p' "$ncp_log" >&2 || true
+        fail ncp-remote
+    fi
+    rm -f "$ncp_log"
     /usr/local/bin/dnnice "$target" summary >/dev/null 2>&1 || fail dnnice-remote
     /usr/local/bin/dnping -q -c 2 -i 100000 -s 16 -w 6 "$target" >/dev/null 2>&1 || fail dnping-remote
     echo "DNIV-AREA31-PP12-CLIENTS-PASS"

@@ -194,7 +194,7 @@ static int run_tool(const char *envname, const char *path,
 
 static int run_plan(struct ncp_plan *plan)
 {
-    return run_tool("DNIV_DNNICE", "/usr/local/sbin/dnnice",
+    return run_tool("DNIV_DNNICE", "/usr/local/bin/dnnice",
                     "dnnice", plan->argv);
 }
 

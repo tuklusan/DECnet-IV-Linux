@@ -254,6 +254,10 @@ def main() -> int:
         if required not in scale16_workflow:
             raise SystemExit(f"source-release gate: scale16 run-attempt isolation missing: {required}")
 
+    ncp_source = read_text("userspace/ncp/ncp.c")
+    if 'run_tool("DNIV_DNNICE", "/usr/local/bin/dnnice",' not in ncp_source or \
+       '"/usr/local/sbin/dnnice"' in ncp_source:
+        raise SystemExit("source-release gate: ncp dnnice install path drift")
     area31_smoke = read_text("tests/lab/dniv-area31-smoke.sh")
     for forbidden in (
         "/usr/local/bin/dncopy --put-text",
@@ -274,6 +278,8 @@ def main() -> int:
         'cterm_log="$scratch/cterm.err"',
         'for _ in $(seq 1 10)',
         "/usr/local/bin/dnlogin --probe",
+        'ncp_log="$scratch/ncp.err"',
+        'sed -n \'1,6p\' "$ncp_log" >&2',
         "sed -n '1,4p' \"$cterm_log\" >&2",
     ):
         if required not in area31_smoke:
