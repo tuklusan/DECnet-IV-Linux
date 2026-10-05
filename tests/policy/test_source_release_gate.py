@@ -315,6 +315,12 @@ def main() -> int:
         if stale in candidate_image:
             raise SystemExit(f"source-release gate: candidate-image stale dnlogin install path remains: {stale}")
 
+    interop_smoke = read_text("tests/lab/dniv-interop-smoke.sh")
+    if "/usr/local/sbin/dnlogin --probe" in interop_smoke:
+        raise SystemExit("source-release gate: interoperability CTERM probe uses stale sbin dnlogin path")
+    if "/usr/local/bin/dnlogin --probe" not in interop_smoke:
+        raise SystemExit("source-release gate: interoperability CTERM probe production dnlogin path missing")
+
     area31_smoke = read_text("tests/lab/dniv-area31-smoke.sh")
     for forbidden in (
         "/usr/local/bin/dncopy --put-text",

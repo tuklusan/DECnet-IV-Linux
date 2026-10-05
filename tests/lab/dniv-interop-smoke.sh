@@ -471,7 +471,7 @@ if [ "$reference" = pydecnet ]; then
     cterm_ok=0
     i=0
     while [ "$i" -lt 40 ]; do
-        if /usr/local/sbin/dnlogin --probe "$peer_node"; then
+        if /usr/local/bin/dnlogin --probe "$peer_node"; then
             cterm_ok=1
             break
         fi
