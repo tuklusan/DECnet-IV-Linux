@@ -142,6 +142,7 @@ static void test_router_vector(void)
     assert(state == DNIV_ADJ_STATE_INIT);
     assert(dniv_wire_listen_msecs(10, 30) == 31000U);
     assert(dniv_wire_listen_msecs(0, 10) == 31000U);
+    assert(dniv_wire_listen_msecs(65535U, 10U) == 203158500U);
 
     assert(dniv_wire_build_router_hello(buf, sizeof(buf), DNIV_ADDR(31, 70),
                                          DNIV_NODE_TYPE_L1_ROUTER, 64, 10,

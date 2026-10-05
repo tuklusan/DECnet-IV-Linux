@@ -160,6 +160,8 @@ cc -O2 -std=c11 -Wall -Wextra -Werror \
 cc -I/usr/src/decnet-iv-linux/include/uapi -O2 -std=c11 -Wall -Wextra -Werror \
     -o /usr/local/sbin/dnadjwait /usr/src/decnet-iv-linux/tests/lab/dnadjwait.c
 cc -I/usr/src/decnet-iv-linux/include/uapi -O2 -std=c11 -Wall -Wextra -Werror \
+    -o /usr/local/sbin/dnhostile /usr/src/decnet-iv-linux/tests/lab/dnhostile.c
+cc -I/usr/src/decnet-iv-linux/include/uapi -O2 -std=c11 -Wall -Wextra -Werror \
     -o /usr/local/sbin/dnmrr /usr/src/decnet-iv-linux/tests/lab/dnmrr.c
 cc -I/usr/src/decnet-iv-linux/include/uapi -O2 -std=c11 -Wall -Wextra -Werror \
     -o /usr/local/sbin/dnloss /usr/src/decnet-iv-linux/tests/lab/dnloss.c

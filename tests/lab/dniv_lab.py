@@ -427,7 +427,8 @@ class QmpClient:
 
 class Lab:
     def __init__(self, base: Path, kernel: Path, initrd: Path | None, work: Path, mode: str, session: str,
-                 nic_model: str, vcpus: int, diagnostics: str, memory_mb: int):
+                 nic_model: str, vcpus: int, diagnostics: str, memory_mb: int,
+                 post_timing: bool):
         self.base = base.resolve()
         self.kernel = kernel.resolve()
         self.initrd = initrd.resolve() if initrd is not None else None
@@ -438,6 +439,7 @@ class Lab:
         self.vcpus = vcpus
         self.diagnostics = diagnostics
         self.memory_mb = memory_mb
+        self.post_timing = post_timing
         self.host_arch = platform.machine()
         self.host_cpus = sorted(os.sched_getaffinity(0))
         self.controller_cpu: int | None = None
@@ -501,6 +503,8 @@ class Lab:
             f"dniv.peer={guest.peer_mac} dniv.peer_node={area}.{guest.peer_node} "
             f"dniv.role={guest.role} dniv.session={self.session}"
         )
+        if self.post_timing:
+            common += " dniv.post_timing=1"
         if self.diagnostics == "kfence":
             common += " dniv.diag=kfence kfence.sample_interval=100 panic_on_warn=1 oops=panic"
         elif self.diagnostics == "ubsan":
@@ -657,6 +661,10 @@ def main() -> int:
     nic_model = os.environ.get("DNIV_LAB_NIC_MODEL", "virtio-net-pci")
     vcpus = int(os.environ.get("DNIV_LAB_VCPUS", "1"))
     diagnostics = os.environ.get("DNIV_LAB_DIAGNOSTICS", "none")
+    post_timing_raw = os.environ.get("DNIV_LAB_POST_TIMING", "false").lower()
+    if post_timing_raw not in {"false", "true"}:
+        raise SystemExit("python-lab: DNIV_LAB_POST_TIMING must be false or true")
+    post_timing = post_timing_raw == "true"
     default_memory = "1024" if platform.machine() == "aarch64" else "512"
     memory_mb = int(os.environ.get("DNIV_LAB_MEMORY_MB", default_memory))
     if timeout < 1:
@@ -667,6 +675,8 @@ def main() -> int:
         raise SystemExit(f"python-lab: unsupported vCPU count: {vcpus}")
     if diagnostics not in {"none", "kfence", "ubsan", "kasan", "kcsan", "lockdebug", "kmemleak"}:
         raise SystemExit(f"python-lab: unsupported diagnostics mode: {diagnostics}")
+    if post_timing and (mode != "e1" or nic_model != "virtio-net-pci" or vcpus < 4 or diagnostics != "none"):
+        raise SystemExit("python-lab: post-timing mode requires e1/virtio/4+ vCPUs/no diagnostics")
     if not 256 <= memory_mb <= 4096:
         raise SystemExit(f"python-lab: unsupported guest memory size: {memory_mb}")
     validate_args(args.base, args.kernel, initrd, mode, session)
@@ -694,7 +704,7 @@ def main() -> int:
         nic_a, nic_b = lab_mac(area, node_a), lab_mac(area, node_b)
         changed_a, changed_b = lab_mac(area, node_a, True), lab_mac(area, node_b, True)
 
-    lab = Lab(args.base, args.kernel, initrd, work, mode, session, nic_model, vcpus, diagnostics, memory_mb)
+    lab = Lab(args.base, args.kernel, initrd, work, mode, session, nic_model, vcpus, diagnostics, memory_mb, post_timing)
     guest_a = Guest(name_a, node_a, node_b, mac_b, "A", nic_a, f"da{suffix}", lab.create_overlay("node-a"),
                     work / "node-a.serial.log", work / "node-a.qmp")
     guest_b = Guest(name_b, node_b, node_a, mac_a, "B", nic_b, f"db{suffix}", lab.create_overlay("node-b"),
@@ -923,6 +933,12 @@ def main() -> int:
         ]
         require_guest_log_evidence(guest_a.log, required_a)
         require_guest_log_evidence(guest_b.log, required_b)
+        if post_timing:
+            require_guest_log_evidence(guest_a.log, [
+                f"DNIV-POSTTIMING-DEVICE-PASS session={session} node={name_a}",
+                f"DNIV-POSTTIMING-CPU-LOAD session={session} node={name_a}",
+                "DNIV-HOSTILE-PASS iterations=4096",
+            ])
         init_logged = (contains(guest_a.log, f"DNIV-E1-INIT session={session}") or
                        contains(guest_b.log, f"DNIV-E1-INIT session={session}"))
         if not init_logged and not pcap_router_init_seen(lab.pcap, mac_a, mac_b):
@@ -936,7 +952,7 @@ def main() -> int:
                   contains(guest_b.log, f"DNIV-E1-RESTART-INIT session={session}")):
             raise SystemExit("python-lab: E1 restart INIT state was not observed")
         print(f"python-lab: E1 pass on {lab.host_arch} nic={lab.nic_model} vcpus={lab.vcpus} diagnostics={lab.diagnostics} "
-              f"for {area}.{node_a}/{area}.{node_b}, captured {frames} DECnet frames")
+              f"post_timing={lab.post_timing} for {area}.{node_a}/{area}.{node_b}, captured {frames} DECnet frames")
     else:
         print(f"python-lab: Phase 2 pass on {lab.host_arch} nic={lab.nic_model} vcpus={lab.vcpus} "
               f"for {area}.{node_a}/{area}.{node_b}, captured {frames} DECnet routing frames")

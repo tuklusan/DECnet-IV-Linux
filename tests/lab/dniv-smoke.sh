@@ -238,6 +238,11 @@ probe_override=$(get_arg dniv.probe_count || true)
 alt_peer=$(get_arg dniv.alt_peer || true)
 alt_peer_node=$(get_arg dniv.alt_peer_node || true)
 diagnostics=$(get_arg dniv.diag || printf 'none')
+post_timing=$(get_arg dniv.post_timing || printf '0')
+case "$post_timing" in
+    0|1) ;;
+    *) echo "DNIV-LAB-FAIL session=$session node=$name reason=bad-post-timing"; exit 1 ;;
+esac
 
 case "$diagnostics" in
 none|'')
@@ -535,6 +540,56 @@ e1)
     echo "DNIV-E1-UCAST session=$session node=$name peer=$peer_node delta=$unicast_delta"
     echo "DNIV-E1-INITIAL session=$session node=$name peer=$peer_node"
 
+    if [ "$post_timing" -eq 1 ] && [ "$role" = A ]; then
+        iface=$(find_iface || true)
+        [ -n "$iface" ] || { echo "DNIV-E1-FAIL session=$session node=$name reason=posttiming-no-interface"; exit 1; }
+        original_mtu=$(cat "/sys/class/net/$iface/mtu")
+        ip link set dev "$iface" mtu 1200
+        /usr/local/sbin/dnraw "$iface" "$peer" "DNIV-POSTTIMING-MTU-$session"
+        ip link set dev "$iface" mtu "$original_mtu"
+
+        ip link set dev "$iface" promisc on
+        ip link set dev "$iface" allmulticast on
+        /usr/local/sbin/dnraw "$iface" "$peer" "DNIV-POSTTIMING-PROMISC-$session"
+        ip link set dev "$iface" allmulticast off
+        ip link set dev "$iface" promisc off
+
+        gro=$(ethtool -k "$iface" | sed -n 's/^generic-receive-offload: //p' | head -1)
+        gso=$(ethtool -k "$iface" | sed -n 's/^generic-segmentation-offload: //p' | head -1)
+        tso=$(ethtool -k "$iface" | sed -n 's/^tcp-segmentation-offload: //p' | head -1)
+        for feature in "$gro" "$gso" "$tso"; do
+            case "$feature" in on|off) ;; *) echo "DNIV-E1-FAIL session=$session node=$name reason=posttiming-ethtool-state"; exit 1 ;; esac
+        done
+        ethtool -K "$iface" gro off gso off tso off
+        /usr/local/sbin/dnraw "$iface" "$peer" "DNIV-POSTTIMING-OFFLOAD-OFF-$session"
+        ethtool -K "$iface" gro "$gro" gso "$gso" tso "$tso"
+        /usr/local/sbin/dnraw "$iface" "$peer" "DNIV-POSTTIMING-OFFLOAD-RESTORE-$session"
+
+        modprobe veth
+        ip link add dnivpt0 type veth peer name dnivpt1
+        ip link set dnivpt0 up
+        ip link set dnivpt1 up
+        ip link del dnivpt0
+        ip link add dnivpt0 type veth peer name dnivpt1
+        ip link set dnivpt0 up
+        ip link set dnivpt1 up
+        ip link del dnivpt0
+
+        /usr/local/sbin/dnhostile 4096
+        if ! wait_adjacency_up "$peer_node" DNIV-POSTTIMING-RECHECK 80; then
+            echo "DNIV-E1-FAIL session=$session node=$name reason=posttiming-adjacency"
+            exit 1
+        fi
+        echo "DNIV-POSTTIMING-DEVICE-PASS session=$session node=$name"
+
+        ( while :; do :; done ) &
+        hog1=$!
+        ( while :; do :; done ) &
+        hog2=$!
+        ( sleep 20; kill "$hog1" "$hog2" 2>/dev/null || true ) &
+        echo "DNIV-POSTTIMING-CPU-LOAD session=$session node=$name workers=2 duration=20s"
+    fi
+
     # DN71 has the higher node address at equal priority, so it is the DR.
     # Silence that router long enough for DN70 to expire it, but for less than
     # listener expiry plus DRDELAY. A correct DN70 must therefore never emit an
@@ -562,7 +617,11 @@ e1)
             poweroff_pass "DNIV-E1-PASS session=$session node=$name"
         fi
 
-        sleep 1
+        if [ "$post_timing" -eq 1 ]; then
+            sleep 3
+        else
+            sleep 1
+        fi
         modprobe -r decnet_iv
         echo "DNIV-E1-SILENT session=$session node=$name"
         sleep 7

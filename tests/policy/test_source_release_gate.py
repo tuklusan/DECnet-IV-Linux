@@ -610,8 +610,12 @@ def main() -> int:
     if "SOURCE_RELEASE source-release.yml" not in dispatcher or "RELEASE_IMAGE release-image.yml" in dispatcher:
         raise SystemExit("source-release gate: acceptance dispatcher not synchronized")
     for marker in (
-        "all|socket|routing|pp11-pressure|pp11-s2|pp12|source-release",
+        "all|socket|routing|pp11-pressure|pp11-s2|pp12|post-timing|source-release",
         'scope" == pp12',
+        'scope" == post-timing',
+        "-f post_timing=true",
+        "VM_LAB_POST_TIMING=vm-lab.yml:e1:virtio-net-pci:4vcpu:post-timing",
+        "VM_LAB_PP11_S2=vm-lab.yml:pp11s2:virtio-net-pci:1vcpu",
         '-f pp12_real_peers="$pp12_real_peers"',
         "-f pp12_real_peers=true",
     ):

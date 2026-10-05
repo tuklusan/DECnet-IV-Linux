@@ -283,12 +283,12 @@ jobs:
             esac
           fi
           case "$profile" in fast|targeted|consolidated|full) ;; *) echo "bad acceptance profile: $profile" >&2; exit 2 ;; esac
-          case "$scope" in all|socket|routing|pp11-pressure|pp11-s2|pp12|source-release) ;; *) echo "bad acceptance scope: $scope" >&2; exit 2 ;; esac
-          if [[ "$profile" == targeted && "$scope" != pp11-pressure && "$scope" != pp11-s2 && "$scope" != pp12 && "$scope" != source-release ]]; then
-            echo "targeted acceptance requires SCOPE=pp11-pressure, SCOPE=pp11-s2, SCOPE=pp12, or SCOPE=source-release" >&2
+          case "$scope" in all|socket|routing|pp11-pressure|pp11-s2|pp12|post-timing|source-release) ;; *) echo "bad acceptance scope: $scope" >&2; exit 2 ;; esac
+          if [[ "$profile" == targeted && "$scope" != pp11-pressure && "$scope" != pp11-s2 && "$scope" != pp12 && "$scope" != post-timing && "$scope" != source-release ]]; then
+            echo "targeted acceptance requires SCOPE=pp11-pressure, SCOPE=pp11-s2, SCOPE=pp12, SCOPE=post-timing, or SCOPE=source-release" >&2
             exit 2
           fi
-          if [[ "$profile" != targeted && ( "$scope" == pp11-pressure || "$scope" == pp11-s2 || "$scope" == pp12 || "$scope" == source-release ) ]]; then
+          if [[ "$profile" != targeted && ( "$scope" == pp11-pressure || "$scope" == pp11-s2 || "$scope" == pp12 || "$scope" == post-timing || "$scope" == source-release ) ]]; then
             echo "targeted-only scope requires PROFILE=targeted" >&2
             exit 2
           fi
@@ -374,13 +374,23 @@ jobs:
               -f pp12_real_peers="$pp12_real_peers"
           else
           printf 'VM_LAB_E1=vm-lab.yml:e1\n' >> "$DNIV_SCRATCH_DIR/dispatch.env"
-          dispatch_and_record VM_LAB_E1 vm-lab.yml \
-            -f lab_mode=e1 -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
+          if [[ "$profile" == targeted && "$scope" == post-timing ]]; then
+            dispatch_and_record VM_LAB_E1 vm-lab.yml \
+              -f lab_mode=e1 -f nic_model=virtio-net-pci -f vcpus=4 -f post_timing=true \
+              -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
+          else
+            dispatch_and_record VM_LAB_E1 vm-lab.yml \
+              -f lab_mode=e1 -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
+          fi
 
           if [[ "$profile" == full ]]; then
             printf 'VM_LAB_E1_SECONDARY=vm-lab.yml:e1:e1000:4vcpu\n' >> "$DNIV_SCRATCH_DIR/dispatch.env"
             dispatch_and_record VM_LAB_E1_SECONDARY vm-lab.yml \
               -f lab_mode=e1 -f nic_model=e1000 -f vcpus=4 \
+              -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
+            printf 'VM_LAB_POST_TIMING=vm-lab.yml:e1:virtio-net-pci:4vcpu:post-timing\n' >> "$DNIV_SCRATCH_DIR/dispatch.env"
+            dispatch_and_record VM_LAB_POST_TIMING vm-lab.yml \
+              -f lab_mode=e1 -f nic_model=virtio-net-pci -f vcpus=4 -f post_timing=true \
               -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
           fi
 
@@ -441,6 +451,10 @@ jobs:
             dispatch_and_record VM_LAB_PP11_S1 vm-lab.yml \
               -f lab_mode=pp11s1 -f nic_model=virtio-net-pci -f vcpus=2 \
               -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
+            printf 'VM_LAB_PP11_S2=vm-lab.yml:pp11s2:virtio-net-pci:1vcpu\n' >> "$DNIV_SCRATCH_DIR/dispatch.env"
+            dispatch_and_record VM_LAB_PP11_S2 vm-lab.yml \
+              -f lab_mode=pp11s2 -f nic_model=virtio-net-pci -f vcpus=1 \
+              -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
           fi
 
           if [[ "$profile" == targeted && "$scope" == pp11-s2 ]]; then
@@ -448,6 +462,8 @@ jobs:
             dispatch_and_record VM_LAB_PP11_S2 vm-lab.yml \
               -f lab_mode=pp11s2 -f nic_model=virtio-net-pci -f vcpus=1 \
               -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
+          elif [[ "$profile" == targeted && "$scope" == post-timing ]]; then
+            :
           else
             dispatch_and_record INTEROP interop.yml \
               -f profile="$profile" -f scope="$scope" \

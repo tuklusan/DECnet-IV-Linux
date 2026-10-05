@@ -110,7 +110,7 @@ apt-get -o Acquire::https::Verify-Peer=false --snapshot "$UBUNTU_APT_SNAPSHOT" i
 update-ca-certificates --fresh
 apt-get --snapshot "$UBUNTU_APT_SNAPSHOT" update
 apt-get --snapshot "$UBUNTU_APT_SNAPSHOT" install -y --no-install-recommends \
-    systemd-sysv kmod iproute2 build-essential initramfs-tools \
+    systemd-sysv kmod iproute2 ethtool build-essential initramfs-tools \
     linux-image-virtual-hwe-26.04 linux-headers-virtual-hwe-26.04 \
     python3 libpcap0.8t64 git
 krel=$(ls -1 /lib/modules | sort -V | tail -1)
