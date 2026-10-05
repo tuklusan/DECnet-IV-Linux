@@ -88,3 +88,46 @@ Beginning with the source-delivery pivot, production release evidence is bound t
 ## Post-Timing ledger rule
 
 Beginning with `## Timing/scheduler tests` and continuing through every later section of `docs/PRE_PRODUCTION_TEST.md`, each canonical requirement is appended here when reached. Executed requirements get their exact proof pointer. Requirements that cannot practically be exercised under the owner constraints get the literal result `Not tested in lab environment`. No requirement may be silently omitted.
+
+
+## Post-Timing requirement ledger
+
+Targeted issue #1034 on exact `5933d71cbbe9ca429dd20aa30b49ce898abbbe91` is green: Repository Policy `37259334720`, Build Bootstrap `37259409183`, Project State Gate `37259419541`, and dual-architecture 4-vCPU virtio E1 `37259431781`. amd64 job `111603325123` retained artifact `11324222138` (SHA-256 `e7f036781f1238e2ccb67bd72af843b963f3e5bfb84fd7fa111877ad508442e9`); arm64 job `111603325308` retained artifact `11323463952` (SHA-256 `a8a53c029fbc16fc4893559e412bd15ff5f1be9519c78774fd0c6675b559eabc`). Consolidated issue #1035 on exact `d2f1f4e6d7122e5183485936b265d3ca778fb163` is also green: Repository Policy `37315308664`, Build Bootstrap `37315388296`, Project State Gate `37315425317`, External Reference Baselines `37315457057`, E1 `37315489138`, E4 `37315525358`, Independent Ethernet Interoperability `37315558494`, VDE2 `37315595068`, and MULTINET `37315627708`.
+
+| Canonical post-Timing requirement | Result | Evidence / disposition |
+| --- | --- | --- |
+| Listener expiry and DR-delay just-before/at/after boundary injection | Not tested in lab environment | Ordinary expiry/no-false-DR/recovery is proven, but no deterministic three-point guest-clock hook exists. |
+| Zero/fallback and maximum timer conversion without overflow | PASS | Build Bootstrap `37259409183` unit coverage. |
+| CPU saturation/workqueue delay during expiry | PASS | Dual-architecture post-Timing run `37259431781`. |
+| VM pause/resume | PASS | `37259431781` requires acknowledged QMP stop/cont and retained pause evidence. |
+| Large scheduler-stall injection independent of VM pause | Not tested in lab environment | No deterministic scheduler-delay injection hook exists. |
+| Timer cancel/rearm deterministic race with unload/identity/device removal | Not tested in lab environment | Lifecycle churn is exercised, but no deterministic timer-race hook exists. |
+| Jiffies wrap via test hook | Not tested in lab environment | No safe release-lab injection hook exists. |
+| S5/S6 long-idle timing | OWNER-AUTHORIZED SKIP | Covered by the PP-11 S3-S6 waiver. |
+| virtio Ethernet path | PASS | Dual-architecture `37259431781`. |
+| Independent Ethernet driver/path | PASS | e1000/4-vCPU run `37084801287` passed amd64 job `111092734258` and arm64 job `111092734377`; final full acceptance must re-prove it on the final SHA. |
+| GRO/GSO/TSO off and restored | PASS | `37259431781`. |
+| MTU change and restore | PASS | `37259431781`. |
+| Multi-NIC routed operation | PASS | Consolidated E4 `37315525358` passed both architectures. |
+| Promiscuous/all-multicast toggling | PASS | `37259431781`. |
+| Device MAC change | PASS | Ordinary E1 MAC-change proof inside `37259431781`. |
+| Separately controlled staggered link availability | Not tested in lab environment | Existing gates prove link loss/recovery but not a deterministic stagger schedule. |
+| Device register/unregister/re-register | PASS | veth lifecycle in `37259431781`. |
+| Nonlinear/cloned/fragmented receive buffers | Not tested in lab environment | No deterministic safe userspace-only skb-construction hook exists. |
+| Filter-reference coexistence | Not tested in lab environment | No deterministic release-lab lifetime-interleaving hook exists. |
+| Bridge/bond/VLAN/macvlan | NOT APPLICABLE | Not claimed release features. |
+| SMP | PASS | 2-vCPU `37084813164` and 8-vCPU `37084825278` passed both architectures; final full must re-prove the matrix. |
+| Non-init network-namespace isolation | Not tested in lab environment | No accepted namespace-isolation scenario exists in the current release lab. |
+| Malformed/spoofed Layer-2/control traffic with valid peers active | PASS | PP-11 S1 `37214669342` and S2 `37229557472`; S2 retained exactly 10,000 fault events with sustained valid traffic per architecture. |
+| Resource/churn exhaustion within lab limits | PASS | PP-11 S1/S2. |
+| Protocol/UAPI/socket hostile-input fuzzing | PASS | PP-11 malformed-control pressure plus 4,096 UAPI/socket calls per architecture in `37259431781`. |
+| Bounded CPU/memory/table growth and recovery | PASS | PP-11 S1/S2 resource and recovery gates. |
+| Evidence disclosure minimization | PASS | Repository policy and strict read-only PP-12 diagnostics. |
+| Route20 upstream health/live behavior | PASS | Build job `111780949267` in `37315457057`; live interop `37315558494`. |
+| PyDECnet in-scope upstream modules/live behavior | PASS | Job `111780950577` in `37315457057`; live interop `37315558494`. |
+| LinuxDECnet libvaxdata conversion health | PASS | Job `111780949366`, artifact `11347657637`, SHA-256 `c17c598a3b0fe4bf27ec67e3d8fe9984b9450e73dffd94c470b13e30fc819682`. |
+| SIMH selected VAX target health | PASS | Job `111780948852`, artifact `11348032176`, SHA-256 `7e67d5c7d65ae63747bc00cd893bfe04b4b86c1a25e856751fdd73e3aec588cf`. |
+| PyDECnet per-file disposition table | PASS | Every listed pinned file has an explicit mapped/reference-health/feature-gated/out-of-scope disposition; the selected suite passed in `37315457057`. |
+| PP-13 first-release rollback/mixed-version stage | OWNER-AUTHORIZED SKIP | No real N-1 release exists. |
+
+Under the owner practical-lab rule, the post-Timing ledger is complete. Next is one final exact-SHA `PROFILE=full`, `SCOPE=all` release acceptance on the unchanged candidate.
