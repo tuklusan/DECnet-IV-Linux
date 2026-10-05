@@ -267,7 +267,7 @@ def main() -> int:
     artifacts = Path(os.environ.get("DNIV_LAB_ARTIFACTS", "tests/lab/artifacts"))
     work = artifacts / session
     work.mkdir(parents=True, exist_ok=True)
-    lab = Lab(base, kernel, initrd, work, "pp11s1", session, nic_model, vcpus, "none", memory_mb)
+    lab = Lab(base, kernel, initrd, work, "pp11s1", session, nic_model, vcpus, "none", memory_mb, False)
     suffix = hashlib.sha256(session.encode("utf-8")).hexdigest()[:6]
     mac_a, mac_b = decnet_mac(area, node_a), decnet_mac(area, node_b)
     guest_a = Guest(name_a, node_a, node_b, mac_b, "A", mac_a, f"pa{suffix}", lab.create_overlay("node-a"),

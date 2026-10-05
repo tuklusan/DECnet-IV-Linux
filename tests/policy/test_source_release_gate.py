@@ -296,6 +296,25 @@ def main() -> int:
     ):
         if marker not in nice_unit:
             raise SystemExit(f"source-release gate: canonical NICE success regression missing: {marker}")
+    pp11_s1 = read_text("tests/lab/dniv_pp11_s1.py")
+    if 'Lab(base, kernel, initrd, work, "pp11s1", session, nic_model, vcpus, "none", memory_mb, False)' not in pp11_s1:
+        raise SystemExit("source-release gate: PP-11 S1 Lab constructor post-timing argument drift")
+
+    candidate_image = read_text("tests/lab/prepare-candidate-image.sh")
+    for required in (
+        "install -m 0755 /usr/src/decnet-iv-linux/userspace/dnlogin/dnlogin /usr/local/bin/dnlogin",
+        "ln -sf dnlogin /usr/local/bin/sethost",
+        'sudo test -s "$mnt/usr/local/bin/dnlogin"',
+    ):
+        if required not in candidate_image:
+            raise SystemExit(f"source-release gate: candidate-image dnlogin install contract missing: {required}")
+    for stale in (
+        "/usr/local/sbin/dnlogin",
+        "ln -sf ../sbin/dnlogin /usr/local/bin/sethost",
+    ):
+        if stale in candidate_image:
+            raise SystemExit(f"source-release gate: candidate-image stale dnlogin install path remains: {stale}")
+
     area31_smoke = read_text("tests/lab/dniv-area31-smoke.sh")
     for forbidden in (
         "/usr/local/bin/dncopy --put-text",

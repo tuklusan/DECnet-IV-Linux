@@ -91,8 +91,8 @@ install -m 0755 /usr/src/decnet-iv-linux/userspace/dnctl/dnctl /usr/local/sbin/d
 make -C /usr/src/decnet-iv-linux/userspace/ncp clean all
 install -m 0755 /usr/src/decnet-iv-linux/userspace/ncp/ncp /usr/local/sbin/ncp
 make -C /usr/src/decnet-iv-linux/userspace/dnlogin clean all
-install -m 0755 /usr/src/decnet-iv-linux/userspace/dnlogin/dnlogin /usr/local/sbin/dnlogin
-ln -sf ../sbin/dnlogin /usr/local/bin/sethost
+install -m 0755 /usr/src/decnet-iv-linux/userspace/dnlogin/dnlogin /usr/local/bin/dnlogin
+ln -sf dnlogin /usr/local/bin/sethost
 make -C /usr/src/decnet-iv-linux/userspace/dncopy clean all
 install -m 0755 /usr/src/decnet-iv-linux/userspace/dncopy/dncopy /usr/local/bin/dncopy
 ln -sf dncopy /usr/local/bin/dntype
@@ -261,7 +261,7 @@ sudo test "$(sudo cat "$mnt/usr/src/decnet-iv-linux/.source-commit")" = "$source
 sudo test "$(sudo cat "$mnt/etc/dniv-candidate-sha")" = "$source_commit"
 sudo test -s "$mnt/usr/local/sbin/dnctl"
 sudo test -s "$mnt/usr/local/sbin/ncp"
-sudo test -s "$mnt/usr/local/sbin/dnlogin"
+sudo test -s "$mnt/usr/local/bin/dnlogin"
 sudo test -L "$mnt/usr/local/bin/sethost"
 sudo test -s "$mnt/usr/local/bin/dncopy"
 sudo test -L "$mnt/usr/local/bin/dntype"
