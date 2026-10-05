@@ -88,6 +88,24 @@ int main(void)
                                       "DECnet-IV-Linux") != 0);
 
     {
+        const __u8 accepted_compact[] = { DNIV_NICE_RET_ACCEPTED };
+        const __u8 accepted_extended[] = { DNIV_NICE_RET_ACCEPTED, 0U, 0U, 0U };
+        const __u8 accepted_bad[] = { DNIV_NICE_RET_ACCEPTED, 0U, 0U, 2U, 'x' };
+        const __u8 done_compact[] = { DNIV_NICE_RET_DONE };
+
+        assert(dniv_nice_control_reply(accepted_compact,
+                                       sizeof(accepted_compact),
+                                       DNIV_NICE_RET_ACCEPTED));
+        assert(dniv_nice_control_reply(accepted_extended,
+                                       sizeof(accepted_extended),
+                                       DNIV_NICE_RET_ACCEPTED));
+        assert(!dniv_nice_control_reply(accepted_bad, sizeof(accepted_bad),
+                                        DNIV_NICE_RET_ACCEPTED));
+        assert(dniv_nice_control_reply(done_compact, sizeof(done_compact),
+                                       DNIV_NICE_RET_DONE));
+    }
+
+    {
         const __u8 summary_request[] = { 0x14, 0x00, 0x00, 0x00, 0x00 };
         const __u8 status_request[] = { 0x14, 0x10, 0x00, 0x00, 0x00 };
 

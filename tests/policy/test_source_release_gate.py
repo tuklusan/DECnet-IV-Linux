@@ -268,10 +268,20 @@ def main() -> int:
     dnnice_source = read_text("userspace/dnnice/dnnice.c")
     if "return dniv_nice_reply_entity_offset(buf, length, offset);" not in dnnice_source:
         raise SystemExit("source-release gate: dnnice bypasses shared NICE success framing parser")
+    for marker in (
+        "receive_single_reply",
+        "DNIV_NICE_RET_ACCEPTED",
+        "dniv_nice_control_reply(response, (size_t)got",
+    ):
+        if marker not in dnnice_source:
+            raise SystemExit(f"source-release gate: dnnice accepted-response prelude regression: {marker}")
     nice_unit = read_text("tests/unit/test_phase6_nice.c")
     for marker in (
         "canonical_len = reply_len - 3U",
         "memcpy(canonical + 1U, reply + 4U, reply_len - 4U)",
+        "accepted_compact",
+        "accepted_extended",
+        "DNIV_NICE_RET_DONE",
     ):
         if marker not in nice_unit:
             raise SystemExit(f"source-release gate: canonical NICE success regression missing: {marker}")

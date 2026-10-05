@@ -28,8 +28,20 @@
 #define DNIV_NICE_INFO_COUNTERS 3U
 
 #define DNIV_NICE_RET_SUCCESS 1
+#define DNIV_NICE_RET_ACCEPTED 2
+#define DNIV_NICE_RET_DONE 0x80U
 #define DNIV_NICE_PARAM_IDENTIFICATION 100U
 #define DNIV_NICE_TYPE_ASCII 0x40U
+
+static inline int
+dniv_nice_control_reply(const __u8 *buf, size_t length, __u8 code)
+{
+    if (!buf || !length || buf[0] != code)
+        return 0;
+    if (length == 1U)
+        return 1;
+    return length >= 4U && length == 4U + (size_t)buf[3];
+}
 
 static inline int
 dniv_nice_reply_entity_offset(const __u8 *buf, size_t length, size_t *offset)

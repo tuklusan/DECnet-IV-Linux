@@ -475,6 +475,26 @@ enum dnnice_query_entity {
     QUERY_CIRCUITS
 };
 
+static ssize_t receive_single_reply(int fd, unsigned char *response,
+                                    size_t capacity)
+{
+    ssize_t got = dniv_recv_record(fd, response, capacity, 0);
+
+    if (got <= 0)
+        return got;
+    if (!dniv_nice_control_reply(response, (size_t)got,
+                                 DNIV_NICE_RET_ACCEPTED))
+        return got;
+
+    got = dniv_recv_record(fd, response, capacity, 0);
+    if (got > 0 && dniv_nice_control_reply(response, (size_t)got,
+                                           DNIV_NICE_RET_ACCEPTED)) {
+        errno = EPROTO;
+        return -1;
+    }
+    return got;
+}
+
 static int receive_multiple(int fd, enum dnnice_query_entity entity,
                             unsigned int info)
 {
@@ -493,10 +513,8 @@ static int receive_multiple(int fd, enum dnnice_query_entity entity,
             return -1;
         }
         if (!saw_header) {
-            if (response[0] == 2U &&
-                (got == 1 ||
-                 (got >= 4 &&
-                  (size_t)got == 4U + (size_t)response[3]))) {
+            if (dniv_nice_control_reply(response, (size_t)got,
+                                         DNIV_NICE_RET_ACCEPTED)) {
                 saw_header = 1U;
                 continue;
             }
@@ -517,10 +535,8 @@ static int receive_multiple(int fd, enum dnnice_query_entity entity,
             fprintf(stderr, "dnnice: missing multiple-items header\n");
             return -1;
         }
-        if (response[0] == 0x80U &&
-            (got == 1 ||
-             (got >= 4 &&
-              (size_t)got == 4U + (size_t)response[3])))
+        if (dniv_nice_control_reply(response, (size_t)got,
+                                    DNIV_NICE_RET_DONE))
             return 0;
         if ((int8_t)response[0] < 0) {
             fprintf(stderr, "dnnice: NICE error %d\n",
@@ -748,7 +764,7 @@ int main(int argc, char **argv)
         close(fd);
         return bad ? 1 : 0;
     }
-    got = dniv_recv_record(fd, response, sizeof(response), 0);
+    got = receive_single_reply(fd, response, sizeof(response));
     if (got <= 0) {
         if (got < 0)
             perror("dnnice: recv");
