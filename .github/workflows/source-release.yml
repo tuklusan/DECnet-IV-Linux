@@ -71,7 +71,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          version="0.0.0-ci-${GITHUB_SHA:0:12}"
+          mapfile -t release_versions < <(sed -n 's/^version=//p' VERSION)
+          test "${#release_versions[@]}" -eq 1
+          version=${release_versions[0]}
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           mkdir -p "$DNIV_SCRATCH_DIR/a" "$DNIV_SCRATCH_DIR/b" "$DNIV_SCRATCH_DIR/release"
           a=$(tools/build-source-release.sh "$DNIV_SCRATCH_DIR/a" "$version" "$GITHUB_SHA")
           b=$(tools/build-source-release.sh "$DNIV_SCRATCH_DIR/b" "$version" "$GITHUB_SHA")

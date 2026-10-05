@@ -17,6 +17,7 @@
 
 from pathlib import Path
 import os
+import re
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -25,9 +26,10 @@ def read_text(path: str) -> str:
 
 def main() -> int:
     required = (
-        "build.sh", "install.sh", "uninstall.sh", "INSTALL.md",
+        "VERSION", "build.sh", "install.sh", "uninstall.sh", "INSTALL.md",
         "docs/DELIVERY.md", "docs/FEATURES.md", "docs/COMPONENTS.md",
         "tools/build-source-release.sh", ".github/workflows/source-release.yml",
+        ".github/workflows/production-release.yml",
     )
     for path in required:
         if not (ROOT / path).is_file():
@@ -36,7 +38,42 @@ def main() -> int:
         raise SystemExit("source-release gate: obsolete release-image workflow remains")
     if (ROOT / ".github/workflows/portability.yml").exists():
         raise SystemExit("source-release gate: obsolete checkout-built portability workflow remains")
+    version_text = read_text("VERSION")
+    version_lines = [line for line in version_text.splitlines() if line.startswith("version=")]
+    if len(version_lines) != 1 or not re.fullmatch(r"version=[0-9]+\.[0-9]+\.[0-9]+", version_lines[0]):
+        raise SystemExit("source-release gate: VERSION must contain exactly one production semantic version")
     workflow = read_text(".github/workflows/source-release.yml")
+    if '0.0.0-ci-${GITHUB_SHA:0:12}' in workflow:
+        raise SystemExit("source-release gate: CI pseudo-version remains in production source packaging")
+    for marker in (
+        "mapfile -t release_versions < <(sed -n 's/^version=//p' VERSION)",
+        'version=${release_versions[0]}',
+    ):
+        if marker not in workflow:
+            raise SystemExit(f"source-release gate: production VERSION binding missing: {marker}")
+    builder = read_text("tools/build-source-release.sh")
+    if "for required in VERSION build.sh install.sh uninstall.sh" not in builder:
+        raise SystemExit("source-release gate: VERSION is not required in the packaged source")
+    publication = read_text(".github/workflows/production-release.yml")
+    for marker in (
+        "github.event.issue.title == 'DNIV production release'",
+        "SOURCE_SHA=",
+        "ACCEPTANCE_ISSUE=",
+        "Acceptance child runs for",
+        "(full/all):",
+        "SOURCE_RELEASE_RUN_ID",
+        "gh run download",
+        "decnet-iv-linux-source-$SOURCE_RELEASE_RUN_ID-$SOURCE_RELEASE_ATTEMPT",
+        "sha256sum -c",
+        "source_sha=$SOURCE_SHA",
+        'gh release create "$tag" "$archive" "$checksum"',
+        '--target "$SOURCE_SHA"',
+        "PP-11 S3-S6",
+        "PP-13",
+        "tools/workflow_guard.sh",
+    ):
+        if marker not in publication:
+            raise SystemExit(f"source-release gate: production publication safeguard missing: {marker}")
     for marker in (
         "Build source archive twice",
         "cmp \"$a\" \"$b\"",

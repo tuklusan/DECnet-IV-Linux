@@ -18,12 +18,25 @@ This is the stable resume entry point for DECnet-IV-Linux.
 
 ## Current completion priority
 
-The immediate release-conversion gate is the mandatory fresh-disk audit of the exact accepted source-release artifact. The audit must reach **3/3 successive zero-defect scans**. Every scan starts from a newly downloaded copy of the exact packaged source bytes, records the tarball filename and SHA-256, and inspects those packaged bytes rather than a checkout. Any newly found defect keeps or resets the count to **0/3**, is fixed directly on `main`, updates `docs/PROJECT_STATE.md` and `scratch/RESUME.md`, and requires new exact-SHA targeted/source-release acceptance plus a new artifact before scan 1 restarts.
+The source-delivery conversion audit previously reached the mandatory 3/3 clean threshold and
+the applicable canonical pre-production chain is complete: PP-11 S1/S2 are closed, S3-S6 are
+owner-authorized skips, PP-12 is closed, PP-13 is skipped for the first release, and the
+post-Timing practical-lab ledger is complete.
 
-After 3/3 closes, resume the canonical pre-production dependency chain in `docs/PRE_PRODUCTION_TEST.md` and `docs/PP_EVIDENCE.md`: finish blocking PP-11 S1 pressure work first, then S2 and the remaining applicable PP requirements in order, honoring all owner-authorized skips and lab constraints. Final production delivery follows only after the applicable PP/release gates are green.
+The current release blocker is the final production-source publication path. Production bytes
+must carry the root production version rather than a CI pseudo-version, and publication must
+use the exact source-release artifact proven by a fully green exact-SHA full acceptance. Any
+delivery change that alters the packaged production bytes requires fresh exact-SHA source-release
+qualification and the owner-mandated 3/3 fresh-artifact audit before final full acceptance is
+claimed. Production publication then emits only the accepted tarball, checksum, and release
+notes; it never rebuilds or repacks the release.
 
-The **final production deliverable is source**, not a disk image: one reproducible versioned source tarball plus checksum and release notes, containing the complete kernel/userspace source, `build.sh`, `install.sh`, `uninstall.sh`, and the detailed step-by-step `INSTALL.md` dependency/build/install/configuration/uninstall manual. QCOW2/RAW/IMG/ISO files, prebuilt kernels/initrds and prebuilt `decnet_iv.ko` files are lab-only or intermediate artifacts and are never the product.
-
+The **final production deliverable is source**, not a disk image: one reproducible versioned
+source tarball plus checksum and release notes, containing the complete kernel/userspace source,
+`build.sh`, `install.sh`, `uninstall.sh`, and the detailed step-by-step `INSTALL.md`
+dependency/build/install/configuration/uninstall manual. QCOW2/RAW/IMG/ISO files, prebuilt
+kernels/initrds and prebuilt `decnet_iv.ko` files are lab-only or intermediate artifacts and
+are never the product.
 
 1. Read `docs/PROJECT_STATE.md` completely. Its `Resume point` and `Next action` section describe the live protocol/repository state.
 2. Read `scratch/RESUME.md` completely. It records exact acceptance lineage and the persistent architecture-foundation model.

@@ -52,6 +52,24 @@ Before final production delivery, the exact packaged source bytes must pass the 
 
 Reaching 3/3 does not bypass pre-production testing. It closes the source-delivery conversion audit, after which the project resumes the remaining applicable `docs/PRE_PRODUCTION_TEST.md` dependency chain. Blocking PP-11 S1 pressure must close before S2. Final publication occurs only after the remaining applicable PP/release gates and final exact-SHA acceptance are green.
 
+
+## Production version and publication
+
+The root `VERSION` file is the single production-version declaration. The source-release
+workflow reads that value when it constructs the archive, so final acceptance exercises the
+same `DECnet-IV-Linux-<version>.tar.xz` bytes that can be published. A production release is
+never rebuilt, renamed, or repacked after acceptance.
+
+Publication is fail-closed through `.github/workflows/production-release.yml`. An owner-authored
+`DNIV production release` issue identifies the exact unchanged `SOURCE_SHA` and the exact
+full-acceptance issue. The publication gate verifies every required full-profile child run is
+green for that SHA, downloads the exact Source Release Reproducibility artifact, rechecks its
+checksum, `VERSION`, `SOURCE-METADATA`, required members, and forbidden-payload rules, then
+creates tag `v<version>` and a GitHub release containing only the accepted tarball and checksum.
+Release notes identify the source commit, compatibility/acceptance run IDs, owner-authorized
+skips, and the canonical evidence ledger. Existing tags/releases fail closed instead of being
+overwritten.
+
 ## Release acceptance
 
 The canonical release object is the exact source tarball. The source-release gate must:

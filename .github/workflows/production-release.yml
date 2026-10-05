@@ -1,0 +1,343 @@
+# ============================================================================
+# Copyright (c) 2026 Supratim Sanyal of SANYALnet Labs.
+# Proprietary rights reserved except as expressly licensed herein.
+#
+# DECnet-IV-Linux
+# This file is governed by the SANYALnet Labs Non-Commercial License in the
+# root LICENSE file. Non-Commercial use is permitted; Commercial Use and use
+# for AI/ML model training are prohibited unless separately authorized.
+#
+# Attribution is required: "Based on original work by Supratim Sanyal of
+# SANYALnet Labs." See LICENSE for full terms, warranty disclaimer, termination,
+# patent, trademark, and governing-law provisions.
+# ============================================================================
+
+name: Production Source Release
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  actions: read
+  contents: write
+  issues: write
+
+concurrency:
+  group: ${{ github.workflow }}-production
+  queue: max
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: >-
+      github.event.sender.login == github.repository_owner &&
+      github.event.issue.title == 'DNIV production release'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      DNIV_RELEASE_EVIDENCE: ${{ github.workspace }}/scratch/runtime/${{ github.run_id }}/${{ github.run_attempt }}/production-release
+    steps:
+      - name: Check out current main
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+
+      - name: Verify production request
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$DNIV_RELEASE_EVIDENCE"
+          body=$(jq -r '.issue.body // ""' "$GITHUB_EVENT_PATH")
+          source_sha=$(printf '%s\n' "$body" | sed -n 's/^SOURCE_SHA=//p' | tail -1)
+          acceptance_issue=$(printf '%s\n' "$body" | sed -n 's/^ACCEPTANCE_ISSUE=//p' | tail -1)
+          [[ "$source_sha" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$acceptance_issue" =~ ^[0-9]+$ ]]
+
+          candidate=$(git rev-parse --verify 'HEAD^{commit}')
+          test "$candidate" = "$source_sha"
+          head=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
+          test "$head" = "$source_sha"
+
+          mapfile -t release_versions < <(sed -n 's/^version=//p' VERSION)
+          test "${#release_versions[@]}" -eq 1
+          version=${release_versions[0]}
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+
+          printf 'SOURCE_SHA=%s\nVERSION=%s\nACCEPTANCE_ISSUE=%s\n' \
+            "$source_sha" "$version" "$acceptance_issue" >> "$GITHUB_ENV"
+          python3 tools/scratch_state.py init --dir "$DNIV_RELEASE_EVIDENCE" \
+            --workflow production-release --job "$GITHUB_JOB" --mode production-release \
+            --source-sha "$source_sha" --expected-sha "$source_sha"
+          tools/workflow_guard.sh "$DNIV_RELEASE_EVIDENCE" "$source_sha" main
+
+          gh api "repos/$GITHUB_REPOSITORY/issues/$acceptance_issue" \
+            >"$DNIV_RELEASE_EVIDENCE/acceptance-issue.json"
+          gh api --paginate --slurp \
+            "repos/$GITHUB_REPOSITORY/issues/$acceptance_issue/comments?per_page=100" \
+            >"$DNIV_RELEASE_EVIDENCE/acceptance-comments.json"
+
+          python3 - "$DNIV_RELEASE_EVIDENCE/acceptance-issue.json" \
+            "$DNIV_RELEASE_EVIDENCE/acceptance-comments.json" \
+            "$source_sha" "$GITHUB_REPOSITORY_OWNER" \
+            "$DNIV_RELEASE_EVIDENCE/run-ids.env" <<'PY'
+          import json
+          import re
+          import sys
+
+          issue_path, comments_path, source_sha, owner, output_path = sys.argv[1:]
+          issue = json.load(open(issue_path, encoding="utf-8"))
+          body = issue.get("body") or ""
+          if issue.get("title") != "DNIV acceptance gates":
+              raise SystemExit("production-release: acceptance issue title mismatch")
+          if (issue.get("user") or {}).get("login") != owner:
+              raise SystemExit("production-release: acceptance issue is not owner-authored")
+          for marker in ("PROFILE=full", "SCOPE=all", f"Candidate: `{source_sha}`"):
+              if marker not in body:
+                  raise SystemExit(f"production-release: acceptance issue marker missing: {marker}")
+
+          pages = json.load(open(comments_path, encoding="utf-8"))
+          comments = []
+          for page in pages:
+              comments.extend(page if isinstance(page, list) else [page])
+          prefix = f"Acceptance child runs for `{source_sha}` (full/all):"
+          matches = [
+              c.get("body") or "" for c in comments
+              if (c.get("user") or {}).get("login") == "github-actions[bot]"
+              and (c.get("body") or "").startswith(prefix)
+          ]
+          if len(matches) != 1:
+              raise SystemExit("production-release: exact full acceptance dispatch comment is not unique")
+
+          keys = (
+              "PARENT", "BUILD", "PROJECT_STATE", "VDE2_CROSS_RUNNER", "FALSE_GREEN",
+              "REFERENCES", "VM_LAB_E1", "VM_LAB_E1_SECONDARY", "VM_LAB_POST_TIMING",
+              "VM_LAB_E1_SMP2", "VM_LAB_E1_SMP8", "VM_LAB_E1_KFENCE",
+              "VM_LAB_E1_UBSAN", "KERNEL_KASAN", "KERNEL_KCSAN", "KERNEL_LOCKDEBUG",
+              "KERNEL_KMEMLEAK", "VM_LAB_E2", "VM_LAB_E3", "VM_LAB_E4", "VM_SCALE_4",
+              "VM_SCALE_8", "VM_SCALE_16", "VM_LAB_PP11_S1", "VM_LAB_PP11_S2",
+              "INTEROP", "VDE2_LOCAL", "MULTINET", "AREA31", "SOURCE_RELEASE",
+          )
+          lines = matches[0].splitlines()
+          values = {}
+          for key in keys:
+              pattern = re.compile(rf"^- `{re.escape(key)}_RUN_ID` = `([0-9]+)`$")
+              found = [m.group(1) for line in lines if (m := pattern.fullmatch(line))]
+              if len(found) != 1:
+                  raise SystemExit(f"production-release: missing or duplicate run id: {key}")
+              values[key] = found[0]
+          with open(output_path, "w", encoding="utf-8") as out:
+              for key in keys:
+                  out.write(f"{key}_RUN_ID={values[key]}\n")
+          PY
+
+      - name: Verify exact full acceptance
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          source "$DNIV_RELEASE_EVIDENCE/run-ids.env"
+          declare -A expected=(
+            [PARENT]='.github/workflows/repository-policy.yml'
+            [BUILD]='.github/workflows/build.yml'
+            [PROJECT_STATE]='.github/workflows/project-state.yml'
+            [VDE2_CROSS_RUNNER]='.github/workflows/vde2-cross-runner.yml'
+            [FALSE_GREEN]='.github/workflows/false-green.yml'
+            [REFERENCES]='.github/workflows/reference-baselines.yml'
+            [VM_LAB_E1]='.github/workflows/vm-lab.yml'
+            [VM_LAB_E1_SECONDARY]='.github/workflows/vm-lab.yml'
+            [VM_LAB_POST_TIMING]='.github/workflows/vm-lab.yml'
+            [VM_LAB_E1_SMP2]='.github/workflows/vm-lab.yml'
+            [VM_LAB_E1_SMP8]='.github/workflows/vm-lab.yml'
+            [VM_LAB_E1_KFENCE]='.github/workflows/vm-lab.yml'
+            [VM_LAB_E1_UBSAN]='.github/workflows/vm-lab.yml'
+            [KERNEL_KASAN]='.github/workflows/kernel-diagnostics.yml'
+            [KERNEL_KCSAN]='.github/workflows/kernel-diagnostics.yml'
+            [KERNEL_LOCKDEBUG]='.github/workflows/kernel-diagnostics.yml'
+            [KERNEL_KMEMLEAK]='.github/workflows/kernel-diagnostics.yml'
+            [VM_LAB_E2]='.github/workflows/vm-lab.yml'
+            [VM_LAB_E3]='.github/workflows/vm-lab.yml'
+            [VM_LAB_E4]='.github/workflows/vm-lab.yml'
+            [VM_SCALE_4]='.github/workflows/vm-lab.yml'
+            [VM_SCALE_8]='.github/workflows/vm-lab.yml'
+            [VM_SCALE_16]='.github/workflows/scale16-distributed.yml'
+            [VM_LAB_PP11_S1]='.github/workflows/vm-lab.yml'
+            [VM_LAB_PP11_S2]='.github/workflows/vm-lab.yml'
+            [INTEROP]='.github/workflows/interop.yml'
+            [VDE2_LOCAL]='.github/workflows/vde2-proof.yml'
+            [MULTINET]='.github/workflows/multinet-proof.yml'
+            [AREA31]='.github/workflows/area31-interop.yml'
+            [SOURCE_RELEASE]='.github/workflows/source-release.yml'
+          )
+          : >"$DNIV_RELEASE_EVIDENCE/verified-runs.jsonl"
+          for key in "${!expected[@]}"; do
+            var="${key}_RUN_ID"
+            run_id=${!var}
+            run_json=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id")
+            printf '%s\n' "$run_json" | jq -e \
+              --arg sha "$SOURCE_SHA" --arg path "${expected[$key]}" \
+              '.head_sha == $sha and .head_branch == "main" and
+               .status == "completed" and .conclusion == "success" and .path == $path' >/dev/null
+            if [[ "$key" == PARENT ]]; then
+              printf '%s\n' "$run_json" | jq -e '.event == "issues"' >/dev/null
+            else
+              printf '%s\n' "$run_json" | jq -e '.event == "workflow_dispatch"' >/dev/null
+            fi
+            printf '%s\n' "$run_json" | jq -c \
+              '{id,name,path,event,head_sha,run_attempt,status,conclusion,html_url}' \
+              >>"$DNIV_RELEASE_EVIDENCE/verified-runs.jsonl"
+          done
+          source_json=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RELEASE_RUN_ID")
+          source_attempt=$(printf '%s\n' "$source_json" | jq -r .run_attempt)
+          [[ "$source_attempt" =~ ^[1-9][0-9]*$ ]]
+          printf 'SOURCE_RELEASE_ATTEMPT=%s\n' "$source_attempt" >>"$GITHUB_ENV"
+
+      - name: Download and verify accepted source artifact
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          source "$DNIV_RELEASE_EVIDENCE/run-ids.env"
+          artifact_name="decnet-iv-linux-source-$SOURCE_RELEASE_RUN_ID-$SOURCE_RELEASE_ATTEMPT"
+          release_dir="$DNIV_RELEASE_EVIDENCE/release"
+          mkdir -p "$release_dir"
+          gh run download "$SOURCE_RELEASE_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name "$artifact_name" --dir "$release_dir"
+
+          archive="$release_dir/DECnet-IV-Linux-$VERSION.tar.xz"
+          checksum="$archive.sha256"
+          test -s "$archive"
+          test -s "$checksum"
+          test -s "$release_dir/archive-name.txt"
+          test "$(cat "$release_dir/archive-name.txt")" = "$(basename "$archive")"
+          (cd "$release_dir" && sha256sum -c "$(basename "$checksum")")
+          archive_sha=$(sha256sum "$archive" | awk '{print $1}')
+          grep -Fqx "$archive_sha  $(basename "$archive")" "$checksum"
+
+          root="DECnet-IV-Linux-$VERSION"
+          metadata=$(tar -xJOf "$archive" "$root/SOURCE-METADATA")
+          printf '%s\n' "$metadata" | grep -Fqx "version=$VERSION"
+          printf '%s\n' "$metadata" | grep -Fqx "source_sha=$SOURCE_SHA"
+          tar -xJOf "$archive" "$root/VERSION" | grep -Fqx "version=$VERSION"
+          for required in build.sh install.sh uninstall.sh INSTALL.md docs/FEATURES.md docs/COMPONENTS.md LICENSE; do
+            tar -tJf "$archive" | grep -Fqx "$root/$required"
+          done
+          if tar -tJf "$archive" | grep -Eq '(^|/)(\.git|__pycache__)(/|$)|\.(qcow2|raw|img|iso|ko|o|pyc)$'; then
+            echo "production-release: forbidden generated payload in accepted source archive" >&2
+            exit 1
+          fi
+          printf 'SOURCE_RELEASE_SHA256=%s\n' "$archive_sha" >>"$GITHUB_ENV"
+          printf 'source_sha=%s\nversion=%s\narchive=%s\nsha256=%s\nacceptance_issue=%s\nsource_release_run=%s\nsource_release_attempt=%s\n' \
+            "$SOURCE_SHA" "$VERSION" "$(basename "$archive")" "$archive_sha" "$ACCEPTANCE_ISSUE" \
+            "$SOURCE_RELEASE_RUN_ID" "$SOURCE_RELEASE_ATTEMPT" \
+            >"$DNIV_RELEASE_EVIDENCE/release-manifest.txt"
+
+      - name: Build release notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          source "$DNIV_RELEASE_EVIDENCE/run-ids.env"
+          cat >"$DNIV_RELEASE_EVIDENCE/release-notes.md" <<EOF_NOTES
+          # DECnet-IV-Linux $VERSION
+
+          Exact accepted source commit: $SOURCE_SHA
+
+          Source archive: DECnet-IV-Linux-$VERSION.tar.xz
+          SHA-256: $SOURCE_RELEASE_SHA256
+
+          This is the first production source release of the native DECnet Phase IV stack for
+          modern x86_64 and aarch64 Linux. The supported kernel floor is Linux 6.8. The release
+          includes the complete in-scope kernel/userspace source, build/install/uninstall scripts,
+          the step-by-step INSTALL.md manual, and complete feature/component documentation.
+          DDCMP and IPv6 are out of scope; MULTINET acceptance is IPv4 TCP only.
+
+          ## Exact acceptance evidence
+
+          Full acceptance issue: #$ACCEPTANCE_ISSUE
+          Parent policy/dispatcher run: $PARENT_RUN_ID
+          Build Bootstrap: $BUILD_RUN_ID
+          Project State Gate: $PROJECT_STATE_RUN_ID
+          External Reference Baselines: $REFERENCES_RUN_ID
+          Primary/secondary E1: $VM_LAB_E1_RUN_ID / $VM_LAB_E1_SECONDARY_RUN_ID
+          Post-Timing practical lab: $VM_LAB_POST_TIMING_RUN_ID
+          SMP 2/8-vCPU: $VM_LAB_E1_SMP2_RUN_ID / $VM_LAB_E1_SMP8_RUN_ID
+          KFENCE/UBSAN: $VM_LAB_E1_KFENCE_RUN_ID / $VM_LAB_E1_UBSAN_RUN_ID
+          KASAN/KCSAN/lockdebug/kmemleak: $KERNEL_KASAN_RUN_ID / $KERNEL_KCSAN_RUN_ID / $KERNEL_LOCKDEBUG_RUN_ID / $KERNEL_KMEMLEAK_RUN_ID
+          Routed E2/E3/E4: $VM_LAB_E2_RUN_ID / $VM_LAB_E3_RUN_ID / $VM_LAB_E4_RUN_ID
+          Scale 4/8/16: $VM_SCALE_4_RUN_ID / $VM_SCALE_8_RUN_ID / $VM_SCALE_16_RUN_ID
+          PP-11 S1/S2: $VM_LAB_PP11_S1_RUN_ID / $VM_LAB_PP11_S2_RUN_ID
+          Independent Ethernet interoperability: $INTEROP_RUN_ID
+          VDE2 cross-runner/local: $VDE2_CROSS_RUNNER_RUN_ID / $VDE2_LOCAL_RUN_ID
+          MULTINET IPv4 TCP: $MULTINET_RUN_ID
+          Area-31 read-only real-peer interoperability: $AREA31_RUN_ID
+          Source reproducibility, portability and exact-source PP-12: $SOURCE_RELEASE_RUN_ID
+
+          PP-11 S3-S6 are owner-authorized skips for this release. PP-13 is owner-authorized
+          skipped for the first production release because no real N-1 production version exists.
+          From the Timing/scheduler section onward, requirements that cannot practically be
+          exercised in the release lab are recorded as Not tested in lab environment in
+          docs/PP_EVIDENCE.md.
+
+          The published tarball and checksum below are the exact accepted Source Release
+          Reproducibility artifact. They are not rebuilt or repacked during publication.
+          EOF_NOTES
+
+      - name: Publish exact production source release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          source "$DNIV_RELEASE_EVIDENCE/run-ids.env"
+          tools/workflow_guard.sh "$DNIV_RELEASE_EVIDENCE" "$SOURCE_SHA" main
+          python3 tools/integrity_scan.py --rev "$SOURCE_SHA" --pass-id final \
+            --baseline "$DNIV_RELEASE_EVIDENCE/integrity/pass-1.json" \
+            --output "$DNIV_RELEASE_EVIDENCE/integrity/final.json"
+
+          tag="v$VERSION"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "production-release: release already exists: $tag" >&2
+            exit 1
+          fi
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" >/dev/null 2>&1; then
+            echo "production-release: tag already exists: $tag" >&2
+            exit 1
+          fi
+
+          archive="$DNIV_RELEASE_EVIDENCE/release/DECnet-IV-Linux-$VERSION.tar.xz"
+          checksum="$archive.sha256"
+          gh release create "$tag" "$archive" "$checksum" \
+            --repo "$GITHUB_REPOSITORY" --target "$SOURCE_SHA" \
+            --title "DECnet-IV-Linux $VERSION" \
+            --notes-file "$DNIV_RELEASE_EVIDENCE/release-notes.md"
+
+          released_sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$tag" --jq .sha)
+          test "$released_sha" = "$SOURCE_SHA"
+          mapfile -t assets < <(gh release view "$tag" --repo "$GITHUB_REPOSITORY" \
+            --json assets --jq '.assets[].name' | sort)
+          expected_assets=("DECnet-IV-Linux-$VERSION.tar.xz" "DECnet-IV-Linux-$VERSION.tar.xz.sha256")
+          mapfile -t expected_assets < <(printf '%s\n' "${expected_assets[@]}" | sort)
+          test "${#assets[@]}" -eq 2
+          test "${assets[*]}" = "${expected_assets[*]}"
+
+          release_url=$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json url --jq .url)
+          printf 'release_url=%s\n' "$release_url" >>"$DNIV_RELEASE_EVIDENCE/release-manifest.txt"
+          gh issue comment "${{ github.event.issue.number }}" --repo "$GITHUB_REPOSITORY" \
+            --body "Published exact accepted production source release $tag from $SOURCE_SHA: $release_url"
+          python3 tools/scratch_state.py mark --dir "$DNIV_RELEASE_EVIDENCE" \
+            --status success --note "production source release published"
+
+      - name: Preserve production release evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: production-release-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.DNIV_RELEASE_EVIDENCE }}/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 6
+          overwrite: false

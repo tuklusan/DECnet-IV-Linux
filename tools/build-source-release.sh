@@ -67,7 +67,7 @@ for generated in "${generated_paths[@]}"; do
     exit 2
   }
 done
-for required in build.sh install.sh uninstall.sh INSTALL.md docs/DELIVERY.md docs/FEATURES.md docs/COMPONENTS.md LICENSE; do
+for required in VERSION build.sh install.sh uninstall.sh INSTALL.md docs/DELIVERY.md docs/FEATURES.md docs/COMPONENTS.md LICENSE; do
   test -r "$work/$name/$required" || { echo "build-source-release: required release member missing: $required" >&2; exit 2; }
 done
 archive="$output_dir/$name.tar.xz"
