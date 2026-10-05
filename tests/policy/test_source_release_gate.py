@@ -265,6 +265,17 @@ def main() -> int:
     ):
         if marker not in nice_header:
             raise SystemExit(f"source-release gate: NICE success reply framing regression: {marker}")
+    dnping_source = read_text("userspace/dnping/dnping.c")
+    for marker in (
+        '#define DNPING_MIRROR_OBJECT "#25"',
+        "dnet_conn((char *)node, DNPING_MIRROR_OBJECT, SOCK_SEQPACKET,",
+        'strcmp(DNPING_MIRROR_OBJECT, "#25")',
+    ):
+        if marker not in dnping_source:
+            raise SystemExit(f"source-release gate: dnping standard MIRROR object regression: {marker}")
+    if 'dnet_conn((char *)node, "MIRROR", SOCK_SEQPACKET,' in dnping_source:
+        raise SystemExit("source-release gate: dnping reverted to named MIRROR object")
+
     dnnice_source = read_text("userspace/dnnice/dnnice.c")
     if "return dniv_nice_reply_entity_offset(buf, length, offset);" not in dnnice_source:
         raise SystemExit("source-release gate: dnnice bypasses shared NICE success framing parser")

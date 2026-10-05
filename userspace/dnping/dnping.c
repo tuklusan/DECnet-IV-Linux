@@ -28,6 +28,7 @@
 #define DNPING_DEFAULT_COUNT 10
 #define DNPING_DEFAULT_SIZE 40
 #define DNPING_MAX_SIZE 65023
+#define DNPING_MIRROR_OBJECT "#25"
 
 static void usage(const char *prog)
 {
@@ -64,6 +65,8 @@ static int run_selftest(void)
     if (!parse_positive("0", 10, &value))
         return 1;
     if (!parse_positive("11", 10, &value))
+        return 1;
+    if (strcmp(DNPING_MIRROR_OBJECT, "#25"))
         return 1;
     puts("dnping selftest passed");
     return 0;
@@ -142,7 +145,7 @@ int main(int argc, char **argv)
     memset(tx, 0x85, (size_t)size);
     tx[0] = 0U;
 
-    fd = dnet_conn((char *)node, "MIRROR", SOCK_SEQPACKET,
+    fd = dnet_conn((char *)node, DNPING_MIRROR_OBJECT, SOCK_SEQPACKET,
                    NULL, 0, NULL, NULL);
     if (fd < 0) {
         if (!quiet)
