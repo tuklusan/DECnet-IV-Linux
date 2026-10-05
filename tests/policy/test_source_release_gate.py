@@ -71,6 +71,8 @@ def main() -> int:
         "PP-11 S3-S6",
         "PP-13",
         "tools/workflow_guard.sh",
+        "--pass-id pass-1",
+        "archive-list.txt",
     ):
         if marker not in publication:
             raise SystemExit(f"source-release gate: production publication safeguard missing: {marker}")

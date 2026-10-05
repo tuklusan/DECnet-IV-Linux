@@ -72,6 +72,8 @@ jobs:
             --workflow production-release --job "$GITHUB_JOB" --mode production-release \
             --source-sha "$source_sha" --expected-sha "$source_sha"
           tools/workflow_guard.sh "$DNIV_RELEASE_EVIDENCE" "$source_sha" main
+          python3 tools/integrity_scan.py --rev "$source_sha" --pass-id pass-1 \
+            --output "$DNIV_RELEASE_EVIDENCE/integrity/pass-1.json"
 
           gh api "repos/$GITHUB_REPOSITORY/issues/$acceptance_issue" \
             >"$DNIV_RELEASE_EVIDENCE/acceptance-issue.json"
@@ -219,14 +221,127 @@ jobs:
           grep -Fqx "$archive_sha  $(basename "$archive")" "$checksum"
 
           root="DECnet-IV-Linux-$VERSION"
+          listing="$DNIV_RELEASE_EVIDENCE/archive-list.txt"
+          tar -tJf "$archive" >"$listing"
           metadata=$(tar -xJOf "$archive" "$root/SOURCE-METADATA")
           printf '%s\n' "$metadata" | grep -Fqx "version=$VERSION"
           printf '%s\n' "$metadata" | grep -Fqx "source_sha=$SOURCE_SHA"
           tar -xJOf "$archive" "$root/VERSION" | grep -Fqx "version=$VERSION"
           for required in build.sh install.sh uninstall.sh INSTALL.md docs/FEATURES.md docs/COMPONENTS.md LICENSE; do
-            tar -tJf "$archive" | grep -Fqx "$root/$required"
+            grep -Fqx "$root/$required" "$listing"
           done
-          if tar -tJf "$archive" | grep -Eq '(^|/)(\.git|__pycache__)(/|$)|\.(qcow2|raw|img|iso|ko|o|pyc)$'; then
+          if grep -Eq '(^|/)(\.git|__pycache__)(/|$)|\.(qcow2|raw|img|iso|ko|o|pyc)          printf 'SOURCE_RELEASE_SHA256=%s\n' "$archive_sha" >>"$GITHUB_ENV"
+          printf 'source_sha=%s\nversion=%s\narchive=%s\nsha256=%s\nacceptance_issue=%s\nsource_release_run=%s\nsource_release_attempt=%s\n' \
+            "$SOURCE_SHA" "$VERSION" "$(basename "$archive")" "$archive_sha" "$ACCEPTANCE_ISSUE" \
+            "$SOURCE_RELEASE_RUN_ID" "$SOURCE_RELEASE_ATTEMPT" \
+            >"$DNIV_RELEASE_EVIDENCE/release-manifest.txt"
+
+      - name: Build release notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          source "$DNIV_RELEASE_EVIDENCE/run-ids.env"
+          cat >"$DNIV_RELEASE_EVIDENCE/release-notes.md" <<EOF_NOTES
+          # DECnet-IV-Linux $VERSION
+
+          Exact accepted source commit: $SOURCE_SHA
+
+          Source archive: DECnet-IV-Linux-$VERSION.tar.xz
+          SHA-256: $SOURCE_RELEASE_SHA256
+
+          This is the first production source release of the native DECnet Phase IV stack for
+          modern x86_64 and aarch64 Linux. The supported kernel floor is Linux 6.8. The release
+          includes the complete in-scope kernel/userspace source, build/install/uninstall scripts,
+          the step-by-step INSTALL.md manual, and complete feature/component documentation.
+          DDCMP and IPv6 are out of scope; MULTINET acceptance is IPv4 TCP only.
+
+          ## Exact acceptance evidence
+
+          Full acceptance issue: #$ACCEPTANCE_ISSUE
+          Parent policy/dispatcher run: $PARENT_RUN_ID
+          Build Bootstrap: $BUILD_RUN_ID
+          Project State Gate: $PROJECT_STATE_RUN_ID
+          External Reference Baselines: $REFERENCES_RUN_ID
+          Primary/secondary E1: $VM_LAB_E1_RUN_ID / $VM_LAB_E1_SECONDARY_RUN_ID
+          Post-Timing practical lab: $VM_LAB_POST_TIMING_RUN_ID
+          SMP 2/8-vCPU: $VM_LAB_E1_SMP2_RUN_ID / $VM_LAB_E1_SMP8_RUN_ID
+          KFENCE/UBSAN: $VM_LAB_E1_KFENCE_RUN_ID / $VM_LAB_E1_UBSAN_RUN_ID
+          KASAN/KCSAN/lockdebug/kmemleak: $KERNEL_KASAN_RUN_ID / $KERNEL_KCSAN_RUN_ID / $KERNEL_LOCKDEBUG_RUN_ID / $KERNEL_KMEMLEAK_RUN_ID
+          Routed E2/E3/E4: $VM_LAB_E2_RUN_ID / $VM_LAB_E3_RUN_ID / $VM_LAB_E4_RUN_ID
+          Scale 4/8/16: $VM_SCALE_4_RUN_ID / $VM_SCALE_8_RUN_ID / $VM_SCALE_16_RUN_ID
+          PP-11 S1/S2: $VM_LAB_PP11_S1_RUN_ID / $VM_LAB_PP11_S2_RUN_ID
+          Independent Ethernet interoperability: $INTEROP_RUN_ID
+          VDE2 cross-runner/local: $VDE2_CROSS_RUNNER_RUN_ID / $VDE2_LOCAL_RUN_ID
+          MULTINET IPv4 TCP: $MULTINET_RUN_ID
+          Area-31 read-only real-peer interoperability: $AREA31_RUN_ID
+          Source reproducibility, portability and exact-source PP-12: $SOURCE_RELEASE_RUN_ID
+
+          PP-11 S3-S6 are owner-authorized skips for this release. PP-13 is owner-authorized
+          skipped for the first production release because no real N-1 production version exists.
+          From the Timing/scheduler section onward, requirements that cannot practically be
+          exercised in the release lab are recorded as Not tested in lab environment in
+          docs/PP_EVIDENCE.md.
+
+          The published tarball and checksum below are the exact accepted Source Release
+          Reproducibility artifact. They are not rebuilt or repacked during publication.
+          EOF_NOTES
+
+      - name: Publish exact production source release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          source "$DNIV_RELEASE_EVIDENCE/run-ids.env"
+          tools/workflow_guard.sh "$DNIV_RELEASE_EVIDENCE" "$SOURCE_SHA" main
+          python3 tools/integrity_scan.py --rev "$SOURCE_SHA" --pass-id final \
+            --baseline "$DNIV_RELEASE_EVIDENCE/integrity/pass-1.json" \
+            --output "$DNIV_RELEASE_EVIDENCE/integrity/final.json"
+
+          tag="v$VERSION"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "production-release: release already exists: $tag" >&2
+            exit 1
+          fi
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" >/dev/null 2>&1; then
+            echo "production-release: tag already exists: $tag" >&2
+            exit 1
+          fi
+
+          archive="$DNIV_RELEASE_EVIDENCE/release/DECnet-IV-Linux-$VERSION.tar.xz"
+          checksum="$archive.sha256"
+          gh release create "$tag" "$archive" "$checksum" \
+            --repo "$GITHUB_REPOSITORY" --target "$SOURCE_SHA" \
+            --title "DECnet-IV-Linux $VERSION" \
+            --notes-file "$DNIV_RELEASE_EVIDENCE/release-notes.md"
+
+          released_sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$tag" --jq .sha)
+          test "$released_sha" = "$SOURCE_SHA"
+          mapfile -t assets < <(gh release view "$tag" --repo "$GITHUB_REPOSITORY" \
+            --json assets --jq '.assets[].name' | sort)
+          expected_assets=("DECnet-IV-Linux-$VERSION.tar.xz" "DECnet-IV-Linux-$VERSION.tar.xz.sha256")
+          mapfile -t expected_assets < <(printf '%s\n' "${expected_assets[@]}" | sort)
+          test "${#assets[@]}" -eq 2
+          test "${assets[*]}" = "${expected_assets[*]}"
+
+          release_url=$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json url --jq .url)
+          printf 'release_url=%s\n' "$release_url" >>"$DNIV_RELEASE_EVIDENCE/release-manifest.txt"
+          gh issue comment "${{ github.event.issue.number }}" --repo "$GITHUB_REPOSITORY" \
+            --body "Published exact accepted production source release $tag from $SOURCE_SHA: $release_url"
+          python3 tools/scratch_state.py mark --dir "$DNIV_RELEASE_EVIDENCE" \
+            --status success --note "production source release published"
+
+      - name: Preserve production release evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: production-release-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.DNIV_RELEASE_EVIDENCE }}/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 6
+          overwrite: false
+ "$listing"; then
             echo "production-release: forbidden generated payload in accepted source archive" >&2
             exit 1
           fi
