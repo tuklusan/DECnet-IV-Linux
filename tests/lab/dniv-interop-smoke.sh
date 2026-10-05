@@ -645,7 +645,7 @@ if [ "$reference" = pydecnet ]; then
         exit 1
     fi
     echo "DNIV-INTEROP-DNPRINT-PASS session=$session scenario=$scenario node=$name peer=$peer_node file=PRINTME.LIS"
-    if ! cterm_output=$(printf '\003phase7\r' | /usr/local/sbin/dnlogin -u CTERMUSER -p CTERMPASS -a CTERMACCT "$peer_node" 2>&1); then
+    if ! cterm_output=$(printf '\003phase7\r' | /usr/local/bin/dnlogin -u CTERMUSER -p CTERMPASS -a CTERMACCT "$peer_node" 2>&1); then
         printf '%s\n' "$cterm_output"
         echo "DNIV-INTEROP-FAIL session=$session scenario=$scenario node=$name reason=cterm-interactive"
         exit 1
