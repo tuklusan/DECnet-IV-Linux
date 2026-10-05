@@ -725,6 +725,7 @@ def main() -> int:
     fault_restored = False
     unlisted_a_before = 0
     routers_b_before = 0
+    post_timing_pause_done = not post_timing
     try:
         lab.create_network([guest_a.tap, guest_b.tap])
         lab.start(guest_a, area)
@@ -756,6 +757,23 @@ def main() -> int:
                     lab.resume_guest(guest_a)
                     startup_a_paused = False
                     startup_released = True
+
+            if post_timing and not post_timing_pause_done:
+                device_a = contains(
+                    guest_a.log,
+                    f"DNIV-POSTTIMING-DEVICE-PASS session={session} node={name_a}",
+                )
+                initial_b = contains(
+                    guest_b.log,
+                    f"DNIV-E1-INITIAL session={session} node={name_b}",
+                )
+                if device_a and initial_b:
+                    lab.pause_guest(guest_a)
+                    record_fault_event(work / "fault-events.log", "post-timing-vm-pause")
+                    time.sleep(1.0)
+                    lab.resume_guest(guest_a)
+                    record_fault_event(work / "fault-events.log", "post-timing-vm-resume")
+                    post_timing_pause_done = True
 
             if diagnostic_fault and not fault_started:
                 ready_b = contains(
@@ -939,6 +957,8 @@ def main() -> int:
                 f"DNIV-POSTTIMING-CPU-LOAD session={session} node={name_a}",
                 "DNIV-HOSTILE-PASS iterations=4096",
             ])
+            require_fault_event(work / "fault-events.log", "post-timing-vm-pause")
+            require_fault_event(work / "fault-events.log", "post-timing-vm-resume")
         init_logged = (contains(guest_a.log, f"DNIV-E1-INIT session={session}") or
                        contains(guest_b.log, f"DNIV-E1-INIT session={session}"))
         if not init_logged and not pcap_router_init_seen(lab.pcap, mac_a, mac_b):
