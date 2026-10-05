@@ -606,6 +606,23 @@ def main() -> int:
     if "Linux v6.8 commit `e8f897f4afef0031fe618a8e94127a0934896aba`" not in test_lab:
         raise SystemExit("source-release gate: lab documentation kernel-floor pin is missing")
 
+    reference_workflow = read_text(".github/workflows/reference-baselines.yml")
+    for marker in (
+        "linuxdecnet-libvaxdata:",
+        "https://github.com/tuklusan/LinuxDECnet.git",
+        'git -C "$work" fetch --depth=1 origin "$LINUXDECNET_REF"',
+        'make -C "$work/dnprogs/libvaxdata/linux" -f makefile.gcc test',
+        "simh-vax-reference:",
+        "https://github.com/tuklusan/simh.git",
+        'git -C "$work" fetch --depth=1 origin "$SIMH_REF"',
+        'make -C "$work" vax NOVIDEO=1 TEST_ARG=-v',
+        "vax_stddev.c",
+        "pdp11_rq.c",
+        "pdp11_xq.c",
+    ):
+        if marker not in reference_workflow:
+            raise SystemExit(f"source-release gate: upstream reference-health safeguard missing: {marker}")
+
     dispatcher = read_text(".github/workflows/repository-policy.yml")
     if "SOURCE_RELEASE source-release.yml" not in dispatcher or "RELEASE_IMAGE release-image.yml" in dispatcher:
         raise SystemExit("source-release gate: acceptance dispatcher not synchronized")

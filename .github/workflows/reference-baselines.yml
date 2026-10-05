@@ -228,3 +228,121 @@ jobs:
           retention-days: 30
           compression-level: 6
           overwrite: false
+
+  linuxdecnet-libvaxdata:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      DNIV_SCRATCH_DIR: ${{ github.workspace }}/scratch/runtime/${{ github.run_id }}/${{ github.run_attempt }}/${{ github.job }}
+    steps:
+      - name: Check out exact repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - name: Initialize scratch state and verify integrity checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/scratch_state.py init --dir "$DNIV_SCRATCH_DIR" --workflow reference-baselines --job "$GITHUB_JOB" --arch x64 --source-sha "$GITHUB_SHA" --parent-run-id '${{ inputs.parent_run_id }}' --expected-sha '${{ inputs.expected_sha }}'
+          tools/workflow_guard.sh "$DNIV_SCRATCH_DIR" "$GITHUB_SHA" main
+      - name: Build pinned LinuxDECnet libvaxdata and run conversion test
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update 2>&1 | tee "$DNIV_SCRATCH_DIR/apt-update.log"
+          sudo apt-get install -y build-essential 2>&1 | tee "$DNIV_SCRATCH_DIR/apt-install.log"
+          . tests/reference/refs.env
+          work="$RUNNER_TEMP/linuxdecnet"
+          git init "$work"
+          git -C "$work" remote add origin https://github.com/tuklusan/LinuxDECnet.git
+          git -C "$work" fetch --depth=1 origin "$LINUXDECNET_REF"
+          git -C "$work" checkout --detach FETCH_HEAD
+          test "$(git -C "$work" rev-parse HEAD)" = "$LINUXDECNET_REF"
+          printf 'REFERENCE=linuxdecnet-libvaxdata\nREFERENCE_SHA=%s\n' "$LINUXDECNET_REF" > "$DNIV_SCRATCH_DIR/reference.env"
+          make -C "$work/dnprogs/libvaxdata" all 2>&1 | tee "$DNIV_SCRATCH_DIR/linuxdecnet-libvaxdata-build.log"
+          make -C "$work/dnprogs/libvaxdata/linux" -f makefile.gcc test 2>&1 | tee "$DNIV_SCRATCH_DIR/linuxdecnet-libvaxdata-test-build.log"
+          test_bin="$work/dnprogs/libvaxdata/linux/$(uname -m)/test"
+          test -x "$test_bin"
+          "$test_bin" 2>&1 | tee "$DNIV_SCRATCH_DIR/linuxdecnet-libvaxdata-test.log"
+          ! grep -Fq 'Reverse operation failed equality test' "$DNIV_SCRATCH_DIR/linuxdecnet-libvaxdata-test.log"
+      - name: Verify exact tree after LinuxDECnet reference test
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/integrity_scan.py --rev "$GITHUB_SHA" --pass-id final --baseline "$DNIV_SCRATCH_DIR/integrity/pass-1.json" --output "$DNIV_SCRATCH_DIR/integrity/final.json"
+          python3 tools/scratch_state.py verify --dir "$DNIV_SCRATCH_DIR"
+      - name: Record workflow result
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f "$DNIV_SCRATCH_DIR/state.json" ]]; then python3 tools/scratch_state.py mark --dir "$DNIV_SCRATCH_DIR" --status '${{ job.status }}' --note 'LinuxDECnet libvaxdata reference health completed'; fi
+      - name: Preserve scratch state
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: scratch-reference-linuxdecnet-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.DNIV_SCRATCH_DIR }}/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 6
+          overwrite: false
+
+  simh-vax-reference:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      DNIV_SCRATCH_DIR: ${{ github.workspace }}/scratch/runtime/${{ github.run_id }}/${{ github.run_attempt }}/${{ github.job }}
+    steps:
+      - name: Check out exact repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - name: Initialize scratch state and verify integrity checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/scratch_state.py init --dir "$DNIV_SCRATCH_DIR" --workflow reference-baselines --job "$GITHUB_JOB" --arch x64 --source-sha "$GITHUB_SHA" --parent-run-id '${{ inputs.parent_run_id }}' --expected-sha '${{ inputs.expected_sha }}'
+          tools/workflow_guard.sh "$DNIV_SCRATCH_DIR" "$GITHUB_SHA" main
+      - name: Build pinned SIMH VAX target with per-simulator tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update 2>&1 | tee "$DNIV_SCRATCH_DIR/apt-update.log"
+          sudo apt-get install -y build-essential libpcap-dev libpcre3-dev 2>&1 | tee "$DNIV_SCRATCH_DIR/apt-install.log"
+          . tests/reference/refs.env
+          work="$RUNNER_TEMP/simh"
+          git init "$work"
+          git -C "$work" remote add origin https://github.com/tuklusan/simh.git
+          git -C "$work" fetch --depth=1 origin "$SIMH_REF"
+          git -C "$work" checkout --detach FETCH_HEAD
+          test "$(git -C "$work" rev-parse HEAD)" = "$SIMH_REF"
+          printf 'REFERENCE=simh-vax\nREFERENCE_SHA=%s\n' "$SIMH_REF" > "$DNIV_SCRATCH_DIR/reference.env"
+          make -C "$work" vax NOVIDEO=1 TEST_ARG=-v 2>&1 | tee "$DNIV_SCRATCH_DIR/simh-vax-build-test.log"
+          test -x "$work/BIN/vax"
+          grep -Fq 'vax_stddev.c' "$DNIV_SCRATCH_DIR/simh-vax-build-test.log"
+          grep -Fq 'pdp11_rq.c' "$DNIV_SCRATCH_DIR/simh-vax-build-test.log"
+          grep -Fq 'pdp11_xq.c' "$DNIV_SCRATCH_DIR/simh-vax-build-test.log"
+          grep -Eq '\*\*\* PASSED - .*Hardware Core Instruction test EHKAA' "$DNIV_SCRATCH_DIR/simh-vax-build-test.log"
+      - name: Verify exact tree after SIMH reference test
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/integrity_scan.py --rev "$GITHUB_SHA" --pass-id final --baseline "$DNIV_SCRATCH_DIR/integrity/pass-1.json" --output "$DNIV_SCRATCH_DIR/integrity/final.json"
+          python3 tools/scratch_state.py verify --dir "$DNIV_SCRATCH_DIR"
+      - name: Record workflow result
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f "$DNIV_SCRATCH_DIR/state.json" ]]; then python3 tools/scratch_state.py mark --dir "$DNIV_SCRATCH_DIR" --status '${{ job.status }}' --note 'SIMH VAX reference health completed'; fi
+      - name: Preserve scratch state
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: scratch-reference-simh-vax-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.DNIV_SCRATCH_DIR }}/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 6
+          overwrite: false
