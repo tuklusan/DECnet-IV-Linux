@@ -68,16 +68,7 @@ static int parse_node(const char *text, uint16_t *address)
 static int reply_offset(const unsigned char *buf, size_t length,
                         size_t *offset)
 {
-    size_t off;
-
-    if (!buf || !offset || length < 4U ||
-        buf[0] != DNIV_NICE_RET_SUCCESS)
-        return -1;
-    off = 4U + (size_t)buf[3];
-    if (off > length)
-        return -1;
-    *offset = off;
-    return 0;
+    return dniv_nice_reply_entity_offset(buf, length, offset);
 }
 
 static int entity_offset(const unsigned char *buf, size_t length,

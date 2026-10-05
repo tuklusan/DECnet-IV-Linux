@@ -31,6 +31,36 @@
 #define DNIV_NICE_PARAM_IDENTIFICATION 100U
 #define DNIV_NICE_TYPE_ASCII 0x40U
 
+static inline int
+dniv_nice_reply_entity_offset(const __u8 *buf, size_t length, size_t *offset)
+{
+    size_t off = 1U;
+
+    if (!buf || !offset || length < 2U ||
+        buf[0] != DNIV_NICE_RET_SUCCESS)
+        return -1;
+
+    /*
+     * Phase IV NICE success replies place the entity immediately after the
+     * return code.  Some interoperable implementations also emit the
+     * two-byte detail plus counted-message fields used by error replies.
+     * Accept both forms without mistaking a valid node entity for a header.
+     */
+    if (length >= 4U &&
+        ((buf[1] == 0U && buf[2] == 0U) ||
+         (buf[1] == 0xffU && buf[2] == 0xffU))) {
+        size_t message_len = (size_t)buf[3];
+
+        if (length - 4U < message_len)
+            return -1;
+        off = 4U + message_len;
+    }
+    if (off >= length)
+        return -1;
+    *offset = off;
+    return 0;
+}
+
 struct dniv_nice_read_node {
     __u16 node;
     __u8 info;
@@ -409,16 +439,11 @@ dniv_nice_parse_node_reply(const __u8 *buf, size_t length,
     size_t off;
     size_t name_len;
 
-    if (!buf || !reply || length < 7U || buf[0] != DNIV_NICE_RET_SUCCESS)
+    if (!buf || !reply || length < 4U ||
+        dniv_nice_reply_entity_offset(buf, length, &off) ||
+        length - off < 3U)
         return -1;
     memset(reply, 0, sizeof(*reply));
-
-    off = 3U;
-    if (off >= length || length - off < (size_t)buf[off] + 1U)
-        return -1;
-    off += (size_t)buf[off] + 1U;
-    if (length - off < 3U)
-        return -1;
 
     reply->address = (__u16)((__u16)buf[off] |
                              ((__u16)buf[off + 1U] << 8));

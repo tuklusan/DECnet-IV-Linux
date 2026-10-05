@@ -117,6 +117,19 @@ int main(void)
         assert(strcmp(parsed.name, "DN70") == 0);
         assert(parsed.has_state && parsed.state == 0U);
         assert(parsed.has_active_links && parsed.active_links == 7U);
+        {
+            __u8 canonical[128];
+            size_t canonical_len = reply_len - 3U;
+
+            canonical[0] = reply[0];
+            memcpy(canonical + 1U, reply + 4U, reply_len - 4U);
+            assert(dniv_nice_parse_node_reply(canonical, canonical_len,
+                                              &parsed) == 0);
+            assert(parsed.address == DNIV_ADDR(31, 70));
+            assert(strcmp(parsed.name, "DN70") == 0);
+            assert(parsed.has_state && parsed.state == 0U);
+            assert(parsed.has_active_links && parsed.active_links == 7U);
+        }
         assert(dniv_nice_parse_node_reply(reply, 9U, &parsed) != 0);
     }
 

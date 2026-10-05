@@ -258,6 +258,23 @@ def main() -> int:
     if 'run_tool("DNIV_DNNICE", "/usr/local/bin/dnnice",' not in ncp_source or \
        '"/usr/local/sbin/dnnice"' in ncp_source:
         raise SystemExit("source-release gate: ncp dnnice install path drift")
+    nice_header = read_text("include/decnet_iv_nice.h")
+    for marker in (
+        "dniv_nice_reply_entity_offset",
+        "Phase IV NICE success replies place the entity immediately after the",
+    ):
+        if marker not in nice_header:
+            raise SystemExit(f"source-release gate: NICE success reply framing regression: {marker}")
+    dnnice_source = read_text("userspace/dnnice/dnnice.c")
+    if "return dniv_nice_reply_entity_offset(buf, length, offset);" not in dnnice_source:
+        raise SystemExit("source-release gate: dnnice bypasses shared NICE success framing parser")
+    nice_unit = read_text("tests/unit/test_phase6_nice.c")
+    for marker in (
+        "canonical_len = reply_len - 3U",
+        "memcpy(canonical + 1U, reply + 4U, reply_len - 4U)",
+    ):
+        if marker not in nice_unit:
+            raise SystemExit(f"source-release gate: canonical NICE success regression missing: {marker}")
     area31_smoke = read_text("tests/lab/dniv-area31-smoke.sh")
     for forbidden in (
         "/usr/local/bin/dncopy --put-text",
