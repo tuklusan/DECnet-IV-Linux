@@ -38,7 +38,7 @@ userspace:
 
 unit:
 	$(MAKE) -C tests/unit test
-	@set -e; for test in tests/policy/test_*.py; do python3 "$test"; done
+	@set -e; for test in tests/policy/test_*.py; do python3 "$$test"; done
 	$(MAKE) -C userspace/dnmultinet test
 	python3 tests/lab/vax/make-http-com.py --selftest
 	python3 tests/lab/vax/make-task-com.py --selftest
