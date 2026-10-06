@@ -84,7 +84,7 @@ def main() -> int:
         if marker not in VM:
             raise SystemExit(f"pp11-s2 regression: missing VM workflow guard: {marker}")
     for marker in (
-        "all|socket|routing|pp11-pressure|pp11-s2|source-release",
+        "all|socket|routing|pp11-pressure|pp11-s2|pp12|post-timing|source-release",
         'scope" != pp11-s2',
         "VM_LAB_PP11_S2=vm-lab.yml:pp11s2:virtio-net-pci:1vcpu",
         "-f lab_mode=pp11s2 -f nic_model=virtio-net-pci -f vcpus=1",
