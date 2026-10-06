@@ -124,6 +124,7 @@ The default installed library layout also includes the compatibility links `libd
 | `tools/license_monkey.py` | Tracked-source license-header enforcement. |
 | `tools/install-hooks.sh` | Local Git hook installer for repository policy checks. |
 | `tools/e4_convergence_regression.py` | E4 convergence sampling regression guard. |
+| `VERSION` | Single production source-release version declaration used by acceptance and publication. |
 | `SOURCE-METADATA` | Generated release version/source-SHA/source-date provenance record. |
 | `INSTALL.md`, `docs/DELIVERY.md`, `docs/FEATURES.md`, `docs/COMPONENTS.md` | End-user install, delivery, feature and component contracts. |
 
@@ -135,6 +136,7 @@ These files are shipped in the source archive so the accepted source SHA can be 
 | --- | --- |
 | `.github/workflows/build.yml` | x86_64/aarch64 build bootstrap gate. |
 | `.github/workflows/source-release.yml` | Reproducible exact-artifact source release, install/uninstall and portability gate. |
+| `.github/workflows/production-release.yml` | Fail-closed publication of the exact fully accepted production source artifact, checksum and release notes. |
 | `.github/workflows/repository-policy.yml` | Main-only policy enforcement and bounded acceptance dispatcher. |
 | `.github/workflows/project-state.yml` | Durable Project State/RESUME continuity gate. |
 | `.github/workflows/false-green.yml` | Acceptance-harness false-green regression. |
