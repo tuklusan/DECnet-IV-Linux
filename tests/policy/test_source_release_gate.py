@@ -39,7 +39,7 @@ def main() -> int:
     if (ROOT / ".github/workflows/portability.yml").exists():
         raise SystemExit("source-release gate: obsolete checkout-built portability workflow remains")
     top_makefile = read_text("Makefile")
-    if 'for test in tests/policy/test_*.py; do python3 "$test"; done' not in top_makefile:
+    if 'for test in tests/policy/test_*.py; do python3 "$$test"; done' not in top_makefile:
         raise SystemExit("source-release gate: top-level unit target does not execute every policy regression")
     version_text = read_text("VERSION")
     version_lines = [line for line in version_text.splitlines() if line.startswith("version=")]
