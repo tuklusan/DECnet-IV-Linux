@@ -535,6 +535,13 @@ def main() -> int:
             raise SystemExit(f"source-release gate: undocumented governance/source-tree component: {relative}")
     builder = read_text("tools/build-source-release.sh")
     for marker in (
+        'find "$work/$name" -type l -print -quit',
+        'symbolic link in source archive',
+        'source already contains generated SOURCE-METADATA',
+    ):
+        if marker not in builder:
+            raise SystemExit(f"source-release gate: builder must reject tracked source links: {marker}")
+    for marker in (
         "SOURCE-METADATA",
         "'*.qcow2'", "'*.raw'", "'*.img'", "'*.iso'", "'*.ko'",
         "'*.a'", "'*.so'", "'*.so.*'", "'*.pyc'", "__pycache__",

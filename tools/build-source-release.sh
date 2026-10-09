@@ -36,6 +36,16 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/$name"
 git -C "$root" archive --format=tar "$commit" | tar -xf - -C "$work/$name"
+# Reject links before writing generated metadata: a committed SOURCE-METADATA
+# symlink could otherwise redirect the write outside the isolated work tree.
+if find "$work/$name" -type l -print -quit | grep -q .; then
+  echo "build-source-release: symbolic link in source archive" >&2
+  exit 2
+fi
+if [[ -e "$work/$name/SOURCE-METADATA" ]]; then
+  echo "build-source-release: source already contains generated SOURCE-METADATA" >&2
+  exit 2
+fi
 cat >"$work/$name/SOURCE-METADATA" <<EOF_METADATA
 version=$version
 source_sha=$commit

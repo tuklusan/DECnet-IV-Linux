@@ -28,7 +28,7 @@ The source tarball itself contains the complete in-scope kernel/userspace source
 
 Disk images are not release artifacts. No QCOW2, RAW, IMG, ISO, prebuilt kernel, initrd or prebuilt `decnet_iv.ko` is a production deliverable. VM disk files created by the acceptance lab are disposable test infrastructure only.
 
-The tarball is generated from one exact accepted source commit, contains no `.git` directory and no generated object/module/disk-image payloads, and carries `SOURCE-METADATA` with release version, source SHA and source-date epoch.
+The tarball is generated from one exact accepted source commit, contains no `.git` directory and no generated object/module/disk-image payloads, and carries `SOURCE-METADATA` with release version, source SHA and source-date epoch. The archive builder rejects tracked symbolic links before creating generated metadata, and rejects source trees that already contain a tracked `SOURCE-METADATA` member. This prevents symlink redirection of metadata writes outside the isolated packaging tree and ensures every shipped member is self-contained.
 
 ## Target systems
 
