@@ -977,6 +977,15 @@ def main() -> int:
             raise SystemExit("source-release gate: dnmaild final spool close failure is not invalidated before cleanup")
     for marker in (
         'static int append_complete_spool(const char *root, FILE *staged)',
+        '#include <sys/file.h>',
+        '#include <sys/resource.h>',
+        'if (flock(fileno(spool), LOCK_EX) ||',
+        '(guarded_fd = dup(fileno(spool))) < 0',
+        'setvbuf(spool, NULL, _IONBF, 0)',
+        'if (fflush(spool) || fsync(guarded_fd))',
+        'if (ftruncate(guarded_fd, original.st_size) || fsync(guarded_fd))',
+        'selftest_spool_io_rollback(directory, mailbox)',
+        'setrlimit(RLIMIT_FSIZE, &limit)',
         'if (fflush(staged) || fseek(staged, 0L, SEEK_SET))',
         'spool = open_mailbox(root);',
         'out = tmpfile();',

@@ -24,6 +24,8 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <sys/file.h>
+#include <sys/resource.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -432,27 +434,65 @@ static FILE *open_mailbox(const char *root)
 static int append_complete_spool(const char *root, FILE *staged)
 {
     unsigned char data[4096];
+    struct stat original;
     FILE *spool;
+    int guarded_fd = -1;
+    int saved_errno;
 
     if (fflush(staged) || fseek(staged, 0L, SEEK_SET))
         return -1;
     spool = open_mailbox(root);
     if (!spool)
         return -1;
+    /* Lock all writers of this daemon's managed spool across append and
+     * rollback. Duplicate the descriptor to retain that lock if fclose
+     * itself reports a failure; never let a partial append survive EIO,
+     * ENOSPC or RLIMIT_FSIZE. The stream is unbuffered to avoid a later
+     * fclose flushing bytes after we truncate a failed append.
+     */
+    if (flock(fileno(spool), LOCK_EX) ||
+        (guarded_fd = dup(fileno(spool))) < 0 ||
+        fstat(guarded_fd, &original) ||
+        setvbuf(spool, NULL, _IONBF, 0))
+        goto fail;
     for (;;) {
         size_t got = fread(data, 1, sizeof(data), staged);
 
         if (got && fwrite(data, 1, got, spool) != got)
-            goto fail;
+            goto rollback;
         if (got < sizeof(data)) {
             if (ferror(staged))
-                goto fail;
+                goto rollback;
             break;
         }
     }
-    return fclose(spool) ? -1 : 0;
-fail:
+    if (fflush(spool) || fsync(guarded_fd))
+        goto rollback;
+    if (fclose(spool)) {
+        saved_errno = errno;
+        (void)ftruncate(guarded_fd, original.st_size);
+        (void)fsync(guarded_fd);
+        close(guarded_fd);
+        errno = saved_errno;
+        return -1;
+    }
+    close(guarded_fd);
+    return 0;
+rollback:
+    saved_errno = errno;
+    /* Keep the advisory lock until any partial append is truncated. */
+    if (ftruncate(guarded_fd, original.st_size) || fsync(guarded_fd))
+        saved_errno = EIO;
     (void)fclose(spool);
+    close(guarded_fd);
+    errno = saved_errno;
+    return -1;
+fail:
+    saved_errno = errno;
+    (void)fclose(spool);
+    if (guarded_fd >= 0)
+        close(guarded_fd);
+    errno = saved_errno;
     return -1;
 }
 
@@ -658,6 +698,50 @@ done:
     return ok ? 0 : -1;
 }
 
+/* Force a partial physical append to fail after a successful staged write.
+ * The original mailbox prefix must survive intact under RLIMIT_FSIZE. */
+static int selftest_spool_io_rollback(const char *root, const char *mailbox)
+{
+    unsigned char block[512];
+    struct stat before, after;
+    struct rlimit limit;
+    FILE *staged = NULL;
+    pid_t child;
+    int status;
+
+    if (stat(mailbox, &before))
+        return -1;
+    staged = tmpfile();
+    if (!staged)
+        return -1;
+    memset(block, 'R', sizeof(block));
+    if (fwrite(block, 1, sizeof(block), staged) != sizeof(block) ||
+        fflush(staged)) {
+        fclose(staged);
+        return -1;
+    }
+    child = fork();
+    if (child < 0) {
+        fclose(staged);
+        return -1;
+    }
+    if (!child) {
+        signal(SIGXFSZ, SIG_IGN);
+        limit.rlim_cur = (rlim_t)before.st_size + 24U;
+        limit.rlim_max = limit.rlim_cur;
+        if (setrlimit(RLIMIT_FSIZE, &limit) ||
+            append_complete_spool(root, staged) != -1)
+            _exit(1);
+        _exit(0);
+    }
+    fclose(staged);
+    if (waitpid(child, &status, 0) != child ||
+        !WIFEXITED(status) || WEXITSTATUS(status) ||
+        stat(mailbox, &after) || after.st_size != before.st_size)
+        return -1;
+    return 0;
+}
+
 static int selftest(void)
 {
     char directory[] = "/tmp/dnmaild-selftest.XXXXXX";
@@ -759,7 +843,8 @@ static int selftest(void)
         goto out;
     victim_fd = open(mailbox, O_RDONLY | O_CLOEXEC);
     if (victim_fd < 0 || read(victim_fd, victim_buf, sizeof(victim_buf)) != 16 ||
-        memcmp(victim_buf, "ok\nFrom: sender", 15U))
+        memcmp(victim_buf, "ok\nFrom: sender", 15U) ||
+        selftest_spool_io_rollback(directory, mailbox))
         goto out;
     rc = 0;
 
