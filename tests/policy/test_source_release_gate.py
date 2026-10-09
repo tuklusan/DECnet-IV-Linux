@@ -862,6 +862,7 @@ def main() -> int:
     if (
         "if (!*from || !*subject ||" not in dnmail
         or "./dnmail -s '' 31.70::TEST body" not in dnmail_make
+        or 'rc=$$?; test "$$rc" -eq 2' not in dnmail_make
     ):
         raise SystemExit("source-release gate: empty MAIL-11 subject may lose NSP record boundary")
     dnmaild = read_text("userspace/dnmail/dnmaild.c")
