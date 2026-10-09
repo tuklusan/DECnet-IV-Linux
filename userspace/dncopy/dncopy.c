@@ -560,6 +560,7 @@ static int read_text_record(FILE *in, unsigned char *data, size_t cap,
 {
     size_t len = 0U;
     int ch;
+    int newline = 0;
 
     if (!in || !data || !cap || !record_len) {
         errno = EINVAL;
@@ -574,8 +575,10 @@ static int read_text_record(FILE *in, unsigned char *data, size_t cap,
                 return 0;
             break;
         }
-        if (ch == '\n')
+        if (ch == '\n') {
+            newline = 1;
             break;
+        }
         if (ch == 0) {
             errno = EILSEQ;
             return -1;
@@ -586,7 +589,7 @@ static int read_text_record(FILE *in, unsigned char *data, size_t cap,
         }
         data[len++] = (unsigned char)ch;
     }
-    if (len && data[len - 1U] == '\r')
+    if (newline && len && data[len - 1U] == '\r')
         len--;
     *record_len = len;
     return 1;
@@ -1200,6 +1203,16 @@ static int selftest_text_records(void)
         read_text_record(in, data, sizeof(data), &len) != 1 || len != 0U ||
         read_text_record(in, data, sizeof(data), &len) != 1 ||
         len != 1U || data[0] != 'x' ||
+        read_text_record(in, data, sizeof(data), &len) != 0)
+        goto out;
+    if (fclose(in))
+        return -1;
+    in = tmpfile();
+    if (!in)
+        return -1;
+    if (fwrite("x\r", 1, 2U, in) != 2U || fseek(in, 0, SEEK_SET) ||
+        read_text_record(in, data, sizeof(data), &len) != 1 ||
+        len != 2U || memcmp(data, "x\r", 2U) ||
         read_text_record(in, data, sizeof(data), &len) != 0)
         goto out;
     if (fclose(in))
