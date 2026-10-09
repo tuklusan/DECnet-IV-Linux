@@ -22,6 +22,7 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <unistd.h>
 
 #include "../common/record_io.h"
@@ -44,6 +45,7 @@
 #define DAP_STATUS 9U
 #define DAP_NAME 15U
 #define DAP_STATUS_EOF 0x4027U
+#define DAP_IO_TIMEOUT_SECONDS 30L
 #define DAP_RFM_FIX 1U
 #define DAP_RFM_VAR 2U
 #define DAP_RFM_VFC 3U
@@ -209,6 +211,20 @@ static int validate_config(const unsigned char *buf, size_t len)
     return 0;
 }
 
+/* A connected but silent FAL peer must not hold an interactive copy
+ * forever.  These are per-I/O inactivity bounds, not whole-file deadlines.
+ */
+static int set_dap_timeouts(int fd)
+{
+    const struct timeval limit = { .tv_sec = DAP_IO_TIMEOUT_SECONDS,
+                                   .tv_usec = 0 };
+
+    return setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO,
+                      &limit, sizeof(limit)) ||
+           setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO,
+                      &limit, sizeof(limit)) ? -1 : 0;
+}
+
 static int open_fal(const char *node_text, const struct access_options *options)
 {
     struct sockaddr_dn peer;
@@ -223,6 +239,11 @@ static int open_fal(const char *node_text, const struct access_options *options)
     fd = socket(AF_DECnet, SOCK_SEQPACKET, DNPROTO_NSP);
     if (fd < 0) {
         perror("dncopy: socket");
+        return -1;
+    }
+    if (set_dap_timeouts(fd)) {
+        perror("dncopy: socket timeout");
+        close(fd);
         return -1;
     }
     if (options && (options->user || options->password || options->account)) {
@@ -1275,6 +1296,35 @@ fail:
     return -1;
 }
 
+static int selftest_socket_timeouts(void)
+{
+    int pair[2] = { -1, -1 };
+    struct timeval actual;
+    socklen_t length;
+    int ok;
+
+    if (socketpair(AF_UNIX, SOCK_SEQPACKET, 0, pair))
+        return -1;
+    if (set_dap_timeouts(pair[0])) {
+        close(pair[0]);
+        close(pair[1]);
+        return -1;
+    }
+    length = sizeof(actual);
+    ok = !getsockopt(pair[0], SOL_SOCKET, SO_RCVTIMEO,
+                     &actual, &length) &&
+         length == sizeof(actual) &&
+         actual.tv_sec == DAP_IO_TIMEOUT_SECONDS && !actual.tv_usec;
+    length = sizeof(actual);
+    ok = ok && !getsockopt(pair[0], SOL_SOCKET, SO_SNDTIMEO,
+                           &actual, &length) &&
+         length == sizeof(actual) &&
+         actual.tv_sec == DAP_IO_TIMEOUT_SECONDS && !actual.tv_usec;
+    close(pair[0]);
+    close(pair[1]);
+    return ok ? 0 : -1;
+}
+
 static int selftest_text_records(void)
 {
     static const unsigned char invalid[] = { 'a', 'b', 0U, 'c', 'd', '\n' };
@@ -1424,7 +1474,8 @@ static int selftest(void)
     struct remote_spec remote;
     struct access_options parsed_options = { 0 };
 
-    if (selftest_text_records() || selftest_staged_output())
+    if (selftest_socket_timeouts() || selftest_text_records() ||
+        selftest_staged_output())
         return 1;
     if (parse_node("31.70", &addr) || addr != (uint16_t)((31U << 10) | 70U))
         return 1;

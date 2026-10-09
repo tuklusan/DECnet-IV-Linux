@@ -786,6 +786,16 @@ def main() -> int:
     retrieve_start = dncopy.find("static int retrieve_file")
     retrieve_end = dncopy.find("static int store_file", retrieve_start)
     retrieve = dncopy[retrieve_start:retrieve_end]
+    for marker in (
+        '#define DAP_IO_TIMEOUT_SECONDS 30L',
+        'static int set_dap_timeouts(int fd)',
+        'if (set_dap_timeouts(fd))',
+        'static int selftest_socket_timeouts(void)',
+        'if (selftest_socket_timeouts() || selftest_text_records()',
+    ):
+        if marker not in dncopy:
+            raise SystemExit(f"source-release gate: dncopy DAP I/O must have bounded peer-idle timeouts: {marker}")
+
     connect_marker = 'msg[2] = 2U; /* CONNECT data stream */'
     staging_marker = 'begin_staged_output(local_path, &out, &staged_output)'
     completion_marker = 'recv_message(fd, reply, sizeof(reply), DAP_ACCESS_COMPLETE)'
@@ -801,7 +811,7 @@ def main() -> int:
         or 'abort_staged_output(&out, &staged_output)' not in retrieve
         or 'out = fopen(local_path, "wb");' in retrieve
         or 'static int selftest_staged_output(void)' not in dncopy
-        or 'selftest_text_records() || selftest_staged_output()' not in dncopy
+        or 'selftest_staged_output()' not in dncopy
     ):
         raise SystemExit("source-release gate: dncopy retrieval must stage and atomically publish complete output")
 

@@ -148,6 +148,8 @@ The release does not silently enable network-facing daemons. Delivered servers i
 
 For `dnfald` DAP CREATE, the directory supplied with `--root` must be writable by the service account on a Linux filesystem supporting `O_TMPFILE`, `linkat(AT_EMPTY_PATH)` and `user.*` extended attributes. Completed uploads are published under the requested name without overwriting an existing entry; aborted or failed pre-publication transfers do not expose incomplete files. On an unsupported filesystem CREATE fails closed. Explicit ERASE/RENAME operations are separate; apply the site's access and directory-permission policy before enabling network-facing FAL service.
 
+All `dncopy` DAP operations enforce 30-second socket send/receive inactivity timeouts. These reset per operation and are not a limit on the total file-transfer duration. Stalled remote FAL peers fail with an error instead of making `dncopy` wait forever.
+
 Named local `dncopy` downloads require write access to the destination directory so the client can stage a private temporary file alongside the output. The existing file is not changed until full DAP completion and local flush/sync/close succeed; failed downloads discard the temporary file. An existing symlink or non-regular destination is rejected rather than followed. Successful replacement is atomic and preserves an existing regular file's permission bits, but not its hard-link identity.
 
 Record-mode `dncopy` uploads (the classic default) accept bounded text records but reject embedded NUL bytes or overlong lines instead of silently truncating data. Use `-m block` or `--put` for binary files and verify hashes after transfer.
