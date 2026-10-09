@@ -26,6 +26,7 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/time.h>
+#include <sys/wait.h>
 #include <sys/xattr.h>
 #include <unistd.h>
 
@@ -368,13 +369,17 @@ static int serve_create(int fd, int rootfd,
     if (access_name(access, access_len, DAP_ACCESS_CREATE,
                     name, sizeof(name)))
         return -1;
-    file_fd = open_regular_at(rootfd, name, 1);
+    /* Stage privately. A named CREATE target can be renamed/replaced by a
+     * concurrent writer before an aborted transfer tries to unlink it.
+     * O_TMPFILE avoids exposing any partial name; link only after close.
+     * Fail closed on filesystems without O_TMPFILE support.
+     */
+    file_fd = openat(rootfd, ".", O_TMPFILE | O_RDWR | O_CLOEXEC, 0666);
     if (file_fd < 0)
         return -1;
     out = fdopen(file_fd, "wb");
     if (!out) {
         close(file_fd);
-        unlinkat(rootfd, name, 0);
         return -1;
     }
 
@@ -430,11 +435,27 @@ static int serve_create(int fd, int rootfd,
             break;
         goto fail;
     }
+    /* Keep the anonymous inode referenced across fclose() so that close
+     * errors are known before atomic publication. An existing destination,
+     * including one introduced during the upload, cannot be replaced.
+     */
+    if (fflush(out) || fsync(fileno(out)))
+        goto fail;
+    file_fd = fcntl(fileno(out), F_DUPFD_CLOEXEC, 0);
+    if (file_fd < 0)
+        goto fail;
     if (fclose(out)) {
         out = NULL;
-        goto fail_unlink;
+        close(file_fd);
+        return -1;
     }
     out = NULL;
+    if (linkat(file_fd, "", rootfd, name, AT_EMPTY_PATH)) {
+        close(file_fd);
+        return -1;
+    }
+    /* The inode was synced and the stream closed before publishing. */
+    close(file_fd);
     {
         const unsigned char complete[] = {
             DAP_ACCESS_COMPLETE, 0U, DAP_ACCOMP_RESPONSE
@@ -445,8 +466,6 @@ static int serve_create(int fd, int rootfd,
 fail:
     if (out)
         fclose(out);
-fail_unlink:
-    unlinkat(rootfd, name, 0);
     return -1;
 }
 
@@ -685,6 +704,167 @@ static int selftest_abort_create(int rootfd, const char *name)
     return rc == -1 ? 0 : -1;
 }
 
+/* A peer can rename the just-created path, then put an unrelated file under
+ * that name before transport failure. Aborted CREATE must preserve it.
+ * This race regression requires neither a live DECnet socket nor privilege.
+ */
+static int selftest_create_swap(int rootfd)
+{
+    const char *name = "RACE.TXT";
+    const unsigned char access[] = {
+        DAP_ACCESS, 0U, DAP_ACCESS_CREATE, 0U, 8U,
+        'R', 'A', 'C', 'E', '.', 'T', 'X', 'T'
+    };
+    unsigned char reply[32];
+    struct timeval timeout = { .tv_sec = 5, .tv_usec = 0 };
+    int pair[2] = { -1, -1 };
+    int new_fd = -1;
+    int read_fd = -1;
+    int rc = -1;
+    int status;
+    pid_t child;
+
+    if (socketpair(AF_UNIX, SOCK_SEQPACKET, 0, pair))
+        return -1;
+    if (setsockopt(pair[0], SOL_SOCKET, SO_RCVTIMEO,
+                   &timeout, sizeof(timeout)))
+        goto out;
+    child = fork();
+    if (child < 0)
+        goto out;
+    if (!child) {
+        int result;
+
+        close(pair[0]);
+        result = serve_create(pair[1], rootfd, access, sizeof(access),
+                              DAP_RFM_FIX, 0U);
+        close(pair[1]);
+        _exit(result == -1 ? 0 : 15);
+    }
+    close(pair[1]);
+    pair[1] = -1;
+    if (dniv_recv_record(pair[0], reply, sizeof(reply), 0) <= 0 ||
+        dniv_recv_record(pair[0], reply, sizeof(reply), 0) <= 0)
+        goto wait_child;
+    /* Earlier CREATE exposed RACE.TXT before the transfer was complete. */
+    if (faccessat(rootfd, name, F_OK, 0) == 0 &&
+        renameat(rootfd, name, rootfd, "MOVED.TXT"))
+        goto wait_child;
+    new_fd = openat(rootfd, name,
+                    O_CREAT | O_EXCL | O_WRONLY | O_CLOEXEC, 0600);
+    if (new_fd < 0 || write(new_fd, "keep!", 5U) != 5)
+        goto wait_child;
+    close(new_fd);
+    new_fd = -1;
+    close(pair[0]);
+    pair[0] = -1;
+    if (waitpid(child, &status, 0) < 0 ||
+        !WIFEXITED(status) || WEXITSTATUS(status))
+        goto out;
+    read_fd = openat(rootfd, name, O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
+    if (read_fd < 0 || read(read_fd, reply, 5U) != 5 ||
+        memcmp(reply, "keep!", 5U))
+        goto out;
+    rc = 0;
+    goto out;
+
+wait_child:
+    close(pair[0]);
+    pair[0] = -1;
+    (void)waitpid(child, &status, 0);
+out:
+    if (read_fd >= 0)
+        close(read_fd);
+    if (new_fd >= 0)
+        close(new_fd);
+    if (pair[0] >= 0)
+        close(pair[0]);
+    if (pair[1] >= 0)
+        close(pair[1]);
+    (void)unlinkat(rootfd, name, 0);
+    (void)unlinkat(rootfd, "MOVED.TXT", 0);
+    return rc;
+}
+
+/* A fully acknowledged upload must publish its complete bytes exactly once. */
+static int selftest_create_success(int rootfd)
+{
+    const char *name = "COMMIT.TXT";
+    const unsigned char access[] = {
+        DAP_ACCESS, 0U, DAP_ACCESS_CREATE, 0U, 10U,
+        'C', 'O', 'M', 'M', 'I', 'T', '.', 'T', 'X', 'T'
+    };
+    const unsigned char connect[] = { DAP_CONTROL, 0U, DAP_CONTROL_CONNECT };
+    const unsigned char put[] = { DAP_CONTROL, 0U, DAP_CONTROL_PUT };
+    const unsigned char data[] = { DAP_DATA, 0U, 0U, 'o', 'k', '!' };
+    const unsigned char complete[] = {
+        DAP_ACCESS_COMPLETE, 0U, DAP_ACCOMP_CLOSE
+    };
+    unsigned char reply[32];
+    struct timeval timeout = { .tv_sec = 5, .tv_usec = 0 };
+    int pair[2] = { -1, -1 };
+    int read_fd = -1;
+    int rc = -1;
+    int status;
+    pid_t child;
+
+    if (socketpair(AF_UNIX, SOCK_SEQPACKET, 0, pair))
+        return -1;
+    if (setsockopt(pair[0], SOL_SOCKET, SO_RCVTIMEO,
+                   &timeout, sizeof(timeout)))
+        goto out;
+    child = fork();
+    if (child < 0)
+        goto out;
+    if (!child) {
+        int result;
+
+        close(pair[0]);
+        result = serve_create(pair[1], rootfd, access, sizeof(access),
+                              DAP_RFM_FIX, 0U);
+        close(pair[1]);
+        _exit(result == 0 ? 0 : 15);
+    }
+    close(pair[1]);
+    pair[1] = -1;
+    if (dniv_recv_record(pair[0], reply, sizeof(reply), 0) <= 0 ||
+        dniv_recv_record(pair[0], reply, sizeof(reply), 0) <= 0 ||
+        faccessat(rootfd, name, F_OK, 0) == 0 || errno != ENOENT ||
+        dniv_send_record(pair[0], connect, sizeof(connect), 0) ||
+        dniv_recv_record(pair[0], reply, sizeof(reply), 0) <= 0 ||
+        dniv_send_record(pair[0], put, sizeof(put), 0) ||
+        dniv_send_record(pair[0], data, sizeof(data), 0) ||
+        dniv_send_record(pair[0], complete, sizeof(complete), 0) ||
+        dniv_recv_record(pair[0], reply, sizeof(reply), 0) != 3 ||
+        reply[0] != DAP_ACCESS_COMPLETE || reply[2] != DAP_ACCOMP_RESPONSE)
+        goto wait_child;
+    close(pair[0]);
+    pair[0] = -1;
+    if (waitpid(child, &status, 0) < 0 ||
+        !WIFEXITED(status) || WEXITSTATUS(status))
+        goto out;
+    read_fd = openat(rootfd, name, O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
+    if (read_fd < 0 || read(read_fd, reply, sizeof(reply)) != 3 ||
+        memcmp(reply, "ok!", 3U))
+        goto out;
+    rc = 0;
+    goto out;
+
+wait_child:
+    close(pair[0]);
+    pair[0] = -1;
+    (void)waitpid(child, &status, 0);
+out:
+    if (read_fd >= 0)
+        close(read_fd);
+    if (pair[0] >= 0)
+        close(pair[0]);
+    if (pair[1] >= 0)
+        close(pair[1]);
+    (void)unlinkat(rootfd, name, 0);
+    return rc;
+}
+
 static int selftest(void)
 {
     unsigned char config[16];
@@ -774,7 +954,8 @@ static int selftest(void)
     file_fd = -1;
     /* Newly created incomplete files must still be removed on failure. */
     if (selftest_abort_create(rootfd, "PARTIAL.TXT") ||
-        faccessat(rootfd, "PARTIAL.TXT", F_OK, 0) == 0 || errno != ENOENT)
+        faccessat(rootfd, "PARTIAL.TXT", F_OK, 0) == 0 || errno != ENOENT ||
+        selftest_create_swap(rootfd) || selftest_create_success(rootfd))
         goto out;
     file_fd = open_regular_at(rootfd, "ESCAPE.TXT", 0);
     if (file_fd >= 0)

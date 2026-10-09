@@ -794,14 +794,17 @@ def main() -> int:
         create_start < 0
         or create_end < 0
         or "if (fclose(out)) {" not in create_body
-        or "goto fail_unlink;" not in create_body
-        or "fail_unlink:\n    unlinkat(rootfd, name, 0);" not in create_body
-        or "flags |= O_WRONLY | O_CREAT | O_EXCL;" not in dnfald
-        or 'if (!out) {\n        close(file_fd);\n        unlinkat(rootfd, name, 0);' not in dnfald
+        or 'openat(rootfd, ".", O_TMPFILE | O_RDWR | O_CLOEXEC, 0666)' not in create_body
+        or "if (fflush(out) || fsync(fileno(out)))" not in create_body
+        or "fcntl(fileno(out), F_DUPFD_CLOEXEC, 0)" not in create_body
+        or 'linkat(file_fd, "", rootfd, name, AT_EMPTY_PATH)' not in create_body
+        or "unlinkat(rootfd, name, 0)" in create_body
         or 'selftest_abort_create(rootfd, "GOOD.TXT")' not in dnfald
         or 'selftest_abort_create(rootfd, "PARTIAL.TXT")' not in dnfald
+        or 'selftest_create_swap(rootfd)' not in dnfald
+        or 'selftest_create_success(rootfd)' not in dnfald
     ):
-        raise SystemExit("source-release gate: dnfald CREATE close failure can leave a failed partial target")
+        raise SystemExit("source-release gate: dnfald CREATE lacks atomic staging/publish or race regression")
     directory_start = dnfald.find("static int serve_directory")
     directory_end = dnfald.find("static int serve_erase", directory_start)
     directory_body = dnfald[directory_start:directory_end]
