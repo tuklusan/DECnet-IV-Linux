@@ -27,6 +27,7 @@ dnmaild: dnmaild.c
 
 check: dnmail dnmaild
 	./dnmail --selftest
+	@set +e; ./dnmail -s '' 31.70::TEST body >/dev/null 2>&1; rc=$?; test "$rc" -eq 2
 	./dnmaild --selftest
 
 clean:

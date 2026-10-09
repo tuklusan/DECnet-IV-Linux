@@ -212,7 +212,12 @@ int main(int argc, char **argv)
     }
     target = argv[arg];
     message = argv[arg + 1];
-    if (!*from || strlen(from) >= 256U || strlen(subject) >= 256U ||
+    /* The native NSP seqpacket sender does not emit zero-byte records.
+     * Reject an empty subject rather than shifting the message into the
+     * subject field and falsely acknowledging a corrupted MAIL-11 delivery.
+     */
+    if (!*from || !*subject || strlen(from) >= 256U ||
+        strlen(subject) >= 256U ||
         strlen(message) > 4095U || parse_target(target, &addr, &user)) {
         fprintf(stderr, "dnmail: invalid arguments\n");
         return 2;

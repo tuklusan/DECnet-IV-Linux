@@ -150,6 +150,8 @@ For `dnfald` DAP CREATE, the directory supplied with `--root` must be writable b
 
 Record-mode `dncopy` uploads (the classic default) accept bounded text records but reject embedded NUL bytes or overlong lines instead of silently truncating data. Use `-m block` or `--put` for binary files and verify hashes after transfer.
 
+The `dnmail` MAIL-11 client requires a nonempty subject. If specifying `-s`, supply at least one character: zero-byte subject records are not emitted by the native NSP socket, and a missing subject record would shift the MAIL-11 message fields. An empty `-s ''` argument is rejected before a network connection is made.
+
 ## 10. Client environment
 
 Installed clients include `ncp`, `dnlogin`/`sethost`, `dncopy` plus its DAP command aliases, `dntask`, `dnping`, `dnnice`, `dnmirror`, `dnobject`, `phone`, `dnmail` and `dnlynx`.

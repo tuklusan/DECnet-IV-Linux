@@ -857,6 +857,13 @@ def main() -> int:
     if "if (fclose(out)) {\n        out = NULL;\n        goto out;\n    }" not in smtp_fake:
         raise SystemExit("source-release gate: SMTP lab helper final output close failure is not invalidated before cleanup")
 
+    dnmail = read_text("userspace/dnmail/dnmail.c")
+    dnmail_make = read_text("userspace/dnmail/Makefile")
+    if (
+        "if (!*from || !*subject ||" not in dnmail
+        or "./dnmail -s '' 31.70::TEST body" not in dnmail_make
+    ):
+        raise SystemExit("source-release gate: empty MAIL-11 subject may lose NSP record boundary")
     dnmaild = read_text("userspace/dnmail/dnmaild.c")
     for marker in (
         "int close_errno = 0;",

@@ -77,7 +77,7 @@ This catalogue describes the production source release. Lab-only helpers and ind
 
 ## Mail
 
-- `dnmail` MAIL-11 client including optional v3 Session capability negotiation and multiple-recipient delivery.
+- `dnmail` MAIL-11 client including optional v3 Session capability negotiation and multiple-recipient delivery. The client rejects an explicitly empty `-s` subject before opening a network connection; zero-byte native NSP records are not emitted, so empty subjects cannot be sent safely.
 - `dnmaild` object 27 service with legacy/v3 negotiation, local spool delivery, sendmail-compatible execution and bounded direct SMTP delivery; the local `mailbox.log` spool is created owner-only (0600), opened inside `--root` without following symbolic links and rejects multiply linked/non-regular targets. Final spool flush/close failure invalidates the stream before common cleanup, so an already-closed `FILE` is never closed a second time. A sendmail pipe-close error is retained as delivery failure only after the spawned sendmail child has still been waited/reaped, preventing orphan/zombie leakage on that error path.
 - Persistent `dnetd`, `dnfald`, `dnhttpd`, `dnmaild`, `dnphoned`, `dnmirror` and `dnobject` loops isolate malformed or aborted client sessions; explicit bounded/once modes still report session failures, and persistent `dnetd` reaps exited dispatch children asynchronously.
 - Fixed-buffer DECnet sequenced-packet consumers reject overlong records instead of silently accepting truncated data; the shared receive helper uses `MSG_TRUNC` to recover the original record length and reports `EMSGSIZE` when it exceeds the caller buffer.
