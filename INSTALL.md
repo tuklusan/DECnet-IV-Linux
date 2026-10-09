@@ -144,7 +144,7 @@ To request automatic module loading at boot on a conventional system, create an 
 
 ## 9. Services
 
-The release does not silently enable network-facing daemons. Delivered servers include `dnetd`, `dnfald`, `dnnml`, `dnphoned`, `dnmaild` and `dnhttpd`. `dnetd` defaults to `/etc/dnetd.conf`. Use the host's service manager if persistent services are desired.
+The release does not silently enable network-facing daemons. Delivered servers include `dnetd`, `dnfald`, `dnnml`, `dnphoned`, `dnmaild` and `dnhttpd`. `dnetd` defaults to `/etc/dnetd.conf`. Use the host's service manager if persistent services are desired. A `dnetd` configuration file must contain only text records (no NUL bytes), each within its bounded physical-line limit. Its option field accepts `N` or a two-field form `N,N`, `N,A`, `N,Y`, `N,R` (case-insensitive); unsupported or extended tokens fail closed.
 
 For `dnfald` DAP CREATE, the directory supplied with `--root` must be writable by the service account on a Linux filesystem supporting `O_TMPFILE`, `linkat(AT_EMPTY_PATH)` and `user.*` extended attributes. Completed uploads are published under the requested name without overwriting an existing entry; aborted or failed pre-publication transfers do not expose incomplete files. On an unsupported filesystem CREATE fails closed. Explicit ERASE/RENAME operations are separate; apply the site's access and directory-permission policy before enabling network-facing FAL service.
 

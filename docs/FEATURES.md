@@ -85,7 +85,7 @@ This catalogue describes the production source release. Lab-only helpers and ind
 ## Generic object dispatch
 
 - `dnetd` configurable DECnet object-to-program dispatcher using the classic five-field `/etc/dnetd.conf` form by default.
-- `dnetd` rejects overlong physical configuration lines instead of interpreting one physical line as multiple buffered fragments.
+- `dnetd` rejects overlong physical configuration lines instead of interpreting one physical line as multiple buffered fragments. It also rejects embedded NUL bytes, requires complete valid option fields (`N`, `N,N`, `N,A`, `N,Y` or `N,R`, case-insensitive), and accepts a valid final physical line without a trailing newline.
 - Numbered/named listeners, explicit accept/reject policy, optional local-account drop and direct child execution with the DECnet socket on standard input/output; unsupported wildcard/authentication modes are rejected rather than silently weakened.
 
 ## MULTINET/VDE integration

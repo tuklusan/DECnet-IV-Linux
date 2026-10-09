@@ -81,6 +81,10 @@ static int parse_options(const char *text, int *auto_mode)
         errno = EOPNOTSUPP;
         return -1;
     }
+    if (text[1] != '\0' && text[1] != ',') {
+        errno = EINVAL;
+        return -1;
+    }
     *auto_mode = 0;
     comma = strchr(text, ',');
     if (!comma)
@@ -209,6 +213,47 @@ static int duplicate_service(const struct service *services, int count,
     return 0;
 }
 
+/* Read a whole physical line without silently discarding bytes after NUL.
+ * Reject oversized lines, including unterminated exact-buffer-sized input.
+ * Returns 1 for a line, 0 at clean EOF, and -1 for invalid/failed input.
+ */
+static int read_config_line(FILE *file, char *line, size_t cap)
+{
+    size_t len = 0U;
+    int ch = EOF;
+
+    if (!file || !line || cap < 2U) {
+        errno = EINVAL;
+        return -1;
+    }
+    while ((ch = fgetc(file)) != EOF) {
+        if (ch == 0) {
+            errno = EILSEQ;
+            return -1;
+        }
+        if (len + 1U >= cap) {
+            errno = E2BIG;
+            return -1;
+        }
+        line[len++] = (char)ch;
+        if (ch == '\n')
+            break;
+    }
+    if (ch == EOF && ferror(file)) {
+        if (!errno)
+            errno = EIO;
+        return -1;
+    }
+    if (!len)
+        return 0;
+    if (len == cap - 1U && line[len - 1U] != '\n') {
+        errno = E2BIG;
+        return -1;
+    }
+    line[len] = '\0';
+    return 1;
+}
+
 static int load_config(const char *path, const char *program_dir,
                        struct service *services, int *count_out)
 {
@@ -221,19 +266,24 @@ static int load_config(const char *path, const char *program_dir,
     if (!file)
         return -1;
 
-    while (fgets(line, sizeof(line), file)) {
+    for (;;) {
         char *start = line;
         struct service service;
         int parsed;
+        int line_rc = read_config_line(file, line, sizeof(line));
 
-        lineno++;
-        if (!strchr(line, '\n') && !feof(file)) {
-            fprintf(stderr, "dnetd: config line %u exceeds %zu bytes\n",
-                    lineno, sizeof(line) - 2U);
+        if (line_rc < 0) {
+            int saved_errno = errno;
+
+            fprintf(stderr, "dnetd: invalid config line %u: %s\n",
+                    lineno + 1U, strerror(saved_errno));
             fclose(file);
-            errno = E2BIG;
+            errno = saved_errno;
             return -1;
         }
+        if (!line_rc)
+            break;
+        lineno++;
         while (*start == ' ' || *start == '\t')
             start++;
         if (!*start || *start == '\n' || *start == '#')
@@ -476,11 +526,62 @@ static int selftest_config_line_bound(void)
     }
 }
 
+static int selftest_config_nul(void)
+{
+    char path[] = "/tmp/dnetd-nul-selftest.XXXXXX";
+    static const char bad[] = "TEST 0 N,N root /bin/cat\0ignored";
+    static const char good[] = "TEST 0 N,N root /bin/cat";
+    struct service services[DNETD_MAX_SERVICES];
+    int count = 0;
+    int fd;
+    int rc;
+    int saved_errno;
+
+    fd = mkstemp(path);
+    if (fd < 0)
+        return -1;
+    if (write(fd, bad, sizeof(bad) - 1U) !=
+        (ssize_t)(sizeof(bad) - 1U)) {
+        (void)close(fd);
+        (void)unlink(path);
+        return -1;
+    }
+    if (close(fd)) {
+        (void)unlink(path);
+        return -1;
+    }
+    errno = 0;
+    rc = load_config(path, "/usr/local/sbin", services, &count);
+    saved_errno = errno;
+    if (rc >= 0 || saved_errno != EILSEQ) {
+        unlink(path);
+        return -1;
+    }
+    fd = open(path, O_WRONLY | O_TRUNC | O_CLOEXEC);
+    if (fd < 0)
+        goto fail;
+    if (write(fd, good, sizeof(good) - 1U) !=
+        (ssize_t)(sizeof(good) - 1U)) {
+        close(fd);
+        goto fail;
+    }
+    if (close(fd))
+        goto fail;
+    count = 0;
+    rc = load_config(path, "/usr/local/sbin", services, &count);
+    unlink(path);
+    return rc == 0 && count == 1 ? 0 : -1;
+fail:
+    unlink(path);
+    return -1;
+}
+
 static int run_selftest(void)
 {
     struct service service;
     char good[] = "TEST 0 N,N root /bin/cat arg";
     char bad_auth[] = "TEST 0 Y,N root /bin/cat";
+    char bad_option[] = "TEST 0 Nextra root /bin/cat";
     char bad_wild[] = "* 0 N,N root /bin/cat";
     char too_many[] =
         "TEST 0 N,N root /bin/cat "
@@ -502,10 +603,15 @@ static int run_selftest(void)
         errno != EOPNOTSUPP)
         return 1;
     errno = 0;
+    if (parse_line(bad_option, "/usr/local/sbin", &service) >= 0 ||
+        errno != EINVAL)
+        return 1;
+    errno = 0;
     if (parse_line(too_many, "/usr/local/sbin", &service) >= 0 ||
         errno != E2BIG)
         return 1;
-    if (selftest_reaper() || selftest_config_line_bound())
+    if (selftest_reaper() || selftest_config_line_bound() ||
+        selftest_config_nul())
         return 1;
     puts("dnetd selftest passed");
     return 0;

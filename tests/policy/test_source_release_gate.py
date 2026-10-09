@@ -1178,15 +1178,26 @@ def main() -> int:
         "action.sa_flags = SA_RESTART | SA_NOCLDSTOP;",
         "return sigaction(SIGCHLD, &action, NULL);",
         "if (!once && install_child_reaper())",
-        "if (selftest_reaper() || selftest_config_line_bound())",
-        "if (!strchr(line, '\\n') && !feof(file))",
-        "config line %u exceeds %zu bytes",
+        "if (selftest_reaper() || selftest_config_line_bound() ||",
+        "selftest_config_nul())",
+        "static int read_config_line(FILE *file, char *line, size_t cap)",
+        "int line_rc = read_config_line(file, line, sizeof(line));",
+        "if (ch == 0) {",
+        "errno = EILSEQ;",
+        "if (len + 1U >= cap) {",
+        "if (len == cap - 1U && line[len - 1U] != '\\n') {",
         "static int selftest_config_line_bound(void)",
+        "static int selftest_config_nul(void)",
         "char overlong[2200]",
         "errno == E2BIG",
+        "char bad_option[] =",
+        "parse_line(bad_option",
+        "if (text[1] != '\\0' && text[1] != ',') {",
     ):
         if marker not in dnetd:
             raise SystemExit(f"source-release gate: dnetd child-reaping safeguard missing: {marker}")
+    if "while (fgets(line, sizeof(line), file))" in dnetd:
+        raise SystemExit("source-release gate: dnetd must reject embedded NUL bytes in physical config lines")
     for marker in (
         "if (token) {",
         "errno = E2BIG;",

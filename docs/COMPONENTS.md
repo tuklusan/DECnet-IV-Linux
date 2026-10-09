@@ -102,7 +102,7 @@ The default installed library layout also includes the compatibility links `libd
 
 | Source directory | Executable | Purpose |
 | --- | --- | --- |
-| `userspace/dnetd` | `dnetd` | Object-to-program service dispatcher. |
+| `userspace/dnetd` | `dnetd` | Object-to-program service dispatcher with bounded, NUL-rejecting configuration reading and exact option parsing. |
 | `userspace/dnmultinet` | `dnmultinet` | Python launcher/config generator for optional PyDECnet VDE-to-MULTINET routing. |
 
 ## Build, release and acceptance support
