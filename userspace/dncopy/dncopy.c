@@ -14,12 +14,14 @@
 
 #include <arpa/inet.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <linux/dn.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include "../common/record_io.h"
@@ -595,6 +597,105 @@ static int read_text_record(FILE *in, unsigned char *data, size_t cap,
     return 1;
 }
 
+/* Publish a named download only after successful DAP completion and local
+ * flush/close.  A failed or interrupted transfer must never truncate the
+ * caller's existing local file.  Keep the staging file in the same directory
+ * so rename() is atomic across the publication boundary.
+ */
+static int begin_staged_output(const char *destination, FILE **out,
+                               char **staged_path)
+{
+    static const char pattern[] = ".dniv-dap-XXXXXX";
+    const char *slash = strrchr(destination, '/');
+    size_t prefix_len = slash ? (size_t)(slash - destination + 1) : 0U;
+    struct stat existing;
+    mode_t mode;
+    char *tmp;
+    FILE *stream;
+    int fd;
+    int saved;
+
+    if (!*destination || prefix_len > SIZE_MAX - sizeof(pattern)) {
+        errno = EINVAL;
+        return -1;
+    }
+    tmp = malloc(prefix_len + sizeof(pattern));
+    if (!tmp)
+        return -1;
+    memcpy(tmp, destination, prefix_len);
+    memcpy(tmp + prefix_len, pattern, sizeof(pattern));
+    fd = mkstemp(tmp);
+    if (fd < 0) {
+        free(tmp);
+        return -1;
+    }
+    if (!lstat(destination, &existing)) {
+        if (!S_ISREG(existing.st_mode)) {
+            errno = EACCES;
+            goto fail;
+        }
+        mode = existing.st_mode & 0777;
+    } else if (errno == ENOENT) {
+        mode_t mask = umask(0);
+
+        umask(mask);
+        mode = 0666 & ~mask;
+    } else {
+        goto fail;
+    }
+    if (fchmod(fd, mode))
+        goto fail;
+    stream = fdopen(fd, "wb");
+    if (!stream)
+        goto fail;
+    *out = stream;
+    *staged_path = tmp;
+    return 0;
+fail:
+    saved = errno;
+    close(fd);
+    unlink(tmp);
+    free(tmp);
+    errno = saved;
+    return -1;
+}
+
+static void abort_staged_output(FILE **out, char **staged_path)
+{
+    if (*out) {
+        (void)fclose(*out);
+        *out = NULL;
+    }
+    if (*staged_path) {
+        (void)unlink(*staged_path);
+        free(*staged_path);
+        *staged_path = NULL;
+    }
+}
+
+static int publish_staged_output(FILE **out, char **staged_path,
+                                 const char *destination)
+{
+    int saved = 0;
+
+    if (fflush(*out) || fsync(fileno(*out)))
+        saved = errno;
+    if (fclose(*out) && !saved)
+        saved = errno;
+    *out = NULL;
+    if (!saved && rename(*staged_path, destination))
+        saved = errno;
+    if (saved)
+        (void)unlink(*staged_path);
+    free(*staged_path);
+    *staged_path = NULL;
+    if (saved) {
+        errno = saved;
+        return -1;
+    }
+    return 0;
+}
+
 static int retrieve_file(const char *node_text, const char *filespec,
                          const char *local_path, int text_mode,
                          const struct access_options *options)
@@ -605,6 +706,7 @@ static int retrieve_file(const char *node_text, const char *filespec,
     int fd;
     unsigned char rfm = 0U;
     FILE *out = stdout;
+    char *staged_output = NULL;
     int close_out = 0;
 
     if (!n || n > 128U) {
@@ -639,14 +741,12 @@ static int retrieve_file(const char *node_text, const char *filespec,
         recv_message(fd, reply, sizeof(reply), DAP_ACK) != 2)
         goto fail;
 
-    /*
-     * Do not clobber an existing local destination until the remote file has
-     * completed DAP OPEN and CONNECT successfully.
+    /* Remote OPEN/CONNECT succeeded.  Stage the named destination, but do
+     * not replace the existing file until every DAP read and ACK succeeds.
      */
     if (local_path && strcmp(local_path, "-")) {
-        out = fopen(local_path, "wb");
-        if (!out) {
-            perror("dncopy: open local output");
+        if (begin_staged_output(local_path, &out, &staged_output)) {
+            perror("dncopy: stage local output");
             close(fd);
             return -1;
         }
@@ -706,18 +806,21 @@ static int retrieve_file(const char *node_text, const char *filespec,
     got = recv_message(fd, reply, sizeof(reply), DAP_ACCESS_COMPLETE);
     if (got < 3 || reply[2] != 2U)
         goto fail;
-    if (fflush(out))
+    if (close_out) {
+        if (publish_staged_output(&out, &staged_output, local_path))
+            goto fail;
+        close_out = 0;
+    } else if (fflush(out)) {
         goto fail;
+    }
     close(fd);
-    if (close_out && fclose(out))
-        return -1;
     return 0;
 
 fail:
     fprintf(stderr, "dncopy: DAP retrieval failed\n");
     close(fd);
     if (close_out)
-        fclose(out);
+        abort_staged_output(&out, &staged_output);
     return -1;
 }
 
@@ -1240,6 +1343,64 @@ out:
     return rc;
 }
 
+static int selftest_staged_output(void)
+{
+    char directory[] = "/tmp/dncopy-staged.XXXXXX";
+    char target[128], alias[128];
+    char contents[32];
+    FILE *out = NULL;
+    char *staged = NULL;
+    int fd = -1;
+    int rc = -1;
+
+    if (!mkdtemp(directory))
+        return -1;
+    if (snprintf(target, sizeof(target), "%s/target", directory) >=
+        (int)sizeof(target) ||
+        snprintf(alias, sizeof(alias), "%s/alias", directory) >=
+        (int)sizeof(alias))
+        goto cleanup;
+    fd = open(target, O_CREAT | O_EXCL | O_WRONLY, 0644);
+    if (fd < 0 || write(fd, "ORIGINAL", 8U) != 8)
+        goto cleanup;
+    close(fd);
+    fd = -1;
+    if (begin_staged_output(target, &out, &staged) ||
+        fwrite("PARTIAL", 1, 7U, out) != 7U)
+        goto cleanup;
+    abort_staged_output(&out, &staged);
+    fd = open(target, O_RDONLY);
+    if (fd < 0 || read(fd, contents, sizeof(contents)) != 8 ||
+        memcmp(contents, "ORIGINAL", 8U))
+        goto cleanup;
+    close(fd);
+    fd = -1;
+    if (begin_staged_output(target, &out, &staged) ||
+        fwrite("COMPLETED", 1, 9U, out) != 9U ||
+        publish_staged_output(&out, &staged, target))
+        goto cleanup;
+    fd = open(target, O_RDONLY);
+    if (fd < 0 || read(fd, contents, sizeof(contents)) != 9 ||
+        memcmp(contents, "COMPLETED", 9U))
+        goto cleanup;
+    close(fd);
+    fd = -1;
+    if (symlink(target, alias))
+        goto cleanup;
+    errno = 0;
+    if (!begin_staged_output(alias, &out, &staged) || errno != EACCES)
+        goto cleanup;
+    rc = 0;
+cleanup:
+    if (fd >= 0)
+        close(fd);
+    abort_staged_output(&out, &staged);
+    unlink(alias);
+    unlink(target);
+    rmdir(directory);
+    return rc;
+}
+
 static int selftest(void)
 {
     unsigned char config[32];
@@ -1263,7 +1424,7 @@ static int selftest(void)
     struct remote_spec remote;
     struct access_options parsed_options = { 0 };
 
-    if (selftest_text_records())
+    if (selftest_text_records() || selftest_staged_output())
         return 1;
     if (parse_node("31.70", &addr) || addr != (uint16_t)((31U << 10) | 70U))
         return 1;

@@ -787,18 +787,23 @@ def main() -> int:
     retrieve_end = dncopy.find("static int store_file", retrieve_start)
     retrieve = dncopy[retrieve_start:retrieve_end]
     connect_marker = 'msg[2] = 2U; /* CONNECT data stream */'
-    local_open_marker = 'out = fopen(local_path, "wb");'
+    staging_marker = 'begin_staged_output(local_path, &out, &staged_output)'
+    completion_marker = 'recv_message(fd, reply, sizeof(reply), DAP_ACCESS_COMPLETE)'
+    publish_marker = 'publish_staged_output(&out, &staged_output, local_path)'
     if (
-        retrieve_start < 0
-        or retrieve_end < 0
+        retrieve_start < 0 or retrieve_end < 0
         or connect_marker not in retrieve
-        or local_open_marker not in retrieve
-        or retrieve.find(local_open_marker) < retrieve.find(connect_marker)
-        or "int close_out = 0;" not in retrieve
-        or "if (close_out)" not in retrieve
-        or "Do not clobber an existing local destination until the remote file has" not in retrieve
+        or staging_marker not in retrieve
+        or completion_marker not in retrieve
+        or publish_marker not in retrieve
+        or not (retrieve.find(connect_marker) < retrieve.find(staging_marker)
+                < retrieve.find(completion_marker) < retrieve.find(publish_marker))
+        or 'abort_staged_output(&out, &staged_output)' not in retrieve
+        or 'out = fopen(local_path, "wb");' in retrieve
+        or 'static int selftest_staged_output(void)' not in dncopy
+        or 'selftest_text_records() || selftest_staged_output()' not in dncopy
     ):
-        raise SystemExit("source-release gate: dncopy local retrieval destination is not deferred until remote OPEN/CONNECT")
+        raise SystemExit("source-release gate: dncopy retrieval must stage and atomically publish complete output")
 
     dnfald = read_text("userspace/dnfald/dnfald.c")
     create_start = dnfald.find("static int serve_create")

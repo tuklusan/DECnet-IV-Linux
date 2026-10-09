@@ -148,6 +148,8 @@ The release does not silently enable network-facing daemons. Delivered servers i
 
 For `dnfald` DAP CREATE, the directory supplied with `--root` must be writable by the service account on a Linux filesystem supporting `O_TMPFILE`, `linkat(AT_EMPTY_PATH)` and `user.*` extended attributes. Completed uploads are published under the requested name without overwriting an existing entry; aborted or failed pre-publication transfers do not expose incomplete files. On an unsupported filesystem CREATE fails closed. Explicit ERASE/RENAME operations are separate; apply the site's access and directory-permission policy before enabling network-facing FAL service.
 
+Named local `dncopy` downloads require write access to the destination directory so the client can stage a private temporary file alongside the output. The existing file is not changed until full DAP completion and local flush/sync/close succeed; failed downloads discard the temporary file. An existing symlink or non-regular destination is rejected rather than followed. Successful replacement is atomic and preserves an existing regular file's permission bits, but not its hard-link identity.
+
 Record-mode `dncopy` uploads (the classic default) accept bounded text records but reject embedded NUL bytes or overlong lines instead of silently truncating data. Use `-m block` or `--put` for binary files and verify hashes after transfer.
 
 The `dnmail` MAIL-11 client requires a nonempty subject. If specifying `-s`, supply at least one character: zero-byte subject records are not emitted by the native NSP socket, and a missing subject record would shift the MAIL-11 message fields. An empty `-s ''` argument is rejected before a network connection is made.
