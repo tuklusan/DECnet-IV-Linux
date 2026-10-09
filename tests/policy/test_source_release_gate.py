@@ -796,6 +796,10 @@ def main() -> int:
         or "if (fclose(out)) {" not in create_body
         or "goto fail_unlink;" not in create_body
         or "fail_unlink:\n    unlinkat(rootfd, name, 0);" not in create_body
+        or "flags |= O_WRONLY | O_CREAT | O_EXCL;" not in dnfald
+        or 'if (!out) {\n        close(file_fd);\n        unlinkat(rootfd, name, 0);' not in dnfald
+        or 'selftest_abort_create(rootfd, "GOOD.TXT")' not in dnfald
+        or 'selftest_abort_create(rootfd, "PARTIAL.TXT")' not in dnfald
     ):
         raise SystemExit("source-release gate: dnfald CREATE close failure can leave a failed partial target")
     directory_start = dnfald.find("static int serve_directory")

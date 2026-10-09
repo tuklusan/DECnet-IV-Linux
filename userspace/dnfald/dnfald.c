@@ -196,7 +196,7 @@ static int open_regular_at(int rootfd, const char *name, int write_file)
     int fd;
 
     if (write_file)
-        flags |= O_WRONLY | O_CREAT;
+        flags |= O_WRONLY | O_CREAT | O_EXCL;
     else
         flags |= O_RDONLY;
     fd = openat(rootfd, name, flags, 0666);
@@ -374,6 +374,7 @@ static int serve_create(int fd, int rootfd,
     out = fdopen(file_fd, "wb");
     if (!out) {
         close(file_fd);
+        unlinkat(rootfd, name, 0);
         return -1;
     }
 
@@ -663,6 +664,27 @@ out:
     return rc;
 }
 
+/* Exercise the failed DAP CREATE path without a DECnet transport or remote peer. */
+static int selftest_abort_create(int rootfd, const char *name)
+{
+    unsigned char access[5U + 255U] = {
+        DAP_ACCESS, 0U, DAP_ACCESS_CREATE, 0U, 0U
+    };
+    size_t len = strlen(name);
+    int pair[2];
+    int rc;
+
+    if (!len || len > 255U || socketpair(AF_UNIX, SOCK_SEQPACKET, 0, pair))
+        return -1;
+    access[4] = (unsigned char)len;
+    memcpy(access + 5U, name, len);
+    close(pair[1]);
+    rc = serve_create(pair[0], rootfd, access, 5U + len,
+                      DAP_RFM_FIX, 0U);
+    close(pair[0]);
+    return rc == -1 ? 0 : -1;
+}
+
 static int selftest(void)
 {
     unsigned char config[16];
@@ -741,11 +763,19 @@ static int selftest(void)
     rootfd = open(directory, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
     if (rootfd < 0)
         goto out;
+    /* Aborting CREATE must never truncate or unlink an existing file. */
+    if (selftest_abort_create(rootfd, "GOOD.TXT"))
+        goto out;
     file_fd = open_regular_at(rootfd, "GOOD.TXT", 0);
-    if (file_fd < 0)
+    if (file_fd < 0 || read(file_fd, victim_buf, 3U) != 3 ||
+        memcmp(victim_buf, "ok\n", 3U))
         goto out;
     close(file_fd);
     file_fd = -1;
+    /* Newly created incomplete files must still be removed on failure. */
+    if (selftest_abort_create(rootfd, "PARTIAL.TXT") ||
+        faccessat(rootfd, "PARTIAL.TXT", F_OK, 0) == 0 || errno != ENOENT)
+        goto out;
     file_fd = open_regular_at(rootfd, "ESCAPE.TXT", 0);
     if (file_fd >= 0)
         goto out;
