@@ -18,11 +18,13 @@
 #include <fcntl.h>
 #include <linux/dn.h>
 #include <stdint.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <sys/time.h>
 #include <unistd.h>
 
@@ -153,7 +155,8 @@ static int serve(int fd, const char *root)
     if (got <= 0)
         return -1;
     request[got] = 0;
-    if (sscanf((char *)request, "%15s %511s %31s", method, uri, version) != 3 ||
+    if (memchr(request, '\0', (size_t)got) ||
+        sscanf((char *)request, "%15s %511s %31s", method, uri, version) != 3 ||
         strcmp(method, "GET") || strncmp(version, "HTTP/", 5) ||
         safe_path(uri, name, sizeof(name))) {
         code = 400;
@@ -188,6 +191,69 @@ static int serve(int fd, const char *root)
     if (n && dniv_send_record(fd, body, n, 0))
         return -1;
     return 0;
+}
+
+/* A NUL in a record is not a terminator for HTTP. Reject the complete
+ * record, including any hidden trailing bytes, rather than serving a valid
+ * prefix as an authorized request.
+ */
+static int selftest_hidden_nul(const char *root)
+{
+    static const unsigned char bad[] = {
+        'G', 'E', 'T', ' ', '/', ' ', 'H', 'T', 'T', 'P', '/',
+        '1', '.', '0', '\0', 'H', 'I', 'D', 'D', 'E', 'N'
+    };
+    unsigned char reply[256];
+    struct timeval timeout = { .tv_sec = 5, .tv_usec = 0 };
+    int pair[2] = { -1, -1 };
+    pid_t child;
+    int status;
+    int rc = -1;
+    ssize_t got;
+
+    if (socketpair(AF_UNIX, SOCK_SEQPACKET, 0, pair))
+        return -1;
+    if (setsockopt(pair[0], SOL_SOCKET, SO_RCVTIMEO,
+                   &timeout, sizeof(timeout))) {
+        close(pair[0]);
+        close(pair[1]);
+        return -1;
+    }
+    child = fork();
+    if (child < 0) {
+        close(pair[0]);
+        close(pair[1]);
+        return -1;
+    }
+    if (!child) {
+        int result;
+
+        close(pair[0]);
+        result = serve(pair[1], root);
+        close(pair[1]);
+        _exit(result ? 1 : 0);
+    }
+    close(pair[1]);
+    if (dniv_send_record(pair[0], bad, sizeof(bad), 0))
+        goto finish;
+    got = dniv_recv_record(pair[0], reply, sizeof(reply) - 1U, 0);
+    if (got < 0)
+        goto finish;
+    reply[got] = 0;
+    if (strncmp((char *)reply, "HTTP/1.0 400 Bad Request\r\n", 26U))
+        goto finish;
+    got = dniv_recv_record(pair[0], reply, sizeof(reply), 0);
+    if (got != 12 || memcmp(reply, "Bad Request\n", 12U))
+        goto finish;
+    rc = 0;
+finish:
+    close(pair[0]);
+    if (rc)
+        (void)kill(child, SIGKILL);
+    if (waitpid(child, &status, 0) != child ||
+        !WIFEXITED(status) || WEXITSTATUS(status))
+        return -1;
+    return rc;
 }
 
 static int selftest(void)
@@ -238,6 +304,8 @@ static int selftest(void)
         goto out;
     }
     file = NULL;
+    if (selftest_hidden_nul(directory))
+        goto out;
     if (symlink(victim, link) ||
         linkat(AT_FDCWD, victim, AT_FDCWD, hardlink_path, 0) ||
         mkfifo(fifo_path, 0600))

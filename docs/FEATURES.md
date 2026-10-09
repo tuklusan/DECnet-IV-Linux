@@ -60,7 +60,7 @@ This catalogue describes the production source release. Lab-only helpers and ind
 - `dnobject` named/numbered object client.
 - `dntask` task/object client.
 - `dnlynx` bounded DECnet-native HTTP/1.0 client; the 8192-byte header bound applies to the HTTP header itself, so a valid header remains accepted when the same NSP record also carries a larger response-body prefix.
-- `dnhttpd` bounded DECnet-native static HTTP/1.0 server serving regular root-level files through the full 8192-byte body limit, with safe root-level GET handling that rejects symbolic-link, hard-link and non-regular leaf escapes without blocking on special files, plus explicit bad/not-found responses.
+- `dnhttpd` bounded DECnet-native static HTTP/1.0 server serving regular root-level files through the full 8192-byte body limit, with safe root-level GET handling that rejects symbolic-link, hard-link and non-regular leaf escapes without blocking on special files, plus explicit bad/not-found responses. HTTP request records containing embedded NUL bytes are rejected as bad requests instead of being silently accepted by a prefix-only parser.
 
 ## DAP/FAL
 

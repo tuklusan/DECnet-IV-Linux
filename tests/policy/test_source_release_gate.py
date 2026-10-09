@@ -1016,6 +1016,16 @@ def main() -> int:
         if marker not in dnhttpd:
             raise SystemExit(f"source-release gate: dnhttpd root-safety regression: {marker}")
 
+    for marker in (
+        "memchr(request, '\\0', (size_t)got)",
+        "static int selftest_hidden_nul(const char *root)",
+        "if (selftest_hidden_nul(directory))",
+        '"HTTP/1.0 400 Bad Request',
+        '"Bad Request\\n", 12U',
+    ):
+        if marker not in dnhttpd:
+            raise SystemExit(f"source-release gate: dnhttpd rejects hidden-NUL HTTP records: {marker}")
+
     dnetdb_source = read_text("userspace/libdnet/dnetdb.c")
     for marker in (
         "static int read_node_line(FILE *file, char *line, size_t cap)",
