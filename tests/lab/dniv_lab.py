@@ -334,6 +334,8 @@ KCSAN_IGNORED_REPORTS = frozenset({
     "BUG: KCSAN: data-race in tick_do_update_jiffies64 / mem_cgroup_wb_stats",
     "BUG: KCSAN: data-race in __d_lookup_rcu / d_lru_add",
     "BUG: KCSAN: data-race in d_lru_add / __d_lookup_rcu",
+    "BUG: KCSAN: data-race in xas_clear_mark / xas_find_marked",
+    "BUG: KCSAN: data-race in xas_find_marked / xas_clear_mark",
 })
 
 LOCKDEBUG_FAILURE_MARKERS = (

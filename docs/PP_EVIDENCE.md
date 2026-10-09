@@ -131,3 +131,5 @@ Targeted issue #1034 on exact `5933d71cbbe9ca429dd20aa30b49ce898abbbe91` is gree
 | PP-13 first-release rollback/mixed-version stage | OWNER-AUTHORIZED SKIP | No real N-1 release exists. |
 
 Under the owner practical-lab rule, the post-Timing ledger is complete. Next is one final exact-SHA `PROFILE=full`, `SCOPE=all` release acceptance on the unchanged candidate.
+
+Final full release acceptance issue #1059 on `947509d623591f42b879bd60222a9068e0df3c37` is **non-qualifying**. All dispatched children except amd64 KCSAN completed green; KCSAN run `37926393337`, amd64 job `113806258407`, artifact `11615141091`, reported exact upstream pair `xas_clear_mark / xas_find_marked`. syzbot bug `57980d45446259bcb330ed78ba02f3b38733d413` is closed invalid for this exact pair, and upstream XArray maintainer review confirms the XArray-lock writer/RCU-reader design. The pinned Linux `72d3fcf802c45d00b300f25b848a93c3a2bd7c7e` retains the same marked-iteration implementation. Successor acceptance therefore filters only this exact pair and reverse ordering as vetted upstream KCSAN noise; all other summaries remain blocking.
