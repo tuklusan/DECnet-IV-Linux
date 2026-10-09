@@ -62,6 +62,27 @@
 #define DAP_ACCOMP_CLOSE 1U
 #define DAP_ACCOMP_RESPONSE 2U
 #define DNFAL_BACKLOG 8
+#define DAP_BUFFER_LIMIT 2048U
+
+/* dnfald handles one accepted session at a time (no per-session threads).
+ * Every outbound DAP frame is bounded by the negotiated peer buffer size. */
+static size_t dap_send_limit = DAP_BUFFER_LIMIT;
+
+static int negotiate_buffer_limit(const unsigned char *config, size_t len,
+                                  size_t *limit)
+{
+    size_t peer;
+
+    if (!limit || len < 12U || config[0] != DAP_CONFIG ||
+        (config[1] & 0x7fU))
+        return -1;
+    peer = (size_t)config[2] | ((size_t)config[3] << 8U);
+    /* The protocol defines zero as unlimited, not as no room to send. */
+    if (peer && peer < 12U)
+        return -1;
+    *limit = !peer || peer > DAP_BUFFER_LIMIT ? DAP_BUFFER_LIMIT : peer;
+    return 0;
+}
 
 static size_t make_config(unsigned char *buf, size_t cap)
 {
@@ -70,7 +91,7 @@ static size_t make_config(unsigned char *buf, size_t cap)
     buf[0] = DAP_CONFIG;
     buf[1] = 0U;
     buf[2] = 0U;
-    buf[3] = 4U;
+    buf[3] = 8U; /* 2048-byte maximum complete DAP message */
     buf[4] = 128U;
     buf[5] = 128U;
     buf[6] = 4U;
@@ -84,7 +105,9 @@ static size_t make_config(unsigned char *buf, size_t cap)
 
 static int validate_config(const unsigned char *buf, size_t len)
 {
-    return len >= 12U && buf[0] == DAP_CONFIG && !(buf[1] & 0x7fU) ? 0 : -1;
+    size_t limit;
+
+    return negotiate_buffer_limit(buf, len, &limit);
 }
 
 static int make_listener(void)
@@ -108,7 +131,17 @@ static int make_listener(void)
 
 static int send_record(int fd, const unsigned char *buf, size_t len)
 {
+    if (len > dap_send_limit) {
+        errno = EMSGSIZE;
+        return -1;
+    }
     return dniv_send_record(fd, buf, len, 0);
+}
+
+static ssize_t recv_record(int fd, void *buf, size_t cap, int flags)
+{
+    return dniv_recv_record(fd, buf,
+                            cap < dap_send_limit ? cap : dap_send_limit, flags);
 }
 
 static int parse_attributes(const unsigned char *buf, size_t len,
@@ -298,7 +331,7 @@ static int serve_get(int fd, int rootfd,
             goto fail;
     }
 
-    got = dniv_recv_record(fd, request, sizeof(request), 0);
+    got = recv_record(fd, request, sizeof(request), 0);
     if (got != 3 || request[0] != DAP_CONTROL || request[2] != DAP_CONTROL_CONNECT)
         goto fail;
     {
@@ -307,12 +340,14 @@ static int serve_get(int fd, int rootfd,
             goto fail;
     }
 
-    got = dniv_recv_record(fd, request, sizeof(request), 0);
+    got = recv_record(fd, request, sizeof(request), 0);
     if (got != 3 || request[0] != DAP_CONTROL || request[2] != DAP_CONTROL_GET)
         goto fail;
 
     for (;;) {
-        size_t count = fread(reply + 3U, 1, sizeof(reply) - 3U, in);
+        size_t payload_cap = (sizeof(reply) < dap_send_limit ?
+                              sizeof(reply) : dap_send_limit) - 3U;
+        size_t count = fread(reply + 3U, 1, payload_cap, in);
 
         if (count) {
             reply[0] = DAP_DATA;
@@ -321,7 +356,7 @@ static int serve_get(int fd, int rootfd,
             if (send_record(fd, reply, count + 3U))
                 goto fail;
         }
-        if (count < sizeof(reply) - 3U) {
+        if (count < payload_cap) {
             if (ferror(in))
                 goto fail;
             break;
@@ -339,7 +374,7 @@ static int serve_get(int fd, int rootfd,
         if (send_record(fd, eof, sizeof(eof)))
             return -1;
     }
-    got = dniv_recv_record(fd, request, sizeof(request), 0);
+    got = recv_record(fd, request, sizeof(request), 0);
     if (got != 3 || request[0] != DAP_ACCESS_COMPLETE || request[2] != DAP_ACCOMP_CLOSE)
         return -1;
     {
@@ -397,7 +432,7 @@ static int serve_create(int fd, int rootfd,
             goto fail;
     }
 
-    got = dniv_recv_record(fd, request, sizeof(request), 0);
+    got = recv_record(fd, request, sizeof(request), 0);
     if (got != 3 || request[0] != DAP_CONTROL ||
         request[2] != DAP_CONTROL_CONNECT)
         goto fail;
@@ -407,7 +442,7 @@ static int serve_create(int fd, int rootfd,
             goto fail;
     }
 
-    got = dniv_recv_record(fd, request, sizeof(request), 0);
+    got = recv_record(fd, request, sizeof(request), 0);
     if (got != 3 || request[0] != DAP_CONTROL ||
         request[2] != DAP_CONTROL_PUT)
         goto fail;
@@ -415,7 +450,7 @@ static int serve_create(int fd, int rootfd,
     for (;;) {
         size_t off;
 
-        got = dniv_recv_record(fd, request, sizeof(request), 0);
+        got = recv_record(fd, request, sizeof(request), 0);
         if (got < 2)
             goto fail;
         if (request[0] == DAP_DATA) {
@@ -481,7 +516,7 @@ static int serve_rename(int fd, int rootfd,
     if (access_name(access, access_len, DAP_ACCESS_RENAME,
                     oldname, sizeof(oldname)))
         return -1;
-    got = dniv_recv_record(fd, request, sizeof(request), 0);
+    got = recv_record(fd, request, sizeof(request), 0);
     if (got < 4 || request[0] != 15U || request[2] != 1U)
         return -1;
     n = request[3];
@@ -632,8 +667,10 @@ static int serve_session(int fd, const char *root)
     if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0 ||
         setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)) < 0)
         return -1;
-    got = dniv_recv_record(fd, request, sizeof(request), 0);
-    if (got < 0 || validate_config(request, (size_t)got))
+    dap_send_limit = DAP_BUFFER_LIMIT;
+    got = recv_record(fd, request, sizeof(request), 0);
+    if (got < 0 ||
+        negotiate_buffer_limit(request, (size_t)got, &dap_send_limit))
         return -1;
     reply_len = make_config(reply, sizeof(reply));
     if (!reply_len || send_record(fd, reply, reply_len))
@@ -644,7 +681,7 @@ static int serve_session(int fd, const char *root)
     if (rootfd < 0)
         return -1;
 
-    got = dniv_recv_record(fd, request, sizeof(request), 0);
+    got = recv_record(fd, request, sizeof(request), 0);
     if (got < 0) {
         rc = -1;
         goto out;
@@ -655,7 +692,7 @@ static int serve_session(int fd, const char *root)
             rc = -1;
             goto out;
         }
-        got = dniv_recv_record(fd, request, sizeof(request), 0);
+        got = recv_record(fd, request, sizeof(request), 0);
         if (got < 0) {
             rc = -1;
             goto out;
@@ -680,6 +717,110 @@ static int serve_session(int fd, const char *root)
         rc = -1;
 out:
     close(rootfd);
+    return rc;
+}
+
+/* Exercise the real GET path against a peer advertising only 128 bytes, not
+ * merely the static frame-construction helper. The original implementation
+ * put 2048 bytes in one DATA record despite advertising only 1024. */
+static int selftest_get_buffer_limit(int rootfd)
+{
+    const char *name = "CAP.TXT";
+    const unsigned char access[] = {
+        DAP_ACCESS, 0U, DAP_ACCESS_OPEN, 0U, 7U,
+        'C', 'A', 'P', '.', 'T', 'X', 'T'
+    };
+    const unsigned char connect[] = { DAP_CONTROL, 0U, DAP_CONTROL_CONNECT };
+    const unsigned char get[] = { DAP_CONTROL, 0U, DAP_CONTROL_GET };
+    const unsigned char finish[] = { DAP_ACCESS_COMPLETE, 0U, DAP_ACCOMP_CLOSE };
+    unsigned char fill[4096], record[256];
+    struct timeval timeout = { .tv_sec = 4, .tv_usec = 0 };
+    int pair[2] = { -1, -1 }, fd = -1, status, rc = -1;
+    pid_t child = -1;
+    size_t total = 0U, frames = 0U;
+    ssize_t got;
+
+    memset(fill, 'Q', sizeof(fill));
+    fd = openat(rootfd, name, O_CREAT | O_EXCL | O_WRONLY | O_CLOEXEC, 0600);
+    if (fd < 0)
+        return -1;
+    if (write(fd, fill, sizeof(fill)) != (ssize_t)sizeof(fill))
+        goto cleanup;
+    if (close(fd)) {
+        fd = -1;
+        goto cleanup;
+    }
+    fd = -1;
+    if (socketpair(AF_UNIX, SOCK_SEQPACKET, 0, pair))
+        goto cleanup;
+    if (setsockopt(pair[0], SOL_SOCKET, SO_RCVTIMEO,
+                   &timeout, sizeof(timeout)))
+        goto cleanup;
+    dap_send_limit = 128U;
+    child = fork();
+    if (child < 0)
+        goto cleanup;
+    if (!child) {
+        int result;
+        close(pair[0]);
+        result = serve_get(pair[1], rootfd, access, sizeof(access));
+        close(pair[1]);
+        _exit(result ? 1 : 0);
+    }
+    close(pair[1]);
+    pair[1] = -1;
+    got = dniv_recv_record(pair[0], record, sizeof(record), 0);
+    if (got < 4 || got > 128 || record[0] != DAP_ATTRIBUTES)
+        goto cleanup;
+    got = dniv_recv_record(pair[0], record, sizeof(record), 0);
+    if (got != 2 || record[0] != DAP_ACK ||
+        dniv_send_record(pair[0], connect, sizeof(connect), 0))
+        goto cleanup;
+    got = dniv_recv_record(pair[0], record, sizeof(record), 0);
+    if (got != 2 || record[0] != DAP_ACK ||
+        dniv_send_record(pair[0], get, sizeof(get), 0))
+        goto cleanup;
+    for (;;) {
+        got = dniv_recv_record(pair[0], record, sizeof(record), 0);
+        if (got < 0 || got > 128)
+            goto cleanup;
+        if (got == 4 && record[0] == DAP_STATUS)
+            break;
+        if (got < 4 || record[0] != DAP_DATA ||
+            record[1] != 0U || record[2] != 0U)
+            goto cleanup;
+        for (size_t i = 3U; i < (size_t)got; i++)
+            if (record[i] != 'Q')
+                goto cleanup;
+        total += (size_t)got - 3U;
+        frames++;
+        if (frames > 40U)
+            goto cleanup;
+    }
+    if (total != sizeof(fill) || frames < 30U ||
+        dniv_send_record(pair[0], finish, sizeof(finish), 0))
+        goto cleanup;
+    got = dniv_recv_record(pair[0], record, sizeof(record), 0);
+    if (got != 3 || record[0] != DAP_ACCESS_COMPLETE ||
+        record[2] != DAP_ACCOMP_RESPONSE)
+        goto cleanup;
+    rc = 0;
+cleanup:
+    if (fd >= 0)
+        close(fd);
+    if (pair[0] >= 0)
+        close(pair[0]);
+    if (pair[1] >= 0)
+        close(pair[1]);
+    if (child > 0) {
+        if (rc)
+            (void)kill(child, SIGKILL);
+        if (waitpid(child, &status, 0) != child ||
+            !WIFEXITED(status) || WEXITSTATUS(status))
+            rc = -1;
+    }
+    dap_send_limit = DAP_BUFFER_LIMIT;
+    (void)unlinkat(rootfd, name, 0);
     return rc;
 }
 
@@ -887,9 +1028,24 @@ static int selftest(void)
 
     if (make_config(config, sizeof(config)) != 12U ||
         validate_config(config, 12U) ||
-        config[3] != 4U || config[4] != 128U || config[5] != 128U ||
+        config[3] != 8U || config[4] != 128U || config[5] != 128U ||
         config[6] != 4U || config[7] != 1U)
         return 1;
+    config[3] = 0U;
+    config[2] = 128U;
+    if (validate_config(config, 12U) ||
+        negotiate_buffer_limit(config, 12U, &dap_send_limit) ||
+        dap_send_limit != 128U)
+        return 1;
+    config[2] = 0U;
+    if (validate_config(config, 12U) ||
+        negotiate_buffer_limit(config, 12U, &dap_send_limit) ||
+        dap_send_limit != DAP_BUFFER_LIMIT)
+        return 1;
+    config[2] = 11U;
+    if (!validate_config(config, 12U))
+        return 1;
+    dap_send_limit = DAP_BUFFER_LIMIT;
     config[0] = 2U;
     if (!validate_config(config, 12U) ||
         safe_filespec((const unsigned char *)"SERVER.TXT", 10U,
@@ -952,6 +1108,9 @@ static int selftest(void)
         goto out;
     close(file_fd);
     file_fd = -1;
+    /* Both complete DATA frames and payload bytes must respect negotiation. */
+    if (selftest_get_buffer_limit(rootfd))
+        goto out;
     /* Newly created incomplete files must still be removed on failure. */
     if (selftest_abort_create(rootfd, "PARTIAL.TXT") ||
         faccessat(rootfd, "PARTIAL.TXT", F_OK, 0) == 0 || errno != ENOENT ||

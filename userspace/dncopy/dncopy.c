@@ -35,6 +35,7 @@
 #endif
 
 #define DAP_FAL_OBJECT 17U
+#define DAP_BUFFER_LIMIT 2048U
 #define DAP_CONFIG 1U
 #define DAP_ATTRIBUTES 2U
 #define DAP_ACCESS 3U
@@ -183,6 +184,25 @@ static int parse_transparent_spec(const char *text, struct remote_spec *spec,
     return parse_node(spec->node, &addr);
 }
 
+/* dncopy is a single-operation CLI. Refresh this limit for each CONFIG
+ * exchange, then apply it to every DAP frame on that connection. */
+static size_t dap_send_limit = DAP_BUFFER_LIMIT;
+
+static int negotiate_buffer_limit(const unsigned char *config, size_t len,
+                                  size_t *limit)
+{
+    size_t peer;
+
+    if (!limit || len < 12U || config[0] != DAP_CONFIG ||
+        (config[1] & 0x7fU))
+        return -1;
+    peer = (size_t)config[2] | ((size_t)config[3] << 8U);
+    if (peer && peer < 12U)
+        return -1;
+    *limit = !peer || peer > DAP_BUFFER_LIMIT ? DAP_BUFFER_LIMIT : peer;
+    return 0;
+}
+
 static size_t make_config(unsigned char *buf, size_t cap)
 {
     if (cap < 12U)
@@ -190,7 +210,7 @@ static size_t make_config(unsigned char *buf, size_t cap)
     buf[0] = DAP_CONFIG;
     buf[1] = 0U;
     buf[2] = 0x00U;
-    buf[3] = 0x04U; /* 1024-byte DAP buffer */
+    buf[3] = 0x08U; /* 2048-byte maximum complete DAP message */
     buf[4] = 128U;  /* user-defined OS: Linux */
     buf[5] = 128U;  /* user-defined file system */
     buf[6] = 4U;
@@ -204,11 +224,9 @@ static size_t make_config(unsigned char *buf, size_t cap)
 
 static int validate_config(const unsigned char *buf, size_t len)
 {
-    if (len < 12U || buf[0] != DAP_CONFIG)
-        return -1;
-    if (buf[1] & 0x7fU)
-        return -1;
-    return 0;
+    size_t limit;
+
+    return negotiate_buffer_limit(buf, len, &limit);
 }
 
 /* A connected but silent FAL peer must not hold an interactive copy
@@ -282,7 +300,17 @@ static int open_fal(const char *node_text, const struct access_options *options)
 
 static int send_record(int fd, const unsigned char *buf, size_t len)
 {
+    if (len > dap_send_limit) {
+        errno = EMSGSIZE;
+        return -1;
+    }
     return dniv_send_record(fd, buf, len, 0);
+}
+
+static ssize_t recv_record(int fd, void *buf, size_t cap, int flags)
+{
+    return dniv_recv_record(fd, buf,
+                            cap < dap_send_limit ? cap : dap_send_limit, flags);
 }
 
 static int exchange_config(int fd)
@@ -291,10 +319,12 @@ static int exchange_config(int fd)
     size_t config_len = make_config(config, sizeof(config));
     ssize_t got;
 
+    dap_send_limit = DAP_BUFFER_LIMIT;
     if (!config_len || send_record(fd, config, config_len))
         return -1;
-    got = dniv_recv_record(fd, reply, sizeof(reply), 0);
-    return got > 0 && !validate_config(reply, (size_t)got) ? 0 : -1;
+    got = recv_record(fd, reply, sizeof(reply), 0);
+    return got > 0 ? negotiate_buffer_limit(reply, (size_t)got,
+                                            &dap_send_limit) : -1;
 }
 
 static int connect_fal(const char *node_text, const struct access_options *options)
@@ -316,7 +346,7 @@ static int connect_fal(const char *node_text, const struct access_options *optio
 
 static int recv_message(int fd, unsigned char *buf, size_t cap, unsigned char type)
 {
-    ssize_t got = dniv_recv_record(fd, buf, cap, 0);
+    ssize_t got = recv_record(fd, buf, cap, 0);
 
     if (got < 2 || buf[0] != type)
         return -1;
@@ -781,7 +811,7 @@ static int retrieve_file(const char *node_text, const char *filespec,
         goto fail;
 
     for (;;) {
-        got = dniv_recv_record(fd, reply, sizeof(reply), 0);
+        got = recv_record(fd, reply, sizeof(reply), 0);
         if (got < 2)
             goto fail;
         if (reply[0] == DAP_DATA) {
@@ -930,7 +960,9 @@ static int store_file(const char *local_path, const char *node_text,
     if (text_mode) {
         for (;;) {
             size_t len;
-            int read_rc = read_text_record(in, data, sizeof(data), &len);
+            size_t payload_cap = dap_send_limit - 3U;
+            int read_rc = read_text_record(in, data,
+                payload_cap < sizeof(data) ? payload_cap : sizeof(data), &len);
 
             if (!read_rc)
                 break;
@@ -938,7 +970,8 @@ static int store_file(const char *local_path, const char *node_text,
                 if (errno == EILSEQ)
                     fprintf(stderr, "dncopy: NUL in record-mode input; use -m block for binary data\n");
                 else if (errno == E2BIG)
-                    fprintf(stderr, "dncopy: text input line exceeds %zu bytes\n", sizeof(data));
+                    fprintf(stderr, "dncopy: text input exceeds negotiated record payload (%zu bytes)\n",
+                            dap_send_limit - 3U);
                 else
                     perror("dncopy: read text input");
                 goto fail;
@@ -952,7 +985,10 @@ static int store_file(const char *local_path, const char *node_text,
         }
     } else {
         for (;;) {
-            data_len = fread(data, 1, sizeof(data), in);
+            size_t payload_cap = dap_send_limit - 3U;
+            if (payload_cap > sizeof(data))
+                payload_cap = sizeof(data);
+            data_len = fread(data, 1, payload_cap, in);
             if (data_len) {
                 msg[0] = DAP_DATA;
                 msg[1] = 0U;
@@ -961,7 +997,7 @@ static int store_file(const char *local_path, const char *node_text,
                 if (send_record(fd, msg, data_len + 3U))
                     goto fail;
             }
-            if (data_len < sizeof(data)) {
+            if (data_len < payload_cap) {
                 if (ferror(in))
                     goto fail;
                 break;
@@ -1029,7 +1065,7 @@ static int rename_file(const char *node_text, const char *oldspec,
     if (send_record(fd, msg, newn + 4U))
         goto fail;
 
-    got = dniv_recv_record(fd, reply, sizeof(reply), 0);
+    got = recv_record(fd, reply, sizeof(reply), 0);
     if (got < 3 || reply[0] != DAP_ACCESS_COMPLETE || reply[2] != 2U)
         goto fail;
     close(fd);
@@ -1068,7 +1104,7 @@ static int delete_file(const char *node_text, const char *filespec,
     if (send_record(fd, msg, n + 5U))
         goto fail;
 
-    got = dniv_recv_record(fd, reply, sizeof(reply), 0);
+    got = recv_record(fd, reply, sizeof(reply), 0);
     if (got < 2)
         goto fail;
     if (reply[0] == DAP_STATUS) {
@@ -1119,7 +1155,7 @@ static int print_file(const char *node_text, const char *filespec,
         goto fail;
 
     for (;;) {
-        ssize_t got = dniv_recv_record(fd, reply, sizeof(reply), 0);
+        ssize_t got = recv_record(fd, reply, sizeof(reply), 0);
 
         if (got < 2)
             goto fail;
@@ -1144,7 +1180,7 @@ static int print_file(const char *node_text, const char *filespec,
         goto fail;
 
     for (;;) {
-        ssize_t got = dniv_recv_record(fd, reply, sizeof(reply), 0);
+        ssize_t got = recv_record(fd, reply, sizeof(reply), 0);
 
         if (got < 2)
             goto fail;
@@ -1200,7 +1236,7 @@ static int submit_file(const char *node_text, const char *filespec,
         goto fail;
 
     for (;;) {
-        ssize_t got = dniv_recv_record(fd, reply, sizeof(reply), 0);
+        ssize_t got = recv_record(fd, reply, sizeof(reply), 0);
 
         if (got < 2)
             goto fail;
@@ -1250,7 +1286,7 @@ static int list_directory(const char *node_text, const char *filespec,
         goto fail;
 
     for (;;) {
-        ssize_t got = dniv_recv_record(fd, reply, sizeof(reply), 0);
+        ssize_t got = recv_record(fd, reply, sizeof(reply), 0);
 
         if (got < 2)
             goto fail;
@@ -1294,6 +1330,36 @@ fail:
     fprintf(stderr, "dncopy: DAP directory listing failed\n");
     close(fd);
     return -1;
+}
+
+static int selftest_buffer_limit(void)
+{
+    unsigned char data[129];
+    int pair[2] = { -1, -1 };
+    ssize_t got;
+    int rc = -1;
+
+    memset(data, 0x5a, sizeof(data));
+    if (socketpair(AF_UNIX, SOCK_SEQPACKET, 0, pair))
+        return -1;
+    dap_send_limit = 128U;
+    if (send_record(pair[0], data, 128U) ||
+        (got = recv_record(pair[1], data, 128U, 0)) != 128U)
+        goto finish;
+    errno = 0;
+    if (send_record(pair[0], data, 129U) != -1 || errno != EMSGSIZE)
+        goto finish;
+    errno = 0;
+    if (dniv_send_record(pair[0], data, 129U, 0) ||
+        recv_record(pair[1], data, 129U, 0) != -1 ||
+        errno != EMSGSIZE)
+        goto finish;
+    rc = 0;
+finish:
+    dap_send_limit = DAP_BUFFER_LIMIT;
+    close(pair[0]);
+    close(pair[1]);
+    return rc;
 }
 
 static int selftest_socket_timeouts(void)
@@ -1474,8 +1540,8 @@ static int selftest(void)
     struct remote_spec remote;
     struct access_options parsed_options = { 0 };
 
-    if (selftest_socket_timeouts() || selftest_text_records() ||
-        selftest_staged_output())
+    if (selftest_buffer_limit() || selftest_socket_timeouts() ||
+        selftest_text_records() || selftest_staged_output())
         return 1;
     if (parse_node("31.70", &addr) || addr != (uint16_t)((31U << 10) | 70U))
         return 1;
@@ -1483,9 +1549,24 @@ static int selftest(void)
         !parse_node("31.0", &addr))
         return 1;
     if (make_config(config, sizeof(config)) != 12U ||
-        config[0] != DAP_CONFIG || config[2] != 0 || config[3] != 4 ||
+        config[0] != DAP_CONFIG || config[2] != 0 || config[3] != 8 ||
         config[6] != 4 || config[7] != 1 || validate_config(config, 12U))
         return 1;
+    config[2] = 128U;
+    config[3] = 0U;
+    if (validate_config(config, 12U) ||
+        negotiate_buffer_limit(config, 12U, &dap_send_limit) ||
+        dap_send_limit != 128U)
+        return 1;
+    config[2] = 0U;
+    if (validate_config(config, 12U) ||
+        negotiate_buffer_limit(config, 12U, &dap_send_limit) ||
+        dap_send_limit != DAP_BUFFER_LIMIT)
+        return 1;
+    config[2] = 11U;
+    if (!validate_config(config, 12U))
+        return 1;
+    dap_send_limit = DAP_BUFFER_LIMIT;
     if (DAP_STATUS_EOF != 0x4027U ||
         decode_status(eof_status, sizeof(eof_status), &status, &mac, &mic) ||
         status != DAP_STATUS_EOF || mac != 4U || mic != 0x027U ||

@@ -425,6 +425,37 @@ static FILE *open_mailbox(const char *root)
     return out;
 }
 
+/* Keep incomplete MAIL-11 data in a private temporary stream.  A peer
+ * disconnect before the end-of-message marker must not publish partial
+ * headers or body into the persistent mailbox spool.
+ */
+static int append_complete_spool(const char *root, FILE *staged)
+{
+    unsigned char data[4096];
+    FILE *spool;
+
+    if (fflush(staged) || fseek(staged, 0L, SEEK_SET))
+        return -1;
+    spool = open_mailbox(root);
+    if (!spool)
+        return -1;
+    for (;;) {
+        size_t got = fread(data, 1, sizeof(data), staged);
+
+        if (got && fwrite(data, 1, got, spool) != got)
+            goto fail;
+        if (got < sizeof(data)) {
+            if (ferror(staged))
+                goto fail;
+            break;
+        }
+    }
+    return fclose(spool) ? -1 : 0;
+fail:
+    (void)fclose(spool);
+    return -1;
+}
+
 static int serve(int fd, const char *root, const char *sendmail_path,
                  const char *smtp_host, unsigned int smtp_port,
                  const char *smtp_from)
@@ -477,7 +508,7 @@ static int serve(int fd, const char *root, const char *sendmail_path,
         recv_field(fd, subject, sizeof(subject), 1) < 0)
         return -1;
 
-    out = open_mailbox(root);
+    out = tmpfile();
     if (!out)
         return -1;
     {
@@ -523,7 +554,7 @@ static int serve(int fd, const char *root, const char *sendmail_path,
             smtp_write_record(smtp_fd, body, (size_t)got))
             goto fail;
     }
-    if (fputs("--\n", out) == EOF)
+    if (fputs("--\n", out) == EOF || append_complete_spool(root, out))
         goto fail;
     if (fclose(out)) {
         out = NULL;
@@ -571,6 +602,60 @@ finish:
     close(pair[0]);
     close(pair[1]);
     return rc;
+}
+
+/* An invalid/incomplete network session cannot append a partial message,
+ * while a completed session must still produce the existing mailbox data.
+ */
+static int selftest_spool_session(const char *root, int complete)
+{
+    int pair[2] = { -1, -1 };
+    unsigned char ack[8];
+    pid_t child;
+    int status;
+    int ok = 0;
+
+    if (socketpair(AF_UNIX, SOCK_SEQPACKET, 0, pair))
+        return -1;
+    child = fork();
+    if (child < 0) {
+        close(pair[0]);
+        close(pair[1]);
+        return -1;
+    }
+    if (!child) {
+        int rc;
+
+        close(pair[0]);
+        rc = serve(pair[1], root, NULL, NULL, 25U, "mail11@localhost");
+        close(pair[1]);
+        _exit(rc ? 1 : 0);
+    }
+    close(pair[1]);
+    if (dniv_send_record(pair[0], "sender", 6U, 0) ||
+        dniv_send_record(pair[0], "recipient", 9U, 0) ||
+        dniv_recv_record(pair[0], ack, sizeof(ack), 0) != 4 ||
+        memcmp(ack, "\1\0\0\0", 4U) ||
+        dniv_send_record(pair[0], "\0", 1U, 0) ||
+        dniv_send_record(pair[0], "user", 4U, 0) ||
+        dniv_send_record(pair[0], "subject", 7U, 0) ||
+        dniv_send_record(pair[0], "body", 4U, 0))
+        goto done;
+    if (complete) {
+        if (dniv_send_record(pair[0], "\0", 1U, 0) ||
+            dniv_recv_record(pair[0], ack, sizeof(ack), 0) != 4 ||
+            memcmp(ack, "\1\0\0\0", 4U))
+            goto done;
+    }
+    ok = 1;
+done:
+    close(pair[0]);
+    if (!ok)
+        (void)kill(child, SIGKILL);
+    if (waitpid(child, &status, 0) != child || !WIFEXITED(status) ||
+        WEXITSTATUS(status) != (complete ? 0 : 1))
+        return -1;
+    return ok ? 0 : -1;
 }
 
 static int selftest(void)
@@ -659,6 +744,22 @@ static int selftest(void)
     victim_fd = open(victim, O_RDONLY | O_CLOEXEC);
     if (victim_fd < 0 || read(victim_fd, victim_buf, sizeof(victim_buf)) != 7 ||
         memcmp(victim_buf, "victim\n", 7U))
+        goto out;
+    close(victim_fd);
+    victim_fd = -1;
+    if (selftest_spool_session(directory, 0))
+        goto out;
+    victim_fd = open(mailbox, O_RDONLY | O_CLOEXEC);
+    if (victim_fd < 0 || read(victim_fd, victim_buf, sizeof(victim_buf)) != 3 ||
+        memcmp(victim_buf, "ok\n", 3U))
+        goto out;
+    close(victim_fd);
+    victim_fd = -1;
+    if (selftest_spool_session(directory, 1))
+        goto out;
+    victim_fd = open(mailbox, O_RDONLY | O_CLOEXEC);
+    if (victim_fd < 0 || read(victim_fd, victim_buf, sizeof(victim_buf)) != 16 ||
+        memcmp(victim_buf, "ok\nFrom: sender", 15U))
         goto out;
     rc = 0;
 

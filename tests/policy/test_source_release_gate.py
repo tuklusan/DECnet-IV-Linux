@@ -788,7 +788,8 @@ def main() -> int:
         or "if (ch == 0) {" not in text_reader
         or "errno = EILSEQ;" not in text_reader
         or "if (len == cap) {" not in text_reader
-        or "read_text_record(in, data, sizeof(data), &len)" not in store_body
+        or "int read_rc = read_text_record(in, data," not in store_body
+        or "payload_cap < sizeof(data) ? payload_cap : sizeof(data)" not in store_body
         or "selftest_text_records()" not in dncopy
         or "fgets((char *)data, sizeof(data), in)" in store_body
     ):
@@ -801,7 +802,7 @@ def main() -> int:
         'static int set_dap_timeouts(int fd)',
         'if (set_dap_timeouts(fd))',
         'static int selftest_socket_timeouts(void)',
-        'if (selftest_socket_timeouts() || selftest_text_records()',
+        'selftest_socket_timeouts() ||',
     ):
         if marker not in dncopy:
             raise SystemExit(f"source-release gate: dncopy DAP I/O must have bounded peer-idle timeouts: {marker}")
@@ -825,7 +826,52 @@ def main() -> int:
     ):
         raise SystemExit("source-release gate: dncopy retrieval must stage and atomically publish complete output")
 
+    # DAP CONFIG BUFSIZ is a *complete message* limit, not just the data
+    # payload. Each peer must honor the lesser advertised size, including
+    # three DATA header bytes and potentially smaller independent DEC peers.
+    for marker in (
+        '#define DAP_BUFFER_LIMIT 2048U',
+        'static int negotiate_buffer_limit(',
+        'peer = (size_t)config[2] | ((size_t)config[3] << 8U);',
+        'if (peer && peer < 12U)',
+        '*limit = !peer || peer > DAP_BUFFER_LIMIT ? DAP_BUFFER_LIMIT : peer;',
+        'if (len > dap_send_limit) {',
+        'errno = EMSGSIZE;',
+        'return dniv_recv_record(fd, buf,',
+        'cap < dap_send_limit ? cap : dap_send_limit, flags);',
+        'config[3] != 8',
+        'selftest_buffer_limit()',
+        'payload_cap = dap_send_limit - 3U;',
+        'data_len = fread(data, 1, payload_cap, in);',
+        'data_len < payload_cap',
+    ):
+        if marker not in dncopy:
+            raise SystemExit(f"source-release gate: dncopy DAP negotiated-buffer regression: {marker}")
+
     dnfald = read_text("userspace/dnfald/dnfald.c")
+    for marker in (
+        '#define DAP_BUFFER_LIMIT 2048U',
+        'static int negotiate_buffer_limit(',
+        'peer = (size_t)config[2] | ((size_t)config[3] << 8U);',
+        'if (peer && peer < 12U)',
+        '*limit = !peer || peer > DAP_BUFFER_LIMIT ? DAP_BUFFER_LIMIT : peer;',
+        'if (len > dap_send_limit) {',
+        'errno = EMSGSIZE;',
+        'return dniv_recv_record(fd, buf,',
+        'cap < dap_send_limit ? cap : dap_send_limit, flags);',
+        'config[3] != 8U',
+        'negotiate_buffer_limit(request, (size_t)got, &dap_send_limit)',
+        'sizeof(reply) : dap_send_limit) - 3U;',
+        'size_t count = fread(reply + 3U, 1, payload_cap, in);',
+        'if (count < payload_cap)',
+        'static int selftest_get_buffer_limit(int rootfd)',
+        'selftest_get_buffer_limit(rootfd)',
+        'dap_send_limit = 128U;',
+        'got > 128',
+        'total != sizeof(fill) || frames < 30U',
+    ):
+        if marker not in dnfald:
+            raise SystemExit(f"source-release gate: dnfald DAP negotiated-buffer regression: {marker}")
     create_start = dnfald.find("static int serve_create")
     create_end = dnfald.find("static int serve_rename", create_start)
     create_body = dnfald[create_start:create_end]
@@ -924,12 +970,21 @@ def main() -> int:
     if 'if (fputs("--\\n", out) == EOF || fclose(out))' in dnmaild:
         raise SystemExit("source-release gate: dnmaild can re-close an invalid stream after final spool close failure")
     for marker in (
-        'if (fputs("--\\n", out) == EOF)\n        goto fail;',
+        'if (fputs("--\\n", out) == EOF || append_complete_spool(root, out))\n        goto fail;',
         'if (fclose(out)) {\n        out = NULL;\n        goto fail;\n    }',
     ):
         if marker not in dnmaild:
             raise SystemExit("source-release gate: dnmaild final spool close failure is not invalidated before cleanup")
     for marker in (
+        'static int append_complete_spool(const char *root, FILE *staged)',
+        'if (fflush(staged) || fseek(staged, 0L, SEEK_SET))',
+        'spool = open_mailbox(root);',
+        'out = tmpfile();',
+        'if (fputs("--\\n", out) == EOF || append_complete_spool(root, out))',
+        'selftest_spool_session(directory, 0)',
+        'selftest_spool_session(directory, 1)',
+        'memcmp(victim_buf, "ok\\n", 3U)',
+        'memcmp(victim_buf, "ok\\nFrom: sender", 15U)',
         'openat(rootfd, "mailbox.log",',
         "O_APPEND | O_NOFOLLOW | O_CLOEXEC",
         "st.st_nlink != 1",
