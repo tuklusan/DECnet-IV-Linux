@@ -1202,6 +1202,14 @@ def main() -> int:
     handover = read_text("docs/HANDOVER.md")
     if "four exact-SHA acceptance depths" not in handover:
         raise SystemExit("source-release gate: handover acceptance-depth model is stale")
+    for required in (
+        "three independent comprehensive zero-defect semantic reviews",
+        "An altered source",
+        "resets the formal scan count to 0/3",
+        "re-prove applicable canonical PP evidence",
+    ):
+        if required not in handover:
+            raise SystemExit("source-release gate: handover does not enforce current release audit order")
     for path in ("README.md", "docs/ROADMAP.md", "docs/ARCHITECTURE.md", "docs/PRE_PRODUCTION_TEST.md"):
         value = read_text(path)
         for stale in ("self-booting QCOW2/RAW images", "Release images remain QCOW2-first", "exact release image"):

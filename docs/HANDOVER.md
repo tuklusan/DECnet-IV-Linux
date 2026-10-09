@@ -18,18 +18,18 @@ This is the stable resume entry point for DECnet-IV-Linux.
 
 ## Current completion priority
 
-The source-delivery conversion audit previously reached the mandatory 3/3 clean threshold and
-the applicable canonical pre-production chain is complete: PP-11 S1/S2 are closed, S3-S6 are
-owner-authorized skips, PP-12 is closed, PP-13 is skipped for the first release, and the
-post-Timing practical-lab ledger is complete.
+Previously closed PP-11 S1/S2 and PP-12, the post-Timing practical-lab ledger, and an earlier
+source-delivery 3/3 audit are historical evidence, not promotion evidence for changed packaged
+bytes. PP-11 S3-S6 and first-release PP-13 remain owner-authorized skips. An altered source
+release does not inherit an earlier 3/3 audit or exact-SHA acceptance.
 
-The current release blocker is the final production-source publication path. Production bytes
-must carry the root production version rather than a CI pseudo-version, and publication must
-use the exact source-release artifact proven by a fully green exact-SHA full acceptance. Any
-delivery change that alters the packaged production bytes requires fresh exact-SHA source-release
-qualification and the owner-mandated 3/3 fresh-artifact audit before final full acceptance is
-claimed. Production publication then emits only the accepted tarball, checksum, and release
-notes; it never rebuilds or repacks the release.
+The current release blocker is three independent comprehensive zero-defect semantic reviews of
+fresh copies of one fully green exact-SHA packaged source artifact. Any newly found defect
+resets the formal scan count to 0/3: repair on main, requalify the exact replacement SHA,
+freshly download its accepted source artifact and restart at scan 1. After 3/3, reconcile and
+re-prove applicable canonical PP evidence on the final SHA in dependency order (S1 before S2),
+then require green full-profile exact-SHA acceptance. Production publication uses only the
+accepted versioned source tarball bytes without repacking, with checksum and release notes.
 
 The **final production deliverable is source**, not a disk image: one reproducible versioned
 source tarball plus checksum and release notes, containing the complete kernel/userspace source,
