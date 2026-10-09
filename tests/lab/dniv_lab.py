@@ -363,7 +363,7 @@ def kcsan_unapproved_findings(path: Path) -> list[str]:
         line.strip()
         for line in lines
         if "BUG: KCSAN:" in line and
-        not any(allowed in line for allowed in KCSAN_IGNORED_REPORTS)
+        line[line.index("BUG: KCSAN:"):].strip() not in KCSAN_IGNORED_REPORTS
     ]
 
 

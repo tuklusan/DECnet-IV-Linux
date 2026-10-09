@@ -137,6 +137,32 @@ def main() -> int:
         result = run(root, "bash", str(WORKFLOW_GUARD), str(state), parent, "main", check=False, env=env)
         expect_failure(result, "does not match requested", "wrong requested revision")
 
+        # Known upstream KCSAN summaries must match the entire summary, never
+        # merely a substring that can hide an appended candidate race.
+        kcsan_log = root / "kcsan.log"
+        known = (
+            "BUG: KCSAN: data-race in xas_clear_mark / xas_find_marked",
+            "BUG: KCSAN: data-race in xas_find_marked / xas_clear_mark",
+            "BUG: KCSAN: data-race in memchr_inv / mod_node_state",
+        )
+        for report in known:
+            kcsan_log.write_text(f"[  1.234] {report}\n", encoding="utf-8")
+            if LAB.kcsan_unapproved_findings(kcsan_log):
+                raise SystemExit(f"false-green regression rejected vetted KCSAN summary: {report}")
+        malformed = (
+            known[0] + " / decnet_iv_socket",
+            known[0] + " extra",
+            "BUG: KCSAN: data-race in decnet_iv_socket / foo :: " + known[0],
+            "BUG: KCSAN: data-race in decnet_iv_socket / foo",
+        )
+        for report in malformed:
+            kcsan_log.write_text(report + "\n", encoding="utf-8")
+            if LAB.kcsan_unapproved_findings(kcsan_log) != [report]:
+                raise SystemExit(f"false-green regression hid unmatched KCSAN summary: {report}")
+        kcsan_log.write_text(known[0] + "\n" + malformed[0] + "\n", encoding="utf-8")
+        if LAB.kcsan_unapproved_findings(kcsan_log) != [malformed[0]]:
+            raise SystemExit("false-green regression hid a candidate race beside vetted upstream noise")
+
         # Guest pass-like text must never substitute for independent wire proof.
         valid_wire = {
             "routersA": 2, "routersB": 2, "endnodesA": 0, "endnodesB": 1,
