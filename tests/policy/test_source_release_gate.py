@@ -34,6 +34,9 @@ def main() -> int:
     for path in required:
         if not (ROOT / path).is_file():
             raise SystemExit(f"source-release gate: missing {path}")
+    for path in ("build.sh", "install.sh", "uninstall.sh", "tools/build-source-release.sh"):
+        if not os.access(ROOT / path, os.X_OK):
+            raise SystemExit(f"source-release gate: required script is not executable: {path}")
     if (ROOT / ".github/workflows/release-image.yml").exists():
         raise SystemExit("source-release gate: obsolete release-image workflow remains")
     if (ROOT / ".github/workflows/portability.yml").exists():
