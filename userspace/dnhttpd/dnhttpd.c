@@ -135,11 +135,39 @@ static int read_bounded_file(FILE *in, unsigned char *body,
     return 0;
 }
 
+/* Only the first HTTP request line determines the method and target.
+ * A fourth token, a malformed protocol version, or a hidden embedded NUL
+ * must never be accepted as a valid request prefix.
+ */
+static int parse_request_line(const unsigned char *request, size_t length,
+                              char *name, size_t cap)
+{
+    const unsigned char *newline = memchr(request, '\n', length);
+    size_t line_len = newline ? (size_t)(newline - request) : length;
+    char line[1024], method[16], uri[512], version[32], extra;
+
+    if (memchr(request, '\0', length))
+        return -1;
+    if (newline && line_len && request[line_len - 1U] == '\r')
+        line_len--;
+    if (!line_len || line_len >= sizeof(line))
+        return -1;
+    memcpy(line, request, line_len);
+    line[line_len] = '\0';
+    if (sscanf(line, "%15s %511s %31s %c",
+               method, uri, version, &extra) != 3 ||
+        strcmp(method, "GET") ||
+        (strcmp(version, "HTTP/1.0") && strcmp(version, "HTTP/1.1")) ||
+        safe_path(uri, name, cap))
+        return -1;
+    return 0;
+}
+
 static int serve(int fd, const char *root)
 {
     struct timeval timeout = { .tv_sec = 30, .tv_usec = 0 };
     unsigned char request[2048];
-    char method[16], uri[512], version[32], name[512];
+    char name[512];
     unsigned char body[8192];
     char header[512];
     FILE *in;
@@ -154,11 +182,7 @@ static int serve(int fd, const char *root)
     got = dniv_recv_record(fd, request, sizeof(request) - 1U, 0);
     if (got <= 0)
         return -1;
-    request[got] = 0;
-    if (memchr(request, '\0', (size_t)got) ||
-        sscanf((char *)request, "%15s %511s %31s", method, uri, version) != 3 ||
-        strcmp(method, "GET") || strncmp(version, "HTTP/", 5) ||
-        safe_path(uri, name, sizeof(name))) {
+    if (parse_request_line(request, (size_t)got, name, sizeof(name))) {
         code = 400;
         reason = "Bad Request";
         n = (size_t)snprintf((char *)body, sizeof(body), "Bad Request\n");
@@ -197,12 +221,9 @@ static int serve(int fd, const char *root)
  * record, including any hidden trailing bytes, rather than serving a valid
  * prefix as an authorized request.
  */
-static int selftest_hidden_nul(const char *root)
+static int selftest_bad_request(const char *root, const unsigned char *bad,
+                                size_t bad_len)
 {
-    static const unsigned char bad[] = {
-        'G', 'E', 'T', ' ', '/', ' ', 'H', 'T', 'T', 'P', '/',
-        '1', '.', '0', '\0', 'H', 'I', 'D', 'D', 'E', 'N'
-    };
     unsigned char reply[256];
     struct timeval timeout = { .tv_sec = 5, .tv_usec = 0 };
     int pair[2] = { -1, -1 };
@@ -234,7 +255,7 @@ static int selftest_hidden_nul(const char *root)
         _exit(result ? 1 : 0);
     }
     close(pair[1]);
-    if (dniv_send_record(pair[0], bad, sizeof(bad), 0))
+    if (dniv_send_record(pair[0], bad, bad_len, 0))
         goto finish;
     got = dniv_recv_record(pair[0], reply, sizeof(reply) - 1U, 0);
     if (got < 0)
@@ -304,8 +325,24 @@ static int selftest(void)
         goto out;
     }
     file = NULL;
-    if (selftest_hidden_nul(directory))
-        goto out;
+    {
+        static const unsigned char hidden_nul[] = {
+            'G', 'E', 'T', ' ', '/', ' ', 'H', 'T', 'T', 'P', '/',
+            '1', '.', '0', '\0', 'H', 'I', 'D', 'D', 'E', 'N'
+        };
+        static const unsigned char invalid_version[] =
+            "GET / HTTP/garbage\r\n";
+        static const unsigned char extra_token[] =
+            "GET / HTTP/1.0 MORE\r\n";
+
+        if (selftest_bad_request(directory, hidden_nul,
+                                 sizeof(hidden_nul)) ||
+            selftest_bad_request(directory, invalid_version,
+                                 sizeof(invalid_version) - 1U) ||
+            selftest_bad_request(directory, extra_token,
+                                 sizeof(extra_token) - 1U))
+            goto out;
+    }
     if (symlink(victim, link) ||
         linkat(AT_FDCWD, victim, AT_FDCWD, hardlink_path, 0) ||
         mkfifo(fifo_path, 0600))

@@ -1037,14 +1037,20 @@ def main() -> int:
             raise SystemExit(f"source-release gate: dnhttpd root-safety regression: {marker}")
 
     for marker in (
-        "memchr(request, '\\0', (size_t)got)",
-        "static int selftest_hidden_nul(const char *root)",
-        "if (selftest_hidden_nul(directory))",
+        "memchr(request, '\\0', length)",
+        "static int parse_request_line(",
+        'sscanf(line, "%15s %511s %31s %c"',
+        'strcmp(version, "HTTP/1.0")',
+        'strcmp(version, "HTTP/1.1")',
+        "static int selftest_bad_request(",
+        "selftest_bad_request(directory, hidden_nul,",
+        "selftest_bad_request(directory, invalid_version,",
+        "selftest_bad_request(directory, extra_token,",
         '"HTTP/1.0 400 Bad Request',
         '"Bad Request\\n", 12U',
     ):
         if marker not in dnhttpd:
-            raise SystemExit(f"source-release gate: dnhttpd rejects hidden-NUL HTTP records: {marker}")
+            raise SystemExit(f"source-release gate: dnhttpd rejects malformed request lines: {marker}")
 
     dnetdb_source = read_text("userspace/libdnet/dnetdb.c")
     for marker in (
