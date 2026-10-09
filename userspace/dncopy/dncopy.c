@@ -549,6 +549,49 @@ static int write_text_payload(FILE *out, const unsigned char *data, size_t len,
     return len && fwrite(data, 1, len, out) != len ? -1 : 0;
 }
 
+/* Read one physical text record without treating embedded NUL as EOF.
+ * A binary byte in record mode is an error, not a successful partial copy.
+ * The bounded reader also handles an exact-size final line without a newline.
+ * Return 1 for a record (including an empty line), 0 for clean EOF, -1
+ * for an invalid or unreadable record.
+ */
+static int read_text_record(FILE *in, unsigned char *data, size_t cap,
+                            size_t *record_len)
+{
+    size_t len = 0U;
+    int ch;
+
+    if (!in || !data || !cap || !record_len) {
+        errno = EINVAL;
+        return -1;
+    }
+    for (;;) {
+        ch = fgetc(in);
+        if (ch == EOF) {
+            if (ferror(in))
+                return -1;
+            if (!len)
+                return 0;
+            break;
+        }
+        if (ch == '\n')
+            break;
+        if (ch == 0) {
+            errno = EILSEQ;
+            return -1;
+        }
+        if (len == cap) {
+            errno = E2BIG;
+            return -1;
+        }
+        data[len++] = (unsigned char)ch;
+    }
+    if (len && data[len - 1U] == '\r')
+        len--;
+    *record_len = len;
+    return 1;
+}
+
 static int retrieve_file(const char *node_text, const char *filespec,
                          const char *local_path, int text_mode,
                          const struct access_options *options)
@@ -758,16 +801,19 @@ static int store_file(const char *local_path, const char *node_text,
         goto fail;
 
     if (text_mode) {
-        while (fgets((char *)data, sizeof(data), in)) {
-            size_t len = strlen((char *)data);
+        for (;;) {
+            size_t len;
+            int read_rc = read_text_record(in, data, sizeof(data), &len);
 
-            if (len && data[len - 1U] == '\n') {
-                len--;
-                if (len && data[len - 1U] == '\r')
-                    len--;
-            } else if (!feof(in)) {
-                fprintf(stderr, "dncopy: text input line exceeds %zu bytes\n",
-                        sizeof(data) - 2U);
+            if (!read_rc)
+                break;
+            if (read_rc < 0) {
+                if (errno == EILSEQ)
+                    fprintf(stderr, "dncopy: NUL in record-mode input; use -m block for binary data\n");
+                else if (errno == E2BIG)
+                    fprintf(stderr, "dncopy: text input line exceeds %zu bytes\n", sizeof(data));
+                else
+                    perror("dncopy: read text input");
                 goto fail;
             }
             msg[0] = DAP_DATA;
@@ -777,8 +823,6 @@ static int store_file(const char *local_path, const char *node_text,
             if (send_record(fd, msg, len + 3U))
                 goto fail;
         }
-        if (ferror(in))
-            goto fail;
     } else {
         for (;;) {
             data_len = fread(data, 1, sizeof(data), in);
@@ -1125,6 +1169,64 @@ fail:
     return -1;
 }
 
+static int selftest_text_records(void)
+{
+    static const unsigned char invalid[] = { 'a', 'b', 0U, 'c', 'd', '\n' };
+    static const unsigned char line[] = { 'o', 'k', '\r', '\n', '\n', 'x' };
+    unsigned char data[1024];
+    size_t len = 0U;
+    FILE *in = tmpfile();
+    int rc = -1;
+
+    if (!in)
+        return -1;
+    if (fwrite(invalid, 1, sizeof(invalid), in) != sizeof(invalid) ||
+        fseek(in, 0, SEEK_SET))
+        goto out;
+    errno = 0;
+    if (read_text_record(in, data, sizeof(data), &len) != -1 ||
+        errno != EILSEQ)
+        goto out;
+    if (fclose(in))
+        return -1;
+    in = tmpfile();
+    if (!in)
+        return -1;
+    if (fwrite(line, 1, sizeof(line), in) != sizeof(line) ||
+        fseek(in, 0, SEEK_SET))
+        goto out;
+    if (read_text_record(in, data, sizeof(data), &len) != 1 ||
+        len != 2U || memcmp(data, "ok", 2U) ||
+        read_text_record(in, data, sizeof(data), &len) != 1 || len != 0U ||
+        read_text_record(in, data, sizeof(data), &len) != 1 ||
+        len != 1U || data[0] != 'x' ||
+        read_text_record(in, data, sizeof(data), &len) != 0)
+        goto out;
+    if (fclose(in))
+        return -1;
+    in = tmpfile();
+    if (!in)
+        return -1;
+    memset(data, 'q', sizeof(data));
+    if (fwrite(data, 1, sizeof(data), in) != sizeof(data) ||
+        fseek(in, 0, SEEK_SET) ||
+        read_text_record(in, data, sizeof(data), &len) != 1 ||
+        len != sizeof(data) ||
+        read_text_record(in, data, sizeof(data), &len) != 0)
+        goto out;
+    if (fseek(in, 0, SEEK_END) || fputc('z', in) == EOF ||
+        fseek(in, 0, SEEK_SET))
+        goto out;
+    errno = 0;
+    if (read_text_record(in, data, sizeof(data), &len) != -1 ||
+        errno != E2BIG)
+        goto out;
+    rc = 0;
+out:
+    fclose(in);
+    return rc;
+}
+
 static int selftest(void)
 {
     unsigned char config[32];
@@ -1148,6 +1250,8 @@ static int selftest(void)
     struct remote_spec remote;
     struct access_options parsed_options = { 0 };
 
+    if (selftest_text_records())
+        return 1;
     if (parse_node("31.70", &addr) || addr != (uint16_t)((31U << 10) | 70U))
         return 1;
     if (!parse_node("0.1", &addr) || !parse_node("64.1", &addr) ||

@@ -769,6 +769,20 @@ def main() -> int:
         raise SystemExit("source-release gate: dncopy store does not close local input when FAL open fails")
     if "if (fd < 0)\n        return -1;" in store_body:
         raise SystemExit("source-release gate: dncopy store leaks local input when FAL open fails")
+    text_reader_start = dncopy.find("static int read_text_record")
+    text_reader_end = dncopy.find("static int retrieve_file", text_reader_start)
+    text_reader = dncopy[text_reader_start:text_reader_end]
+    if (
+        text_reader_start < 0 or text_reader_end < 0
+        or "ch = fgetc(in);" not in text_reader
+        or "if (ch == 0) {" not in text_reader
+        or "errno = EILSEQ;" not in text_reader
+        or "if (len == cap) {" not in text_reader
+        or "read_text_record(in, data, sizeof(data), &len)" not in store_body
+        or "selftest_text_records()" not in dncopy
+        or "fgets((char *)data, sizeof(data), in)" in store_body
+    ):
+        raise SystemExit("source-release gate: dncopy record-mode input must reject NUL and overlong lines")
     retrieve_start = dncopy.find("static int retrieve_file")
     retrieve_end = dncopy.find("static int store_file", retrieve_start)
     retrieve = dncopy[retrieve_start:retrieve_end]
