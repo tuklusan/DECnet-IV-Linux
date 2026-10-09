@@ -143,13 +143,25 @@ static int parse_request_line(const unsigned char *request, size_t length,
                               char *name, size_t cap)
 {
     const unsigned char *newline = memchr(request, '\n', length);
-    size_t line_len = newline ? (size_t)(newline - request) : length;
+    size_t line_len;
+    size_t i;
     char line[1024], method[16], uri[512], version[32], extra;
 
-    if (memchr(request, '\0', length))
+    /* One complete HTTP request must occupy the DECnet record.  A bare
+     * request line, LF-only framing, or bytes after the header terminator
+     * cannot be treated as an authenticated GET of the valid prefix.
+     */
+    if (!newline || newline == request || newline[-1] != '\r' ||
+        length < 4U || memcmp(request + length - 4U, "\r\n\r\n", 4U))
         return -1;
-    if (newline && line_len && request[line_len - 1U] == '\r')
-        line_len--;
+    for (i = 0; i < length; i++) {
+        if (!request[i] || (request[i] == '\n' &&
+            (!i || request[i - 1U] != '\r')) ||
+            (request[i] == '\r' &&
+             (i + 1U == length || request[i + 1U] != '\n')))
+            return -1;
+    }
+    line_len = (size_t)(newline - request) - 1U;
     if (!line_len || line_len >= sizeof(line))
         return -1;
     memcpy(line, request, line_len);
@@ -334,8 +346,24 @@ static int selftest(void)
             "GET / HTTP/garbage\r\n";
         static const unsigned char extra_token[] =
             "GET / HTTP/1.0 MORE\r\n";
+        static const unsigned char incomplete[] = "GET / HTTP/1.0";
+        static const unsigned char bare_lf[] = "GET / HTTP/1.0\n\n";
+        static const unsigned char missing_blank[] = "GET / HTTP/1.0\r\n";
+        static const unsigned char trailing_bytes[] =
+            "GET / HTTP/1.0\r\n\r\nEXTRA";
+        static const unsigned char valid[] =
+            "GET / HTTP/1.1\r\nHost: DNIV\r\n\r\n";
 
-        if (selftest_bad_request(directory, hidden_nul,
+        if (parse_request_line(valid, sizeof(valid) - 1U,
+                               name, sizeof(name)) ||
+            strcmp(name, "index.html") ||
+            selftest_bad_request(directory, incomplete, sizeof(incomplete) - 1U) ||
+            selftest_bad_request(directory, bare_lf, sizeof(bare_lf) - 1U) ||
+            selftest_bad_request(directory, missing_blank,
+                                 sizeof(missing_blank) - 1U) ||
+            selftest_bad_request(directory, trailing_bytes,
+                                 sizeof(trailing_bytes) - 1U) ||
+            selftest_bad_request(directory, hidden_nul,
                                  sizeof(hidden_nul)) ||
             selftest_bad_request(directory, invalid_version,
                                  sizeof(invalid_version) - 1U) ||

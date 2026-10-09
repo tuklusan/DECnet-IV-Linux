@@ -908,6 +908,19 @@ def main() -> int:
     ):
         if marker not in dnmaild:
             raise SystemExit(f"source-release gate: dnmaild selftest stream cleanup regression: {marker}")
+    for marker in (
+        "char line[512];",
+        "for (lines = 0U; lines < 32U; lines++)",
+        "line[used - 2U] != '\\r'",
+        "(line[3] != ' ' && line[3] != '-')",
+        "if (code >= 0 && current != code)",
+        "selftest_smtp_reply(\"250-First\\r\\n250 Final\\r\\n\"",
+        "selftest_smtp_reply(\"250Xgarbage\\n\"",
+        "selftest_smtp_reply(hidden_nul, sizeof(hidden_nul), -1)",
+        "selftest_smtp_reply(\"550-First\\r\\n250 Final\\r\\n\"",
+    ):
+        if marker not in dnmaild:
+            raise SystemExit(f"source-release gate: dnmaild SMTP response validation regression: {marker}")
     if 'if (fputs("--\\n", out) == EOF || fclose(out))' in dnmaild:
         raise SystemExit("source-release gate: dnmaild can re-close an invalid stream after final spool close failure")
     for marker in (
@@ -1041,7 +1054,9 @@ def main() -> int:
             raise SystemExit(f"source-release gate: dnhttpd root-safety regression: {marker}")
 
     for marker in (
-        "memchr(request, '\\0', length)",
+        "if (!newline || newline == request || newline[-1] != '\\r' ||",
+        'memcmp(request + length - 4U, "\\r\\n\\r\\n", 4U)',
+        "if (!request[i] ||",
         "static int parse_request_line(",
         'sscanf(line, "%15s %511s %31s %c"',
         'strcmp(version, "HTTP/1.0")',
@@ -1050,6 +1065,11 @@ def main() -> int:
         "selftest_bad_request(directory, hidden_nul,",
         "selftest_bad_request(directory, invalid_version,",
         "selftest_bad_request(directory, extra_token,",
+        "selftest_bad_request(directory, incomplete,",
+        "selftest_bad_request(directory, bare_lf,",
+        "selftest_bad_request(directory, missing_blank,",
+        "selftest_bad_request(directory, trailing_bytes,",
+        "parse_request_line(valid, sizeof(valid) - 1U,",
         '"HTTP/1.0 400 Bad Request',
         '"Bad Request\\n", 12U',
     ):

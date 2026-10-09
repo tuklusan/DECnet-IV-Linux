@@ -225,11 +225,17 @@ static int finish_sendmail(int input_fd, pid_t child)
 
 static int smtp_read_reply(int fd, int expected)
 {
-    char line[1024];
+    char line[512];
     int code = -1;
+    unsigned int lines;
 
-    for (;;) {
-        size_t used = 0U;
+    /* RFC 5321 replies have matching three-digit codes on every line,
+     * a SP or '-' separator, and a CRLF terminator.  A numeric prefix
+     * alone is not proof that the relay accepted the message.
+     */
+    for (lines = 0U; lines < 32U; lines++) {
+        size_t used = 0U, i;
+        int current;
 
         while (used + 1U < sizeof(line)) {
             char ch;
@@ -246,19 +252,28 @@ static int smtp_read_reply(int fd, int expected)
             if (ch == '\n')
                 break;
         }
-        if (!used || line[used - 1U] != '\n' || used < 4U)
-            return -1;
-        line[used] = '\0';
-        if (line[0] < '0' || line[0] > '9' ||
+        if (used < 6U || line[used - 2U] != '\r' ||
+            line[used - 1U] != '\n' ||
+            line[0] < '0' || line[0] > '9' ||
             line[1] < '0' || line[1] > '9' ||
-            line[2] < '0' || line[2] > '9')
+            line[2] < '0' || line[2] > '9' ||
+            (line[3] != ' ' && line[3] != '-'))
             return -1;
-        code = (line[0] - '0') * 100 + (line[1] - '0') * 10 +
-            (line[2] - '0');
-        if (line[3] != '-')
-            break;
+        for (i = 4U; i + 2U < used; i++) {
+            unsigned char ch = (unsigned char)line[i];
+
+            if ((ch < 0x20U && ch != '\t') || ch == 0x7fU)
+                return -1;
+        }
+        current = (line[0] - '0') * 100 + (line[1] - '0') * 10 +
+                  (line[2] - '0');
+        if (code >= 0 && current != code)
+            return -1;
+        code = current;
+        if (line[3] == ' ')
+            return code == expected ? 0 : -1;
     }
-    return code == expected ? 0 : -1;
+    return -1;
 }
 
 static int smtp_command(int fd, int expected, const char *command)
@@ -541,6 +556,23 @@ fail:
     return -1;
 }
 
+static int selftest_smtp_reply(const char *reply, size_t len, int expected)
+{
+    int pair[2] = { -1, -1 };
+    int rc = -1;
+
+    if (socketpair(AF_UNIX, SOCK_STREAM, 0, pair))
+        return -1;
+    if (write_all(pair[0], reply, len) ||
+        shutdown(pair[0], SHUT_WR))
+        goto finish;
+    rc = smtp_read_reply(pair[1], 250) == expected ? 0 : -1;
+finish:
+    close(pair[0]);
+    close(pair[1]);
+    return rc;
+}
+
 static int selftest(void)
 {
     char directory[] = "/tmp/dnmaild-selftest.XXXXXX";
@@ -553,7 +585,20 @@ static int selftest(void)
     unsigned char record_probe[4];
     int rc = 1;
 
-    if (MAIL_OBJECT != 27U || MAIL11_V3_LEN != 16U)
+    static const char hidden_nul[] = {
+        '2', '5', '0', ' ', 'O', 'K', '\0', 'X', '\r', '\n'
+    };
+
+    if (MAIL_OBJECT != 27U || MAIL11_V3_LEN != 16U ||
+        selftest_smtp_reply("250 OK\r\n", sizeof("250 OK\r\n") - 1U, 0) ||
+        selftest_smtp_reply("250-First\r\n250 Final\r\n",
+                            sizeof("250-First\r\n250 Final\r\n") - 1U, 0) ||
+        selftest_smtp_reply("250Xgarbage\n",
+                            sizeof("250Xgarbage\n") - 1U, -1) ||
+        selftest_smtp_reply("250 OK\n", sizeof("250 OK\n") - 1U, -1) ||
+        selftest_smtp_reply(hidden_nul, sizeof(hidden_nul), -1) ||
+        selftest_smtp_reply("550-First\r\n250 Final\r\n",
+                            sizeof("550-First\r\n250 Final\r\n") - 1U, -1))
         return 1;
     {
         pid_t child = fork();
