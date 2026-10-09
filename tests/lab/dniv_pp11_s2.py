@@ -36,6 +36,7 @@ MIN_RESOURCE_SAMPLES = 50
 MIN_FORWARDED = 1000
 MIN_TRAFFIC_SPAN_SECONDS = FAULT_DURATION - 10.0
 MAX_VALID_GAP_SECONDS = 30.0
+CAPTURE_SETTLE_SECONDS = 10.0
 FATAL = (
     "BUG: KASAN:", "BUG: KCSAN:", "kernel BUG at", "Kernel panic", "Oops:",
     "general protection fault", "use-after-free", "double free", "WARNING: CPU:",
@@ -202,6 +203,13 @@ def main() -> int:
             if proc.returncode:
                 raise RuntimeError(f"pp11-s2: injector failed rc={proc.returncode}")
         wait_for_markers(endpoints, "DNIV-PP11-S2-PASS", session, 900, [r0])
+        capture_deadline = time.monotonic() + CAPTURE_SETTLE_SECONDS
+        while pcap_faults(lab.pcaps) < FAULT_EVENTS:
+            if time.monotonic() >= capture_deadline:
+                break
+            if any(capture.poll() is not None for capture in lab.captures):
+                raise RuntimeError("pp11-s2: capture died while finalizing fault evidence")
+            time.sleep(0.25)
         host_sample(host_resources, guests)
         success = True
     finally:
