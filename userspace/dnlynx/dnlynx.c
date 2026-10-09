@@ -155,9 +155,25 @@ static int append_header_record(unsigned char *header, size_t cap,
 
 static int status_code(const unsigned char *buf, size_t len)
 {
-    if (len < 12U || (memcmp(buf,"HTTP/1.0 ",9U) && memcmp(buf,"HTTP/1.1 ",9U))) return -1;
-    if (buf[9]<'0'||buf[9]>'9'||buf[10]<'0'||buf[10]>'9'||buf[11]<'0'||buf[11]>'9') return -1;
-    return (buf[9]-'0')*100 + (buf[10]-'0')*10 + (buf[11]-'0');
+    size_t i;
+
+    if (!buf || len < 16U ||
+        (memcmp(buf, "HTTP/1.0 ", 9U) && memcmp(buf, "HTTP/1.1 ", 9U)) ||
+        buf[9] < '0' || buf[9] > '9' ||
+        buf[10] < '0' || buf[10] > '9' ||
+        buf[11] < '0' || buf[11] > '9' || buf[12] != ' ')
+        return -1;
+    /* An HTTP status is a complete CRLF-terminated line, not just a
+     * three-digit prefix. Reject embedded controls and truncated lines.
+     */
+    for (i = 13U; i + 1U < len; i++) {
+        if (buf[i] == '\r' && buf[i + 1U] == '\n')
+            return (buf[9] - '0') * 100 + (buf[10] - '0') * 10 +
+                   (buf[11] - '0');
+        if (buf[i] < 0x20U || buf[i] == 0x7fU)
+            return -1;
+    }
+    return -1;
 }
 
 static int run_http(int fd, const char *node, const char *path, int include_headers)
@@ -251,6 +267,14 @@ static int selftest(void)
         !valid_object("HTTP") || !valid_object("DNIVHT") ||
         valid_object("") || valid_object("1HTTP") || valid_object("BAD-NAME") ||
         header_end(ok,sizeof(ok)-1U)!=38 || status_code(ok,sizeof(ok)-1U)!=200 ||
+        status_code((const unsigned char *)"HTTP/1.1 204 No Content\r\n\r\n",
+                    sizeof("HTTP/1.1 204 No Content\r\n\r\n") - 1U)!=204 ||
+        status_code((const unsigned char *)"HTTP/1.0 200Bad\r\n\r\n",
+                    sizeof("HTTP/1.0 200Bad\r\n\r\n") - 1U)>=0 ||
+        status_code((const unsigned char *)"HTTP/1.0 200 OK\n\n",
+                    sizeof("HTTP/1.0 200 OK\n\n") - 1U)>=0 ||
+        status_code((const unsigned char *)"HTTP/1.0 200 \r\n\r\n",
+                    sizeof("HTTP/1.0 200 \r\n\r\n") - 1U)!=200 ||
         append_header_record(header, sizeof(header), &used,
                              large, sizeof(large), &end, &copied) ||
         end != 38 || used != sizeof(header) ||

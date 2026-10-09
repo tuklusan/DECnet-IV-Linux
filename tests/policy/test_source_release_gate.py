@@ -1008,6 +1008,10 @@ def main() -> int:
         "copied<(size_t)got",
         "large, sizeof(large), &end, &copied",
         "copied != sizeof(header)",
+        "buf[12] != ' '",
+        "for (i = 13U; i + 1U < len; i++)",
+        "buf[i] == '\\r' && buf[i + 1U] == '\\n'",
+        "status_code((const unsigned char *)\"HTTP/1.0 200Bad",
     ):
         if marker not in dnlynx:
             raise SystemExit(f"source-release gate: dnlynx header/body record-boundary regression: {marker}")
