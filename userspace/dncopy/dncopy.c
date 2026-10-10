@@ -421,19 +421,18 @@ static int decode_ex(const unsigned char *buf, size_t len, size_t *pos,
     return -1;
 }
 
+/* Consume every recognized ATTR field, not merely the selected RFM.
+ * A truncated optional field must not be accepted as a complete response. */
 static int parse_rfm(const unsigned char *buf, size_t len,
                      unsigned char *rfm)
 {
-    uint64_t menu;
-    uint64_t ignored;
+    uint64_t menu, ignored;
     size_t pos = 2U;
 
     *rfm = DAP_RFM_FIX;
-    if (len < 3U || buf[0] != DAP_ATTRIBUTES ||
-        decode_ex(buf, len, &pos, 6U, &menu))
+    if (len < 3U || buf[0] != DAP_ATTRIBUTES || buf[1] != 0U ||
+        decode_ex(buf, len, &pos, 6U, &menu) || (menu & ~0xffULL))
         return -1;
-    if (!menu)
-        return pos == len ? 0 : -1;
     if ((menu & 0x01U) &&
         decode_ex(buf, len, &pos, 2U, &ignored))
         return -1;
@@ -446,9 +445,37 @@ static int parse_rfm(const unsigned char *buf, size_t len,
         if (pos >= len || buf[pos] < DAP_RFM_FIX ||
             buf[pos] > DAP_RFM_SCR)
             return -1;
-        *rfm = buf[pos];
+        *rfm = buf[pos++];
     }
-    return 0;
+    if ((menu & 0x08U) &&
+        (decode_ex(buf, len, &pos, 3U, &ignored) || ignored > 7U))
+        return -1; /* RAT */
+    if (menu & 0x10U) { /* BLS */
+        if (len - pos < 2U)
+            return -1;
+        pos += 2U;
+    }
+    if (menu & 0x20U) { /* MRS */
+        if (len - pos < 2U)
+            return -1;
+        pos += 2U;
+    }
+    if (menu & 0x40U) { /* ALQ I-5 */
+        size_t count;
+
+        if (pos >= len)
+            return -1;
+        count = buf[pos++];
+        if (count > 5U || count > len - pos)
+            return -1;
+        pos += count;
+    }
+    if (menu & 0x80U) { /* BKS */
+        if (pos >= len)
+            return -1;
+        pos++;
+    }
+    return pos == len ? 0 : -1;
 }
 
 static int parse_store_rfm(const char *text, unsigned char *rfm)
@@ -1682,6 +1709,11 @@ static int selftest(void)
     const unsigned char attr_default[] = { DAP_ATTRIBUTES, 0U, 0x00U };
     const unsigned char attr_rfm_zero[] = { DAP_ATTRIBUTES, 0U, 0x04U, 0U };
     const unsigned char attr_rfm_unsupported[] = { DAP_ATTRIBUTES, 0U, 0x04U, 0xffU };
+    const unsigned char attr_missing_rat[] = { DAP_ATTRIBUTES, 0U, 0x08U };
+    const unsigned char attr_rat_valid[] = { DAP_ATTRIBUTES, 0U, 0x0cU, DAP_RFM_VAR, 0x03U };
+    const unsigned char attr_rat_invalid[] = { DAP_ATTRIBUTES, 0U, 0x08U, 0xffU, 0U };
+    const unsigned char attr_extra[] = { DAP_ATTRIBUTES, 0U, 0U, 0U };
+    const unsigned char attr_missing_bks[] = { DAP_ATTRIBUTES, 0U, 0x80U, 0x01U };
     const unsigned char attr_bad_menu[] = {
         DAP_ATTRIBUTES, 0U, 0x80U, 0x80U, 0x80U, 0x80U, 0x80U, 0x80U
     };
@@ -1742,7 +1774,13 @@ static int selftest(void)
             rfm != DAP_RFM_FIX ||
             !parse_rfm(attr_rfm_zero, sizeof(attr_rfm_zero), &rfm) ||
             !parse_rfm(attr_rfm_unsupported, sizeof(attr_rfm_unsupported), &rfm) ||
-            !parse_rfm(attr_bad_menu, sizeof(attr_bad_menu), &rfm))
+            !parse_rfm(attr_bad_menu, sizeof(attr_bad_menu), &rfm) ||
+            !parse_rfm(attr_missing_rat, sizeof(attr_missing_rat), &rfm) ||
+            parse_rfm(attr_rat_valid, sizeof(attr_rat_valid), &rfm) ||
+            rfm != DAP_RFM_VAR ||
+            !parse_rfm(attr_rat_invalid, sizeof(attr_rat_invalid), &rfm) ||
+            !parse_rfm(attr_extra, sizeof(attr_extra), &rfm) ||
+            !parse_rfm(attr_missing_bks, sizeof(attr_missing_bks), &rfm))
             return 1;
     }
     {

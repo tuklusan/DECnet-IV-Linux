@@ -861,6 +861,18 @@ def main() -> int:
         if marker not in dncopy:
             raise SystemExit(f"source-release gate: malformed DAP RFM accepted: {marker}")
 
+    # Malformed remote ATTR menus must not be silently accepted as valid.
+    for marker in (
+        'decode_ex(buf, len, &pos, 3U, &ignored) || ignored > 7U',
+        'return pos == len ? 0 : -1;',
+        'attr_missing_rat',
+        '!parse_rfm(attr_missing_rat, sizeof(attr_missing_rat), &rfm)',
+        'attr_rat_valid',
+        'attr_missing_bks',
+    ):
+        if marker not in dncopy:
+            raise SystemExit(f"source-release gate: dncopy incomplete ATTR acceptance: {marker}")
+
     # Text decoding of CR-delimited DAP streams must retain CRLF state
     # between DATA messages. An independent exact-source repro showed A\r
     # followed by \nB emitted A\n\nB prior to this safeguard.

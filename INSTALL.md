@@ -196,3 +196,5 @@ After installing a new kernel:
 5. after booting that kernel, load `decnet_iv` and verify identity, adjacencies and required services.
 
 Never reuse a `decnet_iv.ko` on a kernel for which it was not built.
+
+`dncopy` validates the complete supported remote DAP ATTRIBUTES field sequence (not only RFM), rejecting missing RAT/BLS/MRS/ALQ/BKS bytes and trailing bytes rather than treating truncated wire metadata as a valid transfer.

@@ -108,3 +108,5 @@ DDCMP and IPv6 transport support are outside the current project and release sco
 ## Scope boundary
 
 A historical DECnet feature is not implicitly claimed merely because the project implements DECnet Phase IV. Features not represented by the native component inventory and canonical acceptance plan are outside the current release claim.
+
+- DAP `dncopy` attribute decoder checks all first-eight negotiated ATTR fields and their declared lengths; malformed optional fields and unexpected trailing data fail closed.
