@@ -115,3 +115,5 @@ A historical DECnet feature is not implicitly claimed merely because the project
 - DAP `dncopy` attribute decoder checks all first-eight negotiated ATTR fields and their declared lengths; malformed optional fields and unexpected trailing data fail closed.
 
 - `dnphoned` rejects unexpected transport EOF even after PHONE DATA; a properly framed PHONE GOODBYE completes the call, including valid calls with no DATA records. Socketpair regressions cover explicit GOODBYE and both premature EOF cases.
+
+- DAP/FAL GET of ordinary fixed or stream data also works on filesystems without user extended-attribute support; a missing or unsupported private record-framing marker still rejects ambiguous VAR/VFC record downloads rather than fabricating record boundaries.

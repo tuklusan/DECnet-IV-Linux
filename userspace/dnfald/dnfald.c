@@ -295,15 +295,13 @@ static int record_oriented_rfm(unsigned char rfm)
     return rfm == DAP_RFM_VAR || rfm == DAP_RFM_VFC;
 }
 
-static int load_record_framing(int fd, unsigned char rfm, int *framed)
+static int interpret_record_framing(ssize_t len, int xattr_errno,
+                                    const unsigned char *value,
+                                    unsigned char rfm, int *framed)
 {
-    unsigned char value[2];
-    ssize_t len;
-
     *framed = 0;
-    len = fgetxattr(fd, DNFAL_XATTR_RECORD_FRAMING,
-                    value, sizeof(value));
-    if (len < 0 && errno == ENODATA) {
+    if (len < 0 && (xattr_errno == ENODATA ||
+                    xattr_errno == EOPNOTSUPP)) {
         /* A VAR/VFC file without the private frame marker has no known
          * logical DATA boundaries. Serving arbitrary raw read chunks while
          * advertising VAR/VFC fabricates record boundaries and corrupts
@@ -321,6 +319,16 @@ static int load_record_framing(int fd, unsigned char rfm, int *framed)
     }
     *framed = 1;
     return 0;
+}
+
+static int load_record_framing(int fd, unsigned char rfm, int *framed)
+{
+    unsigned char value[2];
+    ssize_t len = fgetxattr(fd, DNFAL_XATTR_RECORD_FRAMING,
+                            value, sizeof(value));
+    int error = errno;
+
+    return interpret_record_framing(len, error, value, rfm, framed);
 }
 
 static int save_record_framing(int fd, unsigned char rfm)
@@ -1329,6 +1337,39 @@ out:
 /* A record-oriented xattr without the corresponding on-disk framing
  * marker is not a readable record stream, and bad local xattr values must
  * not be sent as a malformed DAP ATTR to the remote peer. */
+static int selftest_record_framing_xattr_errors(void)
+{
+    const unsigned char valid[] = { DNFAL_RECORD_FRAMING_V1 };
+    const unsigned char invalid[] = { 0xffU };
+    int framed = -1;
+
+    /* Filesystems without user xattrs may serve ordinary fixed/stream
+     * files, but cannot certify VAR/VFC boundaries without the marker. */
+    if (interpret_record_framing(-1, ENODATA, valid, DAP_RFM_FIX, &framed) || framed ||
+        interpret_record_framing(-1, EOPNOTSUPP, valid, DAP_RFM_FIX, &framed) || framed ||
+        interpret_record_framing(-1, EOPNOTSUPP, valid, DAP_RFM_STM, &framed) || framed)
+        return -1;
+    errno = 0;
+    if (!interpret_record_framing(-1, ENODATA, valid, DAP_RFM_VAR, &framed) ||
+        errno != EPROTO)
+        return -1;
+    errno = 0;
+    if (!interpret_record_framing(-1, EOPNOTSUPP, valid, DAP_RFM_VFC, &framed) ||
+        errno != EPROTO)
+        return -1;
+    if (interpret_record_framing(1, 0, valid, DAP_RFM_VAR, &framed) || !framed)
+        return -1;
+    errno = 0;
+    if (!interpret_record_framing(1, 0, invalid, DAP_RFM_VAR, &framed) ||
+        errno != EPROTO)
+        return -1;
+    errno = 0;
+    if (!interpret_record_framing(1, 0, valid, DAP_RFM_FIX, &framed) ||
+        errno != EPROTO)
+        return -1;
+    return 0;
+}
+
 static int selftest_unframed_metadata(int rootfd)
 {
     const char name[] = "UNFRAMED.TXT";
@@ -1480,6 +1521,9 @@ static int selftest(void)
         goto out;
     rootfd = open(directory, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
     if (rootfd < 0)
+        goto out;
+    /* Non-xattr filesystems still support ordinary fixed/stream files. */
+    if (selftest_record_framing_xattr_errors())
         goto out;
     /* Unframed VAR/VFC and invalid local metadata must fail closed. */
     if (selftest_unframed_metadata(rootfd))
