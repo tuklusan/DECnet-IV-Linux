@@ -116,6 +116,34 @@ def main() -> int:
     ):
         if marker not in publication:
             raise SystemExit(f"source-release gate: production publication safeguard missing: {marker}")
+    # Verify the release workflow checks the downloaded published source bytes.
+    for marker in (
+        "verify-public:",
+        "needs: publish",
+        "Independently download and verify public source release",
+        'gh release download "$tag"',
+        'cmp "$accepted/$tarball$suffix" "$public/$tarball$suffix"',
+        '(cd "$public" && sha256sum -c "$tarball.sha256")',
+        "source_sha=$EXPECT_SHA",
+        "public_download_verified=1",
+        "release-notes.json",
+        "Preserve independent public verification evidence",
+    ):
+        if marker not in publication:
+            raise SystemExit(f"source-release gate: published-source verification missing: {marker}")
+    if publication.count("  verify-public:") != 1 or publication.count("  publish:") != 1:
+        raise SystemExit("source-release gate: separate publication verifier job missing or duplicate")
+    publisher = publication.split("  publish:", 1)[1].split("  verify-public:", 1)[0]
+    verifier = publication.split("  verify-public:", 1)[1]
+    if ("gh release download" in publisher or
+        "gh issue comment" in publisher or
+        "--status success" in publisher or
+        "gh release create" not in publisher or
+        "gh release download" not in verifier or
+        "gh issue comment" not in verifier or
+        "--status success" not in verifier):
+        raise SystemExit("source-release gate: publication completion precedes public verification")
+
     for marker in (
         "Build source archive twice",
         "cmp \"$a\" \"$b\"",

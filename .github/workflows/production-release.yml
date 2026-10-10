@@ -35,6 +35,13 @@ jobs:
       github.event.issue.title == 'DNIV production release'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    outputs:
+      source_sha: ${{ steps.accepted.outputs.source_sha }}
+      source_run_id: ${{ steps.accepted.outputs.source_run_id }}
+      source_attempt: ${{ steps.accepted.outputs.source_attempt }}
+      source_artifact_id: ${{ steps.accepted.outputs.source_artifact_id }}
+      version: ${{ steps.accepted.outputs.version }}
+      tar_sha: ${{ steps.accepted.outputs.tar_sha }}
     env:
       DNIV_RELEASE_EVIDENCE: ${{ github.workspace }}/scratch/runtime/${{ github.run_id }}/${{ github.run_attempt }}/production-release
     steps:
@@ -265,6 +272,7 @@ jobs:
           printf 'SOURCE_RELEASE_ATTEMPT=%s\n' "$source_attempt" >>"$GITHUB_ENV"
 
       - name: Download and verify accepted source artifact
+        id: accepted
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -310,6 +318,14 @@ jobs:
             exit 1
           fi
           printf 'SOURCE_RELEASE_SHA256=%s\n' "$archive_sha" >>"$GITHUB_ENV"
+          {
+            printf 'source_sha=%s\n' "$SOURCE_SHA"
+            printf 'source_run_id=%s\n' "$SOURCE_RELEASE_RUN_ID"
+            printf 'source_attempt=%s\n' "$SOURCE_RELEASE_ATTEMPT"
+            printf 'source_artifact_id=%s\n' "$AUDIT_ARTIFACT_ID"
+            printf 'version=%s\n' "$VERSION"
+            printf 'tar_sha=%s\n' "$archive_sha"
+          } >>"$GITHUB_OUTPUT"
           printf 'source_sha=%s\nversion=%s\narchive=%s\nsha256=%s\nacceptance_issue=%s\naudit_issue=%s\nsource_release_run=%s\nsource_release_attempt=%s\n' \
             "$SOURCE_SHA" "$VERSION" "$(basename "$archive")" "$archive_sha" "$ACCEPTANCE_ISSUE" "$AUDIT_ISSUE" \
             "$SOURCE_RELEASE_RUN_ID" "$SOURCE_RELEASE_ATTEMPT" \
@@ -406,16 +422,114 @@ jobs:
 
           release_url=$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json url --jq .url)
           printf 'release_url=%s\n' "$release_url" >>"$DNIV_RELEASE_EVIDENCE/release-manifest.txt"
-          gh issue comment "${{ github.event.issue.number }}" --repo "$GITHUB_REPOSITORY" \
-            --body "Published exact accepted production source release $tag from $SOURCE_SHA: $release_url"
-          python3 tools/scratch_state.py mark --dir "$DNIV_RELEASE_EVIDENCE" \
-            --status success --note "production source release published"
+          # A separate verification job checks the public download before success.
 
       - name: Preserve production release evidence
         if: ${{ always() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: production-release-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.DNIV_RELEASE_EVIDENCE }}/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 6
+          overwrite: false
+
+  verify-public:
+    name: Independently verify public source release
+    needs: publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      DNIV_RELEASE_EVIDENCE: ${{ github.workspace }}/scratch/runtime/${{ github.run_id }}/${{ github.run_attempt }}/verify-public
+    steps:
+      - name: Check out exact accepted commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ needs.publish.outputs.source_sha }}
+          fetch-depth: 0
+
+      - name: Independently download and verify public source release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECT_SHA: ${{ needs.publish.outputs.source_sha }}
+          EXPECT_SOURCE_RUN: ${{ needs.publish.outputs.source_run_id }}
+          EXPECT_SOURCE_ATTEMPT: ${{ needs.publish.outputs.source_attempt }}
+          EXPECT_ARTIFACT_ID: ${{ needs.publish.outputs.source_artifact_id }}
+          EXPECT_VERSION: ${{ needs.publish.outputs.version }}
+          EXPECT_TAR_SHA: ${{ needs.publish.outputs.tar_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECT_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$EXPECT_SOURCE_RUN" =~ ^[1-9][0-9]*$ ]]
+          [[ "$EXPECT_SOURCE_ATTEMPT" =~ ^[1-9][0-9]*$ ]]
+          [[ "$EXPECT_ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$EXPECT_TAR_SHA" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$EXPECT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          test "$(git rev-parse HEAD)" = "$EXPECT_SHA"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)" = "$EXPECT_SHA"
+          python3 tools/scratch_state.py init --dir "$DNIV_RELEASE_EVIDENCE" \
+            --workflow production-release --job verify-public \
+            --mode published-source-verification \
+            --source-sha "$EXPECT_SHA" --expected-sha "$EXPECT_SHA"
+          tag="v$EXPECT_VERSION"
+          tarball="DECnet-IV-Linux-$EXPECT_VERSION.tar.xz"
+          accepted="$DNIV_RELEASE_EVIDENCE/accepted"
+          public="$DNIV_RELEASE_EVIDENCE/public"
+          mkdir -p "$accepted" "$public"
+          artifact_name="decnet-iv-linux-source-$EXPECT_SOURCE_RUN-$EXPECT_SOURCE_ATTEMPT"
+          metadata=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$EXPECT_ARTIFACT_ID")
+          printf '%s\n' "$metadata" | jq -e \
+            --arg name "$artifact_name" --argjson run "$EXPECT_SOURCE_RUN" \
+            '.name == $name and .expired == false and .workflow_run.id == $run' >/dev/null
+          gh run download "$EXPECT_SOURCE_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name "$artifact_name" --dir "$accepted"
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir "$public"
+          test "$(find "$public" -maxdepth 1 -type f | wc -l)" -eq 2
+          for suffix in '' .sha256; do
+            test -s "$accepted/$tarball$suffix"
+            test -s "$public/$tarball$suffix"
+            cmp "$accepted/$tarball$suffix" "$public/$tarball$suffix"
+          done
+          test "$(cat "$accepted/archive-name.txt")" = "$tarball"
+          test "$(sha256sum "$public/$tarball" | cut -d' ' -f1)" = "$EXPECT_TAR_SHA"
+          (cd "$public" && sha256sum -c "$tarball.sha256")
+          test "$(gh api "repos/$GITHUB_REPOSITORY/commits/$tag" --jq .sha)" = "$EXPECT_SHA"
+          root="DECnet-IV-Linux-$EXPECT_VERSION"
+          listing="$DNIV_RELEASE_EVIDENCE/public-members.txt"
+          tar -tJf "$public/$tarball" >"$listing"
+          for required in build.sh install.sh uninstall.sh INSTALL.md LICENSE \
+            docs/FEATURES.md docs/COMPONENTS.md kernel/decnet/Makefile \
+            include/uapi/linux/dn.h; do
+            grep -Fqx "$root/$required" "$listing"
+          done
+          test "$(tar -xJOf "$public/$tarball" "$root/VERSION" | grep -c "^version=$EXPECT_VERSION$")" -eq 1
+          tar -xJOf "$public/$tarball" "$root/SOURCE-METADATA" | grep -Fqx "source_sha=$EXPECT_SHA"
+          tar -xJOf "$public/$tarball" "$root/SOURCE-METADATA" | grep -Fqx "version=$EXPECT_VERSION"
+          if grep -Eq '(^|/)(\.git|__pycache__)(/|$)|\.(qcow2|raw|img|iso|ko|o|pyc)$' "$listing"; then
+            echo 'verify-public: unexpected archive member' >&2
+            exit 1
+          fi
+          gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json body > \
+            "$DNIV_RELEASE_EVIDENCE/release-notes.json"
+          jq -e --arg sha "$EXPECT_SHA" --arg hex "$EXPECT_TAR_SHA" \
+            '.body | contains("Exact accepted source commit: " + $sha) and contains("SHA-256: " + $hex) and contains("Packaged-source audit issue") and contains("Full acceptance issue")' \
+            "$DNIV_RELEASE_EVIDENCE/release-notes.json" >/dev/null
+          printf 'source_sha=%s\nsource_release_run=%s\nartifact_id=%s\narchive=%s\nsha256=%s\npublic_download_verified=1\n' \
+            "$EXPECT_SHA" "$EXPECT_SOURCE_RUN" "$EXPECT_ARTIFACT_ID" "$tarball" "$EXPECT_TAR_SHA" \
+            > "$DNIV_RELEASE_EVIDENCE/public-verification.env"
+          python3 tools/scratch_state.py mark --dir "$DNIV_RELEASE_EVIDENCE" \
+            --status success --note "public release source bytes checked"
+          release_url=$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json url --jq .url)
+          gh issue comment "${{ github.event.issue.number }}" --repo "$GITHUB_REPOSITORY" \
+            --body "Verified source release $tag from $EXPECT_SHA: $release_url (SHA-256 $EXPECT_TAR_SHA)"
+
+      - name: Preserve independent public verification evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: verify-public-evidence-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ env.DNIV_RELEASE_EVIDENCE }}/
           if-no-files-found: error
           retention-days: 30

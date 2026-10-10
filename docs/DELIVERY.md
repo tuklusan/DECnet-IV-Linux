@@ -70,7 +70,7 @@ checksum, `VERSION`, `SOURCE-METADATA`, required members, and forbidden-payload 
 creates tag `v<version>` and a GitHub release containing only the accepted tarball and checksum.
 Release notes identify the source commit, compatibility/acceptance run IDs, owner-authorized
 skips, and the canonical evidence ledger. Existing tags/releases fail closed instead of being
-overwritten.
+overwritten. Publication success requires a separate verification job to download the public release tarball and checksum, compare their bytes with the accepted source artifact, and check source metadata, required content, release notes and the tag commit. Publishing assets alone does not establish final verification.
 
 ## Release acceptance
 
