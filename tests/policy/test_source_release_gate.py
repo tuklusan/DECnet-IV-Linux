@@ -1448,6 +1448,11 @@ def main() -> int:
         "static int selftest_large_data(void)",
         "unsigned char data[1803];",
         "selftest_large_data()",
+        "static int selftest_termination(int send_data, int send_goodbye, int success)",
+        "selftest_termination(0, 1, 1)",
+        "selftest_termination(1, 0, 0)",
+        "selftest_termination(0, 0, 0)",
+        "if (!got)\n                return -1;",
     ):
         if marker not in phone_server:
             raise SystemExit(f"source-release gate: PHONE long DATA record compatibility: {marker}")

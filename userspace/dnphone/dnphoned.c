@@ -136,14 +136,12 @@ static int serve(int fd, const char *user)
         return -1;
 
     {
-        int seen_data = 0;
-
         for (;;) {
             size_t source_len;
 
             got = dniv_recv_record(fd, buf, sizeof(buf) - 1U, 0);
             if (!got)
-                return seen_data ? 0 : -1;
+                return -1;
             if (got < 0)
                 return -1;
             if (got < 2)
@@ -158,7 +156,6 @@ static int serve(int fd, const char *user)
             case PHONE_DATA:
                 printf("dnphoned: data from=%s text=%s\n",
                        buf + 1U, buf + 1U + source_len + 1U);
-                seen_data = 1;
                 break;
             case PHONE_HOLD:
                 printf("dnphoned: hold from=%s\n", buf + 1U);
@@ -171,7 +168,7 @@ static int serve(int fd, const char *user)
                 break;
             case PHONE_GOODBYE:
                 printf("dnphoned: goodbye from=%s\n", buf + 1U);
-                return seen_data ? 0 : -1;
+                return 0;
             default:
                 return -1;
             }
@@ -242,9 +239,71 @@ static int selftest_large_data(void)
     return 0;
 }
 
+/* EOF is not a PHONE_GOODBYE, even after previously accepted DATA. */
+static int selftest_termination(int send_data, int send_goodbye, int success)
+{
+    const unsigned char connect_msg[] = {
+        PHONE_CONNECT, 'N', 0U, '1', '.', '2', '3', ':', ':',
+        'A', 'L', 'I', 'C', 'E', 0U
+    };
+    const unsigned char dial_msg[] = { PHONE_DIAL, 'N', 0U, 1U };
+    const unsigned char data[] = { PHONE_DATA, 'N', 0U, 'h', 'i', 0U };
+    const unsigned char goodbye[] = { PHONE_GOODBYE, 'N', 0U };
+    struct timeval timeout = { .tv_sec = 5, .tv_usec = 0 };
+    unsigned char reply;
+    int fds[2], status;
+    pid_t child;
+
+    if (socketpair(AF_UNIX, SOCK_SEQPACKET, 0, fds))
+        return -1;
+    if (setsockopt(fds[0], SOL_SOCKET, SO_RCVTIMEO,
+                   &timeout, sizeof(timeout))) {
+        close(fds[0]);
+        close(fds[1]);
+        return -1;
+    }
+    child = fork();
+    if (child < 0) {
+        close(fds[0]);
+        close(fds[1]);
+        return -1;
+    }
+    if (!child) {
+        int result;
+
+        close(fds[0]);
+        result = serve(fds[1], "ALICE");
+        close(fds[1]);
+        _exit(result ? 1 : 0);
+    }
+    close(fds[1]);
+    if (dniv_send_record(fds[0], connect_msg, sizeof(connect_msg), 0) ||
+        dniv_recv_record(fds[0], &reply, 1U, 0) != 1 ||
+        reply != PHONE_REPLYOK ||
+        dniv_send_record(fds[0], dial_msg, sizeof(dial_msg), 0) ||
+        dniv_recv_record(fds[0], &reply, 1U, 0) != 1 ||
+        reply != PHONE_REPLYOK ||
+        (send_data && dniv_send_record(fds[0], data, sizeof(data), 0)) ||
+        (send_goodbye && dniv_send_record(fds[0], goodbye,
+                                         sizeof(goodbye), 0))) {
+        close(fds[0]);
+        (void)kill(child, SIGKILL);
+        (void)waitpid(child, &status, 0);
+        return -1;
+    }
+    close(fds[0]);
+    if (waitpid(child, &status, 0) != child ||
+        !WIFEXITED(status) || WEXITSTATUS(status) != (success ? 0 : 1))
+        return -1;
+    return 0;
+}
+
 static int selftest(void)
 {
     if (selftest_large_data() ||
+        selftest_termination(0, 1, 1) ||
+        selftest_termination(1, 0, 0) ||
+        selftest_termination(0, 0, 0) ||
         !user_match("DN70::ALICE", "alice") ||
         user_match("DN70::BOB", "alice") ||
         user_match("ALICE", "alice"))
