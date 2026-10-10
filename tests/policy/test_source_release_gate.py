@@ -1016,6 +1016,11 @@ def main() -> int:
         "userspace/dntask/dntask.c": (
             "area < 1U || area > 63U",
             '!parse_spec("0.71::TASK", &spec)',
+            "static int run_output(int fd, int binary, int timeout_seconds)",
+            "int rc = poll(&ready, 1, timeout_ms);",
+            "errno = ETIMEDOUT;",
+            "selftest_output_timeout()",
+            "run_output(fd, binary, timeout_seconds)",
         ),
         "userspace/dnlogin/dnlogin.c": (
             "area < 1U || area > 63U",

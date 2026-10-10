@@ -16,6 +16,8 @@
 #include <linux/dn.h>
 #include <poll.h>
 #include <stdint.h>
+#include <signal.h>
+#include <sys/wait.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -215,19 +217,38 @@ static int output_record(const unsigned char *buf, size_t len, int binary)
     return fflush(stdout);
 }
 
-static int run_output(int fd, int binary)
+static int run_output(int fd, int binary, int timeout_seconds)
 {
     unsigned char buf[DNBUFSIZE];
+    const int timeout_ms = timeout_seconds ? timeout_seconds * 1000 : -1;
 
     for (;;) {
-        ssize_t got = dniv_recv_record(fd, buf, sizeof(buf), 0);
+        struct pollfd ready = { .fd = fd, .events = POLLIN };
+        int rc = poll(&ready, 1, timeout_ms);
 
-        if (got == 0)
-            return 0;
-        if (got < 0)
+        if (rc == 0) {
+            errno = ETIMEDOUT;
             return -1;
-        if (output_record(buf, (size_t)got, binary))
+        }
+        if (rc < 0) {
+            if (errno == EINTR)
+                continue;
             return -1;
+        }
+        if (ready.revents & POLLIN) {
+            ssize_t got = dniv_recv_record(fd, buf, sizeof(buf), 0);
+
+            if (got == 0)
+                return 0;
+            if (got < 0 || output_record(buf, (size_t)got, binary))
+                return -1;
+        }
+        if (ready.revents & (POLLERR | POLLHUP | POLLNVAL)) {
+            if (ready.revents & POLLHUP)
+                return 0;
+            errno = EIO;
+            return -1;
+        }
     }
 }
 
@@ -277,6 +298,47 @@ static int run_interactive(int fd, int binary, int timeout_seconds)
     }
 }
 
+/* Noninteractive task output must honor -t just as the interactive path
+ * does. Test using a silent local seqpacket peer, never remote HECnet. */
+static int selftest_output_timeout(void)
+{
+    int pair[2] = { -1, -1 };
+    pid_t child;
+    int status;
+
+    if (socketpair(AF_UNIX, SOCK_SEQPACKET, 0, pair))
+        return -1;
+    child = fork();
+    if (child < 0) {
+        close(pair[0]);
+        close(pair[1]);
+        return -1;
+    }
+    if (!child) {
+        int rc;
+
+        close(pair[0]);
+        alarm(5U);
+        errno = 0;
+        rc = run_output(pair[1], 1, 1);
+        {
+            int failure_errno = errno;
+            close(pair[1]);
+            _exit(rc == -1 && failure_errno == ETIMEDOUT ? 0 : 1);
+        }
+    }
+    close(pair[1]);
+    /* The peer must remain open (but silent) until timeout is observed. */
+    {
+        pid_t waited = waitpid(child, &status, 0);
+
+        close(pair[0]);
+        if (waited != child || !WIFEXITED(status) || WEXITSTATUS(status))
+            return -1;
+    }
+    return 0;
+}
+
 static int selftest(void)
 {
     struct task_spec spec;
@@ -292,7 +354,8 @@ static int selftest(void)
     if (!parse_spec("64.1::TASK", &spec) ||
         !parse_spec("0.71::TASK", &spec) ||
         !parse_spec("31.0::TASK", &spec) ||
-        !parse_spec("31.71::THIS_OBJECT_NAME_IS_TOO_LONG", &spec))
+        !parse_spec("31.71::THIS_OBJECT_NAME_IS_TOO_LONG", &spec) ||
+        selftest_output_timeout())
         return 1;
     puts("dntask selftest passed");
     return 0;
@@ -358,7 +421,7 @@ int main(int argc, char **argv)
             close(fd);
             return 1;
         }
-    } else if (run_output(fd, binary)) {
+    } else if (run_output(fd, binary, timeout_seconds)) {
         perror("dntask: receive");
         close(fd);
         return 1;
