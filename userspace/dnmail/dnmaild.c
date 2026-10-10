@@ -470,8 +470,10 @@ static int append_complete_spool(const char *root, FILE *staged)
         goto rollback;
     if (fclose(spool)) {
         saved_errno = errno;
-        (void)ftruncate(guarded_fd, original.st_size);
-        (void)fsync(guarded_fd);
+        if (ftruncate(guarded_fd, original.st_size))
+            saved_errno = EIO;
+        if (fsync(guarded_fd))
+            saved_errno = EIO;
         close(guarded_fd);
         errno = saved_errno;
         return -1;

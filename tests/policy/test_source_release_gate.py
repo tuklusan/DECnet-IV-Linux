@@ -984,6 +984,8 @@ def main() -> int:
         'setvbuf(spool, NULL, _IONBF, 0)',
         'if (fflush(spool) || fsync(guarded_fd))',
         'if (ftruncate(guarded_fd, original.st_size) || fsync(guarded_fd))',
+        'if (ftruncate(guarded_fd, original.st_size))',
+        'if (fsync(guarded_fd))',
         'selftest_spool_io_rollback(directory, mailbox)',
         'setrlimit(RLIMIT_FSIZE, &limit)',
         'if (fflush(staged) || fseek(staged, 0L, SEEK_SET))',
