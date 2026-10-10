@@ -76,7 +76,7 @@ This catalogue describes the production source release. Lab-only helpers and ind
 ## PHONE
 
 - `phone` client with classic CONNECT/DIAL/DATA session flow.
-- `dnphoned` object 29 service with local-user validation, data delivery and DIRECTORY response support.
+- `dnphoned` object 29 service with local-user validation, data delivery and DIRECTORY response support. Full 1800-byte `phone` client text messages fit the server's 2048-byte NSP sequenced-record receive bound; an isolated socketpair selftest verifies the maximum-length PHONE DATA handshake and delivery.
 
 ## Mail
 

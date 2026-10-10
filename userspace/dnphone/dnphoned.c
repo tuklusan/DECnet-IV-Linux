@@ -1,3 +1,4 @@
+#define _POSIX_C_SOURCE 200809L
 // ============================================================================
 // Copyright (c) 2026 Supratim Sanyal of SANYALnet Labs.
 // Proprietary rights reserved except as expressly licensed herein.
@@ -19,6 +20,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/wait.h>
+#include <signal.h>
 #include <sys/time.h>
 #include <unistd.h>
 
@@ -88,7 +91,7 @@ static int send_code(int fd, unsigned char code)
 static int serve(int fd, const char *user)
 {
     struct timeval timeout = { .tv_sec = 30, .tv_usec = 0 };
-    unsigned char buf[1024];
+    unsigned char buf[2048];
     ssize_t got;
 
     if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) ||
@@ -175,9 +178,73 @@ static int serve(int fd, const char *user)
     }
 }
 
+/* A valid phone client may transmit 1800 text bytes in one DATA record.
+ * Rejecting this frame at the receiver silently breaks local interoperability. */
+static int selftest_large_data(void)
+{
+    const unsigned char connect_msg[] = {
+        PHONE_CONNECT, 'N', 0U, '1', '.', '2', '3', ':', ':',
+        'A', 'L', 'I', 'C', 'E', 0U
+    };
+    const unsigned char dial_msg[] = { PHONE_DIAL, 'N', 0U, 1U };
+    const unsigned char goodbye[] = { PHONE_GOODBYE, 'N', 0U };
+    unsigned char data[1803];
+    unsigned char reply;
+    struct timeval timeout = { .tv_sec = 5, .tv_usec = 0 };
+    int fds[2], status;
+    pid_t child;
+
+    if (socketpair(AF_UNIX, SOCK_SEQPACKET, 0, fds))
+        return -1;
+    if (setsockopt(fds[0], SOL_SOCKET, SO_RCVTIMEO,
+                   &timeout, sizeof(timeout))) {
+        close(fds[0]);
+        close(fds[1]);
+        return -1;
+    }
+    child = fork();
+    if (child < 0) {
+        close(fds[0]);
+        close(fds[1]);
+        return -1;
+    }
+    if (!child) {
+        int result;
+
+        close(fds[0]);
+        result = serve(fds[1], "ALICE");
+        close(fds[1]);
+        _exit(result ? 1 : 0);
+    }
+    close(fds[1]);
+    memset(data, 'x', sizeof(data));
+    data[0] = PHONE_DATA;
+    data[1] = 'N';
+    data[2] = 0U;
+    if (dniv_send_record(fds[0], connect_msg, sizeof(connect_msg), 0) ||
+        dniv_recv_record(fds[0], &reply, 1U, 0) != 1 ||
+        reply != PHONE_REPLYOK ||
+        dniv_send_record(fds[0], dial_msg, sizeof(dial_msg), 0) ||
+        dniv_recv_record(fds[0], &reply, 1U, 0) != 1 ||
+        reply != PHONE_REPLYOK ||
+        dniv_send_record(fds[0], data, sizeof(data), 0) ||
+        dniv_send_record(fds[0], goodbye, sizeof(goodbye), 0)) {
+        close(fds[0]);
+        (void)kill(child, SIGKILL);
+        (void)waitpid(child, &status, 0);
+        return -1;
+    }
+    close(fds[0]);
+    if (waitpid(child, &status, 0) != child ||
+        !WIFEXITED(status) || WEXITSTATUS(status))
+        return -1;
+    return 0;
+}
+
 static int selftest(void)
 {
-    if (!user_match("DN70::ALICE", "alice") ||
+    if (selftest_large_data() ||
+        !user_match("DN70::ALICE", "alice") ||
         user_match("DN70::BOB", "alice") ||
         user_match("ALICE", "alice"))
         return 1;

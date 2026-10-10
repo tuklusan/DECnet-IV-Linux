@@ -1425,6 +1425,16 @@ def main() -> int:
         if marker not in dnmaild:
             raise SystemExit(f"source-release gate: overlong-record selftest missing: {marker}")
 
+    phone_server = read_text("userspace/dnphone/dnphoned.c")
+    for marker in (
+        "unsigned char buf[2048];",
+        "static int selftest_large_data(void)",
+        "unsigned char data[1803];",
+        "selftest_large_data()",
+    ):
+        if marker not in phone_server:
+            raise SystemExit(f"source-release gate: PHONE long DATA record compatibility: {marker}")
+
     persistent_daemons = {
         "dnfald": dnfald,
         "dnhttpd": dnhttpd,
