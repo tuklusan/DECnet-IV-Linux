@@ -578,7 +578,7 @@ static int apply_transfer_env(const char *env, int *text_mode,
 }
 
 static int write_text_payload(FILE *out, const unsigned char *data, size_t len,
-                              unsigned char rfm)
+                              unsigned char rfm, int *pending_cr)
 {
     size_t i;
 
@@ -588,15 +588,17 @@ static int write_text_payload(FILE *out, const unsigned char *data, size_t len,
         return fputc('\n', out) == EOF ? -1 : 0;
     }
     if (rfm == DAP_RFM_STM || rfm == DAP_RFM_SCR) {
+        /* CRLF may straddle independent DAP DATA messages. A CR was
+         * already emitted as a normalized LF; suppress one following LF
+         * even when it arrives in a later message or after empty DATA. */
         for (i = 0; i < len; i++) {
-            if (data[i] == '\r') {
-                if (i + 1U < len && data[i + 1U] == '\n')
-                    i++;
-                if (fputc('\n', out) == EOF)
-                    return -1;
-            } else if (fputc(data[i], out) == EOF) {
-                return -1;
+            if (*pending_cr && data[i] == '\n') {
+                *pending_cr = 0;
+                continue;
             }
+            *pending_cr = data[i] == '\r';
+            if (fputc(*pending_cr ? '\n' : data[i], out) == EOF)
+                return -1;
         }
         return 0;
     }
@@ -789,6 +791,7 @@ static int retrieve_file(const char *node_text, const char *filespec,
     unsigned char msg[512], reply[2048];
     size_t n = strlen(filespec);
     int got;
+    int pending_cr = 0;
     int fd;
     unsigned char rfm = 0U;
     FILE *out = stdout;
@@ -862,7 +865,8 @@ static int retrieve_file(const char *node_text, const char *filespec,
             if (off > (size_t)got)
                 goto fail;
             if (text_mode) {
-                if (write_text_payload(out, reply + off, (size_t)got - off, rfm))
+                if (write_text_payload(out, reply + off, (size_t)got - off, rfm,
+                                       &pending_cr))
                     goto fail;
             } else if (fwrite(reply + off, 1, (size_t)got - off, out) !=
                        (size_t)got - off) {
@@ -1429,6 +1433,42 @@ static int selftest_socket_timeouts(void)
     return ok ? 0 : -1;
 }
 
+/* A streaming CRLF pair split between DAP_DATA messages is one newline. */
+static int selftest_stream_crlf_chunks(void)
+{
+    const unsigned char a[] = { 'A', '\r' };
+    const unsigned char b[] = { '\n', 'B', '\r', '\n', 'C', '\r' };
+    const unsigned char c[] = { '\n', 'D', '\r' };
+    unsigned char buf[32];
+    int pending_cr;
+    size_t got;
+    FILE *out;
+    unsigned char rfm;
+
+    for (rfm = DAP_RFM_STM; rfm <= DAP_RFM_SCR; rfm++) {
+        /* RFM_STMLF is a separate format with different line semantics. */
+        if (rfm != DAP_RFM_STM && rfm != DAP_RFM_SCR)
+            continue;
+        pending_cr = 0;
+        out = tmpfile();
+        if (!out)
+            return -1;
+        if (write_text_payload(out, a, sizeof(a), rfm, &pending_cr) ||
+            write_text_payload(out, NULL, 0U, rfm, &pending_cr) ||
+            write_text_payload(out, b, sizeof(b), rfm, &pending_cr) ||
+            write_text_payload(out, c, sizeof(c), rfm, &pending_cr) ||
+            fflush(out) || fseek(out, 0, SEEK_SET)) {
+            fclose(out);
+            return -1;
+        }
+        got = fread(buf, 1, sizeof(buf), out);
+        fclose(out);
+        if (got != 8U || memcmp(buf, "A\nB\nC\nD\n", 8U))
+            return -1;
+    }
+    return 0;
+}
+
 static int selftest_text_records(void)
 {
     static const unsigned char invalid[] = { 'a', 'b', 0U, 'c', 'd', '\n' };
@@ -1657,7 +1697,8 @@ static int selftest(void)
     struct access_options parsed_options = { 0 };
 
     if (selftest_buffer_limit() || selftest_socket_timeouts() ||
-        selftest_text_records() || selftest_staged_output() ||
+        selftest_text_records() || selftest_stream_crlf_chunks() ||
+        selftest_staged_output() ||
         selftest_staged_private_collision())
         return 1;
     if (parse_node("31.70", &addr) || addr != (uint16_t)((31U << 10) | 70U))

@@ -861,6 +861,23 @@ def main() -> int:
         if marker not in dncopy:
             raise SystemExit(f"source-release gate: malformed DAP RFM accepted: {marker}")
 
+    # Text decoding of CR-delimited DAP streams must retain CRLF state
+    # between DATA messages. An independent exact-source repro showed A\r
+    # followed by \nB emitted A\n\nB prior to this safeguard.
+    for marker in (
+        'static int write_text_payload(FILE *out, const unsigned char *data, size_t len,',
+        'unsigned char rfm, int *pending_cr)',
+        "if (*pending_cr && data[i] == '\\n') {",
+        "*pending_cr = data[i] == '\\r';",
+        'int pending_cr = 0;',
+        '&pending_cr))',
+        'static int selftest_stream_crlf_chunks(void)',
+        'write_text_payload(out, NULL, 0U, rfm, &pending_cr)',
+        'selftest_stream_crlf_chunks() ||',
+    ):
+        if marker not in dncopy:
+            raise SystemExit(f"source-release gate: dncopy DAP stream CRLF split-record regression: {marker}")
+
     # DAP CONFIG BUFSIZ is a *complete message* limit, not just the data
     # payload. Each peer must honor the lesser advertised size, including
     # three DATA header bytes and potentially smaller independent DEC peers.
