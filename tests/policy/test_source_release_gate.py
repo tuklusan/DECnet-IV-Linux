@@ -1081,6 +1081,23 @@ def main() -> int:
             if marker not in source:
                 raise SystemExit(f"source-release gate: DECnet area-zero parser regression: {path}: {marker}")
 
+    libdnet_compat = read_text("userspace/libdnet/compat.c")
+    libdnet_peek_test = read_text("userspace/libdnet/selftest.c")
+    for marker in (
+        'if (!(flags & MSG_EOR) || (flags & MSG_PEEK))',
+        'return (int)recv(fd, buf, (size_t)len, recv_flags);',
+    ):
+        if marker not in libdnet_compat:
+            raise SystemExit(f"source-release gate: libdnet MSG_EOR PEEK replay regression: {marker}")
+    for marker in (
+        'static int selftest_eor_peek(void)',
+        'MSG_EOR | MSG_PEEK',
+        'got != 3 || memcmp(buffer, "abc", 3U)',
+        'if (selftest_eor_peek())',
+    ):
+        if marker not in libdnet_peek_test:
+            raise SystemExit(f"source-release gate: libdnet PEEK regression test missing: {marker}")
+
     libdnet_numeric = read_text("userspace/libdnet/libdnet.c")
     libdnet_selftest = read_text("userspace/libdnet/selftest.c")
     for marker in (

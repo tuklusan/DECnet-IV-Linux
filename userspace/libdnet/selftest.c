@@ -16,8 +16,37 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <unistd.h>
 
 #include <netdnet/dnetdb.h>
+
+/* A peek across a stream record boundary cannot synthesize bytes or
+ * consume the underlying record. Use a local socketpair, not DEC peers. */
+static int selftest_eor_peek(void)
+{
+    int pair[2] = { -1, -1 };
+    char buffer[8];
+    int got;
+    int rc = -1;
+
+    if (socketpair(AF_UNIX, SOCK_STREAM, 0, pair))
+        return -1;
+    if (send(pair[0], "abc", 3U, 0) != 3 || shutdown(pair[0], SHUT_WR))
+        goto done;
+    memset(buffer, 0, sizeof(buffer));
+    got = dnet_recv(pair[1], buffer, 6, MSG_EOR | MSG_PEEK);
+    if (got != 3 || memcmp(buffer, "abc", 3U))
+        goto done;
+    memset(buffer, 0, sizeof(buffer));
+    got = dnet_recv(pair[1], buffer, 6, MSG_EOR);
+    if (got != 3 || memcmp(buffer, "abc", 3U))
+        goto done;
+    rc = 0;
+done:
+    close(pair[0]);
+    close(pair[1]);
+    return rc;
+}
 
 int main(void)
 {
@@ -79,6 +108,8 @@ int main(void)
     errno = 0;
     if (dnet_conn("31.71", "OBJECT-NAME-TOO-LONG", SOCK_SEQPACKET,
                   NULL, 0, NULL, NULL) != -1 || errno != ENAMETOOLONG)
+        return 1;
+    if (selftest_eor_peek())
         return 1;
     puts("libdnet selftest passed");
     return 0;
