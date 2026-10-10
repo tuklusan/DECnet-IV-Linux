@@ -19,6 +19,7 @@
 #include <linux/dn.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <poll.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -539,6 +540,7 @@ static int serve(int fd, const char *root, const char *sendmail_path,
     FILE *out = NULL;
     int mail_fd = -1;
     int smtp_fd = -1;
+    long body_start = -1L;
     pid_t mail_child = -1;
     ssize_t got;
 
@@ -594,12 +596,10 @@ static int serve(int fd, const char *root, const char *sendmail_path,
         if (fwrite(header, 1, (size_t)header_len, out) !=
             (size_t)header_len)
             goto fail;
-        if (smtp_host) {
-            smtp_fd = smtp_open(smtp_host, smtp_port, smtp_from, recipients,
-                                sender, subject, full_user);
-            if (smtp_fd < 0)
-                goto fail;
-        }
+        /* Track where the text records begin.  SMTP delivery is deferred
+         * until the remote MAIL-11 end-of-message marker has arrived. */
+        if (smtp_host && (body_start = ftell(out)) < 0)
+            goto fail;
     }
 
     for (;;) {
@@ -613,8 +613,34 @@ static int serve(int fd, const char *root, const char *sendmail_path,
         if (fwrite(body, 1, (size_t)got, out) != (size_t)got ||
             fputc('\n', out) == EOF)
             goto fail;
-        if (smtp_fd >= 0 &&
-            smtp_write_record(smtp_fd, body, (size_t)got))
+        /* The spool uses newline separators for records. Refuse embedded
+         * newline/NUL/CR before staging so replay cannot change boundaries. */
+        if (smtp_host && (memchr(body, '\r', (size_t)got) ||
+                          memchr(body, '\n', (size_t)got) ||
+                          memchr(body, '\0', (size_t)got)))
+            goto fail;
+    }
+    if (smtp_host) {
+        /* No SMTP socket or DATA command before confirmed MAIL-11 EOM.
+         * Reconstruct the exact record body from the validated private
+         * staging file; size covers a full 4096-byte record plus LF/NUL. */
+        char line[sizeof(body) + 2U];
+
+        if (fflush(out) || fseek(out, body_start, SEEK_SET))
+            goto fail;
+        smtp_fd = smtp_open(smtp_host, smtp_port, smtp_from, recipients,
+                            sender, subject, full_user);
+        if (smtp_fd < 0)
+            goto fail;
+        while (fgets(line, sizeof(line), out)) {
+            size_t len = strlen(line);
+
+            if (!len || line[len - 1U] != '\n' ||
+                smtp_write_record(smtp_fd, (const unsigned char *)line,
+                                  len - 1U))
+                goto fail;
+        }
+        if (ferror(out) || fseek(out, 0L, SEEK_END))
             goto fail;
     }
     if (sendmail_path && start_complete_sendmail(out, sendmail_path,
@@ -828,6 +854,81 @@ out:
     return rc;
 }
 
+/* Verify a remote MAIL-11 abort cannot open the configured SMTP relay.
+ * This uses only an isolated loopback listener and Unix sequenced sockets. */
+static int selftest_smtp_not_before_eom(const char *root)
+{
+    struct sockaddr_in loop;
+    struct pollfd watched;
+    socklen_t loop_len = sizeof(loop);
+    int listener = -1, pair[2] = { -1, -1 };
+    unsigned char ack[8];
+    pid_t child = -1;
+    int status, rc = -1;
+
+    listener = socket(AF_INET, SOCK_STREAM, 0);
+    if (listener < 0)
+        return -1;
+    memset(&loop, 0, sizeof(loop));
+    loop.sin_family = AF_INET;
+    loop.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    if (bind(listener, (struct sockaddr *)&loop, sizeof(loop)) ||
+        listen(listener, 2) ||
+        getsockname(listener, (struct sockaddr *)&loop, &loop_len) ||
+        socketpair(AF_UNIX, SOCK_SEQPACKET, 0, pair))
+        goto finish;
+    child = fork();
+    if (child < 0)
+        goto finish;
+    if (!child) {
+        int result;
+
+        close(pair[0]);
+        close(listener);
+        alarm(6U);
+        result = serve(pair[1], root, NULL, "127.0.0.1",
+                       ntohs(loop.sin_port), "mail11@localhost");
+        close(pair[1]);
+        _exit(result == -1 ? 0 : 1);
+    }
+    close(pair[1]);
+    pair[1] = -1;
+    if (dniv_send_record(pair[0], "sender", 6U, 0) ||
+        dniv_send_record(pair[0], "recipient", 9U, 0) ||
+        dniv_recv_record(pair[0], ack, sizeof(ack), 0) != 4 ||
+        memcmp(ack, "\1\0\0\0", 4U) ||
+        dniv_send_record(pair[0], "\0", 1U, 0) ||
+        dniv_send_record(pair[0], "user", 4U, 0) ||
+        dniv_send_record(pair[0], "subject", 7U, 0) ||
+        dniv_send_record(pair[0], "body", 4U, 0))
+        goto finish;
+    watched.fd = listener;
+    watched.events = POLLIN;
+    watched.revents = 0;
+    /* No SMTP TCP connection while the peer withholds its EOM marker. */
+    if (poll(&watched, 1, 300) != 0)
+        goto finish;
+    close(pair[0]);
+    pair[0] = -1;
+    if (waitpid(child, &status, 0) != child ||
+        !WIFEXITED(status) || WEXITSTATUS(status))
+        goto finish;
+    child = -1;
+    rc = 0;
+finish:
+    if (pair[0] >= 0)
+        close(pair[0]);
+    if (pair[1] >= 0)
+        close(pair[1]);
+    if (listener >= 0)
+        close(listener);
+    if (child > 0) {
+        (void)kill(child, SIGKILL);
+        (void)waitpid(child, NULL, 0);
+    }
+    return rc;
+}
+
 static int selftest(void)
 {
     char directory[] = "/tmp/dnmaild-selftest.XXXXXX";
@@ -931,7 +1032,8 @@ static int selftest(void)
     if (victim_fd < 0 || read(victim_fd, victim_buf, sizeof(victim_buf)) != 16 ||
         memcmp(victim_buf, "ok\nFrom: sender", 15U) ||
         selftest_spool_io_rollback(directory, mailbox) ||
-        selftest_sendmail_replay(directory))
+        selftest_sendmail_replay(directory) ||
+        selftest_smtp_not_before_eom(directory))
         goto out;
     rc = 0;
 

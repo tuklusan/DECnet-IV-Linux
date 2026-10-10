@@ -1018,6 +1018,26 @@ def main() -> int:
     ):
         if marker not in dnmaild:
             raise SystemExit(f"source-release gate: dnmaild precompletion external delivery regression: {marker}")
+    for marker in (
+        'long body_start = -1L;',
+        'if (smtp_host && (body_start = ftell(out)) < 0)',
+        'if (smtp_host && (memchr(body,',
+        'smtp_fd = smtp_open(smtp_host, smtp_port, smtp_from, recipients,',
+        'if (fflush(out) || fseek(out, body_start, SEEK_SET))',
+        'smtp_write_record(smtp_fd, (const unsigned char *)line,',
+        'selftest_smtp_not_before_eom(directory)',
+        'if (poll(&watched, 1, 300) != 0)',
+    ):
+        if marker not in dnmaild:
+            raise SystemExit(f"source-release gate: premature SMTP relay regression: {marker}")
+    done_smtp = dnmaild.find('if (got == 1 && body[0] == 0U)\n            break;')
+    session = dnmaild.split('static int serve(', 1)[1].split('static int selftest_smtp_reply(', 1)[0]
+    smtp_launch = session.find('smtp_fd = smtp_open(')
+    if done_smtp < 0 or smtp_launch < 0 or \
+            smtp_launch < session.find('if (got == 1 && body[0] == 0U)') or \
+            session.count('smtp_fd = smtp_open(') != 1:
+        raise SystemExit("source-release gate: SMTP must open only after remote MAIL-11 completion")
+
     done_record = dnmaild.find('if (got == 1 && body[0] == 0U)\n            break;')
     delivery = dnmaild.find('if (sendmail_path && start_complete_sendmail(out, sendmail_path,')
     if done_record < 0 or delivery < done_record or \
