@@ -42,7 +42,7 @@ def main() -> int:
     if (ROOT / ".github/workflows/portability.yml").exists():
         raise SystemExit("source-release gate: obsolete checkout-built portability workflow remains")
     top_makefile = read_text("Makefile")
-    if 'for test in tests/policy/test_*.py; do python3 "$test"; done' not in top_makefile:
+    if 'for test in tests/policy/test_*.py; do python3 "$$test"; done' not in top_makefile:
         raise SystemExit("source-release gate: top-level unit target does not execute every policy regression")
     socket_source = read_text("kernel/decnet/decnet_iv_socket.c")
     seq_recv = socket_source.split("static int dniv_sock_recvmsg", 1)[1].split(
