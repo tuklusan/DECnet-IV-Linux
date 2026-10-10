@@ -39,6 +39,11 @@ static struct hlist_head dniv_l1_routes[DNIV_ROUTE_L1_BUCKETS];
 static struct hlist_head dniv_l2_routes[DNIV_ROUTE_L2_BUCKETS];
 static __u64 dniv_route_generation;
 
+static bool dniv_route_active(unsigned long expires)
+{
+    return !expires || time_before(jiffies, expires);
+}
+
 
 bool dniv_route_area_attached(__u16 local_area)
 {
@@ -172,7 +177,8 @@ int dniv_route_update(__u8 level, __u16 destination, __u16 next_hop,
     spin_lock_irqsave(&dniv_route_lock, flags);
     candidate = dniv_route_find_locked(head, next_hop, ifindex);
     if (candidate) {
-        if (candidate->cost != cost || candidate->hops != hops)
+        if (candidate->cost != cost || candidate->hops != hops ||
+            dniv_route_active(candidate->expires) != dniv_route_active(expires))
             dniv_route_generation_advance_locked();
         candidate->cost = cost;
         candidate->hops = hops;
@@ -195,7 +201,8 @@ int dniv_route_update(__u8 level, __u16 destination, __u16 next_hop,
         candidate->ifindex = ifindex;
         hlist_add_head(&candidate->node, head);
         dniv_route_generation_advance_locked();
-    } else if (candidate->cost != cost || candidate->hops != hops) {
+    } else if (candidate->cost != cost || candidate->hops != hops ||
+            dniv_route_active(candidate->expires) != dniv_route_active(expires)) {
         dniv_route_generation_advance_locked();
     }
     candidate->cost = cost;
@@ -234,6 +241,7 @@ void dniv_route_refresh_adjacency(__u16 next_hop, __s32 ifindex,
 {
     unsigned long flags;
     unsigned int i;
+    bool visibility_changed = false;
 
     if (next_hop == 0U || ifindex <= 0)
         return;
@@ -244,8 +252,11 @@ void dniv_route_refresh_adjacency(__u16 next_hop, __s32 ifindex,
 
         hlist_for_each_entry(candidate, &dniv_l1_routes[i], node) {
             if (candidate->next_hop == next_hop &&
-                candidate->ifindex == ifindex)
+                candidate->ifindex == ifindex) {
+                visibility_changed |= dniv_route_active(candidate->expires) !=
+                                      dniv_route_active(expires);
                 candidate->expires = expires;
+            }
         }
     }
     for (i = 1; i < DNIV_ROUTE_L2_BUCKETS; i++) {
@@ -253,10 +264,15 @@ void dniv_route_refresh_adjacency(__u16 next_hop, __s32 ifindex,
 
         hlist_for_each_entry(candidate, &dniv_l2_routes[i], node) {
             if (candidate->next_hop == next_hop &&
-                candidate->ifindex == ifindex)
+                candidate->ifindex == ifindex) {
+                visibility_changed |= dniv_route_active(candidate->expires) !=
+                                      dniv_route_active(expires);
                 candidate->expires = expires;
+            }
         }
     }
+    if (visibility_changed)
+        dniv_route_generation_advance_locked();
     spin_unlock_irqrestore(&dniv_route_lock, flags);
 }
 
