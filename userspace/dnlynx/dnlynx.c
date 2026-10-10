@@ -22,6 +22,7 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/time.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include "../common/record_io.h"
@@ -176,10 +177,129 @@ static int status_code(const unsigned char *buf, size_t len)
     return -1;
 }
 
+/* A successful HTTP status does not imply that all declared body bytes
+ * arrived. Enforce an unambiguous decimal Content-Length when present, and
+ * fail closed on unsupported transfer codings instead of printing chunks. */
+static int header_name_is(const unsigned char *name, size_t len,
+                          const char *wanted)
+{
+    size_t i;
+
+    if (strlen(wanted) != len)
+        return 0;
+    for (i = 0U; i < len; i++) {
+        unsigned char a = name[i];
+        unsigned char b = (unsigned char)wanted[i];
+
+        if (a >= 'A' && a <= 'Z')
+            a = (unsigned char)(a + ('a' - 'A'));
+        if (b >= 'A' && b <= 'Z')
+            b = (unsigned char)(b + ('a' - 'A'));
+        if (a != b)
+            return 0;
+    }
+    return 1;
+}
+
+static int valid_header_name_byte(unsigned char c)
+{
+    if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+        (c >= '0' && c <= '9'))
+        return 1;
+    return c && strchr("!#$%&'*+-.^_`|~", c) != NULL;
+}
+
+static int parse_response_headers(const unsigned char *header, size_t end,
+                                  int *has_length, size_t *content_length)
+{
+    size_t pos = 0U;
+
+    if (!header || !has_length || !content_length || end < 4U ||
+        end > DNLYNX_HEADER_MAX)
+        return -1;
+    *has_length = 0;
+    *content_length = 0U;
+    /* Skip the validated HTTP status line. */
+    while (pos + 1U < end &&
+           !(header[pos] == '\r' && header[pos + 1U] == '\n'))
+        pos++;
+    if (pos + 1U >= end)
+        return -1;
+    pos += 2U;
+    while (pos + 1U < end) {
+        size_t line_end = pos;
+        size_t colon = pos;
+        size_t i;
+
+        while (line_end + 1U < end &&
+               !(header[line_end] == '\r' && header[line_end + 1U] == '\n'))
+            line_end++;
+        if (line_end + 1U >= end)
+            return -1;
+        if (line_end == pos)
+            return line_end + 2U == end ? 0 : -1;
+        while (colon < line_end && header[colon] != ':')
+            colon++;
+        if (colon == pos || colon == line_end)
+            return -1;
+        for (i = pos; i < colon; i++)
+            if (!valid_header_name_byte(header[i]))
+                return -1;
+        for (i = colon + 1U; i < line_end; i++)
+            if ((header[i] < 0x20U && header[i] != '\t') ||
+                header[i] == 0x7fU)
+                return -1;
+        if (header_name_is(header + pos, colon - pos, "Transfer-Encoding"))
+            return -1; /* Chunk framing is not implemented by this client. */
+        if (header_name_is(header + pos, colon - pos, "Content-Length")) {
+            size_t number = 0U;
+            size_t digit_count = 0U;
+
+            if (*has_length)
+                return -1; /* Duplicates are ambiguous even if identical. */
+            i = colon + 1U;
+            while (i < line_end && (header[i] == ' ' || header[i] == '\t'))
+                i++;
+            while (i < line_end && header[i] >= '0' && header[i] <= '9') {
+                size_t digit = (size_t)(header[i] - '0');
+
+                if (number > (SIZE_MAX - digit) / 10U)
+                    return -1;
+                number = number * 10U + digit;
+                i++;
+                digit_count++;
+            }
+            while (i < line_end && (header[i] == ' ' || header[i] == '\t'))
+                i++;
+            if (!digit_count || i != line_end)
+                return -1;
+            *content_length = number;
+            *has_length = 1;
+        }
+        pos = line_end + 2U;
+    }
+    return -1;
+}
+
+static int write_http_body(const unsigned char *body, size_t count,
+                           int has_length, size_t content_length,
+                           size_t *written)
+{
+    if (!written || *written > SIZE_MAX - count ||
+        (has_length && (*written > content_length ||
+                        count > content_length - *written)))
+        return -1;
+    if (count && fwrite(body, 1, count, stdout) != count)
+        return -1;
+    *written += count;
+    return 0;
+}
+
 static int run_http(int fd, const char *node, const char *path, int include_headers)
 {
     unsigned char header[DNLYNX_HEADER_MAX], record[DNBUFSIZE];
-    char request[1536]; size_t used=0U; int code=-1, have_header=0; int n;
+    char request[1536]; size_t used=0U, body_written=0U, content_length=0U;
+    int code=-1, have_header=0, has_length=0; int n;
     n=snprintf(request,sizeof(request),
         "GET %s HTTP/1.0\r\nHost: %s\r\nUser-Agent: dnlynx/1\r\nConnection: close\r\n\r\n",path,node);
     if (n<0 || (size_t)n>=sizeof(request)) {
@@ -213,24 +333,28 @@ static int run_http(int fd, const char *node, const char *path, int include_head
                 fputs("dnlynx: HTTP stage=status-line\n",stderr);
                 return -1;
             }
+            if (parse_response_headers(header, (size_t)end, &has_length,
+                                       &content_length)) {
+                fputs("dnlynx: HTTP stage=invalid-headers\n", stderr);
+                return -1;
+            }
             have_header=1;
             if (include_headers && fwrite(header,1,(size_t)end,stdout)!=(size_t)end) {
                 fputs("dnlynx: HTTP stage=header-output\n",stderr);
                 return -1;
             }
-            if (used>(size_t)end && fwrite(header+end,1,used-(size_t)end,stdout)!=used-(size_t)end) {
-                fputs("dnlynx: HTTP stage=body-output\n",stderr);
-                return -1;
-            }
-            if (copied<(size_t)got &&
-                fwrite(record+copied,1,(size_t)got-copied,stdout)!=(size_t)got-copied) {
-                fputs("dnlynx: HTTP stage=body-output\n",stderr);
+            if (write_http_body(header + end, used - (size_t)end,
+                                has_length, content_length, &body_written) ||
+                write_http_body(record + copied, (size_t)got - copied,
+                                has_length, content_length, &body_written)) {
+                fputs("dnlynx: HTTP stage=body-length-or-output\n",stderr);
                 return -1;
             }
             continue;
         }
-        if (fwrite(record,1,(size_t)got,stdout)!=(size_t)got) {
-            fputs("dnlynx: HTTP stage=body-output\n",stderr);
+        if (write_http_body(record, (size_t)got, has_length,
+                            content_length, &body_written)) {
+            fputs("dnlynx: HTTP stage=body-length-or-output\n",stderr);
             return -1;
         }
     }
@@ -238,11 +362,91 @@ static int run_http(int fd, const char *node, const char *path, int include_head
         fputs("dnlynx: HTTP stage=no-header\n",stderr);
         return -1;
     }
+    if (has_length && body_written != content_length) {
+        fprintf(stderr, "dnlynx: HTTP stage=truncated-body received=%zu expected=%zu\n",
+                body_written, content_length);
+        return -1;
+    }
     if (fflush(stdout)) {
         fputs("dnlynx: HTTP stage=flush\n",stderr);
         return -1;
     }
     return code>=200 && code<300 ? 0 : 1;
+}
+
+/* Real SOCK_SEQPACKET end-of-stream proof with a local fake HTTP peer.
+ * Never requires a DECnet listener, external network or writable document. */
+static int selftest_response(const char *response, int expected_rc,
+                             const char *expected_body)
+{
+    int pair[2] = { -1, -1 };
+    int capture[2] = { -1, -1 };
+    int saved_out;
+    int rc;
+    int status;
+    pid_t child;
+    ssize_t got;
+    unsigned char output[128];
+    size_t expected = strlen(expected_body);
+
+    if (socketpair(AF_UNIX, SOCK_SEQPACKET, 0, pair))
+        return -1;
+    if (pipe(capture)) {
+        close(pair[0]);
+        close(pair[1]);
+        return -1;
+    }
+    child = fork();
+    if (child < 0) {
+        close(pair[0]);
+        close(pair[1]);
+        close(capture[0]);
+        close(capture[1]);
+        return -1;
+    }
+    if (!child) {
+        unsigned char request[2048];
+
+        alarm(5U);
+        close(pair[0]);
+        close(capture[0]);
+        close(capture[1]);
+        if (dniv_recv_record(pair[1], request, sizeof(request), 0) <= 0 ||
+            dniv_send_record(pair[1], response, strlen(response), 0))
+            _exit(1);
+        close(pair[1]);
+        _exit(0);
+    }
+    close(pair[1]);
+    saved_out = dup(STDOUT_FILENO);
+    if (saved_out < 0 || fflush(stdout) ||
+        dup2(capture[1], STDOUT_FILENO) < 0) {
+        close(pair[0]);
+        close(capture[0]);
+        close(capture[1]);
+        if (saved_out >= 0)
+            close(saved_out);
+        (void)waitpid(child, &status, 0);
+        return -1;
+    }
+    close(capture[1]);
+    rc = run_http(pair[0], "31.71", "/", 0);
+    close(pair[0]);
+    if (fflush(stdout) || dup2(saved_out, STDOUT_FILENO) < 0) {
+        close(capture[0]);
+        close(saved_out);
+        (void)waitpid(child, &status, 0);
+        return -1;
+    }
+    close(saved_out);
+    got = read(capture[0], output, sizeof(output));
+    close(capture[0]);
+    if (waitpid(child, &status, 0) != child ||
+        !WIFEXITED(status) || WEXITSTATUS(status) ||
+        rc != expected_rc || got != (ssize_t)expected ||
+        memcmp(output, expected_body, expected))
+        return -1;
+    return 0;
 }
 
 static int selftest(void)
@@ -278,7 +482,15 @@ static int selftest(void)
         append_header_record(header, sizeof(header), &used,
                              large, sizeof(large), &end, &copied) ||
         end != 38 || used != sizeof(header) ||
-        copied != sizeof(header))
+        copied != sizeof(header) ||
+        selftest_response("HTTP/1.0 200 OK\r\nContent-Length: 5\r\n\r\nhello", 0, "hello") ||
+        selftest_response("HTTP/1.1 200 OK\r\ncOnTeNt-LeNgTh: 5\r\n\r\nhello", 0, "hello") ||
+        selftest_response("HTTP/1.0 200 OK\r\n\r\nhello", 0, "hello") ||
+        selftest_response("HTTP/1.0 200 OK\r\nContent-Length: 10\r\n\r\nhello", -1, "hello") ||
+        selftest_response("HTTP/1.0 200 OK\r\nContent-Length: 3\r\n\r\nhello", -1, "") ||
+        selftest_response("HTTP/1.0 200 OK\r\nContent-Length: five\r\n\r\nhello", -1, "") ||
+        selftest_response("HTTP/1.0 200 OK\r\nContent-Length: 5\r\nContent-Length: 5\r\n\r\nhello", -1, "") ||
+        selftest_response("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\nhello", -1, ""))
         return 1;
     used = 0U;
     copied = 0U;

@@ -1147,13 +1147,20 @@ def main() -> int:
     dnlynx = read_text("userspace/dnlynx/dnlynx.c")
     for marker in (
         "static int append_header_record",
-        "copied<(size_t)got",
+        "write_http_body(record + copied, (size_t)got - copied,",
         "large, sizeof(large), &end, &copied",
         "copied != sizeof(header)",
         "buf[12] != ' '",
         "for (i = 13U; i + 1U < len; i++)",
         "buf[i] == '\\r' && buf[i + 1U] == '\\n'",
         "status_code((const unsigned char *)\"HTTP/1.0 200Bad",
+        "static int parse_response_headers(",
+        "if (has_length && body_written != content_length)",
+        "dnlynx: HTTP stage=truncated-body",
+        "Content-Length",
+        "Transfer-Encoding",
+        "selftest_response(\"HTTP/1.0 200 OK\\r\\nContent-Length: 10",
+        "selftest_response(\"HTTP/1.0 200 OK\\r\\nContent-Length: 3",
     ):
         if marker not in dnlynx:
             raise SystemExit(f"source-release gate: dnlynx header/body record-boundary regression: {marker}")
