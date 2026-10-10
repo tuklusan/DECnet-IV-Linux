@@ -181,17 +181,47 @@ static int start_sendmail(const char *path, int *input_fd, pid_t *child)
     return 0;
 }
 
+/* On error, kill the subprocess *before* closing its stdin.  Sending
+ * EOF first could let a sendmail-style command queue incomplete input. */
 static void abort_sendmail(int input_fd, pid_t child)
 {
     int status;
 
+    if (child > 0)
+        (void)kill(child, SIGKILL);
     if (input_fd >= 0)
         close(input_fd);
     if (child <= 0)
         return;
-    kill(child, SIGKILL);
     while (waitpid(child, &status, 0) < 0 && errno == EINTR)
         ;
+}
+
+/* A remote MAIL-11 peer has not committed the message until it sends
+ * the end-of-message marker.  Invoke external sendmail only AFTER that
+ * record arrives, by replaying the private complete staged message.
+ */
+static int start_complete_sendmail(FILE *staged, const char *path,
+                                   int *input_fd, pid_t *child)
+{
+    unsigned char bytes[4096];
+
+    if (fflush(staged) || fseek(staged, 0L, SEEK_SET))
+        return -1;
+    if (start_sendmail(path, input_fd, child))
+        return -1;
+    for (;;) {
+        size_t n = fread(bytes, 1U, sizeof(bytes), staged);
+
+        if (n && write_all(*input_fd, bytes, n))
+            return -1;
+        if (n < sizeof(bytes)) {
+            if (ferror(staged))
+                return -1;
+            break;
+        }
+    }
+    return fseek(staged, 0L, SEEK_END);
 }
 
 static int finish_sendmail(int input_fd, pid_t child)
@@ -564,11 +594,6 @@ static int serve(int fd, const char *root, const char *sendmail_path,
         if (fwrite(header, 1, (size_t)header_len, out) !=
             (size_t)header_len)
             goto fail;
-        if (sendmail_path) {
-            if (start_sendmail(sendmail_path, &mail_fd, &mail_child) ||
-                write_all(mail_fd, header, (size_t)header_len))
-                goto fail;
-        }
         if (smtp_host) {
             smtp_fd = smtp_open(smtp_host, smtp_port, smtp_from, recipients,
                                 sender, subject, full_user);
@@ -588,14 +613,13 @@ static int serve(int fd, const char *root, const char *sendmail_path,
         if (fwrite(body, 1, (size_t)got, out) != (size_t)got ||
             fputc('\n', out) == EOF)
             goto fail;
-        if (mail_fd >= 0 &&
-            (write_all(mail_fd, body, (size_t)got) ||
-             write_all(mail_fd, "\n", 1U)))
-            goto fail;
         if (smtp_fd >= 0 &&
             smtp_write_record(smtp_fd, body, (size_t)got))
             goto fail;
     }
+    if (sendmail_path && start_complete_sendmail(out, sendmail_path,
+                                                  &mail_fd, &mail_child))
+        goto fail;
     if (fputs("--\n", out) == EOF || append_complete_spool(root, out))
         goto fail;
     if (fclose(out)) {
@@ -649,7 +673,8 @@ finish:
 /* An invalid/incomplete network session cannot append a partial message,
  * while a completed session must still produce the existing mailbox data.
  */
-static int selftest_spool_session(const char *root, int complete)
+static int selftest_spool_session(const char *root, int complete,
+                                  const char *sendmail_path)
 {
     int pair[2] = { -1, -1 };
     unsigned char ack[8];
@@ -669,7 +694,8 @@ static int selftest_spool_session(const char *root, int complete)
         int rc;
 
         close(pair[0]);
-        rc = serve(pair[1], root, NULL, NULL, 25U, "mail11@localhost");
+        rc = serve(pair[1], root, sendmail_path, NULL, 25U,
+                   "mail11@localhost");
         close(pair[1]);
         _exit(rc ? 1 : 0);
     }
@@ -688,6 +714,12 @@ static int selftest_spool_session(const char *root, int complete)
             dniv_recv_record(pair[0], ack, sizeof(ack), 0) != 4 ||
             memcmp(ack, "\1\0\0\0", 4U))
             goto done;
+    }
+    /* Give an erroneously early external deliverer ample time to launch
+     * while the remote peer deliberately withholds its completion marker. */
+    if (!complete && sendmail_path) {
+        struct timespec pause = { .tv_sec = 0, .tv_nsec = 200000000L };
+        (void)nanosleep(&pause, NULL);
     }
     ok = 1;
 done:
@@ -742,6 +774,58 @@ static int selftest_spool_io_rollback(const char *root, const char *mailbox)
         stat(mailbox, &after) || after.st_size != before.st_size)
         return -1;
     return 0;
+}
+
+/* External delivery must not run for aborted MAIL-11 input. Once a
+ * complete message arrives, the child must receive exactly the staged
+ * header/body, excluding the local mailbox's "--" spool separator. */
+static int selftest_sendmail_replay(const char *root)
+{
+    static const char expected[] =
+        "From: sender\nTo: recipient\nX-VMSmail: user\nSubject: subject\n\nbody\n";
+    char script[256], marker[256], capture[256], content[256];
+    FILE *file = NULL;
+    size_t n;
+    int rc = -1;
+
+    if (snprintf(script, sizeof(script), "%s/sendmail-stub", root) >=
+            (int)sizeof(script) ||
+        snprintf(marker, sizeof(marker), "%s/sendmail-invoked", root) >=
+            (int)sizeof(marker) ||
+        snprintf(capture, sizeof(capture), "%s/sendmail-capture", root) >=
+            (int)sizeof(capture))
+        return -1;
+    file = fopen(script, "wb");
+    if (!file)
+        return -1;
+    if (fprintf(file, "#!/bin/sh\nprintf x > '%s'\ncat > '%s'\n",
+                marker, capture) < 0)
+        goto out;
+    if (fclose(file)) {
+        file = NULL;
+        goto out;
+    }
+    file = NULL;
+    if (chmod(script, 0700) || selftest_spool_session(root, 0, script) ||
+        access(marker, F_OK) == 0 || access(capture, F_OK) == 0 ||
+        selftest_spool_session(root, 1, script) ||
+        access(marker, F_OK) != 0)
+        goto out;
+    file = fopen(capture, "rb");
+    if (!file)
+        goto out;
+    n = fread(content, 1U, sizeof(content), file);
+    if (n != sizeof(expected) - 1U ||
+        memcmp(content, expected, sizeof(expected) - 1U) || ferror(file))
+        goto out;
+    rc = 0;
+out:
+    if (file)
+        fclose(file);
+    unlink(capture);
+    unlink(marker);
+    unlink(script);
+    return rc;
 }
 
 static int selftest(void)
@@ -833,7 +917,7 @@ static int selftest(void)
         goto out;
     close(victim_fd);
     victim_fd = -1;
-    if (selftest_spool_session(directory, 0))
+    if (selftest_spool_session(directory, 0, NULL))
         goto out;
     victim_fd = open(mailbox, O_RDONLY | O_CLOEXEC);
     if (victim_fd < 0 || read(victim_fd, victim_buf, sizeof(victim_buf)) != 3 ||
@@ -841,12 +925,13 @@ static int selftest(void)
         goto out;
     close(victim_fd);
     victim_fd = -1;
-    if (selftest_spool_session(directory, 1))
+    if (selftest_spool_session(directory, 1, NULL))
         goto out;
     victim_fd = open(mailbox, O_RDONLY | O_CLOEXEC);
     if (victim_fd < 0 || read(victim_fd, victim_buf, sizeof(victim_buf)) != 16 ||
         memcmp(victim_buf, "ok\nFrom: sender", 15U) ||
-        selftest_spool_io_rollback(directory, mailbox))
+        selftest_spool_io_rollback(directory, mailbox) ||
+        selftest_sendmail_replay(directory))
         goto out;
     rc = 0;
 

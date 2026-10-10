@@ -992,8 +992,8 @@ def main() -> int:
         'spool = open_mailbox(root);',
         'out = tmpfile();',
         'if (fputs("--\\n", out) == EOF || append_complete_spool(root, out))',
-        'selftest_spool_session(directory, 0)',
-        'selftest_spool_session(directory, 1)',
+        'selftest_spool_session(directory, 0, NULL)',
+        'selftest_spool_session(directory, 1, NULL)',
         'memcmp(victim_buf, "ok\\n", 3U)',
         'memcmp(victim_buf, "ok\\nFrom: sender", 15U)',
         'openat(rootfd, "mailbox.log",',
@@ -1007,6 +1007,22 @@ def main() -> int:
     ):
         if marker not in dnmaild:
             raise SystemExit(f"source-release gate: dnmaild spool-safety regression: {marker}")
+
+    for marker in (
+        'static int start_complete_sendmail(FILE *staged, const char *path,',
+        'if (sendmail_path && start_complete_sendmail(out, sendmail_path,',
+        'if (child > 0)\n        (void)kill(child, SIGKILL);',
+        'selftest_sendmail_replay(directory)',
+        'selftest_spool_session(root, 0, script)',
+        'selftest_spool_session(root, 1, script)',
+    ):
+        if marker not in dnmaild:
+            raise SystemExit(f"source-release gate: dnmaild precompletion external delivery regression: {marker}")
+    done_record = dnmaild.find('if (got == 1 && body[0] == 0U)\n            break;')
+    delivery = dnmaild.find('if (sendmail_path && start_complete_sendmail(out, sendmail_path,')
+    if done_record < 0 or delivery < done_record or \
+            'start_sendmail(sendmail_path' in dnmaild.split('static int serve(', 1)[1]:
+        raise SystemExit("source-release gate: external sendmail must not start before complete MAIL-11 input")
 
     address_range_markers = {
         "userspace/dnmail/dnmail.c": (
