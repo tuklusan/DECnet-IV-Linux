@@ -13,6 +13,7 @@
 // ============================================================================
 
 #include <errno.h>
+#include <poll.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -108,12 +109,21 @@ static int disconnect_data(int fd, uint16_t reason, const char *data)
 
 static int verify_terminated(int fd, const char *name)
 {
+    struct pollfd pfd = { .fd = fd, .events = POLLIN | POLLHUP | POLLERR };
     unsigned char byte;
     char expected[32];
     uint16_t reason;
     ssize_t got;
+    int rc;
 
-    got = recv(fd, &byte, sizeof(byte), 0);
+    /*
+     * Wait until the kernel has observed the peer termination, then prove
+     * MSG_DONTWAIT reports EOF instead of spuriously returning EAGAIN.
+     */
+    rc = poll(&pfd, 1, 30000);
+    if (rc != 1 || !(pfd.revents & POLLHUP) || (pfd.revents & POLLERR))
+        return -1;
+    got = recv(fd, &byte, sizeof(byte), MSG_DONTWAIT);
     if (got != 0)
         return -1;
     if (!strncmp(name, "ABORT", 5)) {

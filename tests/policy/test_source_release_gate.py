@@ -42,8 +42,33 @@ def main() -> int:
     if (ROOT / ".github/workflows/portability.yml").exists():
         raise SystemExit("source-release gate: obsolete checkout-built portability workflow remains")
     top_makefile = read_text("Makefile")
-    if 'for test in tests/policy/test_*.py; do python3 "$$test"; done' not in top_makefile:
+    if 'for test in tests/policy/test_*.py; do python3 "$test"; done' not in top_makefile:
         raise SystemExit("source-release gate: top-level unit target does not execute every policy regression")
+    socket_source = read_text("kernel/decnet/decnet_iv_socket.c")
+    seq_recv = socket_source.split("static int dniv_sock_recvmsg", 1)[1].split(
+        "static __poll_t dniv_sock_poll", 1
+    )[0]
+    if "if (ret != -EAGAIN || !timeo)" in seq_recv:
+        raise SystemExit("source-release gate: sequenced nonblocking receive bypasses terminal-link EOF")
+    for marker in (
+        "int status = dniv_link_status(dsk);",
+        "ret = status == -EHOSTUNREACH ? status : 0;",
+        "if (!timeo) {",
+    ):
+        if marker not in seq_recv:
+            raise SystemExit(f"source-release gate: sequenced terminal receive safeguard missing: {marker}")
+    if seq_recv.index("int status = dniv_link_status(dsk);") > seq_recv.index("if (!timeo) {"):
+        raise SystemExit("source-release gate: MSG_DONTWAIT is checked before terminal-link state")
+
+    term_race = read_text("tests/lab/dntermrace.c")
+    for marker in (
+        "#include <poll.h>",
+        ".events = POLLIN | POLLHUP | POLLERR",
+        "poll(&pfd, 1, 30000)",
+        "recv(fd, &byte, sizeof(byte), MSG_DONTWAIT)",
+    ):
+        if marker not in term_race:
+            raise SystemExit(f"source-release gate: nonblocking termination regression missing: {marker}")
     version_text = read_text("VERSION")
     version_lines = [line for line in version_text.splitlines() if line.startswith("version=")]
     if len(version_lines) != 1 or not re.fullmatch(r"version=[0-9]+\.[0-9]+\.[0-9]+", version_lines[0]):

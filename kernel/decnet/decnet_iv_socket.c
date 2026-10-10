@@ -1105,8 +1105,25 @@ static int dniv_sock_recvmsg(struct socket *sock, struct msghdr *msg,
         }
         if (!ret)
             break;
-        if (ret != -EAGAIN || !timeo)
+        if (ret != -EAGAIN)
             goto out;
+        {
+            int status = dniv_link_status(dsk);
+
+            /*
+             * A nonblocking receive must still report a terminal logical
+             * link.  MSG_DONTWAIT only suppresses waiting; it must not turn
+             * an already-observed orderly disconnect into EAGAIN.
+             */
+            if (status < 0) {
+                ret = status == -EHOSTUNREACH ? status : 0;
+                goto out;
+            }
+        }
+        if (!timeo) {
+            ret = -EAGAIN;
+            goto out;
+        }
         wait_ret = wait_event_interruptible_timeout(
             dniv_sock_waitq,
             ({ bool normal = false, intr = false;
