@@ -275,6 +275,12 @@ static int load_metadata(int fd, unsigned char *rfm, unsigned char *rat)
         return -1;
     if (got > 0 && got != 1)
         return -1;
+    /* xattrs are local storage, not trusted DAP wire values. Reject
+     * corrupted/forged metadata before advertising an illegal RFM or RAT. */
+    if (*rfm < DAP_RFM_FIX || *rfm > DAP_RFM_STMCR || *rat > DAP_RAT_MAX) {
+        errno = EPROTO;
+        return -1;
+    }
     return 0;
 }
 
@@ -297,8 +303,17 @@ static int load_record_framing(int fd, unsigned char rfm, int *framed)
     *framed = 0;
     len = fgetxattr(fd, DNFAL_XATTR_RECORD_FRAMING,
                     value, sizeof(value));
-    if (len < 0 && errno == ENODATA)
+    if (len < 0 && errno == ENODATA) {
+        /* A VAR/VFC file without the private frame marker has no known
+         * logical DATA boundaries. Serving arbitrary raw read chunks while
+         * advertising VAR/VFC fabricates record boundaries and corrupts
+         * record-mode downloads. Never guess: reject ambiguous metadata. */
+        if (record_oriented_rfm(rfm)) {
+            errno = EPROTO;
+            return -1;
+        }
         return 0;
+    }
     if (len != 1 || value[0] != DNFAL_RECORD_FRAMING_V1 ||
         !record_oriented_rfm(rfm)) {
         errno = EPROTO;
@@ -1311,6 +1326,51 @@ out:
     return rc;
 }
 
+/* A record-oriented xattr without the corresponding on-disk framing
+ * marker is not a readable record stream, and bad local xattr values must
+ * not be sent as a malformed DAP ATTR to the remote peer. */
+static int selftest_unframed_metadata(int rootfd)
+{
+    const char name[] = "UNFRAMED.TXT";
+    int fd = -1;
+    unsigned char rfm, rat, bad;
+    int framed;
+    int rc = -1;
+
+    fd = openat(rootfd, name, O_CREAT | O_EXCL | O_RDWR | O_CLOEXEC, 0600);
+    if (fd < 0)
+        return -1;
+    if (write(fd, "AABB", 4U) != 4 ||
+        load_metadata(fd, &rfm, &rat) ||
+        rfm != DAP_RFM_FIX || rat != 0U ||
+        load_record_framing(fd, rfm, &framed) || framed)
+        goto out;
+    if (save_metadata(fd, DAP_RFM_VAR, 0U) ||
+        load_metadata(fd, &rfm, &rat) ||
+        !load_record_framing(fd, rfm, &framed) || errno != EPROTO)
+        goto out;
+    if (save_metadata(fd, DAP_RFM_VFC, 0U) ||
+        load_metadata(fd, &rfm, &rat) ||
+        !load_record_framing(fd, rfm, &framed) || errno != EPROTO)
+        goto out;
+    bad = 255U;
+    if (fsetxattr(fd, DNFAL_XATTR_RFM, &bad, 1U, 0) ||
+        !load_metadata(fd, &rfm, &rat) || errno != EPROTO)
+        goto out;
+    bad = DAP_RFM_FIX;
+    if (fsetxattr(fd, DNFAL_XATTR_RFM, &bad, 1U, 0))
+        goto out;
+    bad = 255U;
+    if (fsetxattr(fd, DNFAL_XATTR_RAT, &bad, 1U, 0) ||
+        !load_metadata(fd, &rfm, &rat) || errno != EPROTO)
+        goto out;
+    rc = 0;
+out:
+    close(fd);
+    (void)unlinkat(rootfd, name, 0);
+    return rc;
+}
+
 static int selftest(void)
 {
     unsigned char config[16];
@@ -1420,6 +1480,9 @@ static int selftest(void)
         goto out;
     rootfd = open(directory, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
     if (rootfd < 0)
+        goto out;
+    /* Unframed VAR/VFC and invalid local metadata must fail closed. */
+    if (selftest_unframed_metadata(rootfd))
         goto out;
     /* Aborting CREATE must never truncate or unlink an existing file. */
     if (selftest_abort_create(rootfd, "GOOD.TXT"))
