@@ -30,6 +30,7 @@ This catalogue describes the production source release. Lab-only helpers and ind
 - NSP segmentation/reassembly, sequencing, acknowledgements, retransmission and timers.
 - NSP data flow control, interrupt/out-of-band flow and resource limits.
 - Session Control connect/accept/reject behavior and object dispatch.
+- `dnping` rejects a MIRROR reply longer than the exact transmitted request, even when the truncated reply prefix matches; local sequenced-socket positive/negative regression enforces this.
 - Native `AF_DECnet` / `SOCK_SEQPACKET` record ABI preserves classic `MSG_EOR` message framing across multiple writes, enforces the `DNBUFSIZE` aggregate record bound, and provides `SOCK_STREAM` compatibility with short-read preservation and `MSG_WAITALL` across NSP record boundaries.
 - Delivered record-oriented userspace retries short positive `SOCK_SEQPACKET` sends until the complete `MSG_EOR` record is accepted; interrupted sends are retried and impossible zero-progress writes fail with a deterministic `EIO` instead of leaking stale `errno`.
 - Multi-segment socket writes preserve an in-progress NSP record across short/partial sends, and once NSP data, interrupt or retained connection-control traffic is committed to retransmission state, an immediate Ethernet transmit result cannot contradict that accepted queue/state ownership.

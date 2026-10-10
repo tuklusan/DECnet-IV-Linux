@@ -12,9 +12,9 @@
 // patent, trademark, and governing-law provisions.
 // ============================================================================
 
-#include <ctype.h>
 #define _POSIX_C_SOURCE 200809L
 
+#include <ctype.h>
 #include <errno.h>
 #include <linux/dn.h>
 #include <stdio.h>

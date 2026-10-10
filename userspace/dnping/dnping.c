@@ -56,11 +56,39 @@ static int parse_positive(const char *text, long max, long *out)
     return 0;
 }
 
+/* A larger MIRROR reply with a matching prefix is NOT a valid echo. */
+static int selftest_oversize_reply(void)
+{
+    unsigned char request[] = { 1U, 0x85U, 0x85U, 0x85U, 0x85U, 0x85U };
+    unsigned char rx[5];
+    int fds[2];
+    int rc = -1;
+
+    if (socketpair(AF_UNIX, SOCK_SEQPACKET, 0, fds))
+        return -1;
+    if (dniv_send_record(fds[0], request, sizeof(request), 0))
+        goto done;
+    errno = 0;
+    if (dniv_recv_record(fds[1], rx, sizeof(rx), 0) != -1 ||
+        errno != EMSGSIZE)
+        goto done;
+    if (dniv_send_record(fds[0], request, sizeof(rx), 0) ||
+        dniv_recv_record(fds[1], rx, sizeof(rx), 0) != (ssize_t)sizeof(rx) ||
+        memcmp(request, rx, sizeof(rx)))
+        goto done;
+    rc = 0;
+done:
+    close(fds[0]);
+    close(fds[1]);
+    return rc;
+}
+
 static int run_selftest(void)
 {
     long value = 0;
 
-    if (parse_positive("3", 10, &value) || value != 3)
+    if (selftest_oversize_reply() ||
+        parse_positive("3", 10, &value) || value != 3)
         return 1;
     if (!parse_positive("0", 10, &value))
         return 1;
@@ -187,7 +215,7 @@ int main(int argc, char **argv)
             break;
         }
         sent++;
-        got = dnet_recv(fd, rx, size, MSG_EOR);
+        got = (int)dniv_recv_record(fd, rx, (size_t)size, 0);
         if (got != size || rx[0] != 1U ||
             (size > 1 && memcmp(tx + 1, rx + 1, (size_t)size - 1U))) {
             if (!quiet)

@@ -1435,6 +1435,16 @@ def main() -> int:
         if marker not in phone_server:
             raise SystemExit(f"source-release gate: PHONE long DATA record compatibility: {marker}")
 
+    ping_client = read_text("userspace/dnping/dnping.c")
+    for marker in (
+        "got = (int)dniv_recv_record(fd, rx, (size_t)size, 0);",
+        "static int selftest_oversize_reply(void)",
+        "errno != EMSGSIZE",
+        "selftest_oversize_reply()",
+    ):
+        if marker not in ping_client:
+            raise SystemExit(f"source-release gate: dnping oversized MIRROR reply: {marker}")
+
     persistent_daemons = {
         "dnfald": dnfald,
         "dnhttpd": dnhttpd,
