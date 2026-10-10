@@ -53,8 +53,10 @@ jobs:
           body=$(jq -r '.issue.body // ""' "$GITHUB_EVENT_PATH")
           source_sha=$(printf '%s\n' "$body" | sed -n 's/^SOURCE_SHA=//p' | tail -1)
           acceptance_issue=$(printf '%s\n' "$body" | sed -n 's/^ACCEPTANCE_ISSUE=//p' | tail -1)
+          audit_issue=$(printf '%s\n' "$body" | sed -n 's/^AUDIT_ISSUE=//p' | tail -1)
           [[ "$source_sha" =~ ^[0-9a-f]{40}$ ]]
           [[ "$acceptance_issue" =~ ^[0-9]+$ ]]
+          [[ "$audit_issue" =~ ^[0-9]+$ ]]
 
           candidate=$(git rev-parse --verify 'HEAD^{commit}')
           test "$candidate" = "$source_sha"
@@ -66,8 +68,8 @@ jobs:
           version=${release_versions[0]}
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
 
-          printf 'SOURCE_SHA=%s\nVERSION=%s\nACCEPTANCE_ISSUE=%s\n' \
-            "$source_sha" "$version" "$acceptance_issue" >> "$GITHUB_ENV"
+          printf 'SOURCE_SHA=%s\nVERSION=%s\nACCEPTANCE_ISSUE=%s\nAUDIT_ISSUE=%s\n' \
+            "$source_sha" "$version" "$acceptance_issue" "$audit_issue" >> "$GITHUB_ENV"
           python3 tools/scratch_state.py init --dir "$DNIV_RELEASE_EVIDENCE" \
             --workflow production-release --job "$GITHUB_JOB" --mode production-release \
             --source-sha "$source_sha" --expected-sha "$source_sha"
@@ -80,16 +82,25 @@ jobs:
           gh api --paginate --slurp \
             "repos/$GITHUB_REPOSITORY/issues/$acceptance_issue/comments?per_page=100" \
             >"$DNIV_RELEASE_EVIDENCE/acceptance-comments.json"
+          gh api "repos/$GITHUB_REPOSITORY/issues/$audit_issue" \
+            >"$DNIV_RELEASE_EVIDENCE/audit-issue.json"
+          gh api --paginate --slurp \
+            "repos/$GITHUB_REPOSITORY/issues/$audit_issue/comments?per_page=100" \
+            >"$DNIV_RELEASE_EVIDENCE/audit-comments.json"
 
           python3 - "$DNIV_RELEASE_EVIDENCE/acceptance-issue.json" \
             "$DNIV_RELEASE_EVIDENCE/acceptance-comments.json" \
-            "$source_sha" "$GITHUB_REPOSITORY_OWNER" \
-            "$DNIV_RELEASE_EVIDENCE/run-ids.env" <<'PY'
+            "$DNIV_RELEASE_EVIDENCE/audit-issue.json" \
+            "$DNIV_RELEASE_EVIDENCE/audit-comments.json" \
+            "$source_sha" "$version" "$GITHUB_REPOSITORY_OWNER" \
+            "$DNIV_RELEASE_EVIDENCE/run-ids.env" \
+            "$DNIV_RELEASE_EVIDENCE/audit.env" <<'PY'
           import json
           import re
           import sys
 
-          issue_path, comments_path, source_sha, owner, output_path = sys.argv[1:]
+          (issue_path, comments_path, audit_issue_path, audit_comments_path,
+           source_sha, version, owner, output_path, audit_output_path) = sys.argv[1:]
           issue = json.load(open(issue_path, encoding="utf-8"))
           body = issue.get("body") or ""
           if issue.get("title") != "DNIV acceptance gates":
@@ -133,6 +144,62 @@ jobs:
           with open(output_path, "w", encoding="utf-8") as out:
               for key in keys:
                   out.write(f"{key}_RUN_ID={values[key]}\n")
+
+          audit_issue = json.load(open(audit_issue_path, encoding="utf-8"))
+          if audit_issue.get("title") != "DNIV packaged-source audit":
+              raise SystemExit("production-release: packaged-source audit issue title mismatch")
+          if (audit_issue.get("user") or {}).get("login") != owner:
+              raise SystemExit("production-release: packaged-source audit issue is not owner-authored")
+          audit_body = audit_issue.get("body") or ""
+          if audit_body.splitlines().count(f"SOURCE_SHA={source_sha}") != 1:
+              raise SystemExit("production-release: packaged-source audit source SHA mismatch")
+
+          audit_pages = json.load(open(audit_comments_path, encoding="utf-8"))
+          audit_comments = []
+          for page in audit_pages:
+              audit_comments.extend(page if isinstance(page, list) else [page])
+          certified = []
+          block_re = re.compile(
+              r"^Packaged-source semantic audit ([123])/3 PASS\n"
+              r"SOURCE_SHA=([0-9a-f]{40})\n"
+              r"SOURCE_RELEASE_RUN_ID=([0-9]+)\n"
+              r"ARTIFACT_ID=([0-9]+)\n"
+              r"TARBALL=(DECnet-IV-Linux-[0-9]+\.[0-9]+\.[0-9]+\.tar\.xz)\n"
+              r"TARBALL_SHA256=([0-9a-f]{64})\n"
+              r"RESULT=zero-defect$"
+          )
+          for comment in audit_comments:
+              if (comment.get("user") or {}).get("login") != owner:
+                  continue
+              match = block_re.fullmatch((comment.get("body") or "").strip())
+              if match:
+                  certified.append((comment.get("created_at") or "", match.groups()))
+          certified.sort(key=lambda item: item[0])
+          if len(certified) != 3:
+              raise SystemExit("production-release: exactly three packaged-source audit certifications required")
+          expected_scan = 1
+          common = None
+          for _created, groups in certified:
+              scan, audit_sha, source_run, artifact_id, tarball, tar_sha = groups
+              if int(scan) != expected_scan:
+                  raise SystemExit("production-release: packaged-source audit certifications are not ordered 1/3, 2/3, 3/3")
+              if audit_sha != source_sha:
+                  raise SystemExit("production-release: packaged-source audit certification SHA mismatch")
+              if source_run != values["SOURCE_RELEASE"]:
+                  raise SystemExit("production-release: packaged-source audit source-release run mismatch")
+              if tarball != f"DECnet-IV-Linux-{version}.tar.xz":
+                  raise SystemExit("production-release: packaged-source audit tarball name mismatch")
+              this_common = (source_run, artifact_id, tarball, tar_sha)
+              if common is None:
+                  common = this_common
+              elif this_common != common:
+                  raise SystemExit("production-release: packaged-source audits do not certify the same accepted artifact bytes")
+              expected_scan += 1
+          with open(audit_output_path, "w", encoding="utf-8") as out:
+              out.write(f"AUDIT_SOURCE_RELEASE_RUN_ID={common[0]}\n")
+              out.write(f"AUDIT_ARTIFACT_ID={common[1]}\n")
+              out.write(f"AUDIT_TARBALL={common[2]}\n")
+              out.write(f"AUDIT_TARBALL_SHA256={common[3]}\n")
           PY
 
       - name: Verify exact full acceptance
@@ -205,6 +272,11 @@ jobs:
           set -euo pipefail
           source "$DNIV_RELEASE_EVIDENCE/run-ids.env"
           artifact_name="decnet-iv-linux-source-$SOURCE_RELEASE_RUN_ID-$SOURCE_RELEASE_ATTEMPT"
+          source "$DNIV_RELEASE_EVIDENCE/audit.env"
+          artifact_json=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$AUDIT_ARTIFACT_ID")
+          printf '%s\n' "$artifact_json" | jq -e \
+            --arg name "$artifact_name" --argjson run "$SOURCE_RELEASE_RUN_ID" \
+            '.name == $name and .expired == false and .workflow_run.id == $run' >/dev/null
           release_dir="$DNIV_RELEASE_EVIDENCE/release"
           mkdir -p "$release_dir"
           gh run download "$SOURCE_RELEASE_RUN_ID" --repo "$GITHUB_REPOSITORY" \
@@ -219,6 +291,9 @@ jobs:
           (cd "$release_dir" && sha256sum -c "$(basename "$checksum")")
           archive_sha=$(sha256sum "$archive" | awk '{print $1}')
           grep -Fqx "$archive_sha  $(basename "$archive")" "$checksum"
+          source "$DNIV_RELEASE_EVIDENCE/audit.env"
+          test "$archive_sha" = "$AUDIT_TARBALL_SHA256"
+          test "$(basename "$archive")" = "$AUDIT_TARBALL"
 
           root="DECnet-IV-Linux-$VERSION"
           listing="$DNIV_RELEASE_EVIDENCE/archive-list.txt"
@@ -235,8 +310,8 @@ jobs:
             exit 1
           fi
           printf 'SOURCE_RELEASE_SHA256=%s\n' "$archive_sha" >>"$GITHUB_ENV"
-          printf 'source_sha=%s\nversion=%s\narchive=%s\nsha256=%s\nacceptance_issue=%s\nsource_release_run=%s\nsource_release_attempt=%s\n' \
-            "$SOURCE_SHA" "$VERSION" "$(basename "$archive")" "$archive_sha" "$ACCEPTANCE_ISSUE" \
+          printf 'source_sha=%s\nversion=%s\narchive=%s\nsha256=%s\nacceptance_issue=%s\naudit_issue=%s\nsource_release_run=%s\nsource_release_attempt=%s\n' \
+            "$SOURCE_SHA" "$VERSION" "$(basename "$archive")" "$archive_sha" "$ACCEPTANCE_ISSUE" "$AUDIT_ISSUE" \
             "$SOURCE_RELEASE_RUN_ID" "$SOURCE_RELEASE_ATTEMPT" \
             >"$DNIV_RELEASE_EVIDENCE/release-manifest.txt"
 
@@ -262,6 +337,7 @@ jobs:
           ## Exact acceptance evidence
 
           Full acceptance issue: #$ACCEPTANCE_ISSUE
+          Packaged-source audit issue (three successive zero-defect scans): #$AUDIT_ISSUE
           Parent policy/dispatcher run: $PARENT_RUN_ID
           Build Bootstrap: $BUILD_RUN_ID
           Project State Gate: $PROJECT_STATE_RUN_ID

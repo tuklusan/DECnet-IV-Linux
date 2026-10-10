@@ -52,6 +52,8 @@ Before final production delivery, the exact packaged source bytes must pass the 
 
 Reaching 3/3 does not bypass pre-production testing. It closes the source-delivery conversion audit, after which the project resumes the remaining applicable `docs/PRE_PRODUCTION_TEST.md` dependency chain. Blocking PP-11 S1 pressure must close before S2. Final publication occurs only after the remaining applicable PP/release gates and final exact-SHA acceptance are green.
 
+Production publication is fail-closed on a dedicated owner-authored `DNIV packaged-source audit` issue. Its body binds `SOURCE_SHA=<exact-sha>`, and it must contain exactly three owner-authored certification comments, in chronological 1/3, 2/3, 3/3 order, each recording the same accepted Source Release run, artifact ID, versioned tarball name and tarball SHA-256 with `RESULT=zero-defect`. The production request supplies this issue as `AUDIT_ISSUE=<number>`; publication independently re-downloads the Source Release artifact and requires its SHA-256 to match the 3/3 certification. This machine-checkable record is only the publication interlock: the comments must describe reviews that were actually performed under the manual semantic-audit procedure above.
+
 
 ## Production version and publication
 
