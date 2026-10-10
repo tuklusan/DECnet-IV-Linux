@@ -113,7 +113,9 @@ def nested_block(lines: list[str], start: int) -> list[str]:
 def upload_block(lines: list[str], uses_index: int) -> list[str]:
     end = len(lines)
     for index in range(uses_index + 1, len(lines)):
-        if STEP_RE.match(lines[index]):
+        # An evidence block ends at the next step OR the next job.
+        # Otherwise the next job's name can be parsed as a second asset name.
+        if STEP_RE.match(lines[index]) or JOB_RE.match(lines[index]):
             end = index
             break
     return lines[uses_index:end]

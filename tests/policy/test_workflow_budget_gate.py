@@ -311,6 +311,41 @@ def main() -> int:
         if result.returncode == 0 or "gh run download" not in result.stderr:
             raise SystemExit("workflow budget failed to reject missing PP-10 retry evidence proof")
 
+        run(root, "git", "reset", "-q", "HEAD", "--", str(false_green.relative_to(root)))
+
+        # A subsequent job's name must not be counted as another artifact name.
+        second_job = f"""  verify-public:
+    name: Independent publication verifier
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check published bytes
+        run: echo verified
+      - name: Preserve public verification
+        uses: actions/upload-artifact@{UPLOAD_PIN}
+        with:
+          name: public-check-${{{{ github.run_attempt }}}}
+          path: results
+          if-no-files-found: error
+          retention-days: 30
+          overwrite: false
+"""
+        sample.write_text(GOOD + second_job, encoding="utf-8")
+        run(root, "git", "add", str(sample.relative_to(root)))
+        result = invoke(root, "--staged")
+        if result.returncode != 0:
+            raise SystemExit("workflow budget misread next job as previous upload: " + result.stderr)
+
+        missing_name = second_job.replace(
+            "name: public-check-${{ github.run_attempt }}",
+            "name: public-check",
+        )
+        sample.write_text(GOOD + missing_name, encoding="utf-8")
+        run(root, "git", "add", str(sample.relative_to(root)))
+        result = invoke(root, "--staged")
+        if result.returncode == 0 or "github.run_attempt" not in result.stderr:
+            raise SystemExit("workflow budget missed unversioned next-job upload")
+
     print("workflow budget regression tests passed")
     return 0
 
