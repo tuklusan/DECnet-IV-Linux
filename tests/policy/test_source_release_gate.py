@@ -1018,7 +1018,24 @@ def main() -> int:
         or 'rc=$$?; test "$$rc" -eq 2' not in dnmail_make
     ):
         raise SystemExit("source-release gate: empty MAIL-11 subject may lose NSP record boundary")
+    for marker in (
+        "static int send_body_record(int fd, const char *body)",
+        "return len ? send_record(fd, body, len) : 0;",
+        "static int selftest_empty_body(void)",
+        "selftest_empty_body()",
+        "send_body_record(fd, message)",
+    ):
+        if marker not in dnmail:
+            raise SystemExit(f"source-release gate: empty MAIL-11 body handling: {marker}")
     dnmaild = read_text("userspace/dnmail/dnmaild.c")
+    for marker in (
+        "const char *sendmail_path, int empty_body)",
+        "(!empty_body && dniv_send_record(pair[0], \"body\", 4U, 0))",
+        "selftest_spool_session(directory, 1, NULL, 1)",
+        "after.st_size - before.st_size !=",
+    ):
+        if marker not in dnmaild:
+            raise SystemExit(f"source-release gate: empty MAIL-11 body server regression: {marker}")
     for marker in (
         "int close_errno = 0;",
         "if (close(input_fd))\n        close_errno = errno;",
@@ -1074,8 +1091,8 @@ def main() -> int:
         'spool = open_mailbox(root);',
         'out = tmpfile();',
         'if (fputs("--\\n", out) == EOF || append_complete_spool(root, out))',
-        'selftest_spool_session(directory, 0, NULL)',
-        'selftest_spool_session(directory, 1, NULL)',
+        'selftest_spool_session(directory, 0, NULL, 0)',
+        'selftest_spool_session(directory, 1, NULL, 0)',
         'memcmp(victim_buf, "ok\\n", 3U)',
         'memcmp(victim_buf, "ok\\nFrom: sender", 15U)',
         'openat(rootfd, "mailbox.log",',
@@ -1095,8 +1112,8 @@ def main() -> int:
         'if (sendmail_path && start_complete_sendmail(out, sendmail_path,',
         'if (child > 0)\n        (void)kill(child, SIGKILL);',
         'selftest_sendmail_replay(directory)',
-        'selftest_spool_session(root, 0, script)',
-        'selftest_spool_session(root, 1, script)',
+        'selftest_spool_session(root, 0, script, 0)',
+        'selftest_spool_session(root, 1, script, 0)',
     ):
         if marker not in dnmaild:
             raise SystemExit(f"source-release gate: dnmaild precompletion external delivery regression: {marker}")

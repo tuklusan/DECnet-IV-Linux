@@ -700,7 +700,7 @@ finish:
  * while a completed session must still produce the existing mailbox data.
  */
 static int selftest_spool_session(const char *root, int complete,
-                                  const char *sendmail_path)
+                                  const char *sendmail_path, int empty_body)
 {
     int pair[2] = { -1, -1 };
     unsigned char ack[8];
@@ -733,7 +733,7 @@ static int selftest_spool_session(const char *root, int complete,
         dniv_send_record(pair[0], "\0", 1U, 0) ||
         dniv_send_record(pair[0], "user", 4U, 0) ||
         dniv_send_record(pair[0], "subject", 7U, 0) ||
-        dniv_send_record(pair[0], "body", 4U, 0))
+        (!empty_body && dniv_send_record(pair[0], "body", 4U, 0)))
         goto done;
     if (complete) {
         if (dniv_send_record(pair[0], "\0", 1U, 0) ||
@@ -832,9 +832,9 @@ static int selftest_sendmail_replay(const char *root)
         goto out;
     }
     file = NULL;
-    if (chmod(script, 0700) || selftest_spool_session(root, 0, script) ||
+    if (chmod(script, 0700) || selftest_spool_session(root, 0, script, 0) ||
         access(marker, F_OK) == 0 || access(capture, F_OK) == 0 ||
-        selftest_spool_session(root, 1, script) ||
+        selftest_spool_session(root, 1, script, 0) ||
         access(marker, F_OK) != 0)
         goto out;
     file = fopen(capture, "rb");
@@ -1018,7 +1018,7 @@ static int selftest(void)
         goto out;
     close(victim_fd);
     victim_fd = -1;
-    if (selftest_spool_session(directory, 0, NULL))
+    if (selftest_spool_session(directory, 0, NULL, 0))
         goto out;
     victim_fd = open(mailbox, O_RDONLY | O_CLOEXEC);
     if (victim_fd < 0 || read(victim_fd, victim_buf, sizeof(victim_buf)) != 3 ||
@@ -1026,7 +1026,7 @@ static int selftest(void)
         goto out;
     close(victim_fd);
     victim_fd = -1;
-    if (selftest_spool_session(directory, 1, NULL))
+    if (selftest_spool_session(directory, 1, NULL, 0))
         goto out;
     victim_fd = open(mailbox, O_RDONLY | O_CLOEXEC);
     if (victim_fd < 0 || read(victim_fd, victim_buf, sizeof(victim_buf)) != 16 ||
@@ -1035,6 +1035,33 @@ static int selftest(void)
         selftest_sendmail_replay(directory) ||
         selftest_smtp_not_before_eom(directory))
         goto out;
+    {
+        static const char empty_entry[] =
+            "From: sender\nTo: recipient\nX-VMSmail: user\n"
+            "Subject: subject\n\n--\n";
+        struct stat before, after;
+        char actual[sizeof(empty_entry) - 1U];
+        FILE *readback;
+
+        if (stat(mailbox, &before) ||
+            selftest_spool_session(directory, 1, NULL, 1) ||
+            stat(mailbox, &after) ||
+            after.st_size - before.st_size !=
+                (off_t)(sizeof(empty_entry) - 1U))
+            goto out;
+        readback = fopen(mailbox, "rb");
+        if (!readback)
+            goto out;
+        if (fseeko(readback, before.st_size, SEEK_SET) ||
+            fread(actual, 1U, sizeof(actual), readback) != sizeof(actual) ||
+            memcmp(actual, empty_entry, sizeof(actual)) ||
+            fgetc(readback) != EOF || ferror(readback)) {
+            fclose(readback);
+            goto out;
+        }
+        if (fclose(readback))
+            goto out;
+    }
     rc = 0;
 
 out:

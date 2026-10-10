@@ -157,12 +157,41 @@ static int send_recipients(int fd, const char *users)
     return send_record(fd, &zero, 1U);
 }
 
+/* An empty MAIL-11 body is represented by the EOM marker directly.
+ * A zero-byte SOCK_SEQPACKET write is not a body record for the peer. */
+static int send_body_record(int fd, const char *body)
+{
+    size_t len = strlen(body);
+
+    return len ? send_record(fd, body, len) : 0;
+}
+
+static int selftest_empty_body(void)
+{
+    int pair[2];
+    unsigned char marker[2];
+    int rc = -1;
+    const unsigned char eom = 0U;
+
+    if (socketpair(AF_UNIX, SOCK_SEQPACKET, 0, pair))
+        return -1;
+    if (!send_body_record(pair[0], "") &&
+        !send_record(pair[0], &eom, 1U) &&
+        dniv_recv_record(pair[1], marker, sizeof(marker), 0) == 1 &&
+        marker[0] == eom)
+        rc = 0;
+    close(pair[0]);
+    close(pair[1]);
+    return rc;
+}
+
 static int selftest(void)
 {
     uint16_t addr;
     const char *user;
 
-    if (parse_target("1.23::ALICE,BOB", &addr, &user) ||
+    if (selftest_empty_body() ||
+        parse_target("1.23::ALICE,BOB", &addr, &user) ||
         addr != 1047U || strcmp(user, "ALICE,BOB") ||
         !parse_target("1.0::ALICE", &addr, &user) ||
         !parse_target("0.23::ALICE", &addr, &user))
@@ -232,7 +261,7 @@ int main(int argc, char **argv)
         send_recipients(fd, user) ||
         send_record(fd, target, strlen(target)) ||
         send_record(fd, subject, strlen(subject)) ||
-        send_record(fd, message, strlen(message)) ||
+        send_body_record(fd, message) ||
         send_record(fd, &zero, 1U) ||
         recv_ack(fd)) {
         fprintf(stderr, "dnmail: MAIL-11 protocol failure\n");
