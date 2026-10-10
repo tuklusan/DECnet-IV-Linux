@@ -1056,6 +1056,11 @@ def main() -> int:
             "int rc = poll(&ready, 1, timeout_ms);",
             "errno = ETIMEDOUT;",
             "selftest_output_timeout()",
+            "selftest_drain_hangup(0) || selftest_drain_hangup(1)",
+            "selftest_interactive_stdin_eof()",
+            "int rc = poll(fds, stdin_open ? 2 : 1, timeout_ms);",
+            "if (received_record)\n            continue;",
+            "if (ready.revents & POLLHUP)\n            return 0;",
             "run_output(fd, binary, timeout_seconds)",
         ),
         "userspace/dnlogin/dnlogin.c": (

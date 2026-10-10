@@ -242,19 +242,23 @@ static int run_output(int fd, int binary, int timeout_seconds)
                 return 0;
             if (got < 0 || output_record(buf, (size_t)got, binary))
                 return -1;
+            /* POLLHUP can accompany POLLIN with several queued records.
+             * Keep draining until receive itself reports end-of-stream. */
+            continue;
         }
-        if (ready.revents & (POLLERR | POLLHUP | POLLNVAL)) {
-            if (ready.revents & POLLHUP)
-                return 0;
+        if (ready.revents & (POLLERR | POLLNVAL)) {
             errno = EIO;
             return -1;
         }
+        if (ready.revents & POLLHUP)
+            return 0;
     }
 }
 
 static int run_interactive(int fd, int binary, int timeout_seconds)
 {
     unsigned char buf[DNBUFSIZE];
+    int stdin_open = 1;
 
     for (;;) {
         struct pollfd fds[2] = {
@@ -262,10 +266,11 @@ static int run_interactive(int fd, int binary, int timeout_seconds)
             { .fd = STDIN_FILENO, .events = POLLIN }
         };
         int timeout_ms = timeout_seconds ? timeout_seconds * 1000 : -1;
-        int rc = poll(fds, 2, timeout_ms);
+        int rc = poll(fds, stdin_open ? 2 : 1, timeout_ms);
+        int received_record = 0;
 
         if (rc == 0) {
-            fprintf(stderr, "dntask: inactivity timeout\n");
+            errno = ETIMEDOUT;
             return -1;
         }
         if (rc < 0) {
@@ -280,20 +285,34 @@ static int run_interactive(int fd, int binary, int timeout_seconds)
                 return 0;
             if (got < 0 || output_record(buf, (size_t)got, binary))
                 return -1;
+            received_record = 1;
         }
-        if (fds[1].revents & POLLIN) {
+        if (stdin_open && (fds[1].revents & POLLIN)) {
             ssize_t got = read(STDIN_FILENO, buf, sizeof(buf));
 
             if (got == 0)
-                return 0;
-            if (got < 0)
-                return -1;
-            if (!binary && buf[got - 1] == '\n')
-                got--;
-            if (got && dniv_send_record(fd, buf, (size_t)got, 0))
-                return -1;
+                stdin_open = 0;
+            else {
+                if (got < 0)
+                    return -1;
+                if (!binary && buf[got - 1] == '\n')
+                    got--;
+                if (got && dniv_send_record(fd, buf, (size_t)got, 0))
+                    return -1;
+            }
         }
-        if (fds[0].revents & (POLLERR | POLLHUP | POLLNVAL))
+        /* A closed input pipe must not repeatedly wake poll(), hide the
+         * inactivity timer, or discard a pending remote response. */
+        if (stdin_open && (fds[1].revents & (POLLHUP | POLLERR | POLLNVAL)))
+            stdin_open = 0;
+        /* An orderly peer hangup can accompany unread sequenced records. */
+        if (received_record)
+            continue;
+        if (fds[0].revents & (POLLERR | POLLNVAL)) {
+            errno = EIO;
+            return -1;
+        }
+        if (fds[0].revents & POLLHUP)
             return 0;
     }
 }
@@ -339,6 +358,120 @@ static int selftest_output_timeout(void)
     return 0;
 }
 
+/* A poll wakeup may include POLLIN|POLLHUP while *several* records are
+ * queued. Both client modes must drain them before reporting success. */
+static int selftest_drain_hangup(int interactive)
+{
+    int peer[2] = { -1, -1 };
+    int capture[2] = { -1, -1 };
+    char output[32];
+    size_t used = 0U;
+    pid_t child;
+    int status;
+    ssize_t got;
+
+    if (socketpair(AF_UNIX, SOCK_SEQPACKET, 0, peer))
+        return -1;
+    if (pipe(capture)) {
+        close(peer[0]);
+        close(peer[1]);
+        return -1;
+    }
+    if (dniv_send_record(peer[0], "first", 5U, 0) ||
+        dniv_send_record(peer[0], "second", 6U, 0)) {
+        close(peer[0]);
+        close(peer[1]);
+        close(capture[0]);
+        close(capture[1]);
+        return -1;
+    }
+    close(peer[0]);
+    child = fork();
+    if (child < 0) {
+        close(peer[1]);
+        close(capture[0]);
+        close(capture[1]);
+        return -1;
+    }
+    if (!child) {
+        int rc;
+
+        alarm(5U);
+        close(capture[0]);
+        if (dup2(capture[1], STDOUT_FILENO) < 0)
+            _exit(1);
+        close(capture[1]);
+        if (interactive) {
+            int input[2];
+
+            if (pipe(input) || dup2(input[0], STDIN_FILENO) < 0)
+                _exit(1);
+            close(input[0]);
+            close(input[1]); /* Explicit stdin EOF must not discard output. */
+        }
+        rc = interactive ? run_interactive(peer[1], 1, 1) :
+                           run_output(peer[1], 1, 1);
+        if (fflush(stdout))
+            _exit(1);
+        close(peer[1]);
+        _exit(rc ? 1 : 0);
+    }
+    close(peer[1]);
+    close(capture[1]);
+    while ((got = read(capture[0], output + used,
+                       sizeof(output) - used)) > 0)
+        used += (size_t)got;
+    close(capture[0]);
+    if (waitpid(child, &status, 0) != child || got < 0 ||
+        !WIFEXITED(status) || WEXITSTATUS(status) ||
+        used != 11U || memcmp(output, "firstsecond", 11U))
+        return -1;
+    return 0;
+}
+
+/* Closing stdin while the remote peer remains quiet must not cause a
+ * permanently ready poll loop that bypasses the inactivity timeout. */
+static int selftest_interactive_stdin_eof(void)
+{
+    int peer[2] = { -1, -1 };
+    pid_t child;
+    int status;
+
+    if (socketpair(AF_UNIX, SOCK_SEQPACKET, 0, peer))
+        return -1;
+    child = fork();
+    if (child < 0) {
+        close(peer[0]);
+        close(peer[1]);
+        return -1;
+    }
+    if (!child) {
+        int input[2];
+        int rc;
+        int saved_errno;
+
+        close(peer[0]);
+        alarm(5U);
+        if (pipe(input) || dup2(input[0], STDIN_FILENO) < 0)
+            _exit(1);
+        close(input[0]);
+        close(input[1]);
+        errno = 0;
+        rc = run_interactive(peer[1], 1, 1);
+        saved_errno = errno;
+        close(peer[1]);
+        _exit(rc == -1 && saved_errno == ETIMEDOUT ? 0 : 1);
+    }
+    close(peer[1]);
+    /* Keep the other end open and silent until the child's timeout. */
+    if (waitpid(child, &status, 0) != child) {
+        close(peer[0]);
+        return -1;
+    }
+    close(peer[0]);
+    return WIFEXITED(status) && !WEXITSTATUS(status) ? 0 : -1;
+}
+
 static int selftest(void)
 {
     struct task_spec spec;
@@ -355,7 +488,9 @@ static int selftest(void)
         !parse_spec("0.71::TASK", &spec) ||
         !parse_spec("31.0::TASK", &spec) ||
         !parse_spec("31.71::THIS_OBJECT_NAME_IS_TOO_LONG", &spec) ||
-        selftest_output_timeout())
+        selftest_output_timeout() ||
+        selftest_drain_hangup(0) || selftest_drain_hangup(1) ||
+        selftest_interactive_stdin_eof())
         return 1;
     puts("dntask selftest passed");
     return 0;
