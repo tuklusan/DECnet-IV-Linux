@@ -51,6 +51,11 @@
 #define DAP_RAT_MAX 7U
 #define DNFAL_XATTR_RFM "user.decnet.rfm"
 #define DNFAL_XATTR_RAT "user.decnet.rat"
+/* Internal on-disk framing for variable-length DAP logical records.
+ * Version 1 stores each complete record as uint16 little-endian length
+ * followed by its exact bytes, including zero-length records. */
+#define DNFAL_XATTR_RECORD_FRAMING "user.decnet.record-framing"
+#define DNFAL_RECORD_FRAMING_V1 '1' 
 #define DAP_ACCESS_OPEN 1U
 #define DAP_ACCESS_CREATE 2U
 #define DAP_ACCESS_RENAME 3U
@@ -144,32 +149,88 @@ static ssize_t recv_record(int fd, void *buf, size_t cap, int flags)
                             cap < dap_send_limit ? cap : dap_send_limit, flags);
 }
 
+/* DAP ATTRIBUTES ATTMENU and DATATYPE/RAT are extensible bitmaps.
+ * Decode the well-defined first eight attributes in protocol field order.
+ * Higher menu fields are not implemented; reject them rather than treating
+ * their wire values as lower-field offsets or silently misparsing RFM. */
+static int parse_attr_ex(const unsigned char *buf, size_t len,
+                         size_t *pos, unsigned int max_bytes,
+                         uint64_t *value)
+{
+    uint64_t bits = 0U;
+    unsigned int i;
+
+    for (i = 0; i < max_bytes; i++) {
+        unsigned char byte;
+
+        if (*pos >= len)
+            return -1;
+        byte = buf[(*pos)++];
+        bits |= (uint64_t)(byte & 0x7fU) << (7U * i);
+        if (!(byte & 0x80U)) {
+            *value = bits;
+            return 0;
+        }
+    }
+    return -1;
+}
+
 static int parse_attributes(const unsigned char *buf, size_t len,
                             unsigned char *rfm, unsigned char *rat)
 {
-    unsigned char menu;
-    size_t pos = 3U;
+    uint64_t menu, value;
+    size_t pos = 2U;
 
     *rfm = DAP_RFM_FIX;
     *rat = 0U;
-    if (len < 3U || buf[0] != DAP_ATTRIBUTES)
+    if (len < 3U || buf[0] != DAP_ATTRIBUTES || buf[1] != 0U ||
+        parse_attr_ex(buf, len, &pos, 6U, &menu) || (menu & ~0xffULL))
         return -1;
-    menu = buf[2];
-    if (!menu)
-        return len == 3U ? 0 : -1;
-    if (menu & 0x01U) { if (pos >= len) return -1; pos++; }
-    if (menu & 0x02U) { if (pos >= len) return -1; pos++; }
-    if (menu & 0x04U) {
-        if (pos >= len) return -1;
+    if ((menu & 0x01U) &&
+        parse_attr_ex(buf, len, &pos, 2U, &value)) /* DATATYPE */
+        return -1;
+    if (menu & 0x02U) { /* ORG */
+        if (pos >= len)
+            return -1;
+        pos++;
+    }
+    if (menu & 0x04U) { /* RFM */
+        if (pos >= len)
+            return -1;
         *rfm = buf[pos++];
         if (*rfm < DAP_RFM_FIX || *rfm > DAP_RFM_STMCR)
             return -1;
     }
-    if (menu & 0x08U) {
-        if (pos >= len) return -1;
-        *rat = buf[pos++];
-        if (*rat > DAP_RAT_MAX)
+    if (menu & 0x08U) { /* RAT is EX-3, not a fixed byte. */
+        if (parse_attr_ex(buf, len, &pos, 3U, &value) ||
+            value > DAP_RAT_MAX)
             return -1;
+        *rat = (unsigned char)value;
+    }
+    if (menu & 0x10U) { /* BLS(2) */
+        if (len - pos < 2U)
+            return -1;
+        pos += 2U;
+    }
+    if (menu & 0x20U) { /* MRS(2) */
+        if (len - pos < 2U)
+            return -1;
+        pos += 2U;
+    }
+    if (menu & 0x40U) { /* ALQ(I-5) */
+        size_t n;
+
+        if (pos >= len)
+            return -1;
+        n = buf[pos++];
+        if (n > 5U || n > len - pos)
+            return -1;
+        pos += n;
+    }
+    if (menu & 0x80U) { /* BKS(1), following the EX continuation */
+        if (pos >= len)
+            return -1;
+        pos++;
     }
     return pos == len ? 0 : -1;
 }
@@ -221,6 +282,80 @@ static int save_metadata(int fd, unsigned char rfm, unsigned char rat)
 {
     return fsetxattr(fd, DNFAL_XATTR_RFM, &rfm, 1U, 0) ||
            fsetxattr(fd, DNFAL_XATTR_RAT, &rat, 1U, 0) ? -1 : 0;
+}
+
+static int record_oriented_rfm(unsigned char rfm)
+{
+    return rfm == DAP_RFM_VAR || rfm == DAP_RFM_VFC;
+}
+
+static int load_record_framing(int fd, unsigned char rfm, int *framed)
+{
+    unsigned char value[2];
+    ssize_t len;
+
+    *framed = 0;
+    len = fgetxattr(fd, DNFAL_XATTR_RECORD_FRAMING,
+                    value, sizeof(value));
+    if (len < 0 && errno == ENODATA)
+        return 0;
+    if (len != 1 || value[0] != DNFAL_RECORD_FRAMING_V1 ||
+        !record_oriented_rfm(rfm)) {
+        errno = EPROTO;
+        return -1;
+    }
+    *framed = 1;
+    return 0;
+}
+
+static int save_record_framing(int fd, unsigned char rfm)
+{
+    const unsigned char value = DNFAL_RECORD_FRAMING_V1;
+
+    return !record_oriented_rfm(rfm) ? 0 :
+        fsetxattr(fd, DNFAL_XATTR_RECORD_FRAMING, &value, 1U, 0);
+}
+
+static int write_framed_payload(FILE *out, const unsigned char *payload,
+                                size_t len)
+{
+    unsigned char prefix[2];
+
+    if (len > UINT16_MAX) {
+        errno = EOVERFLOW;
+        return -1;
+    }
+    prefix[0] = (unsigned char)len;
+    prefix[1] = (unsigned char)(len >> 8U);
+    if (fwrite(prefix, 1, sizeof(prefix), out) != sizeof(prefix) ||
+        (len && fwrite(payload, 1, len, out) != len))
+        return -1;
+    return 0;
+}
+
+/* 1: record, 0: clean EOF, -1: truncated/corrupted/oversize record. */
+static int read_framed_payload(FILE *in, unsigned char *payload, size_t cap,
+                               size_t *len)
+{
+    unsigned char prefix[2];
+    size_t n = fread(prefix, 1, sizeof(prefix), in);
+
+    if (!n)
+        return ferror(in) ? -1 : 0;
+    if (n != sizeof(prefix)) {
+        errno = EPROTO;
+        return -1;
+    }
+    *len = (size_t)prefix[0] | ((size_t)prefix[1] << 8U);
+    if (*len > cap) {
+        errno = EMSGSIZE;
+        return -1;
+    }
+    if (*len && fread(payload, 1, *len, in) != *len) {
+        errno = EPROTO;
+        return -1;
+    }
+    return 1;
 }
 
 static int open_regular_at(int rootfd, const char *name, int write_file)
@@ -304,6 +439,7 @@ static int serve_get(int fd, int rootfd,
     int file_fd;
     unsigned char rfm;
     unsigned char rat;
+    int framed;
     ssize_t got;
 
     if (access_name(access, access_len, DAP_ACCESS_OPEN,
@@ -323,7 +459,8 @@ static int serve_get(int fd, int rootfd,
         const unsigned char ack[] = { DAP_ACK, 0U };
         size_t attr_len;
 
-        if (load_metadata(fileno(in), &rfm, &rat))
+        if (load_metadata(fileno(in), &rfm, &rat) ||
+            load_record_framing(fileno(in), rfm, &framed))
             goto fail;
         attr_len = make_attributes(attributes, sizeof(attributes), rfm, rat);
         if (!attr_len || send_record(fd, attributes, attr_len) ||
@@ -347,20 +484,28 @@ static int serve_get(int fd, int rootfd,
     for (;;) {
         size_t payload_cap = (sizeof(reply) < dap_send_limit ?
                               sizeof(reply) : dap_send_limit) - 3U;
-        size_t count = fread(reply + 3U, 1, payload_cap, in);
+        size_t count;
 
-        if (count) {
-            reply[0] = DAP_DATA;
-            reply[1] = 0U;
-            reply[2] = 0U;
-            if (send_record(fd, reply, count + 3U))
+        if (framed) {
+            int record = read_framed_payload(in, reply + 3U,
+                                             payload_cap, &count);
+
+            if (record < 0)
                 goto fail;
-        }
-        if (count < payload_cap) {
-            if (ferror(in))
+            if (!record)
+                break;
+        } else {
+            count = fread(reply + 3U, 1, payload_cap, in);
+            if (!count && ferror(in))
                 goto fail;
-            break;
+            if (!count)
+                break;
         }
+        reply[0] = DAP_DATA;
+        reply[1] = 0U;
+        reply[2] = 0U;
+        if (send_record(fd, reply, count + 3U))
+            goto fail;
     }
     fclose(in);
     in = NULL;
@@ -423,7 +568,8 @@ static int serve_create(int fd, int rootfd,
         const unsigned char ack[] = { DAP_ACK, 0U };
         size_t attr_len;
 
-        if (save_metadata(fileno(out), requested_rfm, requested_rat))
+        if (save_metadata(fileno(out), requested_rfm, requested_rat) ||
+            save_record_framing(fileno(out), requested_rfm))
             goto fail;
         attr_len = make_attributes(attributes, sizeof(attributes),
                                    requested_rfm, requested_rat);
@@ -459,10 +605,15 @@ static int serve_create(int fd, int rootfd,
             off = 3U + request[2];
             if (off > (size_t)got)
                 goto fail;
-            if ((size_t)got > off &&
-                fwrite(request + off, 1, (size_t)got - off, out) !=
-                    (size_t)got - off)
+            if (record_oriented_rfm(requested_rfm)) {
+                if (write_framed_payload(out, request + off,
+                                         (size_t)got - off))
+                    goto fail;
+            } else if ((size_t)got > off &&
+                       fwrite(request + off, 1, (size_t)got - off, out) !=
+                           (size_t)got - off) {
                 goto fail;
+            }
             continue;
         }
         if (request[0] == DAP_ACCESS_COMPLETE &&
@@ -1006,6 +1157,160 @@ out:
     return rc;
 }
 
+/* A DATA message is a logical variable record, not an arbitrary piece of a
+ * byte stream. Reopen the published inode through real FAL GET and assert
+ * exact individual records (including the empty record) and EOF order. */
+static int selftest_framed_records(int rootfd, unsigned char rfm)
+{
+    const char *name = "RECORD.DAT";
+    const unsigned char create_access[] = {
+        DAP_ACCESS, 0U, DAP_ACCESS_CREATE, 0U, 10U,
+        'R', 'E', 'C', 'O', 'R', 'D', '.', 'D', 'A', 'T'
+    };
+    const unsigned char open_access[] = {
+        DAP_ACCESS, 0U, DAP_ACCESS_OPEN, 0U, 10U,
+        'R', 'E', 'C', 'O', 'R', 'D', '.', 'D', 'A', 'T'
+    };
+    const unsigned char connect[] = { DAP_CONTROL, 0U, DAP_CONTROL_CONNECT };
+    const unsigned char put[] = { DAP_CONTROL, 0U, DAP_CONTROL_PUT };
+    const unsigned char get[] = { DAP_CONTROL, 0U, DAP_CONTROL_GET };
+    const unsigned char data1[] = { DAP_DATA, 0U, 0U, 'a', 'b', 'c' };
+    const unsigned char data2[] = { DAP_DATA, 0U, 0U };
+    const unsigned char data3[] = { DAP_DATA, 0U, 0U, 'd', 'e', 'f' };
+    const unsigned char encoded[] = {
+        3U, 0U, 'a', 'b', 'c', 0U, 0U, 3U, 0U, 'd', 'e', 'f'
+    };
+    const unsigned char finish[] = {
+        DAP_ACCESS_COMPLETE, 0U, DAP_ACCOMP_CLOSE
+    };
+    const unsigned char eof[] = { DAP_STATUS, 0U, 0x27U, 0x40U };
+    unsigned char reply[64];
+    unsigned char bytes[sizeof(encoded)];
+    unsigned char format[2];
+    struct timeval timeout = { .tv_sec = 5, .tv_usec = 0 };
+    int pair[2] = { -1, -1 };
+    int file_fd = -1;
+    pid_t child = -1;
+    int status, rc = -1;
+    int phase;
+
+    for (phase = 0; phase < 2; phase++) {
+        if (socketpair(AF_UNIX, SOCK_SEQPACKET, 0, pair))
+            goto out;
+        if (setsockopt(pair[0], SOL_SOCKET, SO_RCVTIMEO,
+                       &timeout, sizeof(timeout)) ||
+            setsockopt(pair[0], SOL_SOCKET, SO_SNDTIMEO,
+                       &timeout, sizeof(timeout)))
+            goto out;
+        child = fork();
+        if (child < 0)
+            goto out;
+        if (!child) {
+            int result;
+
+            close(pair[0]);
+            result = phase == 0 ?
+                serve_create(pair[1], rootfd, create_access,
+                             sizeof(create_access), rfm, 2U) :
+                serve_get(pair[1], rootfd, open_access,
+                          sizeof(open_access));
+            close(pair[1]);
+            _exit(result == 0 ? 0 : 15);
+        }
+        close(pair[1]);
+        pair[1] = -1;
+        if (dniv_recv_record(pair[0], reply, sizeof(reply), 0) != 7 ||
+            reply[0] != DAP_ATTRIBUTES || reply[5] != rfm ||
+            dniv_recv_record(pair[0], reply, sizeof(reply), 0) != 2 ||
+            reply[0] != DAP_ACK ||
+            dniv_send_record(pair[0], connect, sizeof(connect), 0) ||
+            dniv_recv_record(pair[0], reply, sizeof(reply), 0) != 2 ||
+            reply[0] != DAP_ACK)
+            goto out;
+        if (phase == 0) {
+            if (dniv_send_record(pair[0], put, sizeof(put), 0) ||
+                dniv_send_record(pair[0], data1, sizeof(data1), 0) ||
+                dniv_send_record(pair[0], data2, sizeof(data2), 0) ||
+                dniv_send_record(pair[0], data3, sizeof(data3), 0) ||
+                dniv_send_record(pair[0], finish, sizeof(finish), 0) ||
+                dniv_recv_record(pair[0], reply, sizeof(reply), 0) != 3 ||
+                reply[0] != DAP_ACCESS_COMPLETE ||
+                reply[2] != DAP_ACCOMP_RESPONSE)
+                goto out;
+        } else {
+            if (dniv_send_record(pair[0], get, sizeof(get), 0) ||
+                dniv_recv_record(pair[0], reply, sizeof(reply), 0) !=
+                    (ssize_t)sizeof(data1) ||
+                memcmp(reply, data1, sizeof(data1)) ||
+                dniv_recv_record(pair[0], reply, sizeof(reply), 0) !=
+                    (ssize_t)sizeof(data2) ||
+                memcmp(reply, data2, sizeof(data2)) ||
+                dniv_recv_record(pair[0], reply, sizeof(reply), 0) !=
+                    (ssize_t)sizeof(data3) ||
+                memcmp(reply, data3, sizeof(data3)) ||
+                dniv_recv_record(pair[0], reply, sizeof(reply), 0) !=
+                    (ssize_t)sizeof(eof) ||
+                memcmp(reply, eof, sizeof(eof)) ||
+                dniv_send_record(pair[0], finish, sizeof(finish), 0) ||
+                dniv_recv_record(pair[0], reply, sizeof(reply), 0) != 3 ||
+                reply[0] != DAP_ACCESS_COMPLETE ||
+                reply[2] != DAP_ACCOMP_RESPONSE)
+                goto out;
+        }
+        close(pair[0]);
+        pair[0] = -1;
+        if (waitpid(child, &status, 0) != child ||
+            !WIFEXITED(status) || WEXITSTATUS(status))
+            goto out;
+        child = -1;
+        if (phase == 0) {
+            file_fd = open_regular_at(rootfd, name, 0);
+            if (file_fd < 0 ||
+                read(file_fd, bytes, sizeof(bytes)) !=
+                    (ssize_t)sizeof(bytes) ||
+                memcmp(bytes, encoded, sizeof(encoded)) ||
+                read(file_fd, bytes, sizeof(bytes)) != 0 ||
+                fgetxattr(file_fd, DNFAL_XATTR_RECORD_FRAMING,
+                          format, sizeof(format)) != 1 ||
+                format[0] != DNFAL_RECORD_FRAMING_V1)
+                goto out;
+            close(file_fd);
+            file_fd = -1;
+        }
+    }
+    /* Malformed/incomplete serialized records must never become EOF. */
+    {
+        FILE *bad = tmpfile();
+        size_t len;
+        unsigned char payload[8];
+
+        if (!bad)
+            goto out;
+        if (fwrite((const unsigned char[]){ 4U, 0U, 'X' }, 1, 3U,
+                   bad) != 3U || fseek(bad, 0, SEEK_SET) ||
+            read_framed_payload(bad, payload, sizeof(payload), &len) != -1) {
+            fclose(bad);
+            goto out;
+        }
+        fclose(bad);
+    }
+    rc = 0;
+out:
+    if (file_fd >= 0)
+        close(file_fd);
+    if (pair[0] >= 0)
+        close(pair[0]);
+    if (pair[1] >= 0)
+        close(pair[1]);
+    if (child > 0) {
+        if (rc)
+            (void)kill(child, SIGKILL);
+        (void)waitpid(child, &status, 0);
+    }
+    (void)unlinkat(rootfd, name, 0);
+    return rc;
+}
+
 static int selftest(void)
 {
     unsigned char config[16];
@@ -1072,6 +1377,23 @@ static int selftest(void)
                                                0x04U, DAP_RFM_FIX }, 4U))
         return 1;
 
+    /* The EX-6 ATTMENU must not be mistaken for a single menu octet.
+     * The second menu octet here advertises BKS after RFM. */
+    if (parse_attributes((const unsigned char[]){
+            DAP_ATTRIBUTES, 0U, 0x87U, 0x01U, 1U, 0U,
+            DAP_RFM_VAR, 0x20U }, 8U, &rfm, &rat) ||
+        rfm != DAP_RFM_VAR || rat != 0U ||
+        !parse_attributes((const unsigned char[]){
+            DAP_ATTRIBUTES, 0U, 0x87U, 0x01U, 1U, 0U,
+            DAP_RFM_VAR }, 7U, &rfm, &rat) ||
+        !parse_attributes((const unsigned char[]){
+            DAP_ATTRIBUTES, 0U, 0x87U, 0x80U },
+            4U, &rfm, &rat) ||
+        !parse_attributes((const unsigned char[]){
+            DAP_ATTRIBUTES, 0U, 0x04U, 0xffU },
+            4U, &rfm, &rat))
+        return 1;
+
     if (!mkdtemp(directory))
         return 1;
     victim_fd = mkstemp(victim);
@@ -1114,7 +1436,9 @@ static int selftest(void)
     /* Newly created incomplete files must still be removed on failure. */
     if (selftest_abort_create(rootfd, "PARTIAL.TXT") ||
         faccessat(rootfd, "PARTIAL.TXT", F_OK, 0) == 0 || errno != ENOENT ||
-        selftest_create_swap(rootfd) || selftest_create_success(rootfd))
+        selftest_create_swap(rootfd) || selftest_create_success(rootfd) ||
+        selftest_framed_records(rootfd, DAP_RFM_VAR) ||
+        selftest_framed_records(rootfd, DAP_RFM_VFC))
         goto out;
     file_fd = open_regular_at(rootfd, "ESCAPE.TXT", 0);
     if (file_fd >= 0)

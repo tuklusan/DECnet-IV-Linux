@@ -897,8 +897,8 @@ def main() -> int:
         'config[3] != 8U',
         'negotiate_buffer_limit(request, (size_t)got, &dap_send_limit)',
         'sizeof(reply) : dap_send_limit) - 3U;',
-        'size_t count = fread(reply + 3U, 1, payload_cap, in);',
-        'if (count < payload_cap)',
+        'count = fread(reply + 3U, 1, payload_cap, in);',
+        'if (!count && ferror(in))',
         'static int selftest_get_buffer_limit(int rootfd)',
         'selftest_get_buffer_limit(rootfd)',
         'dap_send_limit = 128U;',
@@ -907,6 +907,20 @@ def main() -> int:
     ):
         if marker not in dnfald:
             raise SystemExit(f"source-release gate: dnfald DAP negotiated-buffer regression: {marker}")
+    for marker in (
+        "DNFAL_XATTR_RECORD_FRAMING",
+        "save_record_framing(fileno(out), requested_rfm)",
+        "write_framed_payload(out, request + off,",
+        "load_record_framing(fileno(in), rfm, &framed)",
+        "read_framed_payload(in, reply + 3U,",
+        "selftest_framed_records(rootfd, DAP_RFM_VAR)",
+        "selftest_framed_records(rootfd, DAP_RFM_VFC)",
+        "parse_attr_ex(buf, len, &pos, 6U, &menu)",
+        "parse_attr_ex(buf, len, &pos, 3U, &value)",
+        "0x87U, 0x01U, 1U, 0U,",
+    ):
+        if marker not in dnfald:
+            raise SystemExit(f"source-release gate: FAL record framing / extended ATTR regression: {marker}")
     create_start = dnfald.find("static int serve_create")
     create_end = dnfald.find("static int serve_rename", create_start)
     create_body = dnfald[create_start:create_end]
