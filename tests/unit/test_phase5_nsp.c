@@ -58,6 +58,11 @@ static void test_data(void)
         0x60,0x03,0x00,0x05,0x01,0x07,0x00,
         'p','a','y','l','o','a','d'
     };
+    /* Empty but complete NSP DATA is legal on the wire.  The stream
+     * compatibility path must not mistake it for transport EOF. */
+    const unsigned char empty[] = {
+        0x60,0x03,0x00,0x05,0x01,0x07,0x00
+    };
     const unsigned char d2[] = {
         0x40,0x03,0x00,0x05,0x01,0x09,0x80,0x06,0xa0,0x07,0x00,
         'p','a','y','l','o','a','d'
@@ -68,6 +73,10 @@ static void test_data(void)
     assert(p.type == DNIV_NSP_DATA && p.bom == 1U && p.eom == 1U);
     assert(p.segnum == 7U && p.payload_len == 7U);
     roundtrip(d, sizeof(d));
+    assert(dniv_nsp_parse(empty, sizeof(empty), &p) == DNIV_NSP_OK);
+    assert(p.type == DNIV_NSP_DATA && p.bom && p.eom &&
+           p.payload_len == 0U);
+    roundtrip(empty, sizeof(empty));
 
     assert(dniv_nsp_parse(d2, sizeof(d2), &p) == DNIV_NSP_OK);
     assert(p.ack1.present && p.ack1.num == 9U);

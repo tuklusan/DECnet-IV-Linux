@@ -994,6 +994,10 @@ static int dniv_stream_recv_locked(struct socket *sock,
                                             dsk->stream_rx, DNBUFSIZE,
                                             &length);
                 if (!ret) {
+                    /* An empty NSP DATA message carries no stream bytes;
+                     * only a terminal logical link may signal stream EOF. */
+                    if (!length)
+                        continue;
                     dsk->stream_rx_len = length;
                     break;
                 }

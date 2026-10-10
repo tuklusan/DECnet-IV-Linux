@@ -117,3 +117,5 @@ A historical DECnet feature is not implicitly claimed merely because the project
 - `dnphoned` rejects unexpected transport EOF even after PHONE DATA; a properly framed PHONE GOODBYE completes the call, including valid calls with no DATA records. Socketpair regressions cover explicit GOODBYE and both premature EOF cases.
 
 - DAP/FAL GET of ordinary fixed or stream data also works on filesystems without user extended-attribute support; a missing or unsupported private record-framing marker still rejects ambiguous VAR/VFC record downloads rather than fabricating record boundaries.
+
+- Native `SOCK_STREAM` receives consume valid zero-length NSP DATA records without reporting false end-of-stream. Ordinary peer disconnection remains the only normal EOF condition; a nonblocking stream read after a zero-length record reports EAGAIN while the connection remains open.

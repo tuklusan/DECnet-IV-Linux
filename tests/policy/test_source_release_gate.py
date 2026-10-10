@@ -45,6 +45,17 @@ def main() -> int:
     if 'for test in tests/policy/test_*.py; do python3 "$$test"; done' not in top_makefile:
         raise SystemExit("source-release gate: top-level unit target does not execute every policy regression")
     socket_source = read_text("kernel/decnet/decnet_iv_socket.c")
+    stream_recv = socket_source.split("static int dniv_stream_recv_locked", 1)[1].split(
+        "static int dniv_sock_recvmsg", 1
+    )[0]
+    if not re.search(r"if \(!ret\) \{\s*/\*.*?\*/\s*if \(!length\)\s*continue;",
+                     stream_recv, re.S):
+        raise SystemExit("source-release gate: empty NSP stream record can become false EOF")
+    wire_regression = read_text("tests/unit/test_phase5_nsp.c")
+    if ("const unsigned char empty[]" not in wire_regression or
+        "p.payload_len == 0U" not in wire_regression or
+        "roundtrip(empty, sizeof(empty))" not in wire_regression):
+        raise SystemExit("source-release gate: empty NSP DATA vector missing")
     seq_recv = socket_source.split("static int dniv_sock_recvmsg", 1)[1].split(
         "static __poll_t dniv_sock_poll", 1
     )[0]
