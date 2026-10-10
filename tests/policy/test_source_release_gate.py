@@ -808,9 +808,9 @@ def main() -> int:
             raise SystemExit(f"source-release gate: dncopy DAP I/O must have bounded peer-idle timeouts: {marker}")
 
     connect_marker = 'msg[2] = 2U; /* CONNECT data stream */'
-    staging_marker = 'begin_staged_output(local_path, &out, &staged_output)'
+    staging_marker = 'begin_staged_output(local_path, &out, &staged_output,'
     completion_marker = 'recv_message(fd, reply, sizeof(reply), DAP_ACCESS_COMPLETE)'
-    publish_marker = 'publish_staged_output(&out, &staged_output, local_path)'
+    publish_marker = 'publish_staged_output(&out, &staged_output, local_path,'
     if (
         retrieve_start < 0 or retrieve_end < 0
         or connect_marker not in retrieve
@@ -825,6 +825,28 @@ def main() -> int:
         or 'selftest_staged_output()' not in dncopy
     ):
         raise SystemExit("source-release gate: dncopy retrieval must stage and atomically publish complete output")
+
+    # Local named downloads must stage unseen, preserve an external new
+    # writer, and remove private temporary directories on abort/commit.
+    for marker in (
+        'static void remove_staged_path(char *path)',
+        'if (!mkdtemp(tmp))',
+        'static const char leaf[] = "/transfer";',
+        'O_CREAT | O_EXCL | O_WRONLY | O_NOFOLLOW, 0600',
+        '*existed = 0;',
+        '*existed = 1;',
+        'link(*staged_path, destination)',
+        'remove_staged_path(*staged_path);',
+        'static int selftest_staged_private_collision(void)',
+        'selftest_staged_private_collision()',
+        '(info.st_mode & 0777) != 0700',
+        'errno != EEXIST',
+        'memcmp(data, "OTHER_WRITER", 12U)',
+    ):
+        if marker not in dncopy:
+            raise SystemExit(f"source-release gate: dncopy private/new-output safety guard missing: {marker}")
+    if 'fd = mkstemp(tmp)' in dncopy:
+        raise SystemExit("source-release gate: public named temp file reintroduced for dncopy")
 
     # DAP CONFIG BUFSIZ is a *complete message* limit, not just the data
     # payload. Each peer must honor the lesser advertised size, including

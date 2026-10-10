@@ -650,13 +650,36 @@ static int read_text_record(FILE *in, unsigned char *data, size_t cap,
 
 /* Publish a named download only after successful DAP completion and local
  * flush/close.  A failed or interrupted transfer must never truncate the
- * caller's existing local file.  Keep the staging file in the same directory
- * so rename() is atomic across the publication boundary.
+ * caller's existing local file.  Keep the stage under a private directory
+ * on the destination filesystem so publication remains atomic.
  */
+/* A download is staged in a private 0700 directory on the destination
+ * filesystem. Setting the final 0644-style mode on a publicly named
+ * mkstemp file would expose unacknowledged partial DAP data to bystanders.
+ * Keeping the stage in a private directory also preserves same-filesystem
+ * atomic rename semantics for intentional replacement of an existing file.
+ */
+static void remove_staged_path(char *path)
+{
+    char *leaf;
+
+    if (!path)
+        return;
+    (void)unlink(path);
+    leaf = strrchr(path, '/');
+    if (leaf) {
+        *leaf = '\0';
+        (void)rmdir(path);
+        *leaf = '/';
+    }
+    free(path);
+}
+
 static int begin_staged_output(const char *destination, FILE **out,
-                               char **staged_path)
+                               char **staged_path, int *existed)
 {
     static const char pattern[] = ".dniv-dap-XXXXXX";
+    static const char leaf[] = "/transfer";
     const char *slash = strrchr(destination, '/');
     size_t prefix_len = slash ? (size_t)(slash - destination + 1) : 0U;
     struct stat existing;
@@ -666,18 +689,26 @@ static int begin_staged_output(const char *destination, FILE **out,
     int fd;
     int saved;
 
-    if (!*destination || prefix_len > SIZE_MAX - sizeof(pattern)) {
+    if (!*destination || !existed ||
+        prefix_len > SIZE_MAX - sizeof(pattern) - sizeof(leaf)) {
         errno = EINVAL;
         return -1;
     }
-    tmp = malloc(prefix_len + sizeof(pattern));
+    tmp = malloc(prefix_len + sizeof(pattern) + sizeof(leaf));
     if (!tmp)
         return -1;
     memcpy(tmp, destination, prefix_len);
     memcpy(tmp + prefix_len, pattern, sizeof(pattern));
-    fd = mkstemp(tmp);
-    if (fd < 0) {
+    if (!mkdtemp(tmp)) {
         free(tmp);
+        return -1;
+    }
+    strcat(tmp, leaf);
+    fd = open(tmp, O_CREAT | O_EXCL | O_WRONLY | O_NOFOLLOW, 0600);
+    if (fd < 0) {
+        saved = errno;
+        remove_staged_path(tmp);
+        errno = saved;
         return -1;
     }
     if (!lstat(destination, &existing)) {
@@ -685,11 +716,13 @@ static int begin_staged_output(const char *destination, FILE **out,
             errno = EACCES;
             goto fail;
         }
+        *existed = 1;
         mode = existing.st_mode & 0777;
     } else if (errno == ENOENT) {
         mode_t mask = umask(0);
 
         umask(mask);
+        *existed = 0;
         mode = 0666 & ~mask;
     } else {
         goto fail;
@@ -705,8 +738,7 @@ static int begin_staged_output(const char *destination, FILE **out,
 fail:
     saved = errno;
     close(fd);
-    unlink(tmp);
-    free(tmp);
+    remove_staged_path(tmp);
     errno = saved;
     return -1;
 }
@@ -718,14 +750,13 @@ static void abort_staged_output(FILE **out, char **staged_path)
         *out = NULL;
     }
     if (*staged_path) {
-        (void)unlink(*staged_path);
-        free(*staged_path);
+        remove_staged_path(*staged_path);
         *staged_path = NULL;
     }
 }
 
 static int publish_staged_output(FILE **out, char **staged_path,
-                                 const char *destination)
+                                 const char *destination, int existed)
 {
     int saved = 0;
 
@@ -734,11 +765,14 @@ static int publish_staged_output(FILE **out, char **staged_path,
     if (fclose(*out) && !saved)
         saved = errno;
     *out = NULL;
-    if (!saved && rename(*staged_path, destination))
+    /* If the target did not exist when the transfer started, atomically
+     * claim the name instead of overwriting an unrelated concurrent writer.
+     * link() is atomic and the stage is on the same filesystem.
+     */
+    if (!saved && (existed ? rename(*staged_path, destination) :
+                           link(*staged_path, destination)))
         saved = errno;
-    if (saved)
-        (void)unlink(*staged_path);
-    free(*staged_path);
+    remove_staged_path(*staged_path);
     *staged_path = NULL;
     if (saved) {
         errno = saved;
@@ -759,6 +793,7 @@ static int retrieve_file(const char *node_text, const char *filespec,
     FILE *out = stdout;
     char *staged_output = NULL;
     int close_out = 0;
+    int output_existed = 0;
 
     if (!n || n > 128U) {
         fprintf(stderr, "dncopy: invalid remote file specification\n");
@@ -796,7 +831,8 @@ static int retrieve_file(const char *node_text, const char *filespec,
      * not replace the existing file until every DAP read and ACK succeeds.
      */
     if (local_path && strcmp(local_path, "-")) {
-        if (begin_staged_output(local_path, &out, &staged_output)) {
+        if (begin_staged_output(local_path, &out, &staged_output,
+                                &output_existed)) {
             perror("dncopy: stage local output");
             close(fd);
             return -1;
@@ -858,7 +894,8 @@ static int retrieve_file(const char *node_text, const char *filespec,
     if (got < 3 || reply[2] != 2U)
         goto fail;
     if (close_out) {
-        if (publish_staged_output(&out, &staged_output, local_path))
+        if (publish_staged_output(&out, &staged_output, local_path,
+                                  output_existed))
             goto fail;
         close_out = 0;
     } else if (fflush(out)) {
@@ -1468,6 +1505,7 @@ static int selftest_staged_output(void)
     char *staged = NULL;
     int fd = -1;
     int rc = -1;
+    int existed = 0;
 
     if (!mkdtemp(directory))
         return -1;
@@ -1481,8 +1519,8 @@ static int selftest_staged_output(void)
         goto cleanup;
     close(fd);
     fd = -1;
-    if (begin_staged_output(target, &out, &staged) ||
-        fwrite("PARTIAL", 1, 7U, out) != 7U)
+    if (begin_staged_output(target, &out, &staged, &existed) ||
+        !existed || fwrite("PARTIAL", 1, 7U, out) != 7U)
         goto cleanup;
     abort_staged_output(&out, &staged);
     fd = open(target, O_RDONLY);
@@ -1491,9 +1529,9 @@ static int selftest_staged_output(void)
         goto cleanup;
     close(fd);
     fd = -1;
-    if (begin_staged_output(target, &out, &staged) ||
-        fwrite("COMPLETED", 1, 9U, out) != 9U ||
-        publish_staged_output(&out, &staged, target))
+    if (begin_staged_output(target, &out, &staged, &existed) ||
+        !existed || fwrite("COMPLETED", 1, 9U, out) != 9U ||
+        publish_staged_output(&out, &staged, target, existed))
         goto cleanup;
     fd = open(target, O_RDONLY);
     if (fd < 0 || read(fd, contents, sizeof(contents)) != 9 ||
@@ -1504,7 +1542,7 @@ static int selftest_staged_output(void)
     if (symlink(target, alias))
         goto cleanup;
     errno = 0;
-    if (!begin_staged_output(alias, &out, &staged) || errno != EACCES)
+    if (!begin_staged_output(alias, &out, &staged, &existed) || errno != EACCES)
         goto cleanup;
     rc = 0;
 cleanup:
@@ -1514,6 +1552,81 @@ cleanup:
     unlink(alias);
     unlink(target);
     rmdir(directory);
+    return rc;
+}
+
+/* No in-progress text may be readable through a public staging path.
+ * If the requested name appears while a new download is in flight, the
+ * external writer's bytes must survive the failed publication unchanged.
+ */
+static int selftest_staged_private_collision(void)
+{
+    char directory[] = "/tmp/dncopy-private.XXXXXX";
+    char destination[256], private_dir[256], data[32] = { 0 };
+    char *stage = NULL;
+    FILE *out = NULL;
+    struct stat info;
+    int existed = -1;
+    int fd = -1;
+    int rc = -1;
+    int saved;
+    char *leaf;
+
+    if (!mkdtemp(directory))
+        return -1;
+    if (chmod(directory, 0755) ||
+        snprintf(destination, sizeof(destination), "%s/dest", directory) >=
+        (int)sizeof(destination))
+        goto done;
+    /* First, preserve a concurrent creator's name and content. */
+    if (begin_staged_output(destination, &out, &stage, &existed) || existed ||
+        fwrite("TRANSFER", 1, 8U, out) != 8U ||
+        strlen(stage) >= sizeof(private_dir))
+        goto done;
+    strcpy(private_dir, stage);
+    leaf = strrchr(private_dir, '/');
+    if (!leaf)
+        goto done;
+    *leaf = '\0';
+    if (stat(private_dir, &info) || !S_ISDIR(info.st_mode) ||
+        (info.st_mode & 0777) != 0700)
+        goto done;
+    fd = open(destination, O_WRONLY | O_CREAT | O_EXCL, 0600);
+    if (fd < 0 || write(fd, "OTHER_WRITER", 12U) != 12)
+        goto done;
+    close(fd);
+    fd = -1;
+    errno = 0;
+    if (publish_staged_output(&out, &stage, destination, existed) != -1 ||
+        errno != EEXIST || !stat(private_dir, &info) || errno != ENOENT)
+        goto done;
+    fd = open(destination, O_RDONLY);
+    if (fd < 0 || read(fd, data, sizeof(data)) != 12 ||
+        memcmp(data, "OTHER_WRITER", 12U))
+        goto done;
+    close(fd);
+    fd = -1;
+    if (unlink(destination))
+        goto done;
+
+    /* An uncontended new destination still publishes atomically. */
+    if (begin_staged_output(destination, &out, &stage, &existed) || existed ||
+        fwrite("TRANSFER", 1, 8U, out) != 8U ||
+        publish_staged_output(&out, &stage, destination, existed))
+        goto done;
+    fd = open(destination, O_RDONLY);
+    if (fd < 0 || read(fd, data, sizeof(data)) != 8 ||
+        memcmp(data, "TRANSFER", 8U))
+        goto done;
+    rc = 0;
+done:
+    saved = errno;
+    if (fd >= 0)
+        close(fd);
+    abort_staged_output(&out, &stage);
+    unlink(destination);
+    rmdir(directory);
+    errno = saved;
     return rc;
 }
 
@@ -1541,7 +1654,8 @@ static int selftest(void)
     struct access_options parsed_options = { 0 };
 
     if (selftest_buffer_limit() || selftest_socket_timeouts() ||
-        selftest_text_records() || selftest_staged_output())
+        selftest_text_records() || selftest_staged_output() ||
+        selftest_staged_private_collision())
         return 1;
     if (parse_node("31.70", &addr) || addr != (uint16_t)((31U << 10) | 70U))
         return 1;
