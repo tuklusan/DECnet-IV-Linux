@@ -443,7 +443,8 @@ static int parse_rfm(const unsigned char *buf, size_t len,
         pos++; /* ORG */
     }
     if (menu & 0x04U) {
-        if (pos >= len)
+        if (pos >= len || buf[pos] < DAP_RFM_FIX ||
+            buf[pos] > DAP_RFM_SCR)
             return -1;
         *rfm = buf[pos];
     }
@@ -1639,6 +1640,8 @@ static int selftest(void)
         DAP_ATTRIBUTES, 0U, 0x87U, 0x01U, 0x01U, 0x00U, DAP_RFM_STM, 0x20U
     };
     const unsigned char attr_default[] = { DAP_ATTRIBUTES, 0U, 0x00U };
+    const unsigned char attr_rfm_zero[] = { DAP_ATTRIBUTES, 0U, 0x04U, 0U };
+    const unsigned char attr_rfm_unsupported[] = { DAP_ATTRIBUTES, 0U, 0x04U, 0xffU };
     const unsigned char attr_bad_menu[] = {
         DAP_ATTRIBUTES, 0U, 0x80U, 0x80U, 0x80U, 0x80U, 0x80U, 0x80U
     };
@@ -1696,6 +1699,8 @@ static int selftest(void)
             rfm != DAP_RFM_STM ||
             parse_rfm(attr_default, sizeof(attr_default), &rfm) ||
             rfm != DAP_RFM_FIX ||
+            !parse_rfm(attr_rfm_zero, sizeof(attr_rfm_zero), &rfm) ||
+            !parse_rfm(attr_rfm_unsupported, sizeof(attr_rfm_unsupported), &rfm) ||
             !parse_rfm(attr_bad_menu, sizeof(attr_bad_menu), &rfm))
             return 1;
     }

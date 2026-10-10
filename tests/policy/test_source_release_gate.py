@@ -848,6 +848,19 @@ def main() -> int:
     if 'fd = mkstemp(tmp)' in dncopy:
         raise SystemExit("source-release gate: public named temp file reintroduced for dncopy")
 
+    # Reject unknown remote DAP record formats rather than silently copying
+    # malformed record-mode payloads without required text conversion.
+    for marker in (
+        'buf[pos] < DAP_RFM_FIX ||',
+        'buf[pos] > DAP_RFM_SCR',
+        'attr_rfm_zero',
+        'attr_rfm_unsupported',
+        '!parse_rfm(attr_rfm_zero, sizeof(attr_rfm_zero), &rfm)',
+        '!parse_rfm(attr_rfm_unsupported, sizeof(attr_rfm_unsupported), &rfm)',
+    ):
+        if marker not in dncopy:
+            raise SystemExit(f"source-release gate: malformed DAP RFM accepted: {marker}")
+
     # DAP CONFIG BUFSIZ is a *complete message* limit, not just the data
     # payload. Each peer must honor the lesser advertised size, including
     # three DATA header bytes and potentially smaller independent DEC peers.
