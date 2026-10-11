@@ -107,6 +107,8 @@ static int dniv_enduser_decode(const __u8 *buf, __u16 length,
 
     if (destination && format != 1U)
         return -EPROTO;
+    if (buf[1] != 0U)
+        return -EPROTO;
 
     switch (format) {
     case 1U:

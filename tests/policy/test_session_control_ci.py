@@ -76,6 +76,8 @@ int main(void)
 {
     /* Object 7 with generic Session Control source name LINUX. */
     const unsigned char valid[] = {0,7,1,0,5,'L','I','N','U','X',0};
+    const unsigned char bad_destination_type[] = {1,6,4,'T','E','S','T',1,0,5,'L','I','N','U','X',0};
+    const unsigned char bad_source_type[] = {0,7,1,6,5,'L','I','N','U','X',0};
     const unsigned char user[] = {0,7,1,0,5,'L','I','N','U','X',2,1,'X'};
     const unsigned char access[] = {0,7,1,0,5,'L','I','N','U','X',1,1,'U',1,'P',1,'A'};
     const unsigned char both[] = {0,7,1,0,5,'L','I','N','U','X',3,1,'U',1,'P',1,'A',1,'X'};
@@ -91,6 +93,8 @@ int main(void)
 
 #define CHECK(b, ok) (failures += check((b), sizeof(b), (ok), #b))
     CHECK(valid, true);
+    CHECK(bad_destination_type, false);
+    CHECK(bad_source_type, false);
     CHECK(user, true);
     CHECK(access, true);
     CHECK(both, true);
