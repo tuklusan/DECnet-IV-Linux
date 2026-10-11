@@ -12,6 +12,7 @@
 # SANYALnet Labs." See LICENSE for full terms, warranty disclaimer, termination,
 # patent, trademark, and governing-law provisions.
 # ============================================================================
+
 """Compile exact Session Control CI decoder and reject invalid wire payloads."""
 
 from __future__ import annotations
