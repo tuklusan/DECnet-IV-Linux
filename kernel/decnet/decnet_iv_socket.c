@@ -117,9 +117,6 @@ static int dniv_enduser_decode(const __u8 *buf, __u16 length,
     case 2U:
         prefix = 6U;
         break;
-    case 4U:
-        prefix = 10U;
-        break;
     default:
         return -EPROTO;
     }

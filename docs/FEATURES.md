@@ -32,6 +32,7 @@ This catalogue describes the production source release. Lab-only helpers and ind
 - Session Control connect/accept/reject behavior and object dispatch.
 - Session Control v1 Connect Initiate input validates reserved menu/version bits and consumes the entire declared access/user-data field payload; malformed prefixes with trailing bytes are rejected rather than dispatched to an application listener.
 - Named Session Control end-user descriptors also require the specified zero object-type octet; conflicting numeric type bytes in named source/destination selectors are rejected.
+- Session Control v1 source end-user descriptors accept only defined formats 0, 1 and 2; reserved format codes, including format 4, are rejected before application dispatch.
 - `dnping` rejects a MIRROR reply longer than the exact transmitted request, even when the truncated reply prefix matches; local sequenced-socket positive/negative regression enforces this.
 - Native `AF_DECnet` / `SOCK_SEQPACKET` record ABI preserves classic `MSG_EOR` message framing across multiple writes, enforces the `DNBUFSIZE` aggregate record bound, and provides `SOCK_STREAM` compatibility with short-read preservation and `MSG_WAITALL` across NSP record boundaries.
 - Native sequenced sockets report an already-observed ordinary peer disconnect as EOF even with `MSG_DONTWAIT`; nonblocking mode suppresses waiting but does not replace terminal EOF with `EAGAIN`. Retransmit-exhaustion reason 39 remains the distinct `EHOSTUNREACH` error path.
