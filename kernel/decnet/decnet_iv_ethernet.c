@@ -78,6 +78,13 @@ static DEFINE_SPINLOCK(dniv_adj_lock);
 static DEFINE_SPINLOCK(dniv_traffic_lock);
 static struct dniv_adj_entry dniv_adjacencies[DNIV_MAX_ADJACENCIES];
 static struct dniv_dr_state dniv_dr_states[DNIV_MAX_DR_STATES];
+
+/* Keep expired peers out of forwarding and election decisions even if the
+ * one-second adjacency aging worker has not removed their entries yet. */
+static bool dniv_adj_usable(const struct dniv_adj_entry *adj)
+{
+    return adj && adj->used && time_before(jiffies, adj->expires);
+}
 static __u16 dniv_local_address;
 static __u16 dniv_hello_interval;
 static __u16 dniv_eth_cost;
@@ -287,7 +294,7 @@ static struct dniv_adj_entry *dniv_alloc_router_adj_locked(
     for (i = 0; i < DNIV_MAX_ADJACENCIES; i++) {
         struct dniv_adj_entry *adj = &dniv_adjacencies[i];
 
-        if (!adj->used || adj->ifindex != ifindex ||
+        if (!dniv_adj_usable(adj) || adj->ifindex != ifindex ||
             adj->node_type == DNIV_NODE_TYPE_ENDNODE)
             continue;
         count++;
@@ -495,7 +502,7 @@ static bool dniv_has_up_router_adjacency(int ifindex, __u8 level)
     for (i = 0; i < DNIV_MAX_ADJACENCIES; i++) {
         const struct dniv_adj_entry *adj = &dniv_adjacencies[i];
 
-        if (!adj->used || adj->ifindex != ifindex ||
+        if (!dniv_adj_usable(adj) || adj->ifindex != ifindex ||
             adj->state != DNIV_ADJ_STATE_UP ||
             adj->node_type == DNIV_NODE_TYPE_ENDNODE)
             continue;
@@ -672,7 +679,7 @@ static __u8 dniv_collect_router_entries(int ifindex,
                 count < DNIV_WIRE_MAX_RS_ENTRIES; i++) {
         const struct dniv_adj_entry *adj = &dniv_adjacencies[i];
 
-        if (!adj->used || adj->ifindex != ifindex ||
+        if (!dniv_adj_usable(adj) || adj->ifindex != ifindex ||
             adj->node_type == DNIV_NODE_TYPE_ENDNODE)
             continue;
         entries[count].address = adj->address;
@@ -701,7 +708,7 @@ static bool dniv_local_is_dr(int ifindex)
     for (i = 0; i < DNIV_MAX_ADJACENCIES; i++) {
         const struct dniv_adj_entry *adj = &dniv_adjacencies[i];
 
-        if (!adj->used || adj->ifindex != ifindex ||
+        if (!dniv_adj_usable(adj) || adj->ifindex != ifindex ||
             adj->node_type == DNIV_NODE_TYPE_ENDNODE ||
             DNIV_ADDR_AREA(adj->address) != local_area)
             continue;
@@ -744,7 +751,7 @@ static void dniv_endnode_neighbor(int ifindex, __u8 neighbor[ETH_ALEN])
     for (i = 0; i < DNIV_MAX_ADJACENCIES; i++) {
         const struct dniv_adj_entry *adj = &dniv_adjacencies[i];
 
-        if (adj->used && adj->ifindex == ifindex &&
+        if (dniv_adj_usable(adj) && adj->ifindex == ifindex &&
             adj->node_type != DNIV_NODE_TYPE_ENDNODE &&
             adj->state == DNIV_ADJ_STATE_UP) {
             ether_addr_copy(neighbor, adj->mac);
@@ -961,7 +968,7 @@ static int dniv_routing_source_allowed(int ifindex, __u16 source, __u8 level,
 
     spin_lock_irqsave(&dniv_adj_lock, flags);
     adj = dniv_find_adj_locked(ifindex, source);
-    if (!adj || adj->state != DNIV_ADJ_STATE_UP ||
+    if (!dniv_adj_usable(adj) || adj->state != DNIV_ADJ_STATE_UP ||
         adj->node_type == DNIV_NODE_TYPE_ENDNODE)
         goto out;
     if (level == 1U) {
@@ -1048,7 +1055,7 @@ static int dniv_data_source_allowed(int ifindex,
 
     spin_lock_irqsave(&dniv_adj_lock, flags);
     adj = dniv_find_adj_locked(ifindex, address);
-    if (adj && adj->state == DNIV_ADJ_STATE_UP)
+    if (dniv_adj_usable(adj) && adj->state == DNIV_ADJ_STATE_UP)
         allowed = 1;
     spin_unlock_irqrestore(&dniv_adj_lock, flags);
     return allowed;
@@ -1108,7 +1115,7 @@ static int dniv_endnode_route(__u16 destination,
     for (i = 0; i < DNIV_MAX_ADJACENCIES; i++) {
         struct dniv_adj_entry *adj = &dniv_adjacencies[i];
 
-        if (!adj->used || adj->state != DNIV_ADJ_STATE_UP ||
+        if (!dniv_adj_usable(adj) || adj->state != DNIV_ADJ_STATE_UP ||
             adj->node_type == DNIV_NODE_TYPE_ENDNODE)
             continue;
         if (DNIV_ADDR_AREA(adj->address) != DNIV_ADDR_AREA(local))
