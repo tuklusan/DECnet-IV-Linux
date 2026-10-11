@@ -182,6 +182,8 @@ static int dniv_ci_decode(const __u8 *payload, __u16 payload_len,
         return -EPROTO;
 
     menu = payload[off++];
+    if (menu & ~(DNIV_SC_MENU_ACCESS | DNIV_SC_MENU_USER))
+        return -EPROTO;
     if (menu & DNIV_SC_MENU_ACCESS) {
         for (i = 0; i < 3U; i++) {
             const __u8 *field = payload + off;
@@ -221,8 +223,9 @@ static int dniv_ci_decode(const __u8 *payload, __u16 payload_len,
             conndata->opt_optl = cpu_to_le16(field_len);
             memcpy(conndata->opt_data, field + 1U, field_len);
         }
+        off += used;
     }
-    return 0;
+    return off == payload_len ? 0 : -EPROTO;
 }
 
 static bool dniv_selector_match(const struct sockaddr_dn *listener,
