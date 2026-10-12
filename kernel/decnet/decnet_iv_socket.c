@@ -858,8 +858,22 @@ static int dniv_sock_sendmsg(struct socket *sock, struct msghdr *msg,
         return -EOPNOTSUPP;
     if (sock->type == SOCK_STREAM && (msg->msg_flags & MSG_EOR))
         return -EINVAL;
-    if (!size)
-        return (msg->msg_flags & MSG_OOB) ? -EINVAL : 0;
+    if (!size) {
+        if (msg->msg_flags & MSG_OOB)
+            return -EINVAL;
+        /* A zero-length send still validates the logical link: otherwise
+         * send(0) falsely succeeds on a never-connected or closed socket. */
+        lock_sock(sk);
+        ret = dniv_link_status(dsk);
+        if (sock->state != SS_CONNECTED || ret <= 0) {
+            if (ret != -EHOSTUNREACH)
+                ret = -ENOTCONN;
+        } else {
+            ret = 0;
+        }
+        release_sock(sk);
+        return ret;
+    }
 
     data = kmalloc(size, GFP_KERNEL);
     if (!data)
