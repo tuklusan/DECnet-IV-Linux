@@ -2438,3 +2438,29 @@ PP, full exact-SHA acceptance and public release remain pending.
 2026-10-12: Packaged scan 1 of fresh fully qualified artifact 11771640442, source SHA 42bfe3f4048b1331dee98d6d7229276eeac82a6e, archive SHA256 bb7364fe27ee4b91258f8870727ebd2351848873063477fde8082c071b99f997: NCP `getline()` / `strtok_r()` input parsing silently accepted a valid command prefix before an embedded NUL in the physical line. Source-extracted proof on original ncp.c produced ordinary help output on malformed input. Fix adds length-aware NUL rejection before dispatch, built-in and independent policy regressions `tests/policy/test_ncp_embedded_nul.py`; original fails, corrected GCC/Clang strict builds pass. `docs/FEATURES.md` and `docs/PROJECT_STATE.md` updated in same atomic main change. Old archive superseded. Requalify four exact-SHA gates, fresh download, restart scan 1. Official audits 0/3; canonical PP, full acceptance and publication pending.
 2026-10-12: Exact-SHA requalification issue #1126 for main d8a975a56e8fac61e7a9391f40fc26ebb3ec4686 revealed a fail-closed Repository Policy result: workflow 38305335115 failed its LICENSE-MONKEY header check because newly added `tests/policy/test_ncp_embedded_nul.py` missed the required blank line following the canonical license header. This is an artifact/policy qualification failure; it cannot be waived or counted green. The source-extracted NCP regression itself passed with GCC and Clang; only the Python file header boundary needs correction. Correct the exact header, preserve code and tests, commit with both continuity docs, re-run four exact-SHA gates and freshly download the next fully accepted source artifact before resuming comprehensive scan 1. Clean audits remain 0/3, canonical PP/full-profile acceptance/publication pending.
 2026-10-12: Follow-on NCP fail-closed audit: the new physical-line NUL check in main 381b2a7e886445b3ee82144e60120b1dbe55e9da rejects hidden command tails, but in noninteractive/piped mode its error branch still printed a diagnostic and exited with status 0 after EOF, just like the earlier overlong-token error. A calling script could falsely report an invalid command stream as success. The new compiled regression now checks nonzero exit 2 for embedded-NUL and >16-token command lines, plus the valid HELP case and internal NCP parser selftest. GCC/Clang with -Wall -Wextra -Werror pass corrected code. Error return is confined to noninteractive input, preserving interactive recovery behavior. Change ncp.c, shipped regression, FEATURES and both continuity docs together. Previous exact SHA source acceptance #1127 is superseded upon main advancement, regardless of gate results. Requalify exact new SHA and freshly download source before restarting full independent semantic scan 1. Formal clean audits 0/3, canonical PP, final full acceptance and production release not yet authorized.
+
+2026-10-12 handover: Qualified current main `1ac689fbe3e2987a1d293683b37b89b1c9f1ad23`
+via Repository Policy `38306059746`, Build Bootstrap `38306121055`
+(x86_64/aarch64 green), Project State Gate `38306147637`,
+Source Release Reproducibility `38306172967` (four applicable jobs
+green; optional pp12-real-peers SKIPPED). Independently downloaded
+artifact `11773176607`, source ZIP SHA-256
+`f9140031fccc742b6ae1e51c10ccca7c7660fdb2d175d390b84c5f1879fe1644`,
+tar `DECnet-IV-Linux-1.0.0.tar.xz` SHA-256
+`5779c18229379814e224a1f7d8e30a007a5e1f57cb351492f2f87962a29ccd04`.
+Fresh packaged semantic review found real `userspace/libdnet/dnetdb.c`
+six-field `sscanf` truncation at the seventh token, silently accepting
+`executor 31.70 name DN70 line eth0 HIDDEN`. The dedicated new
+`tests/policy/test_dnetdb_trailing_fields.py` fails on original accepted
+source and passes repaired source under both GCC/Clang strict builds.
+Source release gate and libdnet selftest pass the repaired source.
+An extracted-source `make -j4 unit` retry on the original package
+completed exit 0; one earlier local bridge-stop selftest failed
+transiently but twenty standalone repetitions passed. The fix,
+regression, FEATURES and both continuity files belong to one atomic
+main commit. Old exact-SHA artifact is superseded; do NOT count
+any partial review or automated test as a complete clean semantic scan.
+Obtain new exact-SHA four-gate acceptance and freshly download that
+specific newly accepted source archive before restarting scan 1.
+Formal full semantic audit count **0/3**; canonical PP requalification,
+full final acceptance and independent publication verification pending.

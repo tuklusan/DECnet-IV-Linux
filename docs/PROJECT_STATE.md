@@ -2547,3 +2547,32 @@ The canonical final-SHA PP requalification, full PROFILE=full/SCOPE=all
 acceptance, and public production release are NOT yet authorized.
 2026-10-12: Exact-SHA requalification issue #1126 for main d8a975a56e8fac61e7a9391f40fc26ebb3ec4686 revealed a fail-closed Repository Policy result: workflow 38305335115 failed its LICENSE-MONKEY header check because newly added `tests/policy/test_ncp_embedded_nul.py` missed the required blank line following the canonical license header. This is an artifact/policy qualification failure; it cannot be waived or counted green. The source-extracted NCP regression itself passed with GCC and Clang; only the Python file header boundary needs correction. Correct the exact header, preserve code and tests, commit with both continuity docs, re-run four exact-SHA gates and freshly download the next fully accepted source artifact before resuming comprehensive scan 1. Clean audits remain 0/3, canonical PP/full-profile acceptance/publication pending.
 2026-10-12: Follow-on NCP fail-closed audit: the new physical-line NUL check in main 381b2a7e886445b3ee82144e60120b1dbe55e9da rejects hidden command tails, but in noninteractive/piped mode its error branch still printed a diagnostic and exited with status 0 after EOF, just like the earlier overlong-token error. A calling script could falsely report an invalid command stream as success. The new compiled regression now checks nonzero exit 2 for embedded-NUL and >16-token command lines, plus the valid HELP case and internal NCP parser selftest. GCC/Clang with -Wall -Wextra -Werror pass corrected code. Error return is confined to noninteractive input, preserving interactive recovery behavior. Change ncp.c, shipped regression, FEATURES and both continuity docs together. Previous exact SHA source acceptance #1127 is superseded upon main advancement, regardless of gate results. Requalify exact new SHA and freshly download source before restarting full independent semantic scan 1. Formal clean audits 0/3, canonical PP, final full acceptance and production release not yet authorized.
+
+2026-10-12: Continued independent semantic defect-finding inspection of freshly downloaded,
+fully source-qualified archive for main `1ac689fbe3e2987a1d293683b37b89b1c9f1ad23`,
+artifact `11773176607`, tar SHA-256
+`5779c18229379814e224a1f7d8e30a007a5e1f57cb351492f2f87962a29ccd04`.
+The shipped `userspace/libdnet/dnetdb.c` parser uses six `sscanf` conversions for
+the six-field executor/device record. A seventh physical-line token is silently
+ignored: `executor 31.70 name DN70 line eth0 HIDDEN` returned a valid
+six-field record despite non-whitespace hidden trailing input. Reproduced by
+compiling the actual accepted packaged C source with strict warnings; the
+new `tests/policy/test_dnetdb_trailing_fields.py` independently compiles
+the actual parser, rejects excess tokens/comment-like suffixes, and retains
+valid four/six-field positives. The regression FAILS on accepted pre-fix
+source and PASSES corrected source with GCC and Clang `-Wall -Wextra -Werror`.
+The corrected conversion looks for a seventh field, including overlong-device
+remainders, and rejects the entire malformed record. Extracted-source policy
+gate and libdnet selftest passed with the fix. The unmodified accepted
+source `make -j4 unit` retry finished exit 0; an earlier local trial hit
+one transient VDE2 bridge-stop process-cleanup selftest failure, but 20
+separate retries passed. CI acceptance of the old SHA remains historical,
+NOT permission to promote its defective package. Commit the five-file
+repair and both continuity records atomically on main; this necessarily
+supersedes the old fully green artifact and triggers new mandatory exact-SHA
+Repository Policy, dual-architecture Build Bootstrap, Project State Gate
+and Source Release Reproducibility, followed by a newly downloaded
+replacement artifact before restarting manual packaged audit 1. Formal
+complete zero-defect semantic reviews remain **0/3**, and final-SHA
+canonical PP, full PROFILE=full/SCOPE=all acceptance and production
+publication are NOT complete or authorized.

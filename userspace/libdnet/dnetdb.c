@@ -166,10 +166,18 @@ static int read_node_record(FILE *file, struct node_record *record)
             continue;
 
         memset(record, 0, sizeof(*record));
-        record->fields = sscanf(start, "%15s %15s %15s %256s %15s %63s",
-                                record->kind, record->address,
-                                record->name_tag, record->name,
-                                record->line_tag, record->device);
+        /* A complete physical line is one record. A seventh field, even
+         * following a valid executor/line/device tuple, is malformed.
+         * The final conversion also rejects truncated overlong device
+         * tokens instead of accepting their valid-looking prefix. */
+        {
+            char extra;
+
+            record->fields = sscanf(start, "%15s %15s %15s %256s %15s %63s %c",
+                                    record->kind, record->address,
+                                    record->name_tag, record->name,
+                                    record->line_tag, record->device, &extra);
+        }
         if (record->fields != 4 && record->fields != 6) {
             errno = EINVAL;
             return -1;
