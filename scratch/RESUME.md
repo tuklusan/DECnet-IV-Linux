@@ -2499,3 +2499,30 @@ count **0/3**; PP canonical reproof, final full PROFILE=full
 SCOPE=all acceptance, publication, public independent verification
 NOT achieved. Do not count machine traversal or partial semantic
 review as 1/3, and do not fake owner audit certificates.
+
+2026-10-12: Deterministic packaged-source semantic audit pass 1 is now
+tracked file-by-file in GitHub issue #1131. Full qualifying prior
+candidate `bfdba887ecdb2a10172764838c136e1e09d45a60`, accepted
+artifact `11777101217`, tar SHA256
+`0fbecb6798c33f7962e001837c39e07f6c74c7eb2cac527b9c425adc39b37bd0`.
+At fixed lexical source member 16,
+`.github/workflows/repository-policy.yml`, manual all-line inspection
+found a PP-11 S2 targeted dispatch evidence corruption: full-profile
+block correctly writes `...1vcpu\n` with one Bash printf escape,
+but targeted `SCOPE=pp11-s2` writes a literal `\\n`, followed by
+the next `_RUN_ID=` record on the same line. Bash printf was
+independently reproduced in bytewise shell output: `printf 'X\\n'`
+produced bytes 58 5c 6e, not LF. Correct targeted printf to one
+newline conversion and add policy regression
+`tests/policy/test_pp11_s2_dispatch_newline.py` asserting both
+full and targeted S2 lines produce two distinct real newlines,
+including execution of their actual bash printf statements. Re-run
+tests against the packaged bytes (regression must fail original),
+then commit this narrow source change, regression and both continuity
+files atomically on main. Old qualified source is superseded.
+All four exact-SHA source qualification gates must re-run green
+before new accepted source download and semantic audit restart.
+Previous per-file reviews remain historical findings, never count as
+clean audit of changed archive. Owner-required complete semantic
+audits **0/3**, canonical PP, full PROFILE=full SCOPE=all and
+independent release publication verification still pending.
