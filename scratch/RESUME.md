@@ -2331,3 +2331,26 @@ The original artifact is superseded upon this fix; **formal comprehensive
 clean-scan count remains 0/3**. New main requires all four exact-SHA green
 qualification gates and a fresh accepted source download before scan 1 can
 restart; canonical PP, full exact-SHA acceptance and publication are pending.
+
+2026-10-12: Further independent source-extracted semantic inspection of the
+fully green exact-SHA `d4af99789408e9e6d768c272530021de2d3109c3`
+source release (Repository Policy `38291890312`, Bootstrap `38291960729`,
+Project State `38291984060`, Source Release `38292006859`; artifact
+`11766427290`, tar SHA-256
+`9596321e654ba8dbafca591dc48b3c959e398827b393e447cb647d9b3196b577`)
+found a kernel socket ABI defect in `kernel/decnet/decnet_iv_socket.c`:
+a normal sequenced receive marked the returned `msg_flags` as `MSG_OOB`
+whenever an unrelated interrupt was still queued. Linux `recvmsg(2)`
+requires `MSG_OOB` to describe expedited data actually returned in the
+same receive operation; pending interrupts belong in `EPOLLPRI` readiness.
+The new source-extracted compiled regression
+`tests/policy/test_recvmsg_oob_flags.py` supplies simultaneously pending
+normal and interrupt conditions: pre-fix kernel source reports normal flags
+`0x81` (`MSG_EOR | MSG_OOB`) and fails; the corrected source reports
+normal-only `MSG_EOR` and passes with GCC and Clang (strict warnings).
+Corrected `decnet_iv.ko` builds against Linux 6.12.107 amd64 headers.
+The original accepted source is superseded by this repair. The negative
+finding means this is NOT one of the three complete, independent zero-defect
+semantic reviews. **Audit count remains 0/3**. A replacement exact-SHA
+four-gate qualification, fresh artifact and comprehensive scan 1 are required.
+Canonical PP, full acceptance and production publication remain pending.

@@ -1217,12 +1217,10 @@ static int dniv_sock_recvmsg(struct socket *sock, struct msghdr *msg,
     if (flags & MSG_OOB) {
         msg->msg_flags |= MSG_OOB;
     } else {
-        bool normal = false;
-        bool intr = false;
-
+        /* MSG_OOB describes the record returned by recvmsg, not a queued
+         * interrupt belonging to a later independent OOB receive. Pending
+         * interrupt readiness is reported through poll(EPOLLPRI). */
         msg->msg_flags |= MSG_EOR;
-        if (!dniv_nsp_rx_ready(dsk->local_link, &normal, &intr) && intr)
-            msg->msg_flags |= MSG_OOB;
     }
     if (msg->msg_name) {
         memcpy(msg->msg_name, &dsk->peer, sizeof(dsk->peer));

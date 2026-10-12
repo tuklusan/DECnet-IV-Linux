@@ -29,6 +29,7 @@ This catalogue describes the production source release. Lab-only helpers and ind
 - NSP connection establishment and teardown.
 - NSP segmentation/reassembly, sequencing, acknowledgements, retransmission and timers.
 - NSP data flow control, interrupt/out-of-band flow and resource limits.
+- Native DECnet `recvmsg()` reports `MSG_OOB` only when expedited NSP data was actually received. If an interrupt remains queued while a normal record is returned, ordinary record flags stay normal; `poll()`/`EPOLLPRI` separately exposes pending interrupt readiness.
 - Session Control connect/accept/reject behavior and object dispatch.
 - Session Control v1 Connect Initiate input validates reserved menu/version bits and consumes the entire declared access/user-data field payload; malformed prefixes with trailing bytes are rejected rather than dispatched to an application listener.
 - Named Session Control end-user descriptors also require the specified zero object-type octet; conflicting numeric type bytes in named source/destination selectors are rejected.
