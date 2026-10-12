@@ -49,7 +49,7 @@ This catalogue describes the production source release. Lab-only helpers and ind
 ## Management
 
 - `dnctl` local identity/state administration.
-- `ncp` NCP-style local and remote front end. Interactive and piped NCP commands reject embedded NUL bytes in the complete physical input line, preventing an invisible command suffix from being ignored while the visible prefix is executed.
+- `ncp` NCP-style local and remote front end. Interactive and piped NCP commands reject embedded NUL bytes in the complete physical input line, preventing an invisible command suffix from being ignored while the visible prefix is executed. In noninteractive input, a malformed physical command line (embedded NUL or too many tokens) returns a nonzero exit status so scripts cannot report false success.
 - `dnnice` NICE client.
 - `dnnml` NML object 19 server.
 

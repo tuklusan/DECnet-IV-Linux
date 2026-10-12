@@ -317,6 +317,8 @@ int main(int argc, char **argv)
                     "ncp: embedded NUL in command line\n" :
                     "ncp: too many words\n");
             free(line);
+            if (!isatty(STDIN_FILENO))
+                return 2;
             continue;
         }
         if (!nword) {
