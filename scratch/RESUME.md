@@ -2382,3 +2382,25 @@ green exact-SHA qualification runs and freshly download the new source
 artifact before restarting comprehensive scan 1. Canonical PP,
 full-profile exact-SHA acceptance and public production release
 are not complete.
+
+2026-10-12: Exact-SHA requalification issue #1123 for libdnet zero-length
+EOR repair `960f56bc466138b0ffcfbf025da577e5fd0386ff`
+identified a fail-closed policy regression: Build Bootstrap workflow
+`38300582475` failed its `make unit` step on BOTH x86_64 and
+aarch64, because `tests/policy/test_source_release_gate.py` still
+required the old byte-for-byte `dnet_recv` EOR/PEEK conditional
+`if (!(flags & MSG_EOR) || (flags & MSG_PEEK))`, which
+the deliberate zero-length error-preserving fix safely extended
+with `|| !len`. Earlier source-release qualification MUST NOT count
+for that candidate. Correct the policy regression to require the new
+conditional, original single-call MSG_PEEK guarantee, and explicit
+zero-length ENOTCONN / orderly-shutdown selftest. This update passed
+the extracted-tree `python3 tests/policy/test_source_release_gate.py`
+with exit 0; GCC/Clang strict libdnet selftests and complete userspace
+selftests had already passed. Fix tracked on main with both continuity
+files; all new exact-SHA policy/build/state/source-release gates are
+mandatory again. Continue packaged scan 1 only from a *freshly
+downloaded* fully green replacement source artifact. Do not count
+failed Build Bootstrap or an incomplete semantic scan. Official
+zero-defect comprehensive audits **0/3**; canonical PP/full-profile
+acceptance/public production release remain pending.

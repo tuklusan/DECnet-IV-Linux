@@ -1261,7 +1261,7 @@ def main() -> int:
     libdnet_compat = read_text("userspace/libdnet/compat.c")
     libdnet_peek_test = read_text("userspace/libdnet/selftest.c")
     for marker in (
-        'if (!(flags & MSG_EOR) || (flags & MSG_PEEK))',
+        'if (!(flags & MSG_EOR) || (flags & MSG_PEEK) || !len)',
         'return (int)recv(fd, buf, (size_t)len, recv_flags);',
     ):
         if marker not in libdnet_compat:
@@ -1270,7 +1270,10 @@ def main() -> int:
         'static int selftest_eor_peek(void)',
         'MSG_EOR | MSG_PEEK',
         'got != 3 || memcmp(buffer, "abc", 3U)',
-        'if (selftest_eor_peek())',
+        'static int selftest_eor_zero(void)',
+        'errno != ENOTCONN',
+        'shutdown(pair[1], SHUT_WR)',
+        'if (selftest_eor_peek() || selftest_eor_zero())',
     ):
         if marker not in libdnet_peek_test:
             raise SystemExit(f"source-release gate: libdnet PEEK regression test missing: {marker}")
