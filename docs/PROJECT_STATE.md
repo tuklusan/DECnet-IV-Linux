@@ -2371,3 +2371,6 @@ Fresh exact packaged-source semantic scan-1 defect, 2026-10-10 (NOT a clean scan
 
 
 2026-10-12: Accepted packaged-source scan-1 finding on 1d4c837b865d195ce7888f61be266a51b36e218c, Source Release 38104659371 / source artifact 11688829043 / tar SHA256 67f4e2acfe94cb055c12da5dd1e3802a3eba6eb90dc776fe5e4b4833e4bb0f61. In dniv_stream_recv_locked, a partial positive copy_to_iter() had left stream_rx_off unchanged and returned -EFAULT while already modifying the user buffer, making subsequent reads replay delivered bytes. Corrected to count and advance by the actual copy return, with a compiled regression of partial user-copy followed by exact suffix delivery. Existing qualified package is superseded; all exact-SHA gates and freshly downloaded artifact required again. Formal full semantic audit count is 0/3. No PP, full acceptance or publication certified.
+
+
+2026-10-12: Follow-up repository policy run 38256102420 identified missing canonical license header in new tests/policy/test_stream_recv_partial.py. Restored the exact project Python test header from tests/policy/test_session_control_ci.py, without altering receive behavior or relaxing policy. That failed run is NOT acceptance evidence. New main successor requires all four gates fully green and new accepted packaged source download; semantic audit count stays 0/3.
