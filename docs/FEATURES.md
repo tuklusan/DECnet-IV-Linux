@@ -55,7 +55,7 @@ This catalogue describes the production source release. Lab-only helpers and ind
 
 ## Library and compatibility surface
 
-- `libdnet` static/shared libraries, including native connection/receive/EOF helpers.
+- `libdnet` static/shared libraries, including native connection/receive/EOF helpers. The `dnet_recv()` `MSG_EOR` helper forwards zero-length reads to the kernel so disconnected sockets retain their proper error status instead of yielding false success.
 - `/etc/decnet.conf` compatible node database lookup, executor/device lookup, node iteration, object name/number lookup and named-node connection support, with strict bounded physical-line parsing that rejects embedded NULs and overlong records, drains the rejected physical line through newline/EOF, and cannot resynchronize an iterator inside malformed line data.
 - `libdnet_daemon` static/shared helper library with deferred listener, accept/reject, accept-data and daemon-name helpers.
 - `netdnet/dn.h` and `netdnet/dnetdb.h`.

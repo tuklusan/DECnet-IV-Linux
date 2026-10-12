@@ -30,7 +30,7 @@ int dnet_recv(int fd, void *buf, int len, unsigned int flags)
     /* MSG_PEEK must issue one non-consuming receive. Repeating recvmsg()
      * under PEEK replays the same prefix and fabricates additional bytes,
      * especially on a stream with no EOR marker yet. */
-    if (!(flags & MSG_EOR) || (flags & MSG_PEEK))
+    if (!(flags & MSG_EOR) || (flags & MSG_PEEK) || !len)
         return (int)recv(fd, buf, (size_t)len, recv_flags);
 
     {

@@ -48,6 +48,34 @@ done:
     return rc;
 }
 
+/* Even a zero-sized EOR receive must reach the kernel: otherwise an
+ * unconnected socket falsely appears readable/successful. */
+static int selftest_eor_zero(void)
+{
+    int fd = socket(AF_UNIX, SOCK_SEQPACKET, 0);
+    int pair[2] = { -1, -1 };
+    int rc = -1;
+
+    if (fd < 0)
+        return -1;
+    errno = 0;
+    if (dnet_recv(fd, NULL, 0, MSG_EOR) != -1 || errno != ENOTCONN)
+        goto done;
+    if (socketpair(AF_UNIX, SOCK_SEQPACKET, 0, pair))
+        goto done;
+    if (shutdown(pair[1], SHUT_WR) ||
+        dnet_recv(pair[0], NULL, 0, MSG_EOR) != 0)
+        goto done;
+    rc = 0;
+done:
+    close(fd);
+    if (pair[0] >= 0)
+        close(pair[0]);
+    if (pair[1] >= 0)
+        close(pair[1]);
+    return rc;
+}
+
 int main(void)
 {
     struct dn_naddr addr;
@@ -109,7 +137,7 @@ int main(void)
     if (dnet_conn("31.71", "OBJECT-NAME-TOO-LONG", SOCK_SEQPACKET,
                   NULL, 0, NULL, NULL) != -1 || errno != ENAMETOOLONG)
         return 1;
-    if (selftest_eor_peek())
+    if (selftest_eor_peek() || selftest_eor_zero())
         return 1;
     puts("libdnet selftest passed");
     return 0;

@@ -2354,3 +2354,31 @@ finding means this is NOT one of the three complete, independent zero-defect
 semantic reviews. **Audit count remains 0/3**. A replacement exact-SHA
 four-gate qualification, fresh artifact and comprehensive scan 1 are required.
 Canonical PP, full acceptance and production publication remain pending.
+
+2026-10-12: Packaged-source semantic scan 1 of accepted
+`4a2ec48f9afab83d3b797bb2330e27fbb3b17ea2` (four green exact-SHA
+qualification runs `38294916203`, `38294984123`, `38295005172`,
+`38295029851`; freshly downloaded source artifact `11767686890`,
+tar SHA-256 `fc8039654078dcf0136f55d902703a656db84c7b4a3844a00343eabf1c3104b8`)
+found another library socket semantic defect. In
+`userspace/libdnet/compat.c`, `dnet_recv(fd, NULL, 0, MSG_EOR)`
+returned success immediately without invoking `recv`, even on a
+never-connected socket; the corresponding native zero-length read
+reports `ENOTCONN`. The source-extracted, locally compiled
+`userspace/libdnet/selftest.c` regression fails against unchanged
+packaged `compat.c` (exit 1), and passes corrected code with GCC
+and Clang under `-Wall -Wextra -Werror`. The regression also checks
+zero-length successful receive after an AF_UNIX peer shutdown.
+A corrected extracted-source `make -j4 userspace` and embedded
+application selftests passed. The earlier `make -j4 unit` on the
+pre-fix archive passed early tests but timed out before a complete
+suite verdict, which must not be misreported as success.
+Correct `dnet_recv` by forwarding len=0 to the kernel (including
+`MSG_EOR`), preserve the regression and feature documentation,
+and atomically commit with both continuity files. This source-audit
+finding supersedes the prior artifact; **formal clean semantic
+audit count remains 0/3**. After the main commit, require four fresh
+green exact-SHA qualification runs and freshly download the new source
+artifact before restarting comprehensive scan 1. Canonical PP,
+full-profile exact-SHA acceptance and public production release
+are not complete.
