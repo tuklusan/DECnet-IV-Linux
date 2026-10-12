@@ -2464,3 +2464,38 @@ Obtain new exact-SHA four-gate acceptance and freshly download that
 specific newly accepted source archive before restarting scan 1.
 Formal full semantic audit count **0/3**; canonical PP requalification,
 full final acceptance and independent publication verification pending.
+
+2026-10-12 fail-closed handover (next packaged-source defect): accepted
+main `3104bbad1c5bc8dce7c49cecbf0a3f3804b824ed` fully qualified by
+Repository Policy `38314779324`, Build Bootstrap `38314840184`
+(x86_64 and aarch64 green), Project State Gate `38314860768`,
+Source Release Reproducibility `38314882998` (all applicable jobs
+green). Artifact `11776681422`; three independent fresh downloads
+had identical ZIP SHA-256
+`7e613168b27e6d39200db4ff2e184b1d48eb0a67635856a769d243e163f10352`
+and tar `DECnet-IV-Linux-1.0.0.tar.xz` SHA-256
+`ffc84fccd90ce987e29501ae901fed2d243e2a951f5649e51d77174ddd498960`.
+Checksum and SOURCE-METADATA correct, 303 safe entries/260 regular
+source files, 69,431 lines. Semantic manual HTTP review found that
+`dnhttpd` accepted `GET / HTTP/1.0\r\n\r\nHIDDEN\r\n\r\n`
+and concatenated second GET in a single DECnet record as valid GET
+because only the terminal CRLFCRLF was checked. Actual original
+compiled source confirms accepted hidden/second request. Correct
+`parse_request_line` by requiring FIRST CRLFCRLF to occur only at the
+end; permanent `tests/policy/test_dnhttpd_early_terminator.py`
+direct-compiled regression fails original source (exit 3), passes
+corrected source GCC/Clang strict, includes overlapping CRLFCRLF.
+Built-in socketpair negative selftest now checks HTTP 400 for
+concatenated/hidden requests; `make -C userspace/dnhttpd check` green.
+Complete corrected-source `make -j4 unit` exit 0. Changed code,
+regression, FEATURES, PROJECT_STATE and RESUME together in atomic
+main commit. On resume, first VERIFY live main, commit/tree and
+correct workflow/issue IDs (never assume they ran). The old fully
+accepted tar is now SUPERSEDED by new source bytes. Request fresh
+targeted source-release qualification, verify four green exact-SHA
+gates and freshly download replacement artifact before starting
+semantic scan 1 again. Owner-required complete manual semantic audit
+count **0/3**; PP canonical reproof, final full PROFILE=full
+SCOPE=all acceptance, publication, public independent verification
+NOT achieved. Do not count machine traversal or partial semantic
+review as 1/3, and do not fake owner audit certificates.

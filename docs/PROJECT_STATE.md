@@ -2576,3 +2576,41 @@ replacement artifact before restarting manual packaged audit 1. Formal
 complete zero-defect semantic reviews remain **0/3**, and final-SHA
 canonical PP, full PROFILE=full/SCOPE=all acceptance and production
 publication are NOT complete or authorized.
+
+2026-10-12: New independent fresh packaged-source semantic review of exact
+fully qualified `3104bbad1c5bc8dce7c49cecbf0a3f3804b824ed`, source release
+workflow `38314882998`, artifact `11776681422`, tar
+`DECnet-IV-Linux-1.0.0.tar.xz` SHA-256
+`ffc84fccd90ce987e29501ae901fed2d243e2a951f5649e51d77174ddd498960`
+found an actual HTTP framing security/correctness error in packaged
+`userspace/dnhttpd/dnhttpd.c`: `parse_request_line` only required that
+the last four bytes equal CRLFCRLF, so it accepted a previously completed
+GET followed by `HIDDEN\r\n\r\n` or a complete second GET ending in
+another CRLFCRLF. The source contract expressly rejects post-header
+bytes and permits one DECnet request per record. Direct actual-source
+GCC reproducer: valid=0, hidden=0, concatenated=0; false acceptance is
+reproducible on accepted bytes. A new independent compiled
+`tests/policy/test_dnhttpd_early_terminator.py` fails original archive
+(exit 3) and passes corrected source under GCC and Clang with
+`-Wall -Wextra -Werror`; its checks include valid GET with/without
+headers and three invalid trailing/smuggling layouts including
+overlapping terminators. Fixed parser requires the FIRST header
+terminator to be exactly the final four bytes, rejecting hidden content.
+Expanded `dnhttpd --selftest` exercises actual socketpair 400 responses
+for concatenated and hidden requests; `make -C userspace/dnhttpd check`
+passed. Full local corrected-source `make -j4 unit` finished exit 0.
+Three separate fresh source-artifact downloads each independently
+verified identical ZIP SHA-256
+`7e613168b27e6d39200db4ff2e184b1d48eb0a67635856a769d243e163f10352`,
+same tar hash, checksum, SOURCE-METADATA, safe 303-member extraction
+with 260 regular files and 69,431 lines; these inventory traversals
+are *not* comprehensive manual reviews, and the found defect makes
+the old source release unfit for promotion. Commit HTTP fix,
+permanent policy regression, FEATURES and both continuity records
+atomically directly on main. Requalify new exact SHA with green
+Repository Policy, Build Bootstrap x86_64/aarch64, Project State Gate,
+Source Release Reproducibility; only after successful qualification
+freshly download the replacement packaged artifact and restart
+three complete independent line-by-line semantic reviews. Formal
+clean audits **0/3**; final-SHA canonical PP, full acceptance,
+public production release and independent verification remain pending.

@@ -154,6 +154,12 @@ static int parse_request_line(const unsigned char *request, size_t length,
     if (!newline || newline == request || newline[-1] != '\r' ||
         length < 4U || memcmp(request + length - 4U, "\r\n\r\n", 4U))
         return -1;
+    /* An earlier CRLFCRLF ends the first request. Reject anything after
+     * that terminator, even when the record ends in another CRLFCRLF.
+     * One DECnet record carries exactly one HTTP request. */
+    if (memmem(request, length, "\r\n\r\n", 4U) !=
+        request + length - 4U)
+        return -1;
     for (i = 0; i < length; i++) {
         if (!request[i] || (request[i] == '\n' &&
             (!i || request[i - 1U] != '\r')) ||
@@ -351,6 +357,11 @@ static int selftest(void)
         static const unsigned char missing_blank[] = "GET / HTTP/1.0\r\n";
         static const unsigned char trailing_bytes[] =
             "GET / HTTP/1.0\r\n\r\nEXTRA";
+        static const unsigned char trailing_complete_header[] =
+            "GET / HTTP/1.0\r\n\r\nHIDDEN\r\n\r\n";
+        static const unsigned char trailing_second_request[] =
+            "GET / HTTP/1.0\r\nHost: DNIV\r\n\r\n"
+            "GET /private HTTP/1.0\r\n\r\n";
         static const unsigned char valid[] =
             "GET / HTTP/1.1\r\nHost: DNIV\r\n\r\n";
 
@@ -363,6 +374,10 @@ static int selftest(void)
                                  sizeof(missing_blank) - 1U) ||
             selftest_bad_request(directory, trailing_bytes,
                                  sizeof(trailing_bytes) - 1U) ||
+            selftest_bad_request(directory, trailing_complete_header,
+                                 sizeof(trailing_complete_header) - 1U) ||
+            selftest_bad_request(directory, trailing_second_request,
+                                 sizeof(trailing_second_request) - 1U) ||
             selftest_bad_request(directory, hidden_nul,
                                  sizeof(hidden_nul)) ||
             selftest_bad_request(directory, invalid_version,
