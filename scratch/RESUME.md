@@ -2526,3 +2526,35 @@ Previous per-file reviews remain historical findings, never count as
 clean audit of changed archive. Owner-required complete semantic
 audits **0/3**, canonical PP, full PROFILE=full SCOPE=all and
 independent release publication verification still pending.
+
+2026-10-12: New exact-SHA qualification after PP-11 S2 dispatcher repair
+was fail-closed by a genuine GitHub-hosted Ubuntu 24.04 arm64 package
+repository mismatch, not candidate compile. Build Bootstrap
+`38319939005`, arm64 job `115045338590` failed before compilation:
+APT `linux-headers-generic` required versioned
+`linux-headers-6.8.0-147-generic` absent from published arm64 indexes
+(exit 100); retry attempt 2 also failed. Exact source release
+`38319969929` arm64 extracted-source validation job `115045654164`
+failed at identical APT prerequisite; no accepted source artifact
+may be claimed. Ubuntu package indexes currently show arm64
+6.8.0-146 generic headers available and newer 147 meta temporarily
+ahead of its matching header dependency.
+For robust CI without weakening real kernel compilation, add
+`tools/install-ci-kernel-headers.sh`: first attempt meta package,
+otherwise enumerate generic versioned package names, sort newest
+first, use APT simulated install to require a satisfiable COMPLETE
+header package, install that exact selected package; exit error if
+none works. Wire BOTH Build Bootstrap and both Source Release
+header-install sites to it, leaving downstream KDIR/matching-header
+build checks intact. Add `tests/policy/test_ci_header_fallback.py`
+with fake APT/SUDO to prove unavailable newest fallback to an
+installable older complete version and no-headers hard failure.
+This changes packaged source bytes; commit all changes atomically
+with PROJECT_STATE and RESUME, re-run all four exact-SHA gates,
+freshly download final accepted archive before new semantic
+review pass 1. Old accepted source SHA
+`bfdba887ecdb2a10172764838c136e1e09d45a60` and its review
+ledger #1131 are historical only. Semantic audit certification
+remains **0/3**; canonical PP/full acceptance/public production
+release remain blocked. Issue #1132 documents original failed
+qualification and must NOT be counted green.

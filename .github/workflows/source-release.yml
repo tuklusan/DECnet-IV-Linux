@@ -61,7 +61,8 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get -o Acquire::Retries=3 update
-          sudo apt-get -o Acquire::Retries=3 install -y build-essential linux-headers-generic python3 kmod xz-utils
+          sudo apt-get -o Acquire::Retries=3 install -y build-essential python3 kmod xz-utils
+          bash tools/install-ci-kernel-headers.sh
           KDIR=$(find /usr/src -maxdepth 1 -type d -name 'linux-headers-*-generic' | sort -V | tail -1)
           test -n "$KDIR"
           KERNEL_RELEASE=$(basename "$KDIR")
@@ -574,7 +575,8 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get -o Acquire::Retries=3 update
-          sudo apt-get -o Acquire::Retries=3 install -y build-essential linux-headers-generic python3 kmod xz-utils
+          sudo apt-get -o Acquire::Retries=3 install -y build-essential python3 kmod xz-utils
+          bash tools/install-ci-kernel-headers.sh
           KDIR=$(find /usr/src -maxdepth 1 -type d -name 'linux-headers-*-generic' | sort -V | tail -1)
           test -n "$KDIR"
           KERNEL_RELEASE=$(basename "$KDIR")
