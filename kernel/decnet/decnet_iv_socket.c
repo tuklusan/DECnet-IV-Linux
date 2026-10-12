@@ -1033,12 +1033,15 @@ static int dniv_stream_recv_locked(struct socket *sock,
 
         available = dsk->stream_rx_len - dsk->stream_rx_off;
         chunk = min_t(size_t, size - copied, available);
-        if (chunk &&
-            copy_to_iter(dsk->stream_rx + dsk->stream_rx_off, chunk,
-                         &msg->msg_iter) != chunk)
-            return copied ? (int)copied : -EFAULT;
-        dsk->stream_rx_off += chunk;
-        copied += chunk;
+        if (chunk) {
+            size_t moved = copy_to_iter(dsk->stream_rx + dsk->stream_rx_off,
+                                        chunk, &msg->msg_iter);
+
+            dsk->stream_rx_off += moved;
+            copied += moved;
+            if (moved != chunk)
+                return copied ? (int)copied : -EFAULT;
+        }
 
         if (!(flags & MSG_WAITALL))
             break;
