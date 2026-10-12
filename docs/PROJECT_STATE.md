@@ -2386,3 +2386,28 @@ Fresh exact packaged-source semantic scan-1 defect, 2026-10-10 (NOT a clean scan
 
 
 2026-10-12: Accepted packaged source d7f3dc144c269f71104d44dbb7e275fcf4cf14cd (Source Release 38281032335, fresh artifact 11760643810, tar SHA256 cd549bcb7e15642d6f1d4785d900b1c75ca22428b4e9db32d6708d6d0aa450a7) revealed that native stream poll omitted already buffered partial-read bytes after the NSP queue was drained, also hiding pending bytes when the link disconnected. Corrected poll tests the socket-private stream buffer and reports readability alongside terminal HUP. Exact-source function regression failed on prior bytes, passes candidate under GCC/Clang -Werror and checks native Linux SOCK_STREAM short-read readiness and positive/negative link states. Kernel module compiled with Linux 6.12 headers; complete local make unit is green. This finding supersedes the former accepted archive: formal comprehensive clean audits remain 0/3. Re-run all four exact-SHA qualification gates and download a new artifact before comprehensive scan 1. PP/full acceptance/publication pending.
+
+
+2026-10-12: Fresh exact-SHA packaged-source audit continuation from fully accepted
+`9c7743c381118786f1326c001aa2435df31c3180`: Repository Policy
+`38282786174`, Build Bootstrap `38282873351` (x86_64/aarch64), Project State
+Gate `38282892720`, Source Release Reproducibility `38282929130` fully green.
+Re-downloaded artifact `11761877731`, ZIP SHA-256
+`72b861cec1c32bd8173b200b5dd47f315bd7ef61612872c20b7175db01bf80b5`,
+archive `DECnet-IV-Linux-1.0.0.tar.xz` SHA-256
+`51902ce49ac8e4134dddf4b7648446b8c8cfc2cc118f6b64d6377d65cd0677be`;
+packaged checksum and source metadata match. A new semantic gap in shipped
+`userspace/dnping/dnping.c` was identified: the `-w` option overrides
+`SO_RCVTIMEO` only, while `dnet_conn` preconfigures a fixed 60-second
+`SO_SNDTIMEO`, so a blocked probe send can overrun the caller's requested
+one/two-second socket-operation timeout. Source-extracted AF_UNIX SOCK_SEQPACKET
+regression `tests/policy/test_dnping_send_timeout.py` compiles actual `dnping.c`
+and checks real per-socket transmit/receive options, failing the untouched
+accepted package (exit 62) and passing the correction with GCC and Clang
+`-Wall -Wextra -Werror`. `make userspace` (including selftests),
+`test_source_release_gate.py`, and canonical license-header checks passed
+locally. This is a defect-finding partial review, NOT a complete clean audit.
+The original artifact is superseded upon this fix; **formal comprehensive
+clean-scan count remains 0/3**. New main requires all four exact-SHA green
+qualification gates and a fresh accepted source download before scan 1 can
+restart; canonical PP, full exact-SHA acceptance and publication are pending.

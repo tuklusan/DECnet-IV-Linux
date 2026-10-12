@@ -186,6 +186,8 @@ int main(int argc, char **argv)
     {
         struct timeval timeout = { timeout_sec, 0 };
         if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO,
+                       &timeout, sizeof(timeout)) ||
+            setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO,
                        &timeout, sizeof(timeout))) {
             if (!quiet)
                 perror("dnping: timeout");

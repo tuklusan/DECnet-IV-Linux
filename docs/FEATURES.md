@@ -63,7 +63,7 @@ This catalogue describes the production source release. Lab-only helpers and ind
 ## Applications
 
 - `dnlogin` / `sethost` CTERM/Foundation remote terminal client with Session access-data support and interactive terminal read/write control.
-- `dnping` MIRROR-based connectivity probe with bounded count, frame-size, interval and timeout controls plus packet/round-trip statistics.
+- `dnping` MIRROR-based connectivity probe with bounded count, frame-size, interval and timeout controls plus packet/round-trip statistics. The `-w` socket timeout applies to both transmit and receive stalls rather than allowing the inherited connection send timeout to override the configured probe timeout.
 - `dnmirror` MIRROR utility.
 - `dnobject` named/numbered object client.
 - `dntask` task/object client.
