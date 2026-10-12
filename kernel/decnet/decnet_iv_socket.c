@@ -1246,8 +1246,11 @@ static __poll_t dniv_sock_poll(struct file *file, struct socket *sock,
     struct dniv_nsp_conn_snapshot snapshot;
     bool normal = false;
     bool intr = false;
+    bool buffered;
     __poll_t mask = 0;
 
+    buffered = sock->type == SOCK_STREAM &&
+               READ_ONCE(dsk->stream_rx_off) < READ_ONCE(dsk->stream_rx_len);
     poll_wait(file, &dniv_sock_waitq, wait);
     if (READ_ONCE(dsk->listening)) {
         if (READ_ONCE(dsk->pending_count))
@@ -1264,13 +1267,16 @@ static __poll_t dniv_sock_poll(struct file *file, struct socket *sock,
                 snapshot.retransmit_count, DNIV_NSP_MAX_WINDOW,
                 DNIV_NSP_MAX_RETRANSMIT))
             mask |= EPOLLOUT | EPOLLWRNORM;
-        if (!dniv_nsp_rx_ready(dsk->local_link, &normal, &intr) && normal)
+        if ((!dniv_nsp_rx_ready(dsk->local_link, &normal, &intr) && normal) ||
+            buffered)
             mask |= EPOLLIN | EPOLLRDNORM;
         if (intr)
             mask |= EPOLLPRI | EPOLLRDBAND;
     } else if (snapshot.state == DNIV_NSP_ST_DI ||
                snapshot.state == DNIV_NSP_ST_CLOSED) {
         mask |= EPOLLHUP;
+        if (buffered)
+            mask |= EPOLLIN | EPOLLRDNORM;
         if (snapshot.state == DNIV_NSP_ST_CLOSED &&
             snapshot.disconnect_reason == DNIV_NSP_REASON_NODE_UNREACHABLE)
             mask |= EPOLLERR;

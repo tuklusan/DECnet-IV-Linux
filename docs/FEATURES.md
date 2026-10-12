@@ -124,4 +124,5 @@ A historical DECnet feature is not implicitly claimed merely because the project
 
 - DAP/FAL GET of ordinary fixed or stream data also works on filesystems without user extended-attribute support; a missing or unsupported private record-framing marker still rejects ambiguous VAR/VFC record downloads rather than fabricating record boundaries.
 
+- A stream poll checks unread bytes held in the socket's partial-read buffer, preserving readability after a short receive and during orderly closure.
 - Native `SOCK_STREAM` receives consume valid zero-length NSP DATA records without reporting false end-of-stream. Ordinary peer disconnection remains the only normal EOF condition; a nonblocking stream read after a zero-length record reports EAGAIN while the connection remains open.
