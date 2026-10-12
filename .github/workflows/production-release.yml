@@ -192,8 +192,9 @@ jobs:
                   raise SystemExit("production-release: packaged-source audit certifications are not ordered 1/3, 2/3, 3/3")
               if audit_sha != source_sha:
                   raise SystemExit("production-release: packaged-source audit certification SHA mismatch")
-              if source_run != values["SOURCE_RELEASE"]:
-                  raise SystemExit("production-release: packaged-source audit source-release run mismatch")
+              # Audits MUST precede final full acceptance, so the fully qualified
+              # audited source run is a different run from the full-profile
+              # source gate. Their exact source SHA and tar bytes must match.
               if tarball != f"DECnet-IV-Linux-{version}.tar.xz":
                   raise SystemExit("production-release: packaged-source audit tarball name mismatch")
               this_common = (source_run, artifact_id, tarball, tar_sha)
@@ -279,16 +280,40 @@ jobs:
         run: |
           set -euo pipefail
           source "$DNIV_RELEASE_EVIDENCE/run-ids.env"
-          artifact_name="decnet-iv-linux-source-$SOURCE_RELEASE_RUN_ID-$SOURCE_RELEASE_ATTEMPT"
           source "$DNIV_RELEASE_EVIDENCE/audit.env"
+          [[ "$AUDIT_SOURCE_RELEASE_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$AUDIT_ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
+          audit_run_json=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$AUDIT_SOURCE_RELEASE_RUN_ID")
+          printf '%s\n' "$audit_run_json" | jq -e --arg sha "$SOURCE_SHA" \
+            '.head_sha == $sha and .head_branch == "main" and .event == "workflow_dispatch" and
+             .path == ".github/workflows/source-release.yml" and
+             .status == "completed" and .conclusion == "success"' >/dev/null
+          audit_attempt=$(printf '%s\n' "$audit_run_json" | jq -r '.run_attempt')
+          [[ "$audit_attempt" =~ ^[1-9][0-9]*$ ]]
+          audited_name="decnet-iv-linux-source-$AUDIT_SOURCE_RELEASE_RUN_ID-$audit_attempt"
           artifact_json=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$AUDIT_ARTIFACT_ID")
           printf '%s\n' "$artifact_json" | jq -e \
-            --arg name "$artifact_name" --argjson run "$SOURCE_RELEASE_RUN_ID" \
+            --arg name "$audited_name" --argjson run "$AUDIT_SOURCE_RELEASE_RUN_ID" \
             '.name == $name and .expired == false and .workflow_run.id == $run' >/dev/null
           release_dir="$DNIV_RELEASE_EVIDENCE/release"
-          mkdir -p "$release_dir"
+          full_dir="$DNIV_RELEASE_EVIDENCE/full-acceptance-source"
+          mkdir -p "$release_dir" "$full_dir"
+          gh run download "$AUDIT_SOURCE_RELEASE_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name "$audited_name" --dir "$release_dir"
+
+          # The later final-full acceptance runs a *different* source-release
+          # workflow. Check it independently, then compare BOTH actual packaged
+          # asset files byte-for-byte to the earlier three-times-audited source.
+          full_name="decnet-iv-linux-source-$SOURCE_RELEASE_RUN_ID-$SOURCE_RELEASE_ATTEMPT"
           gh run download "$SOURCE_RELEASE_RUN_ID" --repo "$GITHUB_REPOSITORY" \
-            --name "$artifact_name" --dir "$release_dir"
+            --name "$full_name" --dir "$full_dir"
+          versioned="DECnet-IV-Linux-$VERSION.tar.xz"
+          for suffix in '' .sha256; do
+            test -s "$release_dir/$versioned$suffix"
+            test -s "$full_dir/$versioned$suffix"
+            cmp "$release_dir/$versioned$suffix" "$full_dir/$versioned$suffix"
+          done
+          test "$(cat "$full_dir/archive-name.txt")" = "$versioned"
 
           archive="$release_dir/DECnet-IV-Linux-$VERSION.tar.xz"
           checksum="$archive.sha256"
@@ -320,15 +345,15 @@ jobs:
           printf 'SOURCE_RELEASE_SHA256=%s\n' "$archive_sha" >>"$GITHUB_ENV"
           {
             printf 'source_sha=%s\n' "$SOURCE_SHA"
-            printf 'source_run_id=%s\n' "$SOURCE_RELEASE_RUN_ID"
-            printf 'source_attempt=%s\n' "$SOURCE_RELEASE_ATTEMPT"
+            printf 'source_run_id=%s\n' "$AUDIT_SOURCE_RELEASE_RUN_ID"
+            printf 'source_attempt=%s\n' "$audit_attempt"
             printf 'source_artifact_id=%s\n' "$AUDIT_ARTIFACT_ID"
             printf 'version=%s\n' "$VERSION"
             printf 'tar_sha=%s\n' "$archive_sha"
           } >>"$GITHUB_OUTPUT"
           printf 'source_sha=%s\nversion=%s\narchive=%s\nsha256=%s\nacceptance_issue=%s\naudit_issue=%s\nsource_release_run=%s\nsource_release_attempt=%s\n' \
             "$SOURCE_SHA" "$VERSION" "$(basename "$archive")" "$archive_sha" "$ACCEPTANCE_ISSUE" "$AUDIT_ISSUE" \
-            "$SOURCE_RELEASE_RUN_ID" "$SOURCE_RELEASE_ATTEMPT" \
+            "$AUDIT_SOURCE_RELEASE_RUN_ID" "$audit_attempt" \
             >"$DNIV_RELEASE_EVIDENCE/release-manifest.txt"
 
       - name: Build release notes

@@ -2691,3 +2691,36 @@ green individual jobs. Re-run all four exact-SHA gates for new SHA,
 and fresh-download its fully accepted source archive. Formal
 semantic review 0/3, PP/final full acceptance/production publication
 still blocked pending subsequent independently complete reviews.
+
+2026-10-12: Fixed-order semantic review of accepted packaged source
+`5ddc3e5ed6f4770ba63673d1e8199edc4cbfbc93` (artifact
+`11779191193`, tar SHA256
+`7f90ad24589ebd5e5575a89cc1e9290f4deeaeca26ce379c602c1653d4556265`)
+found a release-publication dependency-cycle defect in packaged
+`.github/workflows/production-release.yml`. Publication required
+owner's three completed audits of the source artifact to have
+`SOURCE_RELEASE_RUN_ID` **equal** to the final full-profile
+acceptance child `SOURCE_RELEASE` run. But contract phases mandate
+three independent fully-qualified packaged reviews FIRST and only
+THEN a distinct final full-profile acceptance dispatcher. Different
+workflow run IDs are unavoidable even for identical unchanged
+source/archive bytes; thus no compliant release could pass.
+Correct production gate to verify audit-certified source-release
+workflow is completed SUCCESS on SAME exact main SHA, with pinned
+artifact ID/name and attempt, then independently download the
+final-full source-release artifact and compare full archived tarball
+AND its checksum file byte-for-byte to the independently audited
+source. Publish the original audited archive unchanged, not
+the later run's repacked material. Ensure public verification reads
+audit-qualified source run ID+attempt returned as output. Keep all
+three owner certification requirements and SHA-locked acceptance
+child checking. Add `tests/policy/test_production_audit_full_run_identity.py`
+exercising independent success/fail byte comparisons and source
+workflow contract. Review actual packaged-source bytes and
+source-bearing docs separately. Commit workflow, regression and both
+continuity documents atomically. Since payload changes, clean audit
+count remains **0/3**, previous 10/264 partial file observations
+historical only. Require freshly green exact-SHA all-arch gates and
+fresh accepted source artifact before restart.
+Canonical PP requalification, final full PROFILE=full SCOPE=all and
+independently verified public release still pending.
