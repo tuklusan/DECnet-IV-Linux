@@ -2515,3 +2515,33 @@ partial review, not a complete clean semantic audit.
 Requalify the new exact main SHA through all four mandatory gates
 and fresh accepted artifact before restarting scan 1. Canonical
 PP, full exact-SHA acceptance and public release remain pending.
+
+2026-10-12: Continuing the mandatory semantic review of a second fresh
+download of accepted packaged source SHA
+`42bfe3f4048b1331dee98d6d7229276eeac82a6e`
+(source artifact `11771640442`, source-release run `38301664030`,
+tar SHA256 `bb7364fe27ee4b91258f8870727ebd2351848873063477fde8082c071b99f997`,
+ZIP SHA256 `1927b6eb0a1545b78aadf139ba1872f9303209d036fcd4e452a12a68fe1ca850`)
+found another concrete security/semantic defect. `ncp` command-mode
+`getline()` returned physical lines containing embedded NUL bytes,
+but `split_line()` used `strtok_r` and silently executed a
+shorter valid command prefix before the NUL, discarding hidden suffix.
+Direct test against the ACCEPTED packaged `ncp.c` with
+`help\0zero executor\n` printed ordinary help and returned
+0 rather than rejecting the malformed physical input. Added strict
+byte-length validation before tokenization, dedicated error reporting,
+a built-in selftest and independent compiled policy regression
+`tests/policy/test_ncp_embedded_nul.py` checking NUL in HELP and
+QUIT lines plus ordinary valid command handling. Prior extracted
+source fails the new regression; corrected C passes both GCC and
+Clang with `-Wall -Wextra -Werror`.
+The source archive is superseded by this fix even though its
+complete independent extracted-source `make -j4 unit` passed
+(exit 0), because test success is not comprehensive semantic proof.
+Commit the NCP fix, regression and feature documentation atomically
+with both continuity files to main. Obtain four NEW fully green
+exact-SHA source acceptance gates and freshly download replacement
+artifact before beginning comprehensive semantic scan 1.
+**Formal zero-defect complete audit count remains 0/3**.
+The canonical final-SHA PP requalification, full PROFILE=full/SCOPE=all
+acceptance, and public production release are NOT yet authorized.

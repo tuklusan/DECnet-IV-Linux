@@ -213,6 +213,15 @@ static int split_line(char *line, char **word)
     return n;
 }
 
+/* getline() returns the physical byte length, which can include embedded
+ * NULs.  Never dispatch only the visible prefix as a complete NCP command. */
+static int parse_input_line(char *line, size_t len, char **words)
+{
+    if (memchr(line, '\0', len))
+        return -2;
+    return split_line(line, words);
+}
+
 static int selftest(void)
 {
     struct ncp_plan p;
@@ -221,6 +230,8 @@ static int selftest(void)
     char *a3[] = { "show", "adjacent", "nodes" };
     char *a4[] = { "show", "active", "circuits", "counters" };
     char *bad[] = { "show", "adjacent", "circuits" };
+    char hidden[] = "help\0zero executor\n";
+    char *words[NCP_MAX_WORDS];
 
     if (build_plan(a1, 2, "31.70", &p) || p.argc != 3 ||
         strcmp(p.argv[1], "31.70") || strcmp(p.argv[2], "summary"))
@@ -235,7 +246,8 @@ static int selftest(void)
     if (build_plan(a4, 4, "31.70", &p) || strcmp(p.argv[2], "circuits") ||
         strcmp(p.argv[4], "counters"))
         return 1;
-    if (!build_plan(bad, 3, "31.70", &p))
+    if (!build_plan(bad, 3, "31.70", &p) ||
+        parse_input_line(hidden, sizeof(hidden) - 1U, words) != -2)
         return 1;
     puts("ncp parser selftest passed");
     return 0;
@@ -299,9 +311,11 @@ int main(int argc, char **argv)
             free(line);
             break;
         }
-        nword = split_line(line, word);
+        nword = parse_input_line(line, (size_t)got, word);
         if (nword < 0) {
-            fprintf(stderr, "ncp: too many words\n");
+            fprintf(stderr, nword == -2 ?
+                    "ncp: embedded NUL in command line\n" :
+                    "ncp: too many words\n");
             free(line);
             continue;
         }
