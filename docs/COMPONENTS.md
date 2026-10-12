@@ -114,6 +114,7 @@ The default installed library layout also includes the compatibility links `libd
 | `install.sh` | Manifested staged/live installation. |
 | `uninstall.sh` | Manifest-validated removal and cache refresh. |
 | `tools/build-source-release.sh` | Reproducible source-tarball constructor and generated/binary-payload guard. |
+| `tools/install-ci-kernel-headers.sh` | CI-only fail-closed complete generic-header installer that tolerates versioned Ubuntu mirror skew without skipping kernel module compilation. |
 | `tools/integrity_scan.py` | Exact-tree integrity baseline/verification. |
 | `tools/evidence_guard.py` | Acceptance evidence preflight, manifesting and verification. |
 | `tools/scratch_state.py` | Acceptance scratch-state lineage and result tracking. |

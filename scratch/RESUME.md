@@ -2558,3 +2558,21 @@ ledger #1131 are historical only. Semantic audit certification
 remains **0/3**; canonical PP/full acceptance/public production
 release remain blocked. Issue #1132 documents original failed
 qualification and must NOT be counted green.
+
+2026-10-12: Exact source SHA `6dafe55ffd4bba203d0bceffe8f2c998a6f4a259`
+qualified Repository Policy but Build Bootstrap `38320421529`
+failed on BOTH architectures at `make unit`, specifically the
+fail-closed source-release policy:
+`source-release gate: undocumented release/support tool:
+install-ci-kernel-headers.sh`. This was caused by adding a CI helper
+without documenting its shipped source-tree role in
+`docs/COMPONENTS.md`; policy correctly refused a false-green source.
+The new `test_pp11_s2_dispatch_newline.py` passed in the same logs.
+Fix solely by adding truthful `tools/install-ci-kernel-headers.sh`
+entry to docs/COMPONENTS.md, and updating both continuity documents
+in one atomic main commit. Do not disable the component manifest guard.
+Old qualifying issue #1133 is non-qualifying, despite preliminary
+green individual jobs. Re-run all four exact-SHA gates for new SHA,
+and fresh-download its fully accepted source archive. Formal
+semantic review 0/3, PP/final full acceptance/production publication
+still blocked pending subsequent independently complete reviews.
