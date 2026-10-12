@@ -938,22 +938,25 @@ int dniv_nsp_rx_ready(__u16 local_link, bool *normal, bool *interrupt)
             *interrupt = true;
             continue;
         }
+        /* Normal readiness may already be known, but the same queue can
+         * contain later independent NSP interrupt records.  Do not stop
+         * scanning before reporting expedited readiness as well. */
         if (entry->channel != DNIV_NSP_CH_DATA ||
-            entry->type != DNIV_NSP_DATA)
+            entry->type != DNIV_NSP_DATA || *normal)
             continue;
         if (!started) {
             if (!entry->bom) {
                 *normal = true;
-                break;
+                continue;
             }
             started = true;
         } else if (entry->bom) {
             *normal = true;
-            break;
+            continue;
         }
         if (entry->eom) {
             *normal = true;
-            break;
+            continue;
         }
     }
 

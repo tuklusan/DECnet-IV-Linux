@@ -2484,3 +2484,34 @@ downloaded* fully green replacement source artifact. Do not count
 failed Build Bootstrap or an incomplete semantic scan. Official
 zero-defect comprehensive audits **0/3**; canonical PP/full-profile
 acceptance/public production release remain pending.
+
+2026-10-12: Independent packaged-source semantic review on the most
+recent fully accepted source bytes `4a2ec48f9afab83d3b797bb2330e27fbb3b17ea2`
+(artifact `11767686890`, tar SHA256
+`fc8039654078dcf0136f55d902703a656db84c7b4a3844a00343eabf1c3104b8`)
+found another native NSP readiness defect also present in the
+unchanged `decnet_iv_nsp.c` blob of subsequent main
+`979c4ca0c3f698c5070c81f667fddab3eb98d9da`.
+`dniv_nsp_rx_ready()` stopped scanning its global ready queue
+as soon as it recognized a complete normal DATA record; any
+independent interrupt queued *after* that DATA was invisible
+to `EPOLLPRI` and `SIOCATMARK` despite being readable via
+`dniv_nsp_recv_interrupt()`. Source-extracted
+`tests/policy/test_nsp_rx_ready_oob.py` compiles the real
+kernel readiness routine with modeled NSP ready-list entries.
+The prior kernel fails both GCC and Clang on normal-DATA-before-
+interrupt (normal=true, interrupt=false, expected both true);
+corrected code completes full bounded-list scan and passes six
+positive/negative mixed-queue cases on both toolchains with
+`-Wall -Wextra -Werror`. The fixed module builds successfully
+against real Linux 6.12.107 amd64 headers. Preserve normal
+readiness short circuit only inside DATA processing while
+continuing through the list for independent interrupts. Fix
+kernel NSP, add regression and feature documentation, and
+advance main atomically with both continuity files. Source bytes
+change; all prior qualification/acceptance is superseded.
+**Formal clean scan count 0/3**: this was a defect-finding
+partial review, not a complete clean semantic audit.
+Requalify the new exact main SHA through all four mandatory gates
+and fresh accepted artifact before restarting scan 1. Canonical
+PP, full exact-SHA acceptance and public release remain pending.
