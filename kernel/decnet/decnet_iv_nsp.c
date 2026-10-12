@@ -1803,7 +1803,7 @@ int dniv_nsp_send_data(__u16 local_link, const __u8 *payload,
     int len;
     int ret;
 
-    if (!payload || !payload_len)
+    if (!payload)
         return -EINVAL;
 
     spin_lock_irqsave(&dniv_nsp_lock, flags);

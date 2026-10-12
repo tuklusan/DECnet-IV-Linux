@@ -868,6 +868,35 @@ static int dniv_sock_sendmsg(struct socket *sock, struct msghdr *msg,
         if (sock->state != SS_CONNECTED || ret <= 0) {
             if (ret != -EHOSTUNREACH)
                 ret = -ENOTCONN;
+        } else if (sock->type == SOCK_SEQPACKET &&
+                   (msg->msg_flags & MSG_EOR)) {
+            /* Finish an open record or transmit a complete empty record.
+             * A zero-length sequenced record must reach the peer rather
+             * than disappearing as a successful no-op. */
+            const __u8 empty = 0U;
+
+            timeo = sock_sndtimeo(sk, msg->msg_flags & MSG_DONTWAIT);
+            for (;;) {
+                ret = dniv_nsp_send_data(dsk->local_link, &empty, 0U,
+                                         dsk->tx_record_open ? 0U : 1U, 1U);
+                if (ret != -EAGAIN || !timeo)
+                    break;
+                wait_ret = wait_event_interruptible_timeout(
+                    dniv_sock_waitq, dniv_can_send(dsk) != 0, timeo);
+                if (wait_ret < 0) {
+                    ret = (int)wait_ret;
+                    break;
+                }
+                if (!wait_ret) {
+                    ret = -EAGAIN;
+                    break;
+                }
+                timeo = wait_ret;
+            }
+            if (!ret) {
+                dsk->tx_record_open = false;
+                dsk->tx_record_len = 0U;
+            }
         } else {
             ret = 0;
         }
