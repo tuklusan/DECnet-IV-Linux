@@ -1089,8 +1089,13 @@ static int dniv_sock_recvmsg(struct socket *sock, struct msghdr *msg,
         return -EOPNOTSUPP;
     if (sock->type == SOCK_STREAM && (flags & MSG_TRUNC))
         return -EOPNOTSUPP;
-    if (!size && !(flags & MSG_TRUNC))
-        return 0;
+    if (!size && !(flags & MSG_TRUNC)) {
+        /* Zero-byte receives must not hide an unconnected socket. */
+        lock_sock(sk);
+        ret = sock->state == SS_CONNECTED ? 0 : -ENOTCONN;
+        release_sock(sk);
+        return ret;
+    }
 
     lock_sock(sk);
     if (sock->state != SS_CONNECTED) {
