@@ -24,10 +24,14 @@ bytes. PP-11 S3-S6 and first-release PP-13 remain owner-authorized skips. An alt
 release does not inherit an earlier 3/3 audit or exact-SHA acceptance.
 
 The current release blocker is three independent comprehensive zero-defect semantic reviews of
-fresh copies of one fully green exact-SHA packaged source artifact. Any newly found defect
-resets the formal scan count to 0/3: repair on main, requalify the exact replacement SHA,
-freshly download its accepted source artifact and restart at scan 1. After 3/3, reconcile and
-re-prove applicable canonical PP evidence on the final SHA in dependency order (S1 before S2),
+fresh copies of one fully green exact-SHA packaged source artifact. During discovery, repair
+any defect on main, requalify and fresh-download the changed package, recheck affected files,
+and CONTINUE the SAME exhaustive discovery pass at the next unreviewed file. Preserve completed
+per-file coverage and source SHA provenance. ONLY at the END of the ENTIRE discovery pass, if
+any defect was found, close it with NO clean credit (0/3) and begin the next complete review
+from file #1 on the final qualified package. A zero-defect clean pass requires one unchanged
+package, and three independent complete clean passes must certify identical package bytes.
+After 3/3, reconcile and re-prove applicable canonical PP evidence in dependency order (S1 before S2),
 then require green full-profile exact-SHA acceptance. Production publication uses only the
 accepted versioned source tarball bytes without repacking, with checksum and release notes.
 

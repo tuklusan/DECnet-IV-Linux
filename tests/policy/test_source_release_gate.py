@@ -1642,7 +1642,10 @@ def main() -> int:
     for required in (
         "three independent comprehensive zero-defect semantic reviews",
         "An altered source",
-        "resets the formal scan count to 0/3",
+        "CONTINUE the SAME exhaustive discovery pass",
+        "ONLY at the END of the ENTIRE discovery pass",
+        "NO clean credit (0/3)",
+        "three independent complete clean passes",
         "re-prove applicable canonical PP evidence",
     ):
         if required not in handover:
