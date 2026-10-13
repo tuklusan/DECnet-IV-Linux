@@ -2807,3 +2807,20 @@ Release Reproducibility, then independently download its exact artifact
 and restart the complete fixed-file semantic pass. Canonical PP reproof,
 full PROFILE=full SCOPE=all, and independently verified publication are
 still blocked pending 3/3 and final exact-SHA acceptance.
+
+2026-10-13: First attempted requalification of source-version consistency
+repair commit `d4d8852c1ea2722f9ed87cc13a65108f7d601c91` was correctly blocked by the
+Repository Policy workflow run `38389198719`: canonical license
+header checker reported the new
+`tests/policy/test_source_release_version_match.py` was missing the
+required blank line immediately after its otherwise-correct project
+header. The regression's behavior was already RED before/GREEN after
+the source builder fix, but project policy must remain fail-closed.
+Restore exactly that blank line in the new test, revalidate the
+canonical checker and regression, and commit only the test and both
+continuity documents together on main. Issue #1141's previous
+targeted dispatch is nonqualifying and did not dispatch acceptance.
+No source release tarball qualified for the prior commit. New
+four-gate exact-SHA qualification is mandatory; full source manual
+semantic reviews remain **0/3**, previous 35/267 file notes
+historical, PP/full/publication still blocked.

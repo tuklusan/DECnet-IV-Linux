@@ -2683,3 +2683,17 @@ credits on this source. Formal complete zero-defect semantic review
 count remains **0/3**. Source install PP11 S1-before-S2, PP12 and
 applicable practical PP, full exact-SHA acceptance and independent
 public-release verification still pending; no publication authorized.
+
+2026-10-13: Requalification issue #1141 on first version-builder
+repair `d4d8852c1ea2722f9ed87cc13a65108f7d601c91` FAILED Repository Policy
+run `38389198719` before dispatch. The new policy regression's
+canonical comment header lacked the mandatory empty line after its
+terminating separator; `tools/license_monkey.py` correctly rejected
+it, so no acceptance artifact may be inherited. Added the missing
+single blank line, independently validated license_monkey.validate_blob
+returns zero errors and red/green source-version test passes. Commit
+this test-mode-preserving minimal correction atomically with both
+continuity docs; new source SHA requires all four fully green exact
+SHA gates, fresh accepted source-artifact acquisition, and 267+
+package-file roster restart. Prior source semantic notes historical
+and formal 0/3, PP/full/publication pending.
