@@ -14,6 +14,8 @@
 # ============================================================================
 
 set -euo pipefail
+root=$(cd "$(dirname "$0")" && pwd)
+source "$root/tools/manifest-member.sh"
 destdir=${DESTDIR:-}
 prefix=${PREFIX:-/usr/local}
 kernel_release=${KERNEL_RELEASE:-$(uname -r)}
@@ -81,8 +83,11 @@ safe_managed_path() {
         "$path" != *"//"* &&
         "$path" != *"/../"* && "$path" != *"/.." &&
         "$path" != *"/./"* && "$path" != *"/." ]] || return 1
-    case "$path" in "$prefix"/*|"$module_root"/*) return 0 ;; esac
-    (( module_root_is_default )) && safe_default_module_path "$path"
+    [[ "$path" == "$module_root/extra/decnet_iv.ko" ]] && return 0
+    if (( module_root_is_default )) && safe_default_module_path "$path"; then
+        return 0
+    fi
+    dniv_manifest_prefix_member "$path" "$prefix"
 }
 
 if [[ -z "$destdir" && -n ${MODULE_ROOT:-} ]]; then

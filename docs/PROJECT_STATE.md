@@ -2846,3 +2846,39 @@ green jobs; four new exact-SHA source gates, independent new tar
 acquisition and owner 3 full semantic scans are mandatory.
 Manual complete clean scans remain **0/3**; canonical PP,
 PROFILE=full/SCOPE=all and production publication not authorized.
+
+2026-10-13: Deterministic source semantic audit of fully accepted packaged
+source `27294f39c3dc6f2723a25ed90fa9bb14402ea7dc`, artifact
+`11808747062`, found a reproducible release-blocking installation
+manifest ownership defect. A single-link, root-contained staged
+manifest listing only `/usr/local/bin/unrelated-service` caused the
+original uninstaller to return PASS and delete that unrelated application
+file. An allowed PREFIX is insufficient ownership proof: existing
+manifest members must match exact project-installed components,
+including legitimate source docs and precise module targets.
+The successor adds `tools/manifest-member.sh` as a shared explicit
+46-prefix-member allowlist; installer and uninstaller check it
+fail-closed in addition to canonical path validation and exact
+current/previous standard kernel module rules. The staged
+`tests/policy/test_uninstall_manifest_scope.py` regression verifies
+poisoned manifest rejection before any removal/overwrite,
+custom PREFIX, and legitimate uninstall. `docs/COMPONENTS.md`
+documents the new source support tool. Local `bash -n`, project
+license checks, source-release policy regression and new targeted
+negative/positive regression succeeded on a disposable source copy.
+A broad local `make unit` run timed out after early unit tests and
+must NOT be called a complete PASS.
+
+This change does not affect DECnet protocol behavior or protected
+HECnet peers. It fixes a confirmed defect, so all 36/268 isolated
+first-pass file observations on the superseded tarball are
+historical only; formal complete clean whole-source scans stay
+**0/3**. Atomic main-only patch also updates scratch/RESUME.md.
+Next independently qualify the new source SHA by green Repository
+Policy, dual-arch Build Bootstrap, Project State Gate, Source
+Release Reproducibility; AFTER all four succeed freshly download,
+verify and record the new immutable artifact and fully restart
+file-by-file semantic review at scan 1. No final-SHA canonical
+PP (PP-11 S1 before S2 and PP-12), PROFILE=full/SCOPE=all
+acceptance, source publication or independent public verification
+before three complete independent clean semantic audits.
