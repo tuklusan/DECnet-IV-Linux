@@ -70,3 +70,20 @@ dniv_manifest_prefix_member() {
     esac
     return 1
 }
+
+# Validate the original manifest bytes before Bash read/mapfile can silently
+# shorten NUL-containing ownership entries or accept a partial last line.
+dniv_manifest_valid_bytes() {
+    local file=$1
+    python3 - "$file" <<'PYCODE'
+import pathlib
+import sys
+
+try:
+    raw = pathlib.Path(sys.argv[1]).read_bytes()
+except OSError:
+    raise SystemExit(1)
+if b"\x00" in raw or (raw and not raw.endswith(b"\n")):
+    raise SystemExit(1)
+PYCODE
+}

@@ -159,6 +159,10 @@ if [[ -e "$manifest" || -L "$manifest" ]]; then
         echo "install.sh: unsafe existing manifest: $manifest" >&2
         exit 2
     }
+    dniv_manifest_valid_bytes "$manifest" || {
+        echo "install.sh: unsafe existing manifest bytes: $manifest" >&2
+        exit 2
+    }
     while IFS= read -r path; do
         [[ -z "$path" ]] && continue
         safe_managed_path "$path" || {

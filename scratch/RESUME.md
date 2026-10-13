@@ -2767,3 +2767,27 @@ verify the successor source artifact; restart exhaustive full 3-pass
 semantic review with a new 270-member-or-updated packaged roster.
 PP-11 S1 before S2 and PP-12, full PROFILE=full/SCOPE=all acceptance,
 and public production release remain blocked until 3/3.
+
+2026-10-13 hard release blocker from newly qualified exact packaged source
+`2a3e9450ce3c9eca9e56a8e9e1afffa8e1421ab4` (Source Release `38406515446`,
+artifact `11818768023`, tar SHA256
+`fe0681bdc845afcea0fece2181919dad3138f6fada1f439dfc6f66fb7b94605c`):
+existing manifest with bytes `/usr/local/bin/ncp\\0unowned\\n`
+(BYTE 00 after `ncp`) bypasses Bash `mapfile` ownership validation in
+`uninstall.sh`; standalone staged negative showed original code returned
+PASS and removed a foreign file `ncp`. Existing installer manifest `read`
+also truncated at NUL. Fix both scripts to call a shared fail-closed Python
+byte parser before reading entries, rejecting any NUL or missing terminating
+newline. Extend existing manifest-scope policy regression for both lifecycle
+paths and missing-newline negative. The regression RED on original and GREEN
+on repaired extracted-source copy; `test_source_release_gate.py` and
+`bash -n` passed locally. The atomic main commit must contain
+`install.sh`, `uninstall.sh`, `tools/manifest-member.sh`,
+`tests/policy/test_uninstall_manifest_scope.py` and both continuity docs.
+Then check live main and trigger new exact-SHA targeted source-release issue
+to obtain four green Repository Policy/dual-arch Build Bootstrap/Project
+State Gate/Source Release Reproducibility gates; fresh-download and verify
+the successor packaged bytes, restart fixed-order first complete semantic
+review, and continue independent 3 full passes. All previous file-level
+observations are history, **formal clean audits 0/3**. PP/full acceptance/
+publication remain pending.

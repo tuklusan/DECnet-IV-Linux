@@ -54,6 +54,22 @@ def main():
         assert rejected.returncode != 0, rejected.stdout + rejected.stderr
         assert good.is_file() and foreign.is_file() and manifest.is_file()
 
+        # NUL bytes cannot turn an invalid line into an owned pathname.
+        # Bash mapfile otherwise truncates at the first NUL.
+        ncp = base / "bin/ncp"
+        ncp.write_text("foreign-ncp-must-survive\n")
+        manifest.write_bytes(b"/usr/local/bin/ncp\x00unowned\n")
+        rejected = run("env", f"DESTDIR={stage}", str(UNINSTALL))
+        assert rejected.returncode != 0, rejected.stdout + rejected.stderr
+        assert ncp.read_text() == "foreign-ncp-must-survive\n"
+        assert manifest.is_file()
+
+        # Incomplete final manifest line is malformed, even for an allowed name.
+        manifest.write_bytes(b"/usr/local/bin/ncp")
+        rejected = run("env", f"DESTDIR={stage}", str(UNINSTALL))
+        assert rejected.returncode != 0, rejected.stdout + rejected.stderr
+        assert ncp.is_file() and manifest.is_file()
+
         custom = "/opt/dniv"
         other = stage / "opt/dniv/bin/foreign"
         m2 = stage / "opt/dniv/share/decnet-iv-linux/install-manifest.txt"
@@ -86,6 +102,16 @@ def main():
         assert "unsafe existing manifest path" in rejected.stderr, rejected.stderr
         assert not (stage / "lib/modules/6.8.0-fixture/extra/decnet_iv.ko").exists()
         assert foreign.is_file()
+
+        # Installer must reject the raw NUL-bearing manifest before writes.
+        manifest.write_bytes(b"/usr/local/bin/ncp\x00unowned\n")
+        rejected = run("env", f"DESTDIR={stage}",
+                       f"PATH={fakebin}:/usr/bin:/bin", "bash",
+                       str(package / "install.sh"))
+        assert rejected.returncode != 0, rejected.stdout + rejected.stderr
+        assert "unsafe existing manifest bytes" in rejected.stderr, rejected.stderr
+        assert not (stage / "lib/modules/6.8.0-fixture/extra/decnet_iv.ko").exists()
+        assert ncp.read_text() == "foreign-ncp-must-survive\n"
 
         # A legitimate installed command, alias or source document is allowed.
         for path in ("/usr/local/bin/dncopy", "/usr/local/bin/sethost",

@@ -2900,3 +2900,33 @@ verify the successor source artifact; restart exhaustive full 3-pass
 semantic review with a new 270-member-or-updated packaged roster.
 PP-11 S1 before S2 and PP-12, full PROFILE=full/SCOPE=all acceptance,
 and public production release remain blocked until 3/3.
+
+2026-10-13: A fresh independent exact-packaged-byte semantic review of fully
+qualified source `2a3e9450ce3c9eca9e56a8e9e1afffa8e1421ab4`, Source Release run `38406515446`,
+artifact `11818768023`, archive SHA256
+`fe0681bdc845afcea0fece2181919dad3138f6fada1f439dfc6f66fb7b94605c`
+found a fail-open install-manifest byte-validation defect. `uninstall.sh`
+used Bash `mapfile -t` on untrusted existing manifest bytes: a staged file
+containing a literal `/usr/local/bin/ncp` followed by NUL, `unowned`, and
+newline was silently shortened into an authorized path. Against an isolated
+staging directory containing a foreign file named `ncp`, the original
+uninstaller returned PASS and deleted that foreign file. Installer likewise
+used `read -r` on malformed existing manifest bytes before authorizing names.
+The original packaged source regression fails on this negative. The repair
+shares `dniv_manifest_valid_bytes` from `tools/manifest-member.sh`: reject
+embedded NUL and incomplete final lines before any Bash path parsing,
+overwrite or removal. Extended `test_uninstall_manifest_scope.py` exercises
+NUL and truncated-line uninstall rejection before removal and installer
+fail-closed NUL rejection. Candidate passed this standalone policy regression,
+`test_source_release_gate.py` and shell syntax checks locally on a disposable
+copy of the extracted source. These diagnostics do not replace independent
+hosted acceptance. Correction includes both lifecycle scripts, shared helper,
+regression and both continuity documents in one main-only commit. All previous
+partial packaged-source reviews are historical after any source-byte change;
+complete successive clean semantic scans remain **0/3**. Requalify successor
+main SHA with green Repository Policy, dual-native-architecture Build Bootstrap,
+Project State Gate and Source Release Reproducibility. After four exact-SHA
+successes, freshly download and verify its replacement source archive and
+restart exhaustive 270-member-or-updated roster scan 1. Canonical PP, final
+PROFILE=full/SCOPE=all acceptance and independent production publication remain
+blocked pending three successive complete zero-defect audits.

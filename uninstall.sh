@@ -101,6 +101,10 @@ if [[ -z "$destdir" ]]; then
 fi
 check_staged_parent "$manifest_rel" || exit 2
 [[ -f "$manifest" && ! -L "$manifest" && $(stat -c %h -- "$manifest") == 1 ]] || { echo "uninstall.sh: safe install manifest not found: $manifest" >&2; exit 2; }
+dniv_manifest_valid_bytes "$manifest" || {
+  echo "uninstall.sh: unsafe install manifest bytes: $manifest" >&2
+  exit 2
+}
 mapfile -t paths <"$manifest"
 module_releases=()
 for path in "${paths[@]}"; do
