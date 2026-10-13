@@ -2724,3 +2724,45 @@ historical only. Require freshly green exact-SHA all-arch gates and
 fresh accepted source artifact before restart.
 Canonical PP requalification, final full PROFILE=full SCOPE=all and
 independently verified public release still pending.
+
+2026-10-12: Deterministic fresh packaged-source semantic pass 1 on
+fully exact-SHA qualified `02e1fa5bada6de180bb7a31ba42eb99f89a12d24`,
+source-release run `38323203829`, artifact `11779358102`,
+tar `DECnet-IV-Linux-1.0.0.tar.xz` SHA256
+`7020452dd7084d308d954b40dc3dbfb58b535a74e29ef2d6de50d30878776221`,
+found a new real telephone Session/record framing defect in actual
+`userspace/dnphone/dnphoned.c`. After receiving PHONE_CONNECT
+with source string and NUL-terminated recipient, the service only
+required a recipient NUL *somewhere* in the physical NSP record,
+therefore `CONNECT N\0 1.23::ALICE\0HIDDEN` incorrectly returned
+PHONE_REPLYOK. DIAL was accepted solely from a leading opcode and
+minimum length; arbitrary unterminated/multi-command DIAL records
+also elicited PHONE_REPLYOK. The GOODBYE and other control branches
+accepted suffixes after the first source NUL. This violates the
+full-record PHONE handshake framing rather than merely cosmetic input.
+Independently reproduced the accepted actual C source behavior with
+GCC/Clang and an AF_UNIX SOCK_SEQPACKET forked server: hidden CONNECT
+returned OK on both compilers. Added source-compiling
+`tests/policy/test_phone_framing.py` with four cases: valid CONNECT/
+DIAL/GOODBYE success, invalid hidden CONNECT rejection, invalid hidden
+DIAL rejection, invalid hidden GOODBYE rejection. The regression
+FAILS original accepted source (three negatives) under GCC and Clang,
+and PASSES repaired source under GCC and Clang with
+`-Wall -Wextra -Werror`; shipped PHONE daemon
+`--selftest` also PASSES on both compilers. The fix constrains
+CONNECT target NUL to the final record byte, constrains DIAL to
+source NUL plus exactly one dial byte, and requires non-DATA PHONE
+controls to consist only of opcode plus source NUL. Full fresh
+corrected userspace product build finished exit 0. A corrected
+`make -j4 unit` attempt was terminated by a local execution timeout
+after initial tests and is NOT a complete unit PASS; new standalone
+regression passed. Preserve the defect/fix and full exact details in
+audit issue #1131 and supplemental issue #1061. Atomic substantive
+commit on main includes PHONE C source, regression, FEATURES and both
+continuity files. All prior pass-1 partial per-file observations for
+old archive remain historical; old accepted archive SUPERSEDED. Formal
+zero-defect complete scans **0/3**. Requalify replacement exact-SHA
+Repository Policy, dual-arch Build Bootstrap, Project State Gate and
+Source Release Reproducibility, freshly download accepted packaged
+artifact and restart full manual scan 1. Canonical final-SHA PP,
+full-profile exact-SHA acceptance and publication remain pending.

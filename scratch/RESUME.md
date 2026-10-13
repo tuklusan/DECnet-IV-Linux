@@ -2609,3 +2609,38 @@ historical only. Require freshly green exact-SHA all-arch gates and
 fresh accepted source artifact before restart.
 Canonical PP requalification, final full PROFILE=full SCOPE=all and
 independently verified public release still pending.
+
+2026-10-12 HANDOVER / blocker: qualified exact SHA
+`02e1fa5bada6de180bb7a31ba42eb99f89a12d24` from source-release
+run `38323203829`, artifact `11779358102`, tar SHA256
+`7020452dd7084d308d954b40dc3dbfb58b535a74e29ef2d6de50d30878776221`.
+Three fresh downloaded copies identical ZIP hash
+`d4e060141e55db4c051101b2a3eee9f0d17aa06f80f7e32ecd2d9cbf837b7e85`,
+265 regular source files, 70,098 source lines. Per-file
+semantic source checklist in issue #1131 reached 81 partially
+reviewed files (previous checkpoint 80 and dnobject); subsequent
+manual inspection found *reproducible* PHONE protocol control framing
+flaw in `userspace/dnphone/dnphoned.c`. The original actual
+accepted C service wrongly sends PHONE_REPLYOK for malformed
+CONNECT with a hidden physical record suffix after the recipient NUL;
+DIAL only checks opcode/minimum len and also accepts arbitrary
+suffixes; GOODBYE/control accepts hidden suffix after source NUL.
+New independently compiled socketpair regression
+`tests/policy/test_phone_framing.py` covers valid handshake and
+invalid CONNECT/DIAL/GOODBYE suffixes. It FAILS unchanged previous
+accepted source on GCC and Clang; repaired source PASSES on both,
+and corrected built-in PHONE server `--selftest` also PASSES
+GCC/Clang. Full corrected `make -j4 userspace` exit 0;
+corrected `make -j4 unit` attempt terminated by local test
+execution timeout; DO NOT count a complete unit PASS for that
+attempt. Fix rejects hidden trailing bytes by strict CONNECT
+target NUL-at-end, DIAL exactly source+NUL+one byte, and other
+control opcode exactly source+NUL. Atomic main repair includes
+source, regression, FEATURES, PROJECT_STATE and RESUME. On resume:
+first verify live main/committed file list and four new exact-SHA
+source-acceptance gate runs, then independently download the newly
+fully accepted artifact before *restarting* semantic scan 1. Old
+partial-file ledger is historical only; formal complete zero-defect
+manual audits **0/3**. No current-SHA PP requalification, full
+PROFILE=full SCOPE=all or public release accomplished. Audit issue
+#1131 for file-level evidence, #1061 for supplemental findings.

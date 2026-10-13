@@ -120,8 +120,11 @@ static int serve(int fd, const char *user)
         if (first >= (size_t)got - 1U)
             return -1;
         target = (char *)buf + 1U + first + 1U;
-        if (target >= (char *)buf + got || !memchr(target, '\0',
-            (size_t)((char *)buf + got - target)))
+        /* The target terminator must be the final byte of this request.
+         * A hidden suffix must not be accepted as a shorter CONNECT. */
+        if (target >= (char *)buf + got ||
+            bounded_strlen(target, (size_t)((char *)buf + got - target)) +
+                1U != (size_t)((char *)buf + got - target))
             return -1;
         if (!user_match(target, user))
             return send_code(fd, PHONE_REPLYNOUSER);
@@ -130,7 +133,10 @@ static int serve(int fd, const char *user)
         return -1;
 
     got = dniv_recv_record(fd, buf, sizeof(buf), 0);
-    if (got < 3 || buf[0] != PHONE_DIAL)
+    /* DIAL must carry one NUL-terminated name and one dial byte.
+     * A hidden suffix or unterminated source is malformed. */
+    if (got < 3 || buf[0] != PHONE_DIAL || buf[got - 2] != '\0' ||
+        memchr(buf + 1U, '\0', (size_t)got - 2U) != buf + got - 2)
         return -1;
     if (send_code(fd, PHONE_REPLYOK))
         return -1;
@@ -150,6 +156,10 @@ static int serve(int fd, const char *user)
             source_len = bounded_strlen((char *)buf + 1U,
                                         (size_t)got - 1U);
             if (source_len >= (size_t)got - 1U)
+                return -1;
+            /* Only DATA may carry a payload after the source name. */
+            if (buf[0] != PHONE_DATA &&
+                source_len + 2U != (size_t)got)
                 return -1;
 
             switch (buf[0]) {
