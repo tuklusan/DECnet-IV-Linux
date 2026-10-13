@@ -338,10 +338,10 @@ static inline int dniv_nsp_build(__u8 *buf, __u32 cap,
         dniv_nsp_put_le16(buf + off, pkt->segsize); off += 2U;
         if (pkt->type == DNIV_NSP_CC) {
             if (pkt->payload_len > DNIV_NSP_MAX_CTL_DATA ||
-                off + 1U + pkt->payload_len > cap)
+                off > cap || cap - off < 1U + pkt->payload_len)
                 return -1;
             buf[off++] = (__u8)pkt->payload_len;
-        } else if (off + pkt->payload_len > cap) {
+        } else if (off > cap || pkt->payload_len > cap - off) {
             return -1;
         }
         if (pkt->payload_len) {
@@ -358,7 +358,7 @@ static inline int dniv_nsp_build(__u8 *buf, __u32 cap,
     if (pkt->type == DNIV_NSP_DI) {
         __u32 i;
         if (pkt->payload_len > DNIV_NSP_MAX_CTL_DATA ||
-            off + 3U + pkt->payload_len > cap)
+            off > cap || cap - off < 3U + pkt->payload_len)
             return -1;
         dniv_nsp_put_le16(buf + off, pkt->reason); off += 2U;
         buf[off++] = (__u8)pkt->payload_len;
@@ -402,7 +402,8 @@ static inline int dniv_nsp_build(__u8 *buf, __u32 cap,
     if (pkt->type == DNIV_NSP_INT &&
         (!pkt->payload_len || pkt->payload_len > DNIV_NSP_MAX_CTL_DATA))
         return -1;
-    if (off + pkt->payload_len > cap || (pkt->payload_len && !pkt->payload))
+    if (off > cap || pkt->payload_len > cap - off ||
+        (pkt->payload_len && !pkt->payload))
         return -1;
     if (pkt->payload_len) {
         __u32 i;

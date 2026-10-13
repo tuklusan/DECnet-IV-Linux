@@ -127,3 +127,5 @@ A historical DECnet feature is not implicitly claimed merely because the project
 
 - A stream poll checks unread bytes held in the socket's partial-read buffer, preserving readability after a short receive and during orderly closure.
 - Native `SOCK_STREAM` receives consume valid zero-length NSP DATA records without reporting false end-of-stream. Ordinary peer disconnection remains the only normal EOF condition; a nonblocking stream read after a zero-length record reports EAGAIN while the connection remains open.
+
+- NSP packet construction rejects 32-bit payload-length arithmetic overflow against bounded encoded output buffers, including pathological oversized CI, DI and DATA/INT records.
