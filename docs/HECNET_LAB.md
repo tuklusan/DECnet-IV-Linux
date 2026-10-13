@@ -66,7 +66,7 @@ The Area-31 workflow uses these GitHub Actions secrets:
 
 The workflow and its scripts must check for all required secret names before opening the remote MULTINET connection or attempting VAX access. If one or more are absent, they must stop cleanly and state which secret names are required. They must never print, persist in artifacts, or commit the secret values. The Area-31 native path stores the VAX user/password only in private files on the disposable read-only control image, then supplies them to `dnlogin`/`dncopy` through `DNACCESS_USER` and `DNACCESS_PASSWORD`; the secret values never appear in QEMU or application command-line arguments.
 
-The MULTINET remote endpoint is one Area-31 area router. The node identified by `VAX_ADDR` is another Area-31 area router reachable after the MULTINET adjacency and routing path are established. VAX credentials are for controlled test deployment/login only.
+The MULTINET remote endpoint is one Area-31 area router. The node identified by `VAX_ADDR` is another Area-31 area router reachable after the MULTINET adjacency and routing path are established. VAX credentials support permitted non-state-changing authentication and read-only diagnostics only; they never authorize deployment, remote filesystem changes or executing test helpers on protected peers beyond PYRTR.
 
 ## Repository-tracked Area-31 tests
 
@@ -77,12 +77,12 @@ Remote tests belong in the repository rather than in ad-hoc runner commands. Ful
 3. prove reachability to the VAX router at `VAX_ADDR`;
 4. query the delivered node, circuit, route, adjacency, executor and counter information through NICE/NML;
 5. exercise NSP/MIRROR and Session/object access in both directions;
-6. use `VAX_USERNAME`/`VAX_PASSWORD` only when a VAX-side helper actually must be installed or invoked;
+6. use `VAX_USERNAME`/`VAX_PASSWORD` only for permitted non-state-changing remote authentication; install and run any active VAX-side helper exclusively on project-controlled local/SIMH machines, never protected Area-31 peers beyond PYRTR;
 7. retain reusable Linux/VAX pairs under `tests/lab` for the delivered claimed login, DAP/FAL file operations, PHONE, mail, task/object access and management/counter paths wherever the remote-peer safety policy permits;
 8. run failure/reconnect, route withdrawal, restart, sustained-load and endurance cases only on project-controlled local/SIMH systems; remote HECnet peers beyond PYRTR remain non-disruptive observation/traffic peers, and MIM remains strictly read-only;
 9. incorporate only project-controlled local/SIMH systems into 4/8/16-node scale and endurance work; remote Area-31 systems provide non-disruptive interoperability evidence only.
 
-VAX-side scripts/programs should live in a dedicated `tests/lab` subdirectory and be paired with the Linux driver that invokes and validates them. Application experiments such as a small VAX DECnet service plus a `dnlynx` client are welcome after the underlying Session/object and standard DECnet/Linux userspace features are stable; they are supplemental tests, not a shortcut around those layers.
+VAX-side scripts/programs for project-controlled local/SIMH peers should live in a dedicated `tests/lab` subdirectory and be paired with the Linux driver that invokes and validates them. Application experiments such as a small locally hosted VAX DECnet service plus a `dnlynx` client are supplemental tests after the underlying Session/object and standard DECnet/Linux userspace features are stable; never install, invoke or modify anything on protected remote Area-31 systems for these experiments.
 
 No public HECnet route is advertised from a disposable CI job outside Area 31. Disposable identities are selected only from Area 31 and checked against PYRTR's NML known-node view before the final proof identity is used. External connectivity remains optional interoperability evidence and never substitutes for local exact-SHA acceptance.
 
