@@ -2980,3 +2980,29 @@ Source Release Reproducibility; THEN fresh-download and checksum-verify
 its newly accepted source artifact, reconstruct source roster and
 restart full file-by-file semantic pass 1. Canonical final-SHA PP,
 PROFILE=full/SCOPE=all acceptance and publication remain blocked.
+
+2026-10-13: Semantic review of fully green packaged source `9b1fca05d34fe8913f60300a2da3163a77cef35f`
+(Source Release `38427248020`, artifact `11828897535`, tar SHA256
+`955061b5ca3925ce31a91ab231d259c4f5d824cbe7108694cb90a24fbe2af30e`)
+confirmed three consistent but incorrect Area-31 preflight chronology claims:
+`docs/HANDOVER.md`, `docs/PRE_PRODUCTION_TEST.md` and
+`docs/ROADMAP.md` say the workflow validates runtime credentials
+"before network activity". The actual source workflow first performs
+SHA-pinned actions/checkout over GitHub, then checks/masks five secret
+values before Area-31 remote transport; `tests/lab/prove-area31.sh
+--preflight-only` terminates without remote connections. This security
+invariant is **before Area-31 transport access**, not before all
+network activity. Repair these three documentation phrasings only,
+preserving actual sequence, authentication boundary and remote-peer
+restrictions; no script or kernel/protocol change. The correction and
+paired continuity files form a single main-parent atomic commit.
+The previous 36/272 complete-file provisional observations apply ONLY
+to superseded source bytes, not to any successor packaged artifact.
+Formal successive zero-defect complete semantic audits remain **0/3**.
+Before resuming obtain green Repository Policy, dual-architecture Build
+Bootstrap, Project State Gate and Source Release Reproducibility for
+the successor exact main SHA; freshly download/checksum-verify its
+archive, safely extract, create whole packaged-source roster and
+restart fixed lexical semantic scan 1 at file 1. Do not begin final-SHA
+PP-11 S1/S2 and PP-12, full-profile acceptance, or public release
+without all three complete clean independent packaged semantic scans.

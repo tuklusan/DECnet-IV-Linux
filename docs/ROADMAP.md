@@ -90,7 +90,7 @@ Deliver:
 
 - rootless VDE2 Ethernet fabrics for local and cross-runner labs, including an actual two-host switch-to-switch join rather than assuming the documented SSH design works;
 - a configurable user-space MULTINET TCP gateway based on the proven PyDECnet implementation;
-- a repository-tracked Area-31 client workflow that consumes `MULTINET_REMOTE_HOST`, `MULTINET_REMOTE_PORT`, `VAX_ADDR`, `VAX_USERNAME` and `VAX_PASSWORD` only at runtime, checks that all required secrets are present before network activity, reports missing prerequisites clearly, and never logs secret values;
+- a repository-tracked Area-31 client workflow that consumes `MULTINET_REMOTE_HOST`, `MULTINET_REMOTE_PORT`, `VAX_ADDR`, `VAX_USERNAME` and `VAX_PASSWORD` only at runtime, checks that all required secrets are present before Area-31 transport access, reports missing prerequisites clearly, and never logs secret values;
 - controlled routing through the MULTINET-connected Area-31 area router to the second Area-31 router at `VAX_ADDR`;
 - persistent paired Linux/VAX tests under `tests/lab` for routing/NICE information and counters, NSP/Session/object access and the delivered Phase 7 login, DAP/FAL, PHONE, mail and task-access tools, with application-level experiments remaining supplemental.
 

@@ -2837,3 +2837,25 @@ file. Any earlier partial per-file observations are historical.
 Formal completed clean audits **0/3**; PP-11 S1 before S2, PP-12,
 full/all acceptance and independently verified publication still
 pending. Never mistake an optional skipped peer job for PP evidence.
+
+2026-10-13 current qualified archive: SHA `9b1fca05d34fe8913f60300a2da3163a77cef35f`,
+run `38427248020`, artifact `11828897535`, tar SHA256
+`955061b5ca3925ce31a91ab231d259c4f5d824cbe7108694cb90a24fbe2af30e`.
+Source review found docs/HANDOVER.md, docs/PRE_PRODUCTION_TEST.md and
+docs/ROADMAP.md incorrectly promised Area-31 secrets preflight before
+*all* network activity, yet actual .github/workflows/area31-interop.yml
+does exact GitHub checkout first. The real safety invariant remains
+preflight BEFORE Area-31 remote transport; prove-area31.sh --preflight-only
+has no remote connection. Correct all three docs solely to "before
+Area-31 transport access", keep steps and remote boundaries unchanged.
+Atomic main commit contains those three docs and both paired continuity
+files. Any prior 36/272 per-file provisional observations are
+historical only after source-byte change; formal complete clean
+semantic scans remain **0/3**. Next: obtain all four exact new-SHA green
+gates, freshly download and safely extract successor accepted source,
+verify source SHA/checksum and rebuild lexical source inventory;
+restart complete file-by-file semantic pass1 on new packaged bytes.
+Then only after three independent full clean scans canonical PP11 S1
+before S2, PP12 and applicable practical labs, final full PROFILE=full
+SCOPE=all acceptance, and immutable tar publication with independent
+public download verification. Do not count skipped PP jobs as PASS.
