@@ -54,7 +54,7 @@ if [ "$stage" -eq 0 ]; then
     ip link set "$iface" up || fail link-up
     ip link set "$iface" down || fail link-down-2
     modprobe -r decnet_iv || fail module-unload-1
-    ! grep -Fq '^decnet_iv ' /proc/modules || fail module-still-loaded-1
+    ! grep -Eq '^decnet_iv[[:space:]]' /proc/modules || fail module-still-loaded-1
     printf '1\n' >"$stage_file"
     sync
     echo "DNIV-PP12-BOOT1-PASS source=$expected iface=$iface"

@@ -3006,3 +3006,7 @@ archive, safely extract, create whole packaged-source roster and
 restart fixed lexical semantic scan 1 at file 1. Do not begin final-SHA
 PP-11 S1/S2 and PP-12, full-profile acceptance, or public release
 without all three complete clean independent packaged semantic scans.
+
+### 2026-10-13 packaged-source PP-12 unload assertion correction
+
+Packaged-source audit of prior exact source `b38a19b01c91b7c74e9553970d574d4a149807ed` found that `tests/lab/dniv-pp12-smoke.sh` checked `/proc/modules` with `grep -Fq '^decnet_iv '`: fixed-string matching interpreted the caret literally and could never catch an actually loaded `decnet_iv` module. Changed the check to `grep -Eq '^decnet_iv[[:space:]]'`, with positive and negative fixture-based policy regression. Previous PP-12 unload assertion is not valid proof of the absence of this module; the final candidate must independently re-prove all applicable PP requirements. Defect resets full packaged-source semantic scans to 0/3. Requalify the replacement exact source SHA through all four green gates, fresh-download the new artifact and restart deterministic source scan from lexical file #001. Earlier incomplete 96/272 observations are superseded and are not clean scans.
