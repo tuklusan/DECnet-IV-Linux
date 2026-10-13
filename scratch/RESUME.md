@@ -2652,3 +2652,34 @@ PROFILE=full SCOPE=all or public release accomplished. Audit issue
 2026-10-12 packaged TEST_LAB source-order audit: Exact fully qualified source `926b787defe2cdb6bcaa0f5ca5e32336d9b3a206` (source release run `38337589550`, artifact `11785274000`, tar SHA-256 `88541459b93fc1bb33215f7e1d570ee35ac620349b2893171b48dcb6ee07a33a`) has a confirmed documentation error in `docs/TEST_LAB.md`: the Area-31 preflight was described as the **first executable step**, but `.github/workflows/area31-interop.yml` first checks out the exact SHA and binds provisional local identities, and then checks/masks Area-31 secrets before remote transport access. Repair only the documentation ordering; no code or HECnet boundary is weakened. Prior fixed-order pass-1 partial **37/267** isolated reviewed files are historical on the superseded tar, NOT reusable audit credit. Complete formal clean scans remain **0/3**. Requalify this replacement exact main with Repository Policy, dual-architecture Build Bootstrap, Project State Gate and Source Release Reproducibility; after all four green, independently fresh-download and verify replacement source artifact, rebuild complete packaged source roster and restart owner-required first comprehensive semantic pass. Do not advance canonical PP, full PROFILE=full/SCOPE=all, or public release before three successive independently complete zero-defect reviews of the new identical packaged bytes. Audit issue #1131 and root record #1061.
 
 2026-10-12 Area-31 protected-peer documentation semantic repair: exact fully qualified source `9d75ccbc7f8158bca7f7db68b58498f450cb1cca`, run `38342354838`, artifact `11787407435`, tar SHA-256 `163402d5db0f1d9b4f144c90a2619f8adf385cf892eaf4b5995594d0a2c676cf`, was found to contradict its own hard protected remote HECnet rule by allowing `VAX_USERNAME`/`VAX_PASSWORD` for test *deployment* or remote helper install/invocation in `docs/HECNET_LAB.md` despite its lines 21,90–92 banning any remote filesystem alteration or remote program execution past PYRTR 31.3 (MIM 1.13 strict read-only). Correct only the Area31 documentation: credentials for read-only/non-state-changing authentication, test helper installation/invocation confined exclusively to project-controlled local/SIMH peers. Existing workflow/code safety and operational network behavior unchanged, no remote state mutated. Evidence issue #1131 finding comment 6137843865. Current formal three complete clean audits **0/3**; prior 31/267 partial file readings on superseded exact source are historical not transferable. Require 4 new exact-SHA fully green gates, fresh qualified source artifact and independent safe acquisition, restart exhaustive file-by-file full semantic pass1; no PP/full release acceptance/publication until 3/3.
+
+2026-10-13 REQUALIFICATION REQUIRED after a confirmed packaged-source
+release-contract defect on previous fully accepted SHA
+`a24fcb055e9bb0e7e0e2043a0c7bcec38da0ef74` (source-release run `38343942322`,
+artifact `11788146460`, tar SHA256
+`1f2b010e8ffd35f550ad55b3aed02aa3aeef73fbd47c87db8178f515bb189002`).
+A disposable synthetic Git fixture (with shipped VERSION=1.0.0)
+proved the unchanged delivered `tools/build-source-release.sh` could
+successfully produce `DECnet-IV-Linux-9.9.9.tar.xz` and metadata 9.9.9
+while the archive still shipped VERSION=1.0.0, violating the single
+declared production-version contract. Exact builder code now compares
+the requested version to the *pinned commit's* VERSION declaration
+before archive creation; the new `tests/policy/test_source_release_version_match.py`
+regression is RED on accepted old source and GREEN with the fix for
+matching, mismatched, missing and duplicate declarations.
+The workflow now checks wrong-version input directly and preserves the
+wrong-SHA and read-only-output tests as meaningful independent negatives
+using the real source version. SHA-qualified main atomic commit includes
+this tool, workflow, regression and BOTH continuity documents. No
+protocol behavior or HECnet remote target is changed.
+Before resuming audit, verify live main SHA and all four required
+Repository Policy / dual-arch Build Bootstrap / Project State Gate /
+Source Release Reproducibility gates completely green; fresh-download
+one fully accepted matching archive and rebase all 267 current packaged
+files (count may change due new regression) with per-file SHA256
+coverage. All 35 prior first-pass isolated file observations in issue
+#1131 belong to the superseded SHA and are HISTORICAL, not 35 review
+credits on this source. Formal complete zero-defect semantic review
+count remains **0/3**. Source install PP11 S1-before-S2, PP12 and
+applicable practical PP, full exact-SHA acceptance and independent
+public-release verification still pending; no publication authorized.

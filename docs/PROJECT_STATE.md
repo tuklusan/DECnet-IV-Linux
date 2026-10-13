@@ -2774,3 +2774,36 @@ full-profile exact-SHA acceptance and publication remain pending.
 2026-10-12 packaged TEST_LAB source-order audit: Exact fully qualified source `926b787defe2cdb6bcaa0f5ca5e32336d9b3a206` (source release run `38337589550`, artifact `11785274000`, tar SHA-256 `88541459b93fc1bb33215f7e1d570ee35ac620349b2893171b48dcb6ee07a33a`) has a confirmed documentation error in `docs/TEST_LAB.md`: the Area-31 preflight was described as the **first executable step**, but `.github/workflows/area31-interop.yml` first checks out the exact SHA and binds provisional local identities, and then checks/masks Area-31 secrets before remote transport access. Repair only the documentation ordering; no code or HECnet boundary is weakened. Prior fixed-order pass-1 partial **37/267** isolated reviewed files are historical on the superseded tar, NOT reusable audit credit. Complete formal clean scans remain **0/3**. Requalify this replacement exact main with Repository Policy, dual-architecture Build Bootstrap, Project State Gate and Source Release Reproducibility; after all four green, independently fresh-download and verify replacement source artifact, rebuild complete packaged source roster and restart owner-required first comprehensive semantic pass. Do not advance canonical PP, full PROFILE=full/SCOPE=all, or public release before three successive independently complete zero-defect reviews of the new identical packaged bytes. Audit issue #1131 and root record #1061.
 
 2026-10-12 Area-31 protected-peer documentation semantic repair: exact fully qualified source `9d75ccbc7f8158bca7f7db68b58498f450cb1cca`, run `38342354838`, artifact `11787407435`, tar SHA-256 `163402d5db0f1d9b4f144c90a2619f8adf385cf892eaf4b5995594d0a2c676cf`, was found to contradict its own hard protected remote HECnet rule by allowing `VAX_USERNAME`/`VAX_PASSWORD` for test *deployment* or remote helper install/invocation in `docs/HECNET_LAB.md` despite its lines 21,90–92 banning any remote filesystem alteration or remote program execution past PYRTR 31.3 (MIM 1.13 strict read-only). Correct only the Area31 documentation: credentials for read-only/non-state-changing authentication, test helper installation/invocation confined exclusively to project-controlled local/SIMH peers. Existing workflow/code safety and operational network behavior unchanged, no remote state mutated. Evidence issue #1131 finding comment 6137843865. Current formal three complete clean audits **0/3**; prior 31/267 partial file readings on superseded exact source are historical not transferable. Require 4 new exact-SHA fully green gates, fresh qualified source artifact and independent safe acquisition, restart exhaustive file-by-file full semantic pass1; no PP/full release acceptance/publication until 3/3.
+
+2026-10-13: Fresh exact-SHA packaged-source supplemental semantic review of
+`a24fcb055e9bb0e7e0e2043a0c7bcec38da0ef74` (accepted Source Release Reproducibility run `38343942322`,
+artifact `11788146460`, versioned tar SHA-256
+`1f2b010e8ffd35f550ad55b3aed02aa3aeef73fbd47c87db8178f515bb189002`)
+confirmed a real source-publication consistency defect in
+`tools/build-source-release.sh`. Root `VERSION` is the sole authoritative
+production-version declaration, but the builder accepted a syntactically
+valid arbitrary caller version instead of comparing it to `VERSION` in the
+specified source commit. A separate disposable synthetic Git fixture built
+from the exact accepted source demonstrated exit 0 for requested 9.9.9
+when committed VERSION still read 1.0.0; its tarball was named 9.9.9 and
+SOURCE-METADATA said 9.9.9, contradicting packaged VERSION=1.0.0.
+The new direct source-compiled policy regression demonstrates RED on the
+old builder and GREEN on the repair, testing matching, mismatched, missing
+and duplicate committed VERSION values and checking archive contents.
+Repair the builder to check the pinned committed VERSION before assembling
+any archive. Also update the Source Release workflow's wrong-pin/read-only
+negatives to use the actual declared version (rather than letting the new
+version guard make them vacuously pass), add an explicit wrong-version
+negative, and preserve both native-architecture real build gates.
+The local extracted-source complete make unit diagnostic was terminated
+by an execution timeout, not a PASS; the independent hosted acceptance
+gates must be rerun for the exact new source SHA. This substantive commit
+includes the builder, workflow, regression and both continuity documents
+atomically on main. Source bytes are altered, so all 35/267 prior partial
+pass-1 observations become historical and complete clean semantic reviews
+remain **0/3**. Qualify the replacement SHA with fully green Repository
+Policy, Build Bootstrap on amd64/aarch64, Project State Gate, and Source
+Release Reproducibility, then independently download its exact artifact
+and restart the complete fixed-file semantic pass. Canonical PP reproof,
+full PROFILE=full SCOPE=all, and independently verified publication are
+still blocked pending 3/3 and final exact-SHA acceptance.

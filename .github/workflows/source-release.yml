@@ -97,6 +97,8 @@ jobs:
           negative="$RUNNER_TEMP/source-release-negatives"
           rm -rf "$negative"
           mkdir -p "$negative/checksum" "$negative/tree"
+          source_release_version=$(sed -n 's/^version=//p' VERSION)
+          [[ "$source_release_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
 
           cp "$release/$archive" "$negative/checksum/$archive"
           cp "$release/$archive.sha256" "$negative/checksum/$archive.sha256"
@@ -151,14 +153,19 @@ jobs:
           fi
           rm "$candidate/audit.qcow2"
 
-          if tools/build-source-release.sh "$negative/bad-pin" audit-bad-pin 0000000000000000000000000000000000000000 >/dev/null 2>&1; then
+          if tools/build-source-release.sh "$negative/version-mismatch" "${source_release_version}-audit-mismatch" "$GITHUB_SHA" >/dev/null 2>&1; then
+            echo "source-release: committed VERSION mismatch negative unexpectedly succeeded" >&2
+            exit 1
+          fi
+
+          if tools/build-source-release.sh "$negative/bad-pin" "$source_release_version" 0000000000000000000000000000000000000000 >/dev/null 2>&1; then
             echo "source-release: wrong-pin negative unexpectedly succeeded" >&2
             exit 1
           fi
 
           mkdir "$negative/read-only-output"
           chmod 0555 "$negative/read-only-output"
-          if tools/build-source-release.sh "$negative/read-only-output" audit-read-only "$GITHUB_SHA" >/dev/null 2>&1; then
+          if tools/build-source-release.sh "$negative/read-only-output" "$source_release_version" "$GITHUB_SHA" >/dev/null 2>&1; then
             echo "source-release: read-only-output negative unexpectedly succeeded" >&2
             exit 1
           fi

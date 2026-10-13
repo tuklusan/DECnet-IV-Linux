@@ -30,6 +30,18 @@ umask 022
 
 root=$(git rev-parse --show-toplevel)
 commit=$(git -C "$root" rev-parse --verify "$source_sha^{commit}")
+# VERSION in the pinned source commit is authoritative.  A caller-supplied
+# label must never produce an archive whose name and metadata disagree with
+# the VERSION shipped inside the very same source tarball.
+version_file=$(git -C "$root" show "$commit:VERSION") || {
+  echo "build-source-release: committed VERSION missing or unreadable" >&2
+  exit 2
+}
+declared_version=$(printf '%s\n' "$version_file" | sed -n 's/^version=//p')
+if [[ "$declared_version" != "$version" ]]; then
+  echo "build-source-release: requested version $version disagrees with committed VERSION" >&2
+  exit 2
+fi
 epoch=$(git -C "$root" show -s --format=%ct "$commit")
 name="DECnet-IV-Linux-$version"
 work=$(mktemp -d)
