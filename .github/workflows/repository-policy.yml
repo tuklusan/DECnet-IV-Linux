@@ -451,16 +451,26 @@ jobs:
             dispatch_and_record VM_LAB_PP11_S1 vm-lab.yml \
               -f lab_mode=pp11s1 -f nic_model=virtio-net-pci -f vcpus=2 \
               -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
+            pp11_s1_run_id=$(sed -n 's/^VM_LAB_PP11_S1_RUN_ID=//p' "$DNIV_SCRATCH_DIR/dispatch.env")
+            [[ "$pp11_s1_run_id" =~ ^[1-9][0-9]*$ ]] || { echo 'missing S1 run identity' >&2; exit 2; }
             printf 'VM_LAB_PP11_S2=vm-lab.yml:pp11s2:virtio-net-pci:1vcpu\n' >> "$DNIV_SCRATCH_DIR/dispatch.env"
             dispatch_and_record VM_LAB_PP11_S2 vm-lab.yml \
               -f lab_mode=pp11s2 -f nic_model=virtio-net-pci -f vcpus=1 \
+              -f pp11_s1_run_id="$pp11_s1_run_id" \
               -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
           fi
 
           if [[ "$profile" == targeted && "$scope" == pp11-s2 ]]; then
+            printf 'VM_LAB_PP11_S1=vm-lab.yml:pp11s1:virtio-net-pci:2vcpu\n' >> "$DNIV_SCRATCH_DIR/dispatch.env"
+            dispatch_and_record VM_LAB_PP11_S1 vm-lab.yml \
+              -f lab_mode=pp11s1 -f nic_model=virtio-net-pci -f vcpus=2 \
+              -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
+            pp11_s1_run_id=$(sed -n 's/^VM_LAB_PP11_S1_RUN_ID=//p' "$DNIV_SCRATCH_DIR/dispatch.env")
+            [[ "$pp11_s1_run_id" =~ ^[1-9][0-9]*$ ]] || { echo 'missing S1 run identity' >&2; exit 2; }
             printf 'VM_LAB_PP11_S2=vm-lab.yml:pp11s2:virtio-net-pci:1vcpu\n' >> "$DNIV_SCRATCH_DIR/dispatch.env"
             dispatch_and_record VM_LAB_PP11_S2 vm-lab.yml \
               -f lab_mode=pp11s2 -f nic_model=virtio-net-pci -f vcpus=1 \
+              -f pp11_s1_run_id="$pp11_s1_run_id" \
               -f parent_run_id="$GITHUB_RUN_ID" -f expected_sha="$GITHUB_SHA"
           elif [[ "$profile" == targeted && "$scope" == post-timing ]]; then
             :

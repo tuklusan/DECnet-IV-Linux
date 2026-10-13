@@ -41,6 +41,10 @@ on:
         description: Exact parent candidate SHA; blank for direct dispatch
         required: false
         type: string
+      pp11_s1_run_id:
+        description: Required completed S1 run identity for PP-11 S2
+        required: false
+        type: string
       nic_model:
         description: QEMU Ethernet device model
         required: true
@@ -86,7 +90,32 @@ permissions:
   contents: read
 
 jobs:
+  pp11-s1-prerequisite:
+    if: ${{ inputs.lab_mode == 'pp11s2' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Check out exact source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Wait for independently successful exact S1 before S2
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          python3 tools/pp11_s1_gate.py \
+            --repo "$GITHUB_REPOSITORY" \
+            --run-id '${{ inputs.pp11_s1_run_id }}' \
+            --parent-run-id '${{ inputs.parent_run_id }}' \
+            --sha "$GITHUB_SHA"
+
   python-two-node:
+    needs: pp11-s1-prerequisite
+    if: ${{ always() && (inputs.lab_mode != 'pp11s2' || needs.pp11-s1-prerequisite.result == 'success') }}
     strategy:
       fail-fast: false
       max-parallel: 2
