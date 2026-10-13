@@ -2824,3 +2824,25 @@ No source release tarball qualified for the prior commit. New
 four-gate exact-SHA qualification is mandatory; full source manual
 semantic reviews remain **0/3**, previous 35/267 file notes
 historical, PP/full/publication still blocked.
+
+2026-10-13: Additional direct builder negative caught during
+pre-qualification on `d92f728bcbc3d3db1aad4d69fbc6e5ca629d8352`: the first fixed source
+builder used Bash command substitution for committed VERSION, which
+silently strips embedded NUL bytes. A disposable synthetic committed
+fixture containing `version=1.0.0\0\n` produced a tar despite its
+embedded VERSION being malformed. This is a real fail-open source
+identity gap and invalidates/supersedes preliminary issue #1142.
+Correct builder VERSION validation to process original committed
+bytes through a Python 3.10+ stdin byte parser, fail closed for
+NUL/CR anywhere, missing/multiple declarations or differing exact
+version line, and preserve all other builder/metadata/packaging guards.
+Extend the new source-version regression with NUL and CRLF fixture
+commits. Direct local test FAILS previous NUL case and PASSES the
+hardened builder's mismatched/missing/duplicate/NUL/CRLF plus valid
+positive cases. This atomic main-only commit updates only builder,
+regression and both continuity files, no protocol behavior. All
+predecessor qualification is superseded regardless of preliminary
+green jobs; four new exact-SHA source gates, independent new tar
+acquisition and owner 3 full semantic scans are mandatory.
+Manual complete clean scans remain **0/3**; canonical PP,
+PROFILE=full/SCOPE=all and production publication not authorized.

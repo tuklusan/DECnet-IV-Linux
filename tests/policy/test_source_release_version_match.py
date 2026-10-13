@@ -85,6 +85,14 @@ def main():
         duplicate_sha = commit(repo)
         expect_rejection(repo, work / "duplicate", duplicate_sha, "1.0.0")
 
+        version_file.write_bytes(b"version=1.0.0\x00\n")
+        nul_sha = commit(repo)
+        expect_rejection(repo, work / "embedded-nul", nul_sha, "1.0.0")
+
+        version_file.write_bytes(b"version=1.0.0\r\n")
+        cr_sha = commit(repo)
+        expect_rejection(repo, work / "embedded-cr", cr_sha, "1.0.0")
+
         version_file.write_text("other_version=1.0.0\n", encoding="utf-8")
         missing_sha = commit(repo)
         expect_rejection(repo, work / "missing", missing_sha, "1.0.0")

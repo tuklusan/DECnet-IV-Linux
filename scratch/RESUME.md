@@ -2697,3 +2697,19 @@ continuity docs; new source SHA requires all four fully green exact
 SHA gates, fresh accepted source-artifact acquisition, and 267+
 package-file roster restart. Prior source semantic notes historical
 and formal 0/3, PP/full/publication pending.
+
+2026-10-13: Supplemental source-release semantic scan caught embedded
+NUL stripping in Bash committed-VERSION substitution on unqualified
+source SHA d92f728bcbc3d3db1aad4d69fbc6e5ca629d8352. Synthetic
+committed VERSION with bytes version=1.0.0, NUL, newline generated
+an invalid but successfully produced versioned source archive.
+Replace substitution by raw committed-VERSION binary stream validation,
+fail closed for NUL, CR, missing, duplicate, differing exact lines,
+and add actual regression negatives for NUL and CRLF alongside
+valid/wrong/missing/duplicate cases. Regression red before/green after.
+Predecessor #1142 qualification is superseded regardless of outcome.
+Atomic main-only correction includes builder, test and both
+continuity files. Need four newly green exact-SHA gates and freshly
+downloaded accepted artifact before rebuilding coverage roster;
+prior 35/267 isolated file review evidence historical; formal 0/3.
+PP, full PROFILE=full SCOPE=all and public release still blocked.

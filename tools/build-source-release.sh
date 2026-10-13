@@ -33,13 +33,20 @@ commit=$(git -C "$root" rev-parse --verify "$source_sha^{commit}")
 # VERSION in the pinned source commit is authoritative.  A caller-supplied
 # label must never produce an archive whose name and metadata disagree with
 # the VERSION shipped inside the very same source tarball.
-version_file=$(git -C "$root" show "$commit:VERSION") || {
-  echo "build-source-release: committed VERSION missing or unreadable" >&2
-  exit 2
-}
-declared_version=$(printf '%s\n' "$version_file" | sed -n 's/^version=//p')
-if [[ "$declared_version" != "$version" ]]; then
-  echo "build-source-release: requested version $version disagrees with committed VERSION" >&2
+# Inspect the ORIGINAL committed VERSION bytes, not a shell substitution:
+# Bash silently strips NULs from command-substitution output.  Requiring one
+# exact ASCII version declaration prevents malformed release metadata.
+if ! git -C "$root" show "$commit:VERSION" | python3 -c '
+import sys
+expected = ("version=" + sys.argv[1] + "\n").encode("ascii")
+data = sys.stdin.buffer.read()
+lines = data.splitlines(keepends=True)
+if (b"\x00" in data or b"\r" in data or
+        sum(line.startswith(b"version=") for line in lines) != 1 or
+        expected not in lines):
+    sys.exit(1)
+' "$version"; then
+  echo "build-source-release: requested version disagrees with committed VERSION, or VERSION is malformed" >&2
   exit 2
 fi
 epoch=$(git -C "$root" show -s --format=%ct "$commit")
