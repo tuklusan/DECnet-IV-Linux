@@ -12,6 +12,7 @@
 # SANYALnet Labs." See LICENSE for full terms, warranty disclaimer, termination,
 # patent, trademark, and governing-law provisions.
 # ============================================================================
+
 """Fail closed until the exact-parent, dual-architecture PP-11 S1 has passed."""
 
 import argparse
