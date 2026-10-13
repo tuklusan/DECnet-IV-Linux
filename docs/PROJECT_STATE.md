@@ -2882,3 +2882,21 @@ file-by-file semantic review at scan 1. No final-SHA canonical
 PP (PP-11 S1 before S2 and PP-12), PROFILE=full/SCOPE=all
 acceptance, source publication or independent public verification
 before three complete independent clean semantic audits.
+
+2026-10-13 packaged source semantic audit correction: accepted source SHA
+`78eeb3cd9066fcfc44e0d788460abb97cb992c2f` is superseded after
+`#1131` finding: scratch/README.md incorrectly claimed every hosted
+job has a maximum 75-minute timeout. Current workflow policy allows
+one narrowly scoped 120-minute exception for
+`.github/workflows/scale16-distributed.yml`; ordinary hosted jobs
+remain capped at 75 minutes. Correct documentation only; do not
+shorten distributed acceptance or change protocol behavior.
+All previously completed isolated source reviews belong to the old
+packaged bytes, and all complete clean semantic audit counts stay
+**0/3**. Qualify this new exact main SHA with green Repository
+Policy, both native Build Bootstrap architectures, Project State
+Gate and Source Release Reproducibility, then freshly download and
+verify the successor source artifact; restart exhaustive full 3-pass
+semantic review with a new 270-member-or-updated packaged roster.
+PP-11 S1 before S2 and PP-12, full PROFILE=full/SCOPE=all acceptance,
+and public production release remain blocked until 3/3.

@@ -22,7 +22,7 @@ A hosted run/session ID records lineage only. Hosted RAM, processes and live VM 
 
 Compact workflow evidence is retained for at most 30 days. VM workflows may reuse only the verified source-independent architecture foundation stored through the repository's architecture/fingerprint-keyed Actions cache. Exact-candidate images and writable QCOW2 overlays are disposable, are never accepted as resume input, and are excluded from uploaded compact evidence. Interoperability runs always start fresh candidate/reference VMs from verified foundations.
 
-Every hosted job declares an explicit timeout no greater than 75 minutes. `tools/workflow_budget_gate.py` enforces job timeouts, evidence retention, verified-foundation/disposable-candidate safeguards and interoperability disk exclusion before workflow integrity evidence is recorded.
+Every hosted job declares an explicit timeout: at most 75 minutes by default, with the sole 120-minute exception for the four distributed-scale partitions in `.github/workflows/scale16-distributed.yml`. `tools/workflow_budget_gate.py` enforces job timeouts, evidence retention, verified-foundation/disposable-candidate safeguards and interoperability disk exclusion before workflow integrity evidence is recorded.
 
 `tools/integrity_scan.py` can verify every tracked blob completely with explicit `--full-tree`, and its default bounded mode records the exact parent-to-candidate diff plus changed-file blob hashes while checking checkout bytes and modes. `tools/workflow_guard.sh` runs ordinary policy/regression gates and records one bounded baseline diff manifest; workflows perform a matching final scan before preserving state. These machine checks prove candidate identity and checkout immutability for their recorded scope.
 
