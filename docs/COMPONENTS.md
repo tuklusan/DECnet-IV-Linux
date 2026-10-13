@@ -123,6 +123,7 @@ The default installed library layout also includes the compatibility links `libd
 | `tools/project_state_gate.py` | Durable Project State/RESUME continuity gate. |
 | `tools/repo_policy.py` | Main-only repository and acceptance policy enforcement. |
 | `tools/workflow_budget_gate.py` | Hosted-runner workflow budget/concurrency policy check. |
+| `tools/pp11_s1_gate.py` | Fail-closed PP-11 S1-before-S2 same-parent gate: validates both architectures, source SHA and exact-run-attempt evidence before S2 execution. |
 | `tools/license_monkey.py` | Tracked-source license-header enforcement. |
 | `tools/install-hooks.sh` | Local Git hook installer for repository policy checks. |
 | `tools/e4_convergence_regression.py` | E4 convergence sampling regression guard. |
