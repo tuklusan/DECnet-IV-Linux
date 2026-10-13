@@ -24,15 +24,15 @@ import subprocess
 import tempfile
 import time
 
-ARCH_RUNNERS = {"amd64": "python-two-node (ubuntu-24.04, x64)",
-                "arm64": "python-two-node (ubuntu-24.04-arm, arm64)"}
+ARCH_RUNNERS = {"amd64": "python-two-node (ubuntu-24.04, x64, amd64, qemu-system-x86, 300, 1800)",
+                "arm64": "python-two-node (ubuntu-24.04-arm, arm64, arm64, qemu-system-arm, 420, 2400)"}
 
 
 def require_run(run, repo, run_id, sha):
     if (run.get("id") != run_id or run.get("head_sha") != sha or
         run.get("event") != "workflow_dispatch" or
         run.get("repository", {}).get("full_name") != repo or
-        not re.search(r"(?:^|/)\.github/workflows/vm-lab\.yml@refs/heads/main$",
+        not re.search(r"^\.github/workflows/vm-lab\.yml$",
                       run.get("path", ""))):
         raise ValueError("S1 run is not the exact expected workflow/source/repository")
     attempt = run.get("run_attempt")

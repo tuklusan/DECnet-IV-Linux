@@ -36,10 +36,10 @@ def rejects(fn):
 
 run = {"id": RUN_ID, "head_sha": SHA, "event": "workflow_dispatch",
        "repository": {"full_name": REPO}, "run_attempt": 2,
-       "path": REPO + "/.github/workflows/vm-lab.yml@refs/heads/main"}
+       "path": ".github/workflows/vm-lab.yml"}
 assert gate.require_run(run, REPO, RUN_ID, SHA) == 2
 for key, bad in (("head_sha", "b" * 40), ("event", "push"),
-                 ("id", RUN_ID + 1), ("path", ".github/workflows/interop.yml@refs/heads/main"),
+                 ("id", RUN_ID + 1), ("path", ".github/workflows/interop.yml"),
                  ("run_attempt", 0)):
     rejects(lambda key=key, bad=bad: gate.require_run({**run, key: bad}, REPO, RUN_ID, SHA))
 
