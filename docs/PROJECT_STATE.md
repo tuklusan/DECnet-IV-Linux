@@ -2950,3 +2950,33 @@ successor source with all four exact-SHA gates and fresh package before
 restarting file-by-file semantic pass 1. Superseded provisional observations
 are history only; complete successive zero-defect reviews remain **0/3**.
 Do not conduct final-SHA PP, full/all acceptance, or publish until 3/3.
+
+2026-10-13: Semantic review of newly accepted packaged source
+`2902dc812d26ac3f57a4a41f797e4be2e9aca0a1` (Source Release Reproducibility
+`38418854423`, artifact `11825134401`, tar SHA256
+`f119f51c4650bd82ecf1e87b635594bb3a7693854a173c624525d3bd7fd596b2`)
+confirmed a source-only archive binary exclusion defect:
+`tools/build-source-release.sh` rejected ELF magic but permitted
+committed Windows PE, Mach-O, universal Mach-O, WebAssembly, and LLVM
+bitcode files renamed to innocuous source-like filenames. A disposable
+minimal real Git source fixture containing valid `MZ` DOS and
+`PE\\x00\\x00` NT signatures was accepted by the original builder and
+the compiled payload appeared in the supposedly source-only tarball.
+The new actual-builder regression `test_source_release_binary_formats.py`
+is RED on the original packaged builder (renamed PE accepted) and
+GREEN on the hardened builder, checking ELF, PE, Mach-O, universal,
+WebAssembly and LLVM binary magic negatives, and preserving ordinary
+text starting with MZ. The existing production-version regression and
+`test_source_release_gate.py` both PASS with the patch, as does
+`bash -n tools/build-source-release.sh`. Restrict only packaging
+content, not protocols or any protected HECnet peer behavior.
+Atomic main-only repair updates the builder, new regression, this
+state record, and `scratch/RESUME.md`.
+The 271-file partial observations on the prior immutable source remain
+historical only. Formal three complete independent zero-defect audits
+remain **0/3**. Qualify new main exact SHA via Repository Policy,
+Build Bootstrap on both native architectures, Project State Gate and
+Source Release Reproducibility; THEN fresh-download and checksum-verify
+its newly accepted source artifact, reconstruct source roster and
+restart full file-by-file semantic pass 1. Canonical final-SHA PP,
+PROFILE=full/SCOPE=all acceptance and publication remain blocked.

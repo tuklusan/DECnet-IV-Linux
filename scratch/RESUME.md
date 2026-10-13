@@ -2812,3 +2812,28 @@ semantic pass 1. Formal three full clean scans remain **0/3**; old isolated
 file progress is historical only. Canonical PP, full/all acceptance,
 and independently verified public publication are pending. Never treat
 skips as PASS or claim final release based on source-only job success.
+
+2026-10-13: New confirmed source-only archive blocker on exact
+qualified candidate `2902dc812d26ac3f57a4a41f797e4be2e9aca0a1`, run `38418854423`, artifact
+`11825134401` (tar SHA256
+`f119f51c4650bd82ecf1e87b635594bb3a7693854a173c624525d3bd7fd596b2`).
+Original packaged `tools/build-source-release.sh` inspected ELF
+magic and Linux binary extensions only; a disposable committed
+source fixture containing a renamed compiled PE-format payload
+(MZ plus PE NT header) was accepted as source, tar produced exit 0.
+New `tests/policy/test_source_release_binary_formats.py` RED
+original, GREEN repaired, using an actual standalone Git fixture
+and source builder: PE, Mach-O including fat format, WebAssembly,
+LLVM bitcode and ELF disallowed even if renamed; ordinary MZ text
+positive succeeds. Existing `test_source_release_version_match.py`,
+`test_source_release_gate.py`, and shell syntax pass patched source.
+No source protocol changes or protected remote peer access.
+Commit builder+regression+both continuity docs atomically using
+expected-main-SHA compare-and-swap; verify live committed tree/files.
+Requalify 4 native/exact-SHA gates, fresh download/checksum/safe
+extraction of the successor immutable source tar, regenerate complete
+packaged source roster, restart full semantic audit scan 1 at first
+file. Any earlier partial per-file observations are historical.
+Formal completed clean audits **0/3**; PP-11 S1 before S2, PP-12,
+full/all acceptance and independently verified publication still
+pending. Never mistake an optional skipped peer job for PP evidence.

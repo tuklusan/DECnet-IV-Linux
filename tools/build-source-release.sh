@@ -75,8 +75,36 @@ for forbidden in .git __pycache__ '*.pyc' '*.qcow2' '*.raw' '*.img' '*.iso' '*.k
 done
 while IFS= read -r -d '' candidate; do
   magic=$(od -An -tx1 -N4 "$candidate" | tr -d ' \n')
-  if [[ "$magic" == 7f454c46 ]]; then
-    echo "build-source-release: ELF binary payload present: ${candidate#"$work/$name/"}" >&2
+  # Source releases must not smuggle compiled binaries merely by renaming
+  # their extension.  ELF, Mach-O (including fat/universal), WebAssembly,
+  # LLVM bitcode and JVM class files all have fixed identifying magic.
+  case "$magic" in
+    7f454c46)
+      echo "build-source-release: ELF binary payload present: ${candidate#"$work/$name/"}" >&2
+      exit 2
+      ;;
+    feedface|cefaedfe|feedfacf|cffaedfe|cafebabe|bebafeca|cafebabf|bfbafeca|0061736d|4243c0de)
+      echo "build-source-release: compiled binary payload present: ${candidate#"$work/$name/"}" >&2
+      exit 2
+      ;;
+  esac
+  # A PE/COFF executable has an MZ DOS header with an e_lfanew pointer
+  # at byte 0x3c to the PE\0\0 signature.  Checking both avoids treating
+  # innocent text beginning with MZ as compiled code.
+  if [[ "$magic" == 4d5a* ]] && python3 - "$candidate" <<'PY_PE'
+import sys
+with open(sys.argv[1], "rb") as source:
+    header = source.read(64)
+    if len(header) < 64:
+        sys.exit(1)
+    offset = int.from_bytes(header[60:64], "little")
+    if offset < 64:
+        sys.exit(1)
+    source.seek(offset)
+    sys.exit(0 if source.read(4) == b"PE\x00\x00" else 1)
+PY_PE
+  then
+    echo "build-source-release: compiled PE binary payload present: ${candidate#"$work/$name/"}" >&2
     exit 2
   fi
 done < <(find "$work/$name" -type f -print0)
