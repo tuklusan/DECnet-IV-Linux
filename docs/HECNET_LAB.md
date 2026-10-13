@@ -44,7 +44,7 @@ The project forks carrying native VDE support are pinned in `tests/reference/ref
 
 ### Cross-runner SSH rendezvous contract
 
-The cross-runner VDE2 workflow consumes `VDE_SSH_HOST`, `VDE_SSH_PORT`, `VDE_SSH_USER`, `VDE_SSH_KEY` and `VDE_SSH_KNOWN_HOSTS` only at runtime. Its unprivileged reverse-forward port is derived automatically from the exact candidate SHA. The bastion must already exist and permit TCP reverse forwarding; the project does not create or assume a public relay. Both runners validate prerequisites before checkout/network activity, write key/configuration material only below runner-temporary storage with restrictive permissions, and never retain it as evidence. The server's ephemeral inner SSH account is restricted to the VDE plug plus readiness/completion marker commands.
+The cross-runner VDE2 workflow consumes `VDE_SSH_HOST`, `VDE_SSH_PORT`, `VDE_SSH_USER`, `VDE_SSH_KEY` and `VDE_SSH_KNOWN_HOSTS` only at runtime. Its unprivileged reverse-forward port is derived automatically from the exact candidate SHA. The bastion must already exist and permit TCP reverse forwarding; the project does not create or assume a public relay. Both runners check out the exact pinned repository first, then validate SSH rendezvous prerequisites before initiating bastion access or cross-runner VDE network traffic. They write key/configuration material only below runner-temporary storage with restrictive permissions and never retain it as evidence. The server's ephemeral inner SSH account is restricted to the VDE plug plus readiness/completion marker commands.
 
 ## MULTINET
 
