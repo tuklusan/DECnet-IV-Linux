@@ -30,7 +30,7 @@ One out-of-tree module, `decnet_iv.ko`; native protocol handling is in the Linux
 | NSP transport | Connect/disconnect, logical links, segmentation, reassembly, sequencing, ACKs, retries, timers and bounded flow control. |
 | Normal + urgent data | Regular and interrupt/out-of-band NSP records with independent poll/epoll readiness. |
 | Linux DECnet sockets | Native `AF_DECnet` with `SOCK_SEQPACKET` record boundaries and `SOCK_STREAM` byte-stream behavior, including partial reads and `MSG_WAITALL`. |
-| Classic socket controls | `DNPROTO_NSP` access/connect/accept/disconnect data, link info, deferred accept and explicit accept/reject. |
+| Classic socket controls | `DNPROTO_NSP` access/connect/accept/disconnect data, link info, deferred accept/reject and explicit accept/reject. |
 | Session Control | Object selection and dispatch, connection initiation, access-data handling and accept/reject semantics. |
 | Kernel management API | Versioned UAPI, `/dev/decnet_iv`, identity, route/adjacency/NSP-link snapshots and counters. |
 | Defensive protocol handling | Strict wire/menu parsing, record-size limits, overflow checks, retransmission ownership and orderly teardown/EOF behavior. |
