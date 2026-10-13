@@ -43,13 +43,22 @@ def require_run(run, repo, run_id, sha):
 
 def require_jobs(data):
     jobs = data.get("jobs")
-    if not isinstance(jobs, list) or data.get("total_count") != len(ARCH_RUNNERS):
-        raise ValueError("S1 must have exactly two architecture jobs")
+    if not isinstance(jobs, list) or data.get("total_count") != len(jobs):
+        raise ValueError("S1 jobs response is incomplete")
     by_name = {j.get("name"): j for j in jobs}
-    if set(by_name) != set(ARCH_RUNNERS.values()):
-        raise ValueError("S1 architecture jobs missing or duplicated")
-    if any(j.get("status") != "completed" or j.get("conclusion") != "success"
-           for j in jobs):
+    if len(by_name) != len(jobs):
+        raise ValueError("S1 job labels are duplicated")
+    expected = set(ARCH_RUNNERS.values())
+    optional = "pp11-s1-prerequisite"
+    if set(by_name) not in (expected, expected | {optional}):
+        raise ValueError("S1 has missing or unexpected jobs")
+    # The S2-only prerequisite is necessarily skipped on an S1 run.
+    if optional in by_name:
+        job = by_name[optional]
+        if job.get("status") != "completed" or job.get("conclusion") != "skipped":
+            raise ValueError("S1-only run must skip the S2 prerequisite")
+    if any(by_name[name].get("status") != "completed" or
+           by_name[name].get("conclusion") != "success" for name in expected):
         raise ValueError("S1 must finish success on both architectures")
 
 

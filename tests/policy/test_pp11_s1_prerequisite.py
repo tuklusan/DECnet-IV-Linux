@@ -47,6 +47,17 @@ jobs = {"total_count": 2, "jobs": [
     {"name": name, "status": "completed", "conclusion": "success"}
     for name in gate.ARCH_RUNNERS.values()]}
 gate.require_jobs(jobs)
+skipped = {"name": "pp11-s1-prerequisite", "status": "completed",
+           "conclusion": "skipped"}
+with_skip = {"total_count": 3, "jobs": [*jobs["jobs"], skipped]}
+gate.require_jobs(with_skip)
+rejects(lambda: gate.require_jobs({
+    **with_skip, "jobs": [*jobs["jobs"], {**skipped, "conclusion": "success"}]}))
+rejects(lambda: gate.require_jobs({
+    **with_skip, "jobs": [*jobs["jobs"], {**skipped, "status": "in_progress"}]}))
+rejects(lambda: gate.require_jobs({
+    **with_skip, "jobs": [*jobs["jobs"], {**skipped, "name": "unrelated-gate"}]}))
+rejects(lambda: gate.require_jobs({**with_skip, "total_count": 2}))
 rejects(lambda: gate.require_jobs({**jobs, "total_count": 1}))
 rejects(lambda: gate.require_jobs({**jobs, "jobs": [jobs["jobs"][0], jobs["jobs"][0]]}))
 rejects(lambda: gate.require_jobs({**jobs, "jobs": [jobs["jobs"][0],
