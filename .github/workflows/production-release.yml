@@ -271,6 +271,33 @@ jobs:
           source_attempt=$(printf '%s\n' "$source_json" | jq -r .run_attempt)
           [[ "$source_attempt" =~ ^[1-9][0-9]*$ ]]
           printf 'SOURCE_RELEASE_ATTEMPT=%s\n' "$source_attempt" >>"$GITHUB_ENV"
+          # Full-source success does not prove PP-12 if the optional job was
+          # skipped. Inspect actual job conclusions for BOTH architectures.
+          gh api --paginate \
+            "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RELEASE_RUN_ID/jobs?per_page=100" \
+            --jq '.jobs[] | {name,status,conclusion}' \
+            >"$DNIV_RELEASE_EVIDENCE/full-source-jobs.jsonl"
+          python3 - "$DNIV_RELEASE_EVIDENCE/full-source-jobs.jsonl" <<'PY_PP12_JOBS'
+          import json
+          import sys
+          from pathlib import Path
+
+          expected = {
+              "package-amd64",
+              "validate-arm64",
+              "portability (ubuntu-24.04, amd64)",
+              "portability (ubuntu-24.04-arm, arm64)",
+              "pp12-real-peers (ubuntu-24.04, amd64, qemu-system-x86)",
+              "pp12-real-peers (ubuntu-24.04-arm, arm64, qemu-system-arm)",
+          }
+          rows = [json.loads(line) for line in Path(sys.argv[1]).read_text().splitlines()]
+          names = [row.get("name") for row in rows]
+          if len(names) != len(expected) or set(names) != expected:
+              raise SystemExit("production-release: full-source job set incomplete or duplicated")
+          for row in rows:
+              if row.get("status") != "completed" or row.get("conclusion") != "success":
+                  raise SystemExit(f"production-release: full-source job not green: {row['name']}")
+          PY_PP12_JOBS
 
       - name: Download and verify accepted source artifact
         id: accepted

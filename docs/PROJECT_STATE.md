@@ -2930,3 +2930,23 @@ successes, freshly download and verify its replacement source archive and
 restart exhaustive 270-member-or-updated roster scan 1. Canonical PP, final
 PROFILE=full/SCOPE=all acceptance and independent production publication remain
 blocked pending three successive complete zero-defect audits.
+
+2026-10-13 confirmed packaged-source production release gate defect in
+fully accepted source `7f6a922ab96a374e2946150f81c7762cbf085d53` (source-release run `38411579951`,
+artifact `11822081406`, tar SHA256
+`8561688cd7b0a9ab0b3de40eb2f69265f46a8b8a9f0b7bb863cd72d9803e11e9`).
+The publication workflow checked the full source-release child's top-level
+completed SUCCESS and exact SHA, but did not inspect its inner six jobs:
+a source-only qualifier legitimately succeeds while both required PP-12
+real-peer jobs are SKIPPED. This could falsely certify PP-12 if a
+source-only run ID were supplied as the final acceptance child.
+Require the complete expected six-job source-release matrix, every job
+completed SUCCESS including PP-12 real peers on native amd64 and arm64,
+and reject missing, duplicate, extra, skipped, failed, or pending jobs.
+A source-extracted regression verifies positive and negative outcomes,
+including exact workflow guard presence. Change the publication workflow,
+regression, and both continuity records atomically on main; qualify
+successor source with all four exact-SHA gates and fresh package before
+restarting file-by-file semantic pass 1. Superseded provisional observations
+are history only; complete successive zero-defect reviews remain **0/3**.
+Do not conduct final-SHA PP, full/all acceptance, or publish until 3/3.

@@ -2791,3 +2791,24 @@ the successor packaged bytes, restart fixed-order first complete semantic
 review, and continue independent 3 full passes. All previous file-level
 observations are history, **formal clean audits 0/3**. PP/full acceptance/
 publication remain pending.
+
+2026-10-13: On fully qualified source `7f6a922ab96a374e2946150f81c7762cbf085d53` (Source Release
+`38411579951`, artifact `11822081406`, tar SHA256
+`8561688cd7b0a9ab0b3de40eb2f69265f46a8b8a9f0b7bb863cd72d9803e11e9`),
+source-release publication interlock review found that
+`.github/workflows/production-release.yml` verified full source-release
+workflow status SUCCESS without checking its children: both arch PP-12
+real-peer jobs may be skipped while targeted source-only release
+qualifications still conclude SUCCESS. Add fail-closed exact six-job
+completed SUCCESS proof, including PP-12 both architectures, and the
+`tests/policy/test_production_full_pp12_jobs.py` negative regression.
+This main-only atomic repair includes production workflow, test, and
+`docs/PROJECT_STATE.md` as well as this resume file. The old audited
+package bytes are superseded by any repair. Before continuing audits,
+obtain green Repository Policy, dual-architecture Build Bootstrap,
+Project State Gate, Source Release Reproducibility for the new exact SHA;
+freshly download its artifact, record hash/metadata and restart fixed-order
+semantic pass 1. Formal three full clean scans remain **0/3**; old isolated
+file progress is historical only. Canonical PP, full/all acceptance,
+and independently verified public publication are pending. Never treat
+skips as PASS or claim final release based on source-only job success.
