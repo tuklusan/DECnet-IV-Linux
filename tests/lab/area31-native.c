@@ -25,6 +25,8 @@
 #include <decnet_iv_nice.h>
 #include <netdnet/dnetdb.h>
 
+#include "../../userspace/common/record_io.h"
+
 static __le16 cpu_to_le16_u(uint16_t value)
 {
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
@@ -221,7 +223,7 @@ static int mirror_query(const char *target, int matrix)
             tx[j] = (unsigned char)(j ^ (size_t)(0x31U + i));
         if (send(fd, tx, len, MSG_EOR | MSG_NOSIGNAL) != (ssize_t)len)
             goto fail;
-        got = dnet_recv(fd, rx, len, MSG_EOR);
+        got = (int)dniv_recv_record(fd, rx, len, 0);
         if (got != (int)len || rx[0] != 1U ||
             memcmp(tx + 1, rx + 1, len - 1U))
             goto fail;
