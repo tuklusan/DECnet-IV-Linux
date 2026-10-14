@@ -110,6 +110,44 @@ static int check_nice(int oversize)
     return oversize ? (rc == 0) : (rc != 0);
 }
 
+static int check_nice_control(int which, int expect_success)
+{
+    int pair[2], rc;
+    const uint16_t target = (uint16_t)((31U << 10) | 123U);
+    unsigned char item[11] = {0};
+    unsigned char accepted[4] = {2U, 0U, 0U, 0U};
+    unsigned char done[4] = {0x80U, 0U, 0U, 0U};
+    item[0] = DNIV_NICE_RET_SUCCESS;
+    item[1] = item[2] = 0xffU;
+    item[4] = (unsigned char)(target & 0xffU);
+    item[5] = (unsigned char)(target >> 8);
+    item[6] = 0x84U;
+    memcpy(item + 7, "DN70", 4U);
+    if (socketpair(AF_UNIX, SOCK_SEQPACKET, 0, pair)) return 1;
+    if (which == 0) { // compact valid control
+        if (send(pair[1], accepted, 1U, MSG_EOR) != 1) return 1;
+    } else if (which == 1) { // malformed two-byte ACCEPTED
+        if (send(pair[1], accepted, 2U, MSG_EOR) != 2) return 1;
+    } else if (which == 2) { // accepted header with trailing bytes
+        accepted[3] = 3U;
+        if (send(pair[1], accepted, 4U, MSG_EOR) != 4) return 1;
+    } else { // extended valid control
+        if (send(pair[1], accepted, 4U, MSG_EOR) != 4) return 1;
+    }
+    if (send(pair[1], item, sizeof(item), MSG_EOR) != (ssize_t)sizeof(item)) return 1;
+    if (which == 4) { // malformed 2-byte terminator
+        if (send(pair[1], done, 2U, MSG_EOR) != 2) return 1;
+    } else if (which == 5) { // malformed counted terminator
+        done[3] = 1U;
+        if (send(pair[1], done, 4U, MSG_EOR) != 4) return 1;
+    } else {
+        if (send(pair[1], done, 1U, MSG_EOR) != 1) return 1;
+    }
+    rc = nice_read_executor_reply(pair[0], target, DNIV_NICE_INFO_SUMMARY);
+    close(pair[0]); close(pair[1]);
+    return expect_success ? (rc != 0) : (rc == 0);
+}
+
 int main(void)
 {
     int good, malformed;
@@ -127,6 +165,12 @@ int main(void)
         fprintf(stderr, "area31-MIRROR exact record: good=%d oversize=%d\n",
                 good, malformed);
         return 1;
+    }
+    if (check_nice_control(0, 1) || check_nice_control(3, 1) ||
+        check_nice_control(1, 0) || check_nice_control(2, 0) ||
+        check_nice_control(4, 0) || check_nice_control(5, 0)) {
+        fprintf(stderr, "area31-NICE invalid accepted/done control passed\n");
+        return 5;
     }
     if (check_nice(0) || check_nice(1)) {
         fprintf(stderr, "area31-NICE exact record: overlong reply falsely accepted\n");

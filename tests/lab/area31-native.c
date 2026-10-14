@@ -98,16 +98,20 @@ static int nice_read_executor_reply(int fd, uint16_t target,
         }
         code = (int)(int8_t)response[0];
 
-        if (code == 2) {
-            if (multiple || saw_item) {
+        if (code == DNIV_NICE_RET_ACCEPTED) {
+            if (multiple || saw_item ||
+                !dniv_nice_control_reply(response, (size_t)got,
+                                         DNIV_NICE_RET_ACCEPTED)) {
                 nice_dump_frame(info, response, got);
                 return -1;
             }
             multiple = 1;
             continue;
         }
-        if (code == -128) {
-            if (multiple && saw_item)
+        if (code == (int)(int8_t)DNIV_NICE_RET_DONE) {
+            if (multiple && saw_item &&
+                dniv_nice_control_reply(response, (size_t)got,
+                                        DNIV_NICE_RET_DONE))
                 return 0;
             nice_dump_frame(info, response, got);
             return -1;
