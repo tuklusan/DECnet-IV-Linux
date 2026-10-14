@@ -25,6 +25,8 @@
 
 #include <linux/dn.h>
 
+#include "../../userspace/common/record_io.h"
+
 #define DEFAULT_CHURN_CYCLES 16U
 #define MAX_CHURN_CYCLES 10000U
 
@@ -93,7 +95,7 @@ static int mirror_once(const struct sockaddr_dn *peer, unsigned int cycle)
     if (send(fd, tx, sizeof(tx), MSG_EOR | MSG_NOSIGNAL) !=
         (ssize_t)sizeof(tx))
         goto fail;
-    got = recv(fd, rx, sizeof(rx), 0);
+    got = dniv_recv_record(fd, rx, sizeof(rx), 0);
     if (got != (ssize_t)sizeof(rx) || rx[0] != 1U ||
         memcmp(rx + 1U, tx + 1U, sizeof(tx) - 1U))
         goto fail;
@@ -316,7 +318,7 @@ static int nonblocking_lifecycle(const struct sockaddr_dn *peer)
     if (send(fd, tx, sizeof(tx), MSG_EOR | MSG_NOSIGNAL) !=
         (ssize_t)sizeof(tx))
         goto fail;
-    if (recv(fd, rx, sizeof(rx), 0) != (ssize_t)sizeof(rx) ||
+    if (dniv_recv_record(fd, rx, sizeof(rx), 0) != (ssize_t)sizeof(rx) ||
         rx[0] != 1U || memcmp(rx + 1U, tx + 1U, sizeof(tx) - 1U))
         goto fail;
 
