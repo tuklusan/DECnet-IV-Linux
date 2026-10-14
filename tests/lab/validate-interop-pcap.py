@@ -267,6 +267,16 @@ def validate_endnode(payload: bytes, source: bytes, destination: bytes, who: str
         raise ValueError(f"{who} endnode hello used wrong multicast destination")
 
 
+def validate_clean_drain_counts(counts: dict[str, int]) -> None:
+    """Require a real DI after Data retransmission for the same NSP link."""
+    if counts["candidate_drain_probe"] < 2:
+        raise ValueError("interop pcap: clean disconnect did not retransmit unacknowledged Data")
+    if counts["candidate_drain_di_before_retransmit"]:
+        raise ValueError("interop pcap: clean disconnect DI preceded Data retransmission")
+    if counts["candidate_drain_retransmit_before_di"] < 1:
+        raise ValueError("interop pcap: clean disconnect missing DI after retransmitted Data")
+
+
 def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("pcap", type=Path)
@@ -507,10 +517,7 @@ def main() -> int:
             raise SystemExit("interop pcap: missing candidate NSP timeout retransmission")
         if counts["reference_loss_probe"] < 1:
             raise SystemExit("interop pcap: missing post-fault reference loss-probe response")
-        if counts["candidate_drain_probe"] < 2:
-            raise SystemExit("interop pcap: clean disconnect did not retransmit unacknowledged Data")
-        if counts["candidate_drain_di_before_retransmit"]:
-            raise SystemExit("interop pcap: clean disconnect DI preceded Data retransmission")
+        validate_clean_drain_counts(counts)
         if counts["candidate_exhaust_probe"] < 5:
             raise SystemExit("interop pcap: retransmit-limit probe did not reach all five attempts")
         if counts["candidate_ci_exhaust"] < 5 or counts["candidate_ci_exhaust_rci"] < 4:
