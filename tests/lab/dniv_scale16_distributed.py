@@ -20,6 +20,7 @@ import hashlib
 import os
 from pathlib import Path
 import platform
+import re
 import subprocess
 import sys
 import time
@@ -28,6 +29,10 @@ from dniv_scale import Lab, decnet_mac, guest, marker_sources, wait_for_markers
 
 
 def ssh_sync(config: Path, token: str, side: str) -> None:
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,96}", token):
+        raise RuntimeError("scale-16 distributed invalid synchronization token")
+    if side not in ("a", "b"):
+        raise RuntimeError("scale-16 distributed invalid synchronization side")
     mine = f"/tmp/dniv-scale16-{token}-{side}.ready"
     peer_side = "b" if side == "a" else "a"
     peer = f"/tmp/dniv-scale16-{token}-{peer_side}.ready"
@@ -185,6 +190,8 @@ def main() -> int:
     parser.add_argument("--ssh-config", type=Path, required=True)
     parser.add_argument("--sync-token", required=True)
     args = parser.parse_args()
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,96}", args.sync_token):
+        raise SystemExit("scale-16 distributed invalid synchronization token")
     for path in (args.base, args.kernel, args.initrd, args.ssh_config):
         if not path.is_file():
             raise SystemExit(f"scale-16 distributed missing {path}")
