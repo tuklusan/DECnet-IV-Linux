@@ -363,6 +363,11 @@ EOF
             echo "vde2-cross: socat server bridge session $session timed out" >&2
             exit 1
         fi
+        if (( rc != 0 )); then
+            cat "$log" >&2 || true
+            echo "vde2-cross: socat server bridge session $session failed with exit status $rc" >&2
+            exit 1
+        fi
         kill -0 "$echo_pid" 2>/dev/null || {
             echo "vde2-cross: frame echo server exited during relay session $session" >&2
             exit 1
