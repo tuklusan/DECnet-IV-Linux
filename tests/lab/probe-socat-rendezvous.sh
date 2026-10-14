@@ -66,9 +66,32 @@ chmod 600 "$ssh_config"
 
 if [[ "$mode" == "--server" ]]; then
     python3 - "$ssh_config" "$remote_sock" "$rendezvous" <<'PY'
+import os
 import select
 import subprocess
 import sys
+import time
+
+def read_marker(stream, timeout) -> str | None:
+    """Read one complete marker with a deadline, including partial-line stalls."""
+    deadline = time.monotonic() + timeout
+    data = bytearray()
+    while True:
+        left = deadline - time.monotonic()
+        if left <= 0:
+            return None
+        readable, _, _ = select.select([stream], [], [], left)
+        if not readable:
+            return None
+        chunk = os.read(stream.fileno(), 1)
+        if not chunk:
+            return None
+        if chunk == b"\n":
+            return data.decode("utf-8", errors="replace")
+        if len(data) >= 256:
+            raise RuntimeError("socat-rendezvous: overlong remote marker")
+        data.extend(chunk)
+
 
 cfg, sock, run_id = sys.argv[1:]
 cmd = ["ssh", "-F", cfg, "dniv-bastion",
@@ -78,15 +101,14 @@ p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
 try:
     p.stdin.write(f"DNIV-SOCAT-SERVER {run_id}\n")
     p.stdin.flush()
-    r, _, _ = select.select([p.stdout], [], [], 75)
-    if not r:
+    line = read_marker(p.stdout, 75)
+    if line is None:
         rc = p.poll()
         err = p.stderr.read().strip() if rc is not None else ""
         detail = f" rc={rc}" if rc is not None else ""
         if err:
             detail += f" stderr={err}"
         raise SystemExit("socat-rendezvous: server timed out waiting for client marker" + detail)
-    line = p.stdout.readline().rstrip("\n")
     if line != f"DNIV-SOCAT-CLIENT {run_id}":
         rc = p.poll()
         err = p.stderr.read().strip() if rc is not None else ""
@@ -111,10 +133,32 @@ fi
 
 sleep 6
 python3 - "$ssh_config" "$remote_sock" "$rendezvous" <<'PY'
+import os
 import select
 import subprocess
 import sys
 import time
+
+def read_marker(stream, timeout) -> str | None:
+    """Read one complete marker with a deadline, including partial-line stalls."""
+    deadline = time.monotonic() + timeout
+    data = bytearray()
+    while True:
+        left = deadline - time.monotonic()
+        if left <= 0:
+            return None
+        readable, _, _ = select.select([stream], [], [], left)
+        if not readable:
+            return None
+        chunk = os.read(stream.fileno(), 1)
+        if not chunk:
+            return None
+        if chunk == b"\n":
+            return data.decode("utf-8", errors="replace")
+        if len(data) >= 256:
+            raise RuntimeError("socat-rendezvous: overlong remote marker")
+        data.extend(chunk)
+
 
 cfg, sock, run_id = sys.argv[1:]
 
@@ -127,9 +171,8 @@ for attempt in range(2):
     try:
         p.stdin.write(f"DNIV-SOCAT-CLIENT {run_id}\n")
         p.stdin.flush()
-        r, _, _ = select.select([p.stdout], [], [], 20)
-        if r:
-            line = p.stdout.readline().rstrip("\n")
+        line = read_marker(p.stdout, 20)
+        if line is not None:
             if line == f"DNIV-SOCAT-SERVER {run_id}":
                 print("socat-rendezvous: client pass")
                 raise SystemExit(0)
