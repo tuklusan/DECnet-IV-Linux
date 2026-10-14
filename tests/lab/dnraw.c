@@ -60,6 +60,21 @@ static int parse_mac(const char *text, unsigned char mac[ETH_ALEN])
     return 0;
 }
 
+static int parse_visit(const char *text, unsigned int *value)
+{
+    unsigned long parsed;
+    char *end;
+
+    if (!text || !*text || strspn(text, "0123456789") != strlen(text))
+        return -1;
+    errno = 0;
+    parsed = strtoul(text, &end, 10);
+    if (errno || *end || parsed > 63U)
+        return -1;
+    *value = (unsigned int)parsed;
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     unsigned char dst[ETH_ALEN];
@@ -88,7 +103,7 @@ int main(int argc, char **argv)
         if (parse_mac(argv[3], dst) < 0 ||
             parse_decnet(argv[4], &src_addr) < 0 ||
             parse_decnet(argv[5], &dst_addr) < 0 ||
-            sscanf(argv[6], "%u", &visit) != 1 || visit > 63U) {
+            parse_visit(argv[6], &visit)) {
             fprintf(stderr, "dnraw: invalid short-data argument\n");
             return 2;
         }
