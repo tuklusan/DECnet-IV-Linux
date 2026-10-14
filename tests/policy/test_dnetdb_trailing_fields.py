@@ -80,7 +80,7 @@ static int check_name_length(size_t length, int expected_errno)
         return 1;
     memset(name, 'A', length);
     name[length] = '\0';
-    if (snprintf(line, sizeof(line), "node 31.70 name %s\\n", name) >=
+    if (snprintf(line, sizeof(line), "node 31.70 name %s\n", name) >=
         (int)sizeof(line))
         return 1;
     file = tmpfile();
@@ -101,7 +101,7 @@ static int check_name_length(size_t length, int expected_errno)
         return 0;
     if (expected_errno && rc == -1 && saved == expected_errno)
         return 0;
-    fprintf(stderr, "node-name length %zu: rc=%d errno=%d, expected=%d\\n",
+    fprintf(stderr, "node-name length %zu: rc=%d errno=%d, expected=%d\n",
             length, rc, saved, expected_errno);
     return 1;
 }
