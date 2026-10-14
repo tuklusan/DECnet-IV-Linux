@@ -23,6 +23,8 @@
 
 #include <linux/dn.h>
 
+#include "../../userspace/common/record_io.h"
+
 #define ACCESS_USER "DNIVUSER"
 #define ACCESS_PASS "DNIVPASS"
 #define ACCESS_ACCOUNT "DNIVACCT"
@@ -202,7 +204,7 @@ int main(int argc, char **argv)
             return 1;
         }
 
-        got = recv(fd, rx, sizeof(rx), 0);
+        got = dniv_recv_record(fd, rx, sizeof(rx), 0);
         if (got != (ssize_t)size || rx[0] != 1U ||
             (size > 1U && memcmp(rx + 1, tx + 1, size - 1U))) {
             if (got < 0)
