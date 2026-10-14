@@ -31,7 +31,8 @@ def check_source(compiler: str, name: str, capacity: str, count: int) -> None:
     methods = re.findall(r"got = (recv|dniv_recv_record)\(fd, rx, sizeof\(rx\), 0\);", text)
     if len(methods) != count or (count == 2 and methods[0] != "recv"):
         raise AssertionError(f"{name}: signal/record receive structure unexpectedly changed")
-    fixture = r'''#include <stdio.h>
+    fixture = r'''#define _POSIX_C_SOURCE 200809L
+#include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
