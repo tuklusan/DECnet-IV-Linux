@@ -26,6 +26,8 @@
 
 #include <linux/dn.h>
 
+#include "../../userspace/common/record_io.h"
+
 #define CONCURRENT 8U
 #define PAYLOAD 128U
 #define PRESSURE_PAYLOAD 4096U
@@ -93,7 +95,7 @@ static int exchange(int fd, unsigned int tag)
     if (send(fd, tx, sizeof(tx), MSG_EOR | MSG_NOSIGNAL) !=
         (ssize_t)sizeof(tx))
         return -1;
-    got = recv(fd, rx, sizeof(rx), 0);
+    got = dniv_recv_record(fd, rx, sizeof(rx), 0);
     if (got != (ssize_t)sizeof(rx) || rx[0] != 1U ||
         memcmp(rx + 1U, tx + 1U, sizeof(tx) - 1U))
         return -1;
@@ -241,7 +243,7 @@ static int pressure_test(const struct sockaddr_dn *peer)
         for (i = 0U; i < CONCURRENT; i++) {
             ssize_t got;
             make_payload(tx, sizeof(tx), 1000U + round * CONCURRENT + i);
-            got = recv(fds[i], rx, sizeof(rx), 0);
+            got = dniv_recv_record(fds[i], rx, sizeof(rx), 0);
             if (got != (ssize_t)sizeof(rx) || rx[0] != 1U ||
                 memcmp(rx + 1U, tx + 1U, sizeof(tx) - 1U))
                 goto fail;
@@ -282,7 +284,7 @@ static int concurrent_test(const struct sockaddr_dn *peer)
         unsigned char tx[PAYLOAD], rx[PAYLOAD];
         ssize_t got;
         make_payload(tx, sizeof(tx), 100U + i);
-        got = recv(fds[i], rx, sizeof(rx), 0);
+        got = dniv_recv_record(fds[i], rx, sizeof(rx), 0);
         if (got != (ssize_t)sizeof(rx) || rx[0] != 1U ||
             memcmp(rx + 1U, tx + 1U, sizeof(tx) - 1U))
             goto fail;
