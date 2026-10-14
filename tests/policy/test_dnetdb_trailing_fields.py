@@ -67,6 +67,45 @@ static int check(const char *label, const char *input, int expected_fields)
     return 1;
 }
 
+
+static int check_name_length(size_t length, int expected_errno)
+{
+    char name[300], line[400];
+    FILE *file;
+    struct node_record record;
+    int rc, saved;
+    size_t size;
+
+    if (length >= sizeof(name))
+        return 1;
+    memset(name, 'A', length);
+    name[length] = '\0';
+    if (snprintf(line, sizeof(line), "node 31.70 name %s\\n", name) >=
+        (int)sizeof(line))
+        return 1;
+    file = tmpfile();
+    if (!file)
+        return 1;
+    size = strlen(line);
+    if (fwrite(line, 1U, size, file) != size) {
+        fclose(file);
+        return 1;
+    }
+    rewind(file);
+    errno = 0;
+    rc = read_node_record(file, &record);
+    saved = errno;
+    fclose(file);
+    if (!expected_errno && rc == 1 && record.fields == 4 &&
+        !strcmp(record.name, name))
+        return 0;
+    if (expected_errno && rc == -1 && saved == expected_errno)
+        return 0;
+    fprintf(stderr, "node-name length %zu: rc=%d errno=%d, expected=%d\\n",
+            length, rc, saved, expected_errno);
+    return 1;
+}
+
 int main(void)
 {
     int failed = 0;
@@ -84,8 +123,13 @@ int main(void)
     failed |= check("too many executor tokens",
                     "executor 31.70 name DN70 line eth0 EXTRA MORE\n", -1);
     failed |= check("stray node field", "node 31.70 name DN70 extra\n", -1);
+    failed |= check_name_length(6U, 0);
+    failed |= check_name_length(7U, ENAMETOOLONG);
+    failed |= check_name_length(16U, ENAMETOOLONG);
+    failed |= check_name_length(256U, ENAMETOOLONG);
+    failed |= check_name_length(257U, EINVAL);
     if (!failed)
-        puts("libdnet node database rejects hidden trailing fields");
+        puts("libdnet node database rejects hidden trailing fields and overlong names");
     return failed ? 1 : 0;
 }
 """

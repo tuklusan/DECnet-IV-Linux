@@ -171,12 +171,22 @@ static int read_node_record(FILE *file, struct node_record *record)
          * The final conversion also rejects truncated overlong device
          * tokens instead of accepting their valid-looking prefix. */
         {
+            char parsed_name[257];
             char extra;
+            size_t name_len;
 
             record->fields = sscanf(start, "%15s %15s %15s %256s %15s %63s %c",
                                     record->kind, record->address,
-                                    record->name_tag, record->name,
+                                    record->name_tag, parsed_name,
                                     record->line_tag, record->device, &extra);
+            if (record->fields == 4 || record->fields == 6) {
+                name_len = strlen(parsed_name);
+                if (name_len > DN_MAXNODEL) {
+                    errno = ENAMETOOLONG;
+                    return -1;
+                }
+                memcpy(record->name, parsed_name, name_len + 1U);
+            }
         }
         if (record->fields != 4 && record->fields != 6) {
             errno = EINVAL;
