@@ -436,7 +436,22 @@ proof_wait=360
 [[ "$area31_arch" == arm64 ]] && proof_wait=540
 for _ in $(seq 1 "$proof_wait"); do
     if grep -Fq 'DNIV-AREA31-NATIVE-PASS' "$vm_log" 2>/dev/null; then
-        wait "$vm_pid" 2>/dev/null || true
+        # A guest marker is not success if QEMU then fails or never powers off.
+        # The guest issues poweroff after emitting the marker; bound that exit.
+        for _ in $(seq 1 120); do
+            kill -0 "$vm_pid" 2>/dev/null || break
+            sleep 1
+        done
+        if kill -0 "$vm_pid" 2>/dev/null; then
+            echo "area31-proof: candidate marked PASS but did not shut down" >&2
+            show_vm_log
+            exit 1
+        fi
+        if ! wait "$vm_pid"; then
+            echo "area31-proof: candidate marked PASS but QEMU exited unsuccessfully" >&2
+            show_vm_log
+            exit 1
+        fi
         vm_pid=
         echo "area31-proof: native Linux routing NICE NSP Session path pass"
         exit 0
