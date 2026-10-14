@@ -239,15 +239,22 @@ while IFS="$tab" read -r survey_node survey_name survey_state; do
     if timeout 6 /usr/local/sbin/dniv-area31-native --nice-summary "$survey_node"         >/dev/null 2>/dev/null; then
         nice_result=pass
         survey_nice=$((survey_nice + 1))
-        if timeout 6 /usr/local/sbin/dniv-area31-native --mirror-once "$survey_node"             >/dev/null 2>/dev/null; then
-            mirror_result=pass
-            survey_mirror=$((survey_mirror + 1))
-        else
-            rc=$?
-            if [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then
-                mirror_result=timeout
+        # A PYRTR inventory is not permission to run active services.
+        # Probe MIRROR only on explicitly chosen VAX interop peers.
+        # Unknown HECnet nodes stay read-only NICE observations.
+        if [ "$survey_node" = "$target" ] ||
+           { [ -n "$qcocal" ] && [ "$survey_node" = "$qcocal" ]; }; then
+            if timeout 6 /usr/local/sbin/dniv-area31-native --mirror-once "$survey_node" \
+                >/dev/null 2>/dev/null; then
+                mirror_result=pass
+                survey_mirror=$((survey_mirror + 1))
             else
-                mirror_result=unavailable
+                rc=$?
+                if [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then
+                    mirror_result=timeout
+                else
+                    mirror_result=unavailable
+                fi
             fi
         fi
     else

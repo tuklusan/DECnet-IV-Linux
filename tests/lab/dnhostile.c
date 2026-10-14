@@ -38,6 +38,20 @@ static int must_fail(int rc, const char *what)
     return 0;
 }
 
+/* Even a disconnected socket rejects send; require the validator's own
+ * errno rather than mistaking ENOTCONN for the tested negative. */
+static int must_fail_errno(int rc, int expected, const char *what)
+{
+    int actual = errno;
+
+    if (rc >= 0 || actual != expected) {
+        fprintf(stderr, "dnhostile: %s: expected errno=%d, got rc=%d errno=%d\n",
+                what, expected, rc, actual);
+        return -1;
+    }
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     unsigned long iterations = 4096;
@@ -145,8 +159,8 @@ int main(int argc, char **argv)
                   "setsockopt unknown option"))
         goto fail;
 
-    if (must_fail(send(fd, "x", 1, MSG_DONTROUTE),
-                  "send unsupported flag"))
+    if (must_fail_errno(send(fd, "x", 1, MSG_DONTROUTE), EOPNOTSUPP,
+                        "send unsupported flag"))
         goto fail;
 
     oversize = malloc((size_t)DNBUFSIZE + 1U);
@@ -155,8 +169,8 @@ int main(int argc, char **argv)
         goto fail;
     }
     memset(oversize, 0xa5, (size_t)DNBUFSIZE + 1U);
-    if (must_fail(send(fd, oversize, (size_t)DNBUFSIZE + 1U, MSG_EOR),
-                  "send oversized sequenced record")) {
+    if (must_fail_errno(send(fd, oversize, (size_t)DNBUFSIZE + 1U, MSG_EOR),
+                        EMSGSIZE, "send oversized sequenced record")) {
         free(oversize);
         goto fail;
     }
