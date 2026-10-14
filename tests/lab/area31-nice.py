@@ -39,6 +39,14 @@ def reply_code(data: bytes) -> int:
     return code - 256 if code >= 128 else code
 
 
+def exact_control_reply(payload: bytes, code: int) -> bool:
+    if not payload or payload[0] != code:
+        return False
+    if len(payload) == 1:
+        return True
+    return len(payload) >= 4 and len(payload) == 4 + payload[3]
+
+
 def executor_request(info: int) -> bytes:
     request = NiceReadNode()
     request.permanent = 0
@@ -61,7 +69,7 @@ def read_executor_reply(connection, label: str, destination: Nodeid) -> None:
 
         code = reply_code(payload)
         if code == 2:
-            if multiple or saw_item:
+            if multiple or saw_item or not exact_control_reply(payload, 2):
                 raise RuntimeError(
                     f"NICE {label} malformed multiple header: "
                     f"data={payload[:64].hex()}"
@@ -69,7 +77,8 @@ def read_executor_reply(connection, label: str, destination: Nodeid) -> None:
             multiple = True
             continue
         if code == -128:
-            if not multiple or not saw_item:
+            if (not multiple or not saw_item or
+                    not exact_control_reply(payload, 0x80)):
                 raise RuntimeError(
                     f"NICE {label} unexpected list end: "
                     f"data={payload[:64].hex()}"
