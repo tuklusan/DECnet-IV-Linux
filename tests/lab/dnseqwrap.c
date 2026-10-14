@@ -26,6 +26,8 @@
 
 #include <linux/dn.h>
 
+#include "../../userspace/common/record_io.h"
+
 #define RECORD_SIZE 4096U
 #define RECORDS 130U
 #define PRESSURE_RECORDS 650U
@@ -132,7 +134,7 @@ int main(int argc, char **argv)
             return 1;
         }
 
-        got = recv(fd, rx, sizeof(rx), 0);
+        got = dniv_recv_record(fd, rx, sizeof(rx), 0);
         if (got != (ssize_t)sizeof(tx) || rx[0] != 1U ||
             memcmp(rx + 1U, tx + 1U, sizeof(tx) - 1U)) {
             if (got < 0)

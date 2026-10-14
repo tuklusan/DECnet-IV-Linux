@@ -25,6 +25,8 @@
 
 #include <linux/dn.h>
 
+#include "../../userspace/common/record_io.h"
+
 #define SIGNAL_OBJECT 247U
 #define PAYLOAD 64U
 
@@ -136,7 +138,7 @@ static int recv_eintr_and_recover(const struct sockaddr_dn *peer)
         close(fd);
         return -1;
     }
-    got = recv(fd, rx, sizeof(rx), 0);
+    got = dniv_recv_record(fd, rx, sizeof(rx), 0);
     if (got != (ssize_t)sizeof(rx) || rx[0] != 1U ||
         memcmp(rx + 1U, tx + 1U, sizeof(tx) - 1U)) {
         close(fd);
