@@ -149,7 +149,7 @@ static int validate_cterm_initiate(const unsigned char *buf, size_t len)
     if (len < 5U || buf[0] != FOUND_COMMON_DATA)
         return -1;
     inner = get_le16(buf + 2);
-    if ((size_t)inner + 4U > len || inner < 1U)
+    if ((size_t)inner + 4U != len || inner < 1U)
         return -1;
     return buf[4] == CTERM_INITIATE ? 0 : -1;
 }
@@ -713,6 +713,12 @@ static int selftest(void)
     unsigned char read_data[16];
     unsigned char peer_bind[] = { FOUND_BIND, 2, 4, 0, 7 };
     unsigned char peer_init[] = { FOUND_COMMON_DATA, 0, 1, 0, CTERM_INITIATE };
+    unsigned char peer_init_trailing[] = {
+        FOUND_COMMON_DATA, 0, 1, 0, CTERM_INITIATE, 0xff
+    };
+    unsigned char peer_init_short[] = {
+        FOUND_COMMON_DATA, 0, 2, 0, CTERM_INITIATE
+    };
     uint16_t addr;
 
     if (parse_node("31.70", &addr) || addr != (uint16_t)((31U << 10) | 70U))
@@ -728,7 +734,9 @@ static int selftest(void)
         init[4] != CTERM_INITIATE)
         return 1;
     if (!validate_bind(peer_bind, sizeof(peer_bind)) ||
-        validate_cterm_initiate(peer_init, sizeof(peer_init)))
+        validate_cterm_initiate(peer_init, sizeof(peer_init)) ||
+        !validate_cterm_initiate(peer_init_trailing, sizeof(peer_init_trailing)) ||
+        !validate_cterm_initiate(peer_init_short, sizeof(peer_init_short)))
         return 1;
     memset(read_data, 0, sizeof(read_data));
     read_data[0] = CTERM_READ_DATA;
