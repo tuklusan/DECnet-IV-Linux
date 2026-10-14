@@ -12,6 +12,7 @@
 # SANYALnet Labs." See LICENSE for full terms, warranty disclaimer, termination,
 # patent, trademark, and governing-law provisions.
 # ============================================================================
+
 """Keep the standalone VM scale scripts directly executable in source releases."""
 
 from pathlib import Path
