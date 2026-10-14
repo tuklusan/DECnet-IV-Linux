@@ -23,6 +23,8 @@
 
 #include <linux/dn.h>
 
+#include "../../userspace/common/record_io.h"
+
 #define STALLED_RECORDS 20U
 #define PAYLOAD 128U
 
@@ -123,14 +125,14 @@ int main(int argc, char **argv)
     make_payload(tx, 999U);
     if (send(survivor, tx, sizeof(tx), MSG_EOR | MSG_NOSIGNAL) !=
         (ssize_t)sizeof(tx) ||
-        check_reply(tx, rx, recv(survivor, rx, sizeof(rx), 0)))
+        check_reply(tx, rx, dniv_recv_record(survivor, rx, sizeof(rx), 0)))
         goto fail;
     close(survivor);
     survivor = -1;
 
     for (i = 0U; i < STALLED_RECORDS; i++) {
         make_payload(tx, 100U + i);
-        if (check_reply(tx, rx, recv(stalled, rx, sizeof(rx), 0)))
+        if (check_reply(tx, rx, dniv_recv_record(stalled, rx, sizeof(rx), 0)))
             goto fail;
     }
     close(stalled);
