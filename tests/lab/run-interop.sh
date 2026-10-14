@@ -325,6 +325,22 @@ wait_candidate_marker() {
     return 1
 }
 
+# A serial PASS alone cannot certify a successful guest shutdown. Bound the
+# QEMU child lifetime, then preserve its actual exit status.
+wait_candidate_shutdown() {
+    local pid=$1 limit=$2 state deadline
+    deadline=$((SECONDS + limit))
+    while kill -0 "$pid" 2>/dev/null; do
+        state=$(ps -o stat= -p "$pid" 2>/dev/null || true)
+        case "$state" in Z*|"") break ;; esac
+        if (( SECONDS >= deadline )); then
+            return 124
+        fi
+        sleep 0.2
+    done
+    wait "$pid"
+}
+
 pcap_source_marker_count() {
     local capture=$1 source_text=$2 marker_text=$3
     python3 - "$capture" "$source_text" "$marker_text" <<'PY'
@@ -1708,7 +1724,10 @@ if ! wait_candidate_marker "$candidate_log" "DNIV-INTEROP-PASS session=$session 
     exit 1
 fi
 
-wait "$CANDIDATE_PID" 2>/dev/null || true
+if ! wait_candidate_shutdown "$CANDIDATE_PID" 60; then
+    echo "interop: candidate QEMU shutdown timed out or failed after serial PASS" >&2
+    exit 1
+fi
 unset CANDIDATE_PID
 terminate_pid "$REFERENCE_PID"
 unset REFERENCE_PID
