@@ -24,8 +24,11 @@ for relative in ("tests/lab/dniv_scale.py", "tests/lab/dniv_scale16_distributed.
     contents = path.read_bytes()
     if not contents.startswith(b"#!/usr/bin/env python3\n"):
         raise AssertionError(f"scale source missing executable shebang: {relative}")
-    if not path.stat().st_mode & stat.S_IXUSR:
-        raise AssertionError(f"source release has nonexecutable scale driver: {relative}")
+    actual_mode = stat.S_IMODE(path.stat().st_mode)
+    if actual_mode != 0o755:
+        raise AssertionError(
+            f"source release driver mode {actual_mode:o} != 755: {relative}"
+        )
 
 print("scale 4/8/16 and distributed VM drivers remain directly executable")
 
