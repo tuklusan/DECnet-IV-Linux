@@ -84,6 +84,32 @@ int fixture_recv(int fd, void *buf, int len, unsigned int flags)
 {
     return (int)recv(fd, buf, (size_t)len, flags & ~MSG_EOR);
 }
+static int check_nice(int oversize)
+{
+    int pair[2];
+    int rc;
+    const uint16_t target = (uint16_t)((31U << 10) | 123U);
+    unsigned char frame[513];
+    size_t used = oversize ? sizeof(frame) : 11U;
+
+    memset(frame, 0, sizeof(frame));
+    frame[0] = DNIV_NICE_RET_SUCCESS;
+    frame[1] = 0xffU;
+    frame[2] = 0xffU;
+    frame[4] = (unsigned char)(target & 0xffU);
+    frame[5] = (unsigned char)(target >> 8);
+    frame[6] = 0x84U;
+    memcpy(frame + 7, "DN70", 4U);
+    if (socketpair(AF_UNIX, SOCK_SEQPACKET, 0, pair))
+        return 1;
+    if (send(pair[1], frame, used, MSG_EOR) != (ssize_t)used)
+        return 1;
+    rc = nice_read_executor_reply(pair[0], target, DNIV_NICE_INFO_SUMMARY);
+    close(pair[0]);
+    close(pair[1]);
+    return oversize ? (rc == 0) : (rc != 0);
+}
+
 int main(void)
 {
     int good, malformed;
@@ -101,6 +127,10 @@ int main(void)
         fprintf(stderr, "area31-MIRROR exact record: good=%d oversize=%d\n",
                 good, malformed);
         return 1;
+    }
+    if (check_nice(0) || check_nice(1)) {
+        fprintf(stderr, "area31-NICE exact record: overlong reply falsely accepted\n");
+        return 4;
     }
     return 0;
 }

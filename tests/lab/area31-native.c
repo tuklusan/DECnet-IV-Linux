@@ -91,7 +91,7 @@ static int nice_read_executor_reply(int fd, uint16_t target,
         ssize_t got;
         int code;
 
-        got = recv(fd, response, sizeof(response), 0);
+        got = dniv_recv_record(fd, response, sizeof(response), 0);
         if (got < 1) {
             nice_dump_frame(info, response, got);
             return -1;
