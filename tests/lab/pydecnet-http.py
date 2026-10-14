@@ -17,6 +17,20 @@ from __future__ import annotations
 import sys
 from decnet.connectors import SimpleApiConnector
 
+def valid_http_response(raw: bytes) -> bool:
+    head, sep, body = raw.partition(b"\r\n\r\n")
+    if not sep or body != b"DECNET-WEB-PASS\n":
+        return False
+    lines = head.split(b"\r\n")
+    if len(lines) != 4 or lines[0] != b"HTTP/1.0 200 OK":
+        return False
+    expected = {
+        b"Content-Length: " + str(len(body)).encode("ascii"),
+        b"Content-Type: text/html",
+        b"Connection: close",
+    }
+    return set(lines[1:]) == expected and len(set(lines[1:])) == 3
+
 def main() -> int:
     if len(sys.argv) != 4:
         raise SystemExit(f"usage: {sys.argv[0]} API-SOCKET AREA.NODE SYSTEM")
@@ -39,7 +53,7 @@ def main() -> int:
                 break
             raise RuntimeError(f"unexpected HTTP event {reply.type!r}")
         raw = b"".join(parts)
-        if b"HTTP/1.0 200 OK\r\n" not in raw or b"DECNET-WEB-PASS\n" not in raw:
+        if not valid_http_response(raw):
             raise RuntimeError(f"bad HTTP response: {raw!r}")
     finally:
         connector.close()
