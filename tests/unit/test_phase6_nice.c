@@ -135,6 +135,13 @@ int main(void)
         assert(strcmp(parsed.name, "DN70") == 0);
         assert(parsed.has_state && parsed.state == 0U);
         assert(parsed.has_active_links && parsed.active_links == 7U);
+        /* Orphan physical bytes cannot form NICE parameter headers. */
+        reply[reply_len] = 0xa7U;
+        assert(dniv_nice_parse_node_reply(reply, reply_len + 1U,
+                                          &parsed) != 0);
+        reply[reply_len + 1U] = 0x10U;
+        assert(dniv_nice_parse_node_reply(reply, reply_len + 2U,
+                                          &parsed) != 0);
         {
             __u8 canonical[128];
             size_t canonical_len = reply_len - 3U;

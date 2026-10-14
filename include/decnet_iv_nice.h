@@ -470,7 +470,10 @@ dniv_nice_parse_node_reply(const __u8 *buf, size_t length,
     reply->name[name_len] = '\0';
     off += name_len;
 
-    while (length - off >= 3U) {
+    while (off < length) {
+        /* Every remaining NICE parameter needs at least a 3-byte header. */
+        if (length - off < 3U)
+            return -1;
         __u16 param = (__u16)((__u16)buf[off] |
                               ((__u16)buf[off + 1U] << 8));
         __u8 type = buf[off + 2U];
