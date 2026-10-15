@@ -29,6 +29,14 @@ def reply_code(data: bytes) -> int:
     return code - 256 if code >= 128 else code
 
 
+def exact_control_reply(payload: bytes, code: int) -> bool:
+    if not payload or payload[0] != code:
+        return False
+    if len(payload) == 1:
+        return True
+    return len(payload) >= 4 and len(payload) == 4 + payload[3]
+
+
 def find_node(api_socket: str, system: str, manager: str, wanted: str) -> str | None:
     connector = SimpleApiConnector(api_socket)
     try:
@@ -58,8 +66,12 @@ def find_node(api_socket: str, system: str, manager: str, wanted: str) -> str | 
                         raise RuntimeError("empty NML reply")
                     code = reply_code(raw)
                     if code == 2:
+                        if not exact_control_reply(raw, 2):
+                            raise RuntimeError("malformed NICE ACCEPTED control")
                         continue
                     if code == -128:
+                        if not exact_control_reply(raw, 0x80):
+                            raise RuntimeError("malformed NICE DONE control")
                         break
                     if code < 0:
                         if permanent:
