@@ -40,6 +40,7 @@ def main() -> int:
     try:
         for _ in range(count):
             connector = SimpleApiConnector(api_socket)
+            connectors.append(connector)
             connection, response = connector.connect(
                 system=system,
                 dest=destination,
@@ -56,7 +57,6 @@ def main() -> int:
                 raise RuntimeError(
                     f"bad concurrent NML accept data: {bytes(response)!r}"
                 )
-            connectors.append(connector)
             connections.append(connection)
 
         for connection in connections:
