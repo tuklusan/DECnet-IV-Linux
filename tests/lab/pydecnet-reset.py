@@ -29,12 +29,16 @@ SURVIVOR_DONE = b"py-survivor-done"
 
 def connect(api_socket: str, destination: str, system: str, localuser: str):
     connector = SimpleApiConnector(api_socket)
-    connection, response = connector.connect(
-        system=system,
-        dest=destination,
-        remuser=RESET_OBJECT,
-        localuser=localuser,
-    )
+    try:
+        connection, response = connector.connect(
+            system=system,
+            dest=destination,
+            remuser=RESET_OBJECT,
+            localuser=localuser,
+        )
+    except BaseException:
+        connector.close()
+        raise
     if connection is None or response.type != "accept":
         connector.close()
         raise RuntimeError(
