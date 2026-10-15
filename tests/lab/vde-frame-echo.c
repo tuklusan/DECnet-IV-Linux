@@ -73,7 +73,13 @@ static int run_server(const char *url)
         ssize_t n;
         unsigned char reply[FRAME_LEN] = {0};
 
-        if (wait_readable(conn, 60) <= 0)
+        int ready = wait_readable(conn, 60);
+        if (ready < 0) {
+            perror("vde_datafd/select server");
+            vde_close(conn);
+            return 1;
+        }
+        if (ready == 0)
             continue;
         n = vde_recv(conn, frame, sizeof(frame), 0);
         if (!is_request(frame, n))
