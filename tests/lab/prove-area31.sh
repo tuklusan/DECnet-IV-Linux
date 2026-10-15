@@ -44,6 +44,7 @@ if [[ ! "$VAX_ADDR" =~ ^31\.([0-9]{1,4})$ ]] ||
     echo "area31-proof: VAX_ADDR must identify an Area-31 node" >&2
     exit 2
 fi
+VAX_ADDR="31.$((10#${BASH_REMATCH[1]}))"
 if (( ${#VAX_USERNAME} > 40 || ${#VAX_PASSWORD} > 40 )); then
     echo "area31-proof: VAX access credentials are invalid" >&2
     exit 2
@@ -71,6 +72,7 @@ if [[ ! "$gateway_node" =~ ^31\.([0-9]{1,4})$ ]] ||
     echo "area31-proof: DNIV_AREA31_GATEWAY_NODE must identify an assigned Area-31 node" >&2
     exit 2
 fi
+gateway_node="31.$((10#${BASH_REMATCH[1]}))"
 if [[ ! "$gateway_name" =~ ^[A-Za-z][A-Za-z0-9]{0,5}$ ]]; then
     echo "area31-proof: DNIV_AREA31_GATEWAY_NAME must be a 1..6 character DECnet name" >&2
     exit 2
@@ -80,6 +82,7 @@ if [[ ! "$linux_node" =~ ^31\.([0-9]{1,4})$ ]] ||
     echo "area31-proof: DNIV_AREA31_LINUX_NODE must identify an assigned Area-31 node" >&2
     exit 2
 fi
+linux_node="31.$((10#${BASH_REMATCH[1]}))"
 if [[ ! "$linux_name" =~ ^[A-Za-z][A-Za-z0-9]{0,5}$ ]]; then
     echo "area31-proof: DNIV_AREA31_LINUX_NAME must be a 1..6 character DECnet name" >&2
     exit 2
@@ -95,6 +98,7 @@ if [[ -n "$qcocal_node" ]]; then
         echo "area31-proof: DNIV_QCOCAL_NODE must identify an Area-31 node" >&2
         exit 2
     fi
+    qcocal_node="31.$((10#${BASH_REMATCH[1]}))"
     if [[ "$qcocal_node" == "$gateway_node" || "$qcocal_node" == "$linux_node" ||
           "$qcocal_node" == "$VAX_ADDR" ]]; then
         echo "area31-proof: QCOCAL identity must be distinct" >&2
