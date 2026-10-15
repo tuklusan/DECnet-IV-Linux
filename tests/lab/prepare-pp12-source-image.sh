@@ -96,10 +96,10 @@ printf '%s\n' "$expected_sha" | sudo tee "$mnt/etc/dniv-source-release-sha" >/de
 printf '%s\n' "$archive_sha" | sudo tee "$mnt/etc/dniv-source-release-archive-sha256" >/dev/null
 
 sudo mount -t proc proc "$mnt/proc"
+chroot_mounted=1
 sudo mount -t sysfs sysfs "$mnt/sys"
 sudo mount --rbind /dev "$mnt/dev"
 sudo mount --make-rslave "$mnt/dev"
-chroot_mounted=1
 sudo chroot "$mnt" /bin/bash -euxc '
 expected=$(cat /etc/dniv-source-release-sha)
 cd /usr/src/decnet-iv-linux

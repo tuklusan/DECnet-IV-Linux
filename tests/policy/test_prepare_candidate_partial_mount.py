@@ -19,11 +19,12 @@ import subprocess
 import tempfile
 
 
-SOURCE = Path(__file__).resolve().parents[2] / "tests/lab/prepare-candidate-image.sh"
+ROOT = Path(__file__).resolve().parents[2]
+SOURCES = ("prepare-candidate-image.sh", "prepare-pp12-source-image.sh")
 
 
-def check():
-    src = SOURCE.read_text()
+def check_source(source):
+    src = source.read_text()
     func_start = src.index("cleanup() {\n")
     func_end = src.index("\n}\ntrap cleanup EXIT INT TERM", func_start) + len("\n}\n")
     cleanup = src[func_start:func_end]
@@ -64,7 +65,13 @@ trap cleanup EXIT
             assert f"umount {tmp}/work/root/proc" in operations, (stage, operations)
             if stage != "sysfs":
                 assert f"umount {tmp}/work/root/sys" in operations, (stage, operations)
-    print("prepare-candidate partial mount cleanup source regression passed")
+
+
+
+def check():
+    for name in SOURCES:
+        check_source(ROOT / "tests/lab" / name)
+    print("candidate and PP12 partial mount cleanup source regression passed")
 
 
 if __name__ == "__main__":
