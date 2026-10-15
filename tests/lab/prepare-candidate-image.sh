@@ -77,10 +77,10 @@ printf '%s\n' "$source_commit" | \
     sudo tee "$mnt/usr/src/decnet-iv-linux/.source-commit" >/dev/null
 
 sudo mount -t proc proc "$mnt/proc"
+chroot_mounted=1
 sudo mount -t sysfs sysfs "$mnt/sys"
 sudo mount --rbind /dev "$mnt/dev"
 sudo mount --make-rslave "$mnt/dev"
-chroot_mounted=1
 sudo chroot "$mnt" /bin/bash -euxc '
 source_commit=$(cat /usr/src/decnet-iv-linux/.source-commit)
 krel=$(ls -1 /lib/modules | sort -V | tail -1)
