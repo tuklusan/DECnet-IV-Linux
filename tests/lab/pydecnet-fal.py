@@ -162,7 +162,11 @@ def main() -> int:
         while True:
             reply = connection.recv()
             raw = bytes(reply)
+            if reply.type != "data":
+                raise RuntimeError(f"bad metadata GET message type: {reply.type!r}")
             if raw[:1] == bytes((8,)):
+                if len(raw) < 3 or raw[:3] != bytes((8, 0, 0)):
+                    raise RuntimeError(f"bad metadata GET DAP DATA: {raw!r}")
                 payload += raw[3:]
                 continue
             if raw == bytes((9, 0, 0x27, 0x40)):
