@@ -1757,14 +1757,16 @@ if [[ "$reference" == pydecnet ]]; then
 fi
 if [[ "$pp11_pressure" == 1 ]]; then
     grep -Fq "DNIV-INTEROP-PP11-PRESSURE-PASS session=$session scenario=$scenario rounds=3" "$candidate_log"
-    {
-        grep -v '^result=' "$pressure_env"
-        printf 'validator=PASS\nresult=PASS\n'
-    } > "$pressure_env.tmp"
-    mv "$pressure_env.tmp" "$pressure_env"
 fi
 grep -Fq "DNIV-INTEROP-RECOVERED session=$session scenario=$scenario" "$candidate_log"
 ! grep -Fq 'DNIV-INTEROP-FAIL' "$candidate_log"
 ! grep -Fq 'DNIV-REF-FAIL' "$ref1_log"
 ! grep -Fq 'DNIV-REF-FAIL' "$ref2_log"
+if [[ "$pp11_pressure" == 1 ]]; then
+    {
+        grep -v -e '^result=' -e '^validator=' "$pressure_env"
+        printf 'validator=PASS\nresult=PASS\n'
+    } > "$pressure_env.tmp"
+    mv "$pressure_env.tmp" "$pressure_env"
+fi
 echo "interop: pass reference=$reference scenario=$scenario arch=$host_arch"
