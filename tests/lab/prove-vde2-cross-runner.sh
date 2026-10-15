@@ -204,6 +204,7 @@ switch_pid=
 bridge_pid=
 py_pid=
 echo_pid=
+route20_pid=
 current_bridge_log=
 
 stop_pid() {
@@ -219,10 +220,14 @@ cleanup() {
         stop_process_tree "$bridge_pid"
     fi
     stop_pid "${echo_pid:-}"
-    if [[ -r /var/run/route20.pid ]]; then
-        rpid=$(cat /var/run/route20.pid 2>/dev/null)
-        [[ -z "$rpid" ]] || sudo kill "$rpid" 2>/dev/null || true
-        sudo rm -f /var/run/route20.pid
+    # Only touch the Route20 daemon this invocation started.  The client
+    # does not launch Route20 and must never terminate another lab service.
+    if [[ -n "${route20_pid:-}" ]]; then
+        if [[ -r /var/run/route20.pid ]] &&
+           [[ "$(cat /var/run/route20.pid 2>/dev/null)" == "$route20_pid" ]]; then
+            sudo kill "$route20_pid" 2>/dev/null || true
+            sudo rm -f /var/run/route20.pid
+        fi
     fi
     if [[ -n "${switch_pid:-}" ]]; then
         kill "$switch_pid" 2>/dev/null || true
@@ -315,7 +320,10 @@ InactivityTimer=30
 [session]
 InactivityTimer=60
 EOF
-    sudo rm -f /var/run/route20.pid
+    if [[ -e /var/run/route20.pid ]]; then
+        echo "vde2-cross: Route20 pid file exists; refusing to disrupt an existing service" >&2
+        exit 1
+    fi
     sudo "$work/route20/Route20/route20" "$work/route20.ini"
     for _ in $(seq 1 100); do
         [[ -s /var/run/route20.pid ]] && break
@@ -323,6 +331,12 @@ EOF
     done
     [[ -s /var/run/route20.pid ]] || {
         echo "vde2-cross: Route20 did not start" >&2
+        exit 1
+    }
+    route20_pid=$(cat /var/run/route20.pid)
+    [[ "$route20_pid" =~ ^[1-9][0-9]*$ ]] &&
+        sudo kill -0 "$route20_pid" 2>/dev/null || {
+        echo "vde2-cross: Route20 reported an invalid or dead daemon pid" >&2
         exit 1
     }
 
@@ -381,7 +395,7 @@ EOF
         exit 1
     }
     rpid=$(cat /var/run/route20.pid)
-    sudo kill -0 "$rpid" 2>/dev/null || {
+    [[ "$rpid" == "$route20_pid" ]] && sudo kill -0 "$rpid" 2>/dev/null || {
         echo "vde2-cross: Route20 exited during socat relay proof" >&2
         exit 1
     }
