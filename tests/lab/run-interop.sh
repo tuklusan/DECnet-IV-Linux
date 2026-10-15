@@ -1759,9 +1759,18 @@ if [[ "$pp11_pressure" == 1 ]]; then
     grep -Fq "DNIV-INTEROP-PP11-PRESSURE-PASS session=$session scenario=$scenario rounds=3" "$candidate_log"
 fi
 grep -Fq "DNIV-INTEROP-RECOVERED session=$session scenario=$scenario" "$candidate_log"
-! grep -Fq 'DNIV-INTEROP-FAIL' "$candidate_log"
-! grep -Fq 'DNIV-REF-FAIL' "$ref1_log"
-! grep -Fq 'DNIV-REF-FAIL' "$ref2_log"
+if grep -Fq 'DNIV-INTEROP-FAIL' "$candidate_log"; then
+    echo "interop: forbidden DNIV-INTEROP-FAIL in candidate_log" >&2
+    exit 1
+fi
+if grep -Fq 'DNIV-REF-FAIL' "$ref1_log"; then
+    echo "interop: forbidden DNIV-REF-FAIL in ref1_log" >&2
+    exit 1
+fi
+if grep -Fq 'DNIV-REF-FAIL' "$ref2_log"; then
+    echo "interop: forbidden DNIV-REF-FAIL in ref2_log" >&2
+    exit 1
+fi
 if [[ "$pp11_pressure" == 1 ]]; then
     {
         grep -v -e '^result=' -e '^validator=' "$pressure_env"
