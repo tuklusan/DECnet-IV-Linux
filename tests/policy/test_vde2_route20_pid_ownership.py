@@ -20,11 +20,11 @@ import tempfile
 
 
 ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = ROOT / "tests/lab/prove-vde2-cross-runner.sh"
+SCRIPTS = ("prove-vde2-cross-runner.sh", "prove-vde2.sh")
 
 
-def check():
-    original = SCRIPT.read_text()
+def check_script(script_path):
+    original = script_path.read_text()
     begin = original.index("cleanup() {\n")
     end = original.index("\n}\ntrap cleanup EXIT INT TERM", begin) + 3
     cleanup = original[begin:end]
@@ -48,6 +48,7 @@ mkdir -p "$work"
 route20_pid="{owned}"
 stop_pid() {{ :; }}
 stop_process_tree() {{ :; }}
+stop_switch() {{ :; }}
 sudo() {{ printf '%s\\n' "$*" >> "{log}"; }}
 {test_cleanup}
 cleanup
@@ -61,6 +62,10 @@ cleanup
             assert ("rm -f " + str(pidfile) in actions) is expected, actions
             if not expected:
                 assert pidfile.exists(), "unowned pidfile was deleted"
+
+def check():
+    for script in SCRIPTS:
+        check_script(ROOT / "tests/lab" / script)
     print("VDE2 Route20 PID ownership and no-disruption source regression passed")
 
 

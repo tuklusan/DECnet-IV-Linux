@@ -27,6 +27,7 @@ sock="$work/switch.ctl"
 switch_pid=
 py_pid=
 frame_echo_pid=
+route20_pid=
 stop_switch() {
     if [ -n "${switch_pid:-}" ]; then
         kill "$switch_pid" 2>/dev/null || true
@@ -43,9 +44,10 @@ cleanup() {
     set +e
     [ -z "${py_pid:-}" ] || kill "$py_pid" 2>/dev/null
     [ -z "${frame_echo_pid:-}" ] || kill "$frame_echo_pid" 2>/dev/null
-    if [ -r /var/run/route20.pid ]; then
-        rpid=$(cat /var/run/route20.pid 2>/dev/null)
-        [ -z "$rpid" ] || sudo kill "$rpid" 2>/dev/null
+    # The test may stop only its own verified Route20 daemon.
+    if [[ -n "${route20_pid:-}" && -r /var/run/route20.pid ]] &&
+       [[ "$(cat /var/run/route20.pid 2>/dev/null)" == "$route20_pid" ]]; then
+        sudo kill "$route20_pid" 2>/dev/null || true
         sudo rm -f /var/run/route20.pid
     fi
     stop_switch
@@ -255,13 +257,21 @@ circuit ETH-0 Ethernet $url --mode vde --cost 3 --t3 2 --priority 64
 logging console --events 4.15,4.16
 EOF
 
-sudo rm -f /var/run/route20.pid
+if [[ -e /var/run/route20.pid ]]; then
+    echo "vde2-proof: Route20 pid file already exists; refusing to disrupt another service" >&2
+    exit 1
+fi
 sudo "$work/route20/Route20/route20" "$work/route20.ini"
 for _ in $(seq 1 100); do
     [ -s /var/run/route20.pid ] && break
     sleep 0.1
 done
 [ -s /var/run/route20.pid ] || { echo "vde2-proof: Route20 did not start" >&2; exit 1; }
+route20_pid=$(cat /var/run/route20.pid)
+[[ "$route20_pid" =~ ^[1-9][0-9]*$ ]] && sudo kill -0 "$route20_pid" 2>/dev/null || {
+    echo "vde2-proof: invalid or dead Route20 daemon pid" >&2
+    exit 1
+}
 
 start_py() {
     (
