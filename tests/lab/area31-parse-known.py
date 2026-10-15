@@ -41,6 +41,9 @@ def parsed_rows(text: str) -> tuple[int, list[tuple[str, str, str]]]:
         node_number = int(number, 10)
         if not 1 <= node_number <= 1023:
             return
+        # NICE identity is numeric; textual leading zeros must not bypass
+        # the occupied-node guard in prove-area31.sh.
+        address = f"31.{node_number}"
         candidate = (address, name or "-", state)
         current = by_address.get(address)
         if current is None:
@@ -111,6 +114,13 @@ noise 31.7 Reachable
         ("31.3", "PYRTR", "On"),
         ("31.5", "-", "Reachable"),
     ]
+    _, canonical = occupied_nodes(
+        "Executor node = 31.0003 (PYRTR), State = On,\n"
+        "31.0002 (STATIC) Reachable\n"
+        "31.2 (STATIC) Reachable\n"
+        "31.0031 (VAX) Reachable\n"
+    )
+    assert canonical == ["31.2", "31.3", "31.31"]
     print("area31-parse-known selftest passed")
     return 0
 
