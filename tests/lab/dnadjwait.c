@@ -58,13 +58,15 @@ static int parse_address(const char *text, __u16 *address)
     return 0;
 }
 
-static uint64_t monotonic_ms(void)
+static int monotonic_ms(uint64_t *value)
 {
     struct timespec ts;
 
     if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
-        return 0;
-    return (uint64_t)ts.tv_sec * 1000U + (uint64_t)ts.tv_nsec / 1000000U;
+        return -1;
+    *value = (uint64_t)ts.tv_sec * 1000U +
+             (uint64_t)ts.tv_nsec / 1000000U;
+    return 0;
 }
 
 static int adjacency_state(int fd, __u16 address, int *present, int *up)
@@ -99,6 +101,7 @@ int main(int argc, char **argv)
     const struct timespec pause = { .tv_sec = 0, .tv_nsec = 10000000L };
     __u16 address;
     uint64_t deadline;
+    uint64_t now;
     unsigned long timeout_ms;
     char *end;
     int want_up;
@@ -129,7 +132,12 @@ int main(int argc, char **argv)
     }
 
     want_up = strcmp(argv[1], "up") == 0;
-    deadline = monotonic_ms() + timeout_ms;
+    if (monotonic_ms(&now) != 0) {
+        perror("dnadjwait: clock_gettime");
+        close(fd);
+        return 2;
+    }
+    deadline = now + timeout_ms;
     for (;;) {
         int present;
         int up;
@@ -142,7 +150,12 @@ int main(int argc, char **argv)
             close(fd);
             return 0;
         }
-        if (monotonic_ms() >= deadline)
+        if (monotonic_ms(&now) != 0) {
+            perror("dnadjwait: clock_gettime");
+            close(fd);
+            return 2;
+        }
+        if (now >= deadline)
             break;
         nanosleep(&pause, NULL);
     }
