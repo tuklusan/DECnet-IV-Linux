@@ -152,6 +152,9 @@ tap_bridge_pid=
 qemu_tap_name=
 vde_tap_name=
 bridge_name=
+bridge_created=0
+qemu_tap_created=0
+vde_tap_created=0
 vm_pid=
 
 cleanup() {
@@ -162,12 +165,15 @@ cleanup() {
     [[ -z "${vm_pid:-}" ]] || wait "$vm_pid" 2>/dev/null || true
     [[ -z "${tap_bridge_pid:-}" ]] || kill "$tap_bridge_pid" 2>/dev/null || true
     [[ -z "${tap_bridge_pid:-}" ]] || wait "$tap_bridge_pid" 2>/dev/null || true
-    for tap in "${qemu_tap_name:-}" "${vde_tap_name:-}"; do
-        [[ -z "$tap" ]] && continue
-        sudo ip link set dev "$tap" down 2>/dev/null || true
-        sudo ip tuntap del dev "$tap" mode tap 2>/dev/null || true
-    done
-    if [[ -n "${bridge_name:-}" ]]; then
+    if (( qemu_tap_created )); then
+        sudo ip link set dev "$qemu_tap_name" down 2>/dev/null || true
+        sudo ip tuntap del dev "$qemu_tap_name" mode tap 2>/dev/null || true
+    fi
+    if (( vde_tap_created )); then
+        sudo ip link set dev "$vde_tap_name" down 2>/dev/null || true
+        sudo ip tuntap del dev "$vde_tap_name" mode tap 2>/dev/null || true
+    fi
+    if (( bridge_created )); then
         sudo ip link set dev "$bridge_name" down 2>/dev/null || true
         sudo ip link del dev "$bridge_name" type bridge 2>/dev/null || true
     fi
@@ -396,9 +402,12 @@ else
     vde_tap_name="dnv$tap_suffix"
     bridge_name="dnb$tap_suffix"
     sudo ip link add name "$bridge_name" type bridge
+    bridge_created=1
     sudo ip link set dev "$bridge_name" up
     sudo ip tuntap add dev "$qemu_tap_name" mode tap user "$(id -un)"
+    qemu_tap_created=1
     sudo ip tuntap add dev "$vde_tap_name" mode tap user "$(id -un)"
+    vde_tap_created=1
     sudo ip link set dev "$qemu_tap_name" master "$bridge_name"
     sudo ip link set dev "$vde_tap_name" master "$bridge_name"
     sudo ip link set dev "$qemu_tap_name" up
