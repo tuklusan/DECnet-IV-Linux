@@ -105,7 +105,8 @@ if [[ "$reference" == pydecnet && "$scenario" == l1 && "$(uname -m)" == x86_64 ]
     reserved_proof=1
 fi
 work="$artifacts/$session"
-mkdir -p "$work"
+mkdir -p "$artifacts"
+mkdir "$work"  # never reuse another attempt's overlays or logs
 pressure_env="$work/pp11-pressure.env"
 if [[ "$pp11_pressure" == 1 ]]; then
     cat > "$pressure_env" <<EOF_PRESSURE
@@ -137,6 +138,14 @@ host_pydecnet_api="/tmp/dniv-api-${suffix}.sock"
 bridge="bi${suffix}"
 tap_candidate="ci${suffix}"
 tap_reference="ri${suffix}"
+bridge_owned=0
+tap_candidate_owned=0
+tap_reference_owned=0
+host_pydecnet_api_owned=0
+if [[ "$reference" == pydecnet ]] && [[ -e "$host_pydecnet_api" || -L "$host_pydecnet_api" ]]; then
+    echo "interop: refusing pre-existing PyDECnet API socket $host_pydecnet_api" >&2
+    exit 1
+fi
 
 terminate_pid() {
     local pid=${1:-}
@@ -161,18 +170,22 @@ cleanup() {
     if [[ -n "${LOSS_QDISC:-}" || -n "${RESERVED_QDISC:-}" || -n "${PRESSURE_QDISC:-}" ]]; then
         sudo tc qdisc del dev "$tap_reference" clsact 2>/dev/null || true
     fi
-    rm -f "${host_pydecnet_api:-}"
+    if [[ "${host_pydecnet_api_owned:-0}" == 1 ]]; then
+        rm -f "$host_pydecnet_api"
+    fi
     [[ -n "${TCPDUMP_PID:-}" ]] && sudo kill "$TCPDUMP_PID" 2>/dev/null
-    sudo ip link del "$tap_candidate" 2>/dev/null
-    sudo ip link del "$tap_reference" 2>/dev/null
-    sudo ip link del "$bridge" 2>/dev/null
+    if [[ "${tap_candidate_owned:-0}" == 1 ]]; then sudo ip link del "$tap_candidate" 2>/dev/null; fi
+    if [[ "${tap_reference_owned:-0}" == 1 ]]; then sudo ip link del "$tap_reference" 2>/dev/null; fi
+    if [[ "${bridge_owned:-0}" == 1 ]]; then sudo ip link del "$bridge" 2>/dev/null; fi
 }
 trap cleanup EXIT INT TERM
 
 sudo ip link add "$bridge" type bridge
+bridge_owned=1
 sudo ip link set "$bridge" up
 for tap in "$tap_candidate" "$tap_reference"; do
     sudo ip tuntap add dev "$tap" mode tap user "$(id -un)"
+    if [[ "$tap" == "$tap_candidate" ]]; then tap_candidate_owned=1; else tap_reference_owned=1; fi
     sudo ip link set "$tap" master "$bridge"
     sudo ip link set "$tap" up
 done
@@ -258,7 +271,6 @@ EOF_PYDECNET
         cat > "$host_pydecnet/api.conf" <<EOF_API
 api $host_pydecnet_api --mode 600
 EOF_API
-        rm -f "$host_pydecnet_api"
         : > "$log"
         cd "$host_pydecnet/pydecnet"
         exec env PYTHONPATH=. python3 -u -m decnet.main \
@@ -382,6 +394,8 @@ print(count)
 PY
 }
 
+# The parent owns this run's API path for the lifetime of its reference peer.
+if [[ "$reference" == pydecnet ]]; then host_pydecnet_api_owned=1; fi
 start_reference "$ref1_disk" "$ref1_log" & REFERENCE_PID=$!
 reference_ready_marker="DNIV-REF-READY session=$session reference=$reference sha=$expected_sha scenario=$scenario"
 if [[ "$reference" == pydecnet ]]; then
@@ -1713,6 +1727,9 @@ if ! wait_marker "$candidate_log" "DNIV-INTEROP-EXPIRED session=$session scenari
     exit 1
 fi
 
+if [[ "$reference" == pydecnet && "$host_pydecnet_api_owned" == 1 ]]; then
+    rm -f "$host_pydecnet_api"  # stale socket of this run's first peer only
+fi
 start_reference "$ref2_disk" "$ref2_log" & REFERENCE_PID=$!
 if ! wait_marker "$ref2_log" "$reference_ready_marker" "$reference_ready_seconds" "$REFERENCE_PID"; then
     tail -160 "$ref2_log" >&2 || true
