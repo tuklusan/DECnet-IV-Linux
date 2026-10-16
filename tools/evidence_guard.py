@@ -61,10 +61,15 @@ def digest(path: Path) -> str:
 
 
 def preflight(root: Path, min_free_bytes: int, min_free_inodes: int) -> None:
+    # Do not write through an attacker-controlled root or parent symlink.
+    if any(part.is_symlink() for part in (root, *root.parents)):
+        die("evidence root crosses symbolic link")
     try:
         root.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
         die(f"cannot create evidence directory: {exc}")
+    if any(part.is_symlink() for part in (root, *root.parents)):
+        die("evidence root crosses symbolic link")
     if not root.is_dir():
         die(f"evidence root is not a directory: {root}")
     try:
@@ -78,8 +83,10 @@ def preflight(root: Path, min_free_bytes: int, min_free_inodes: int) -> None:
         die(f"insufficient free evidence inodes: have={stats.f_favail} need={min_free_inodes}")
 
     probe = root / ".dniv-evidence-probe"
+    probe_owned = False
     try:
         fd = os.open(probe, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        probe_owned = True
         try:
             os.write(fd, b"DNIV-EVIDENCE-PROBE\n")
             os.fsync(fd)
@@ -87,10 +94,12 @@ def preflight(root: Path, min_free_bytes: int, min_free_inodes: int) -> None:
             os.close(fd)
         probe.unlink()
     except OSError as exc:
-        try:
-            probe.unlink(missing_ok=True)
-        except OSError:
-            pass
+        # O_EXCL can fail on a file belonging to another run. Never unlink it.
+        if probe_owned:
+            try:
+                probe.unlink(missing_ok=True)
+            except OSError:
+                pass
         die(f"evidence directory write probe failed: {exc}")
 
 
