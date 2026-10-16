@@ -50,8 +50,13 @@ safe_root "$prefix" && safe_root "$module_root" || {
 check_staged_parent() {
     local target=$1 full current part i
     local -a parts
-    [[ -n "$destdir" ]] || return 0
-    full="$destdir$target"
+    if [[ -n "$destdir" ]]; then
+        full="$destdir$target"
+    else
+        # Live PREFIX entries may cross into a different application tree.
+        # Preserve merged-/usr module paths, which are handled separately.
+        case "$target" in "$prefix"/*) full="$target" ;; *) return 0 ;; esac
+    fi
     current=/
     IFS=/ read -r -a parts <<<"${full#/}"
     for ((i = 0; i + 1 < ${#parts[@]}; i++)); do
