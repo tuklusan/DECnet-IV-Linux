@@ -346,6 +346,10 @@ case "$reserved_proof" in
     0|1) ;;
     *) echo "DNIV-INTEROP-FAIL session=$session reason=bad-reserved-proof"; exit 1 ;;
 esac
+case "$flow_proof" in
+    0|1) ;;
+    *) echo "DNIV-INTEROP-FAIL session=$session reason=bad-flow-proof"; exit 1 ;;
+esac
 case "$pp11_pressure" in
     0|1) ;;
     *) echo "DNIV-INTEROP-FAIL session=$session reason=bad-pp11-pressure"; exit 1 ;;
