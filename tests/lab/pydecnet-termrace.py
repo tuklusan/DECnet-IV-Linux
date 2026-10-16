@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import sys
 import threading
+import time
 
 from decnet.connectors import SimpleApiConnector
 
@@ -74,8 +75,9 @@ def main() -> int:
     ]
     for thread in threads:
         thread.start()
+    join_deadline = time.monotonic() + 40.0
     for thread in threads:
-        thread.join(40.0)
+        thread.join(max(0.0, join_deadline - time.monotonic()))
     if any(thread.is_alive() for thread in threads):
         raise RuntimeError("termination-race workers timed out")
     if errors:
