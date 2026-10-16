@@ -168,6 +168,7 @@ def main() -> int:
     host_resources = work / "host-resources.tsv"
     started = time.monotonic()
     success = False
+    injector: subprocess.Popen[bytes] | None = None
     try:
         lab.setup_network([[a0.taps[0], a1.taps[0], r0.taps[0]],
                            [b0.taps[0], r0.taps[1]]])
@@ -187,6 +188,7 @@ def main() -> int:
         ]
         with injector_out.open("wb") as output:
             proc = subprocess.Popen(command, stdout=output, stderr=subprocess.STDOUT)
+            injector = proc
             sample_at = time.monotonic()
             while proc.poll() is None:
                 now = time.monotonic()
@@ -213,7 +215,16 @@ def main() -> int:
         host_sample(host_resources, guests)
         success = True
     finally:
-        lab.close()
+        try:
+            if injector is not None and injector.poll() is None:
+                injector.terminate()
+                try:
+                    injector.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    injector.kill()
+                    injector.wait()
+        finally:
+            lab.close()
     if not success:
         return 1
     elapsed = time.monotonic() - started
