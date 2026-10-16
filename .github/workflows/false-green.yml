@@ -80,12 +80,27 @@ jobs:
           inodes_root="$tmp/inodes"
           mkdir -p "$bytes_root" "$inodes_root"
           cleanup() {
+            local status=$?
+            trap - EXIT INT TERM
             set +e
-            mountpoint -q "$bytes_root" && sudo umount "$bytes_root"
-            mountpoint -q "$inodes_root" && sudo umount "$inodes_root"
-            rm -rf "$tmp"
+            if mountpoint -q "$bytes_root"; then
+              if ! sudo umount "$bytes_root"; then
+                echo "false-green: refusing cleanup of still-mounted byte filesystem" >&2
+                exit 1
+              fi
+            fi
+            if mountpoint -q "$inodes_root"; then
+              if ! sudo umount "$inodes_root"; then
+                echo "false-green: refusing cleanup of still-mounted inode filesystem" >&2
+                exit 1
+              fi
+            fi
+            rm -rf -- "$tmp" || exit 1
+            exit "$status"
           }
           trap cleanup EXIT
+          trap 'exit 130' INT
+          trap 'exit 143' TERM
 
           sudo mount -t tmpfs -o size=1m,nr_inodes=256 tmpfs "$bytes_root"
           sudo chown "$USER:$(id -gn)" "$bytes_root"
