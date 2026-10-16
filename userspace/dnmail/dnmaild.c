@@ -345,8 +345,11 @@ static int smtp_open(const char *host, unsigned int port, const char *from,
     fd = socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0)
         return -1;
-    (void)setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
-    (void)setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
+    if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) ||
+        setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout))) {
+        close(fd);
+        return -1;
+    }
     if (connect(fd, (struct sockaddr *)&peer, sizeof(peer))) {
         close(fd);
         return -1;
