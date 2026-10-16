@@ -116,6 +116,7 @@ class Lab:
         self.guests: list[Guest] = []
         self.captures: list[subprocess.Popen[bytes]] = []
         self.created_taps: list[str] = []
+        self.created_bridges: list[str] = []
 
     @property
     def accel(self) -> str:
@@ -144,6 +145,7 @@ class Lab:
             raise RuntimeError("scale segment definition mismatch")
         for bridge, taps, pcap in zip(self.bridges, groups, self.pcaps):
             sudo("ip", "link", "add", bridge, "type", "bridge")
+            self.created_bridges.append(bridge)
             sudo("ip", "link", "set", bridge, "up")
             for tap in taps:
                 if not Path(f"/sys/class/net/{tap}").exists():
@@ -292,7 +294,7 @@ class Lab:
                 except subprocess.TimeoutExpired:
                     proc.kill()
                     proc.wait()
-        for bridge in self.bridges:
+        for bridge in reversed(self.created_bridges):
             sudo("ip", "link", "del", bridge, check=False)
         for tap in reversed(self.created_taps):
             sudo("ip", "tuntap", "del", "dev", tap, "mode", "tap", check=False)

@@ -458,6 +458,7 @@ class Lab:
             os.sched_setaffinity(0, {self.controller_cpu})
         self.guests: list[Guest] = []
         self.created_taps: list[str] = []
+        self.created_bridge = False
         self.tcpdump: subprocess.Popen[bytes] | None = None
         suffix = hashlib.sha256(session.encode("utf-8")).hexdigest()[:6]
         self.bridge = f"br{suffix}"
@@ -479,6 +480,7 @@ class Lab:
 
     def create_network(self, taps: list[str]) -> None:
         sudo("ip", "link", "add", self.bridge, "type", "bridge")
+        self.created_bridge = True
         sudo("ip", "link", "set", self.bridge, "up")
         for tap in taps:
             sudo("ip", "tuntap", "add", "dev", tap, "mode", "tap", "user", str(os.getuid()))
@@ -633,7 +635,8 @@ class Lab:
                 self.tcpdump.wait()
         for tap in reversed(self.created_taps):
             sudo("ip", "tuntap", "del", "dev", tap, "mode", "tap", check=False)
-        sudo("ip", "link", "del", self.bridge, check=False)
+        if self.created_bridge:
+            sudo("ip", "link", "del", self.bridge, check=False)
 
 
 def validate_args(base: Path, kernel: Path, initrd: Path | None, mode: str, session: str) -> None:
