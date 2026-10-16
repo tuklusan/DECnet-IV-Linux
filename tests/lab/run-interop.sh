@@ -167,6 +167,8 @@ cleanup() {
     terminate_pid "${HOST_PROBE_PID:-}"
     terminate_pid "${CCRETRY_PID:-}"
     terminate_pid "${PRESSURE_INJECT_PID:-}"
+    terminate_pid "${pyhttp_pid:-}"
+    terminate_pid "${pyhttp_object_pid:-}"
     if [[ -n "${LOSS_QDISC:-}" || -n "${RESERVED_QDISC:-}" || -n "${PRESSURE_QDISC:-}" ]]; then
         sudo tc qdisc del dev "$tap_reference" clsact 2>/dev/null || true
     fi
@@ -667,6 +669,7 @@ if [[ "$reference" == pydecnet ]]; then
         cat "$pyhttp_server_log" >&2 || true
         exit 1
     fi
+    unset pyhttp_pid
     grep -Fq 'pydecnet-http-server: pass' "$pyhttp_server_log" || {
         cat "$pyhttp_server_log" >&2 || true
         exit 1
@@ -710,6 +713,7 @@ if [[ "$reference" == pydecnet ]]; then
         cat "$pyhttp_object_log" >&2 || true
         exit 1
     fi
+    unset pyhttp_object_pid
     grep -Fq 'pydecnet-http-server: pass' "$pyhttp_object_log" || {
         cat "$pyhttp_object_log" >&2 || true
         exit 1
