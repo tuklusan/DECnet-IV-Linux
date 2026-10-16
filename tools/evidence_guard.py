@@ -34,13 +34,22 @@ def rooted(root: Path, rel: str) -> Path:
     candidate = Path(rel)
     if candidate.is_absolute() or ".." in candidate.parts or rel in {"", "."}:
         die(f"invalid relative evidence path: {rel!r}")
+    if root.is_symlink():
+        die("evidence root is a symbolic link")
+    # Retain the lexical path after checking containment.  Returning the
+    # resolved target hides the fact that an evidence member was a symlink.
+    lexical = root / candidate
     resolved_root = root.resolve()
-    resolved = (root / candidate).resolve()
     try:
-        resolved.relative_to(resolved_root)
+        lexical.resolve().relative_to(resolved_root)
     except ValueError:
         die(f"evidence path escapes root: {rel}")
-    return resolved
+    current = root
+    for part in candidate.parts:
+        current = current / part
+        if current.is_symlink():
+            die(f"evidence path crosses symbolic link: {rel}")
+    return lexical
 
 
 def digest(path: Path) -> str:
