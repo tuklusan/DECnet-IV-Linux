@@ -102,12 +102,19 @@ fi
 
 probe_pid=
 peer_pid=
+route20_owned_pid=
+route20_pidfile=/var/run/route20.pid
 cleanup() {
     set +e
     [ -n "$probe_pid" ] && kill "$probe_pid" 2>/dev/null || true
-    [ -n "$peer_pid" ] && kill "$peer_pid" 2>/dev/null || true
-    if [ "$reference" = route20 ] && [ -r /var/run/route20.pid ]; then
-        kill "$(cat /var/run/route20.pid)" 2>/dev/null || true
+    if [ "$reference" = route20 ]; then
+        if [ -n "$route20_owned_pid" ] &&
+           [ -f "$route20_pidfile" ] && [ ! -L "$route20_pidfile" ] &&
+           [ "$(cat "$route20_pidfile")" = "$route20_owned_pid" ]; then
+            kill "$route20_owned_pid" 2>/dev/null || true
+        fi
+    else
+        [ -n "$peer_pid" ] && kill "$peer_pid" 2>/dev/null || true
     fi
 }
 trap cleanup EXIT INT TERM
@@ -172,7 +179,12 @@ priority=64
 interface=$iface
 cost=3
 EOF_ROUTE20
-    rm -f /var/run/route20.pid
+    # This disposable peer guest may still have a preexisting Route20 pidfile.
+    # Never remove it or signal a daemon we did not launch.
+    if [ -e "$route20_pidfile" ] || [ -L "$route20_pidfile" ]; then
+        echo "DNIV-REF-FAIL session=$session reason=route20-preexisting-pid"
+        exit 1
+    fi
     "$route20_bin" /run/reference/route20.ini
     i=0
     while [ "$i" -lt 100 ] && [ ! -s /var/run/route20.pid ]; do
@@ -180,8 +192,16 @@ EOF_ROUTE20
         sleep 0.1
     done
     [ -s /var/run/route20.pid ] || { echo "DNIV-REF-FAIL session=$session reason=route20-no-pid"; exit 1; }
-    peer_pid=$(cat /var/run/route20.pid)
+    peer_pid=$(cat "$route20_pidfile")
+    case "$peer_pid" in
+        ''|*[!0-9]*) echo "DNIV-REF-FAIL session=$session reason=route20-bad-pid"; exit 1 ;;
+    esac
+    if [ "$peer_pid" -le 1 ]; then
+        echo "DNIV-REF-FAIL session=$session reason=route20-bad-pid"
+        exit 1
+    fi
     kill -0 "$peer_pid" 2>/dev/null || { dump_route20_diagnostics; echo "DNIV-REF-FAIL session=$session reason=route20-dead"; exit 1; }
+    route20_owned_pid=$peer_pid
     ;;
 pydecnet)
     tar -xf /mnt/reference/pydecnet.tar -C /run/reference
