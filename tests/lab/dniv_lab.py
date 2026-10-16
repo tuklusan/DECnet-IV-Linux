@@ -457,6 +457,7 @@ class Lab:
             self.controller_cpu = self.host_cpus[0]
             os.sched_setaffinity(0, {self.controller_cpu})
         self.guests: list[Guest] = []
+        self.created_taps: list[str] = []
         self.tcpdump: subprocess.Popen[bytes] | None = None
         suffix = hashlib.sha256(session.encode("utf-8")).hexdigest()[:6]
         self.bridge = f"br{suffix}"
@@ -481,6 +482,7 @@ class Lab:
         sudo("ip", "link", "set", self.bridge, "up")
         for tap in taps:
             sudo("ip", "tuntap", "add", "dev", tap, "mode", "tap", "user", str(os.getuid()))
+            self.created_taps.append(tap)
             sudo("ip", "link", "set", tap, "master", self.bridge)
             sudo("ip", "link", "set", tap, "up")
         self.tcpdump = subprocess.Popen(
@@ -629,8 +631,8 @@ class Lab:
             except subprocess.TimeoutExpired:
                 self.tcpdump.kill()
                 self.tcpdump.wait()
-        for guest in self.guests:
-            sudo("ip", "link", "del", guest.tap, check=False)
+        for tap in reversed(self.created_taps):
+            sudo("ip", "tuntap", "del", "dev", tap, "mode", "tap", check=False)
         sudo("ip", "link", "del", self.bridge, check=False)
 
 
