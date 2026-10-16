@@ -936,7 +936,7 @@ static int selftest(void)
 {
     char directory[] = "/tmp/dnmaild-selftest.XXXXXX";
     char victim[] = "/tmp/dnmaild-victim.XXXXXX";
-    char mailbox[256];
+    char mailbox[256] = {0};
     char victim_buf[16];
     FILE *out = NULL;
     int victim_fd = -1;

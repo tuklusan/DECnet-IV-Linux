@@ -24,7 +24,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def run(app: str, cc: str, temp: Path) -> None:
-    source = ROOT / "userspace" / app / f"{app}.c"
+    source = ROOT / "userspace" / ("dnmail" if app == "dnmaild" else app) / f"{app}.c"
     expected_prefix = f"/tmp/{app}-"
     probe = temp / f"{app}-{cc}.c"
     exe = temp / f"{app}-{cc}"
@@ -62,10 +62,10 @@ def main() -> None:
     if not compilers:
         raise AssertionError('no C compiler for actual server cleanup regression')
     with tempfile.TemporaryDirectory(prefix='dniv-selftest-cleanup-') as directory:
-        for app in ('dnfald', 'dnhttpd'):
+        for app in ('dnfald', 'dnhttpd', 'dnmaild'):
             for cc in compilers:
                 run(app, cc, Path(directory))
-    print('FAL/HTTP selftest early-failure cleanup ownership passed')
+    print('FAL/HTTP/MAIL selftest early-failure cleanup ownership passed')
 
 
 if __name__ == '__main__':
