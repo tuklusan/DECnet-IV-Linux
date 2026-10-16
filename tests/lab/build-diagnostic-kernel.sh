@@ -42,8 +42,21 @@ esac
 linux_repo=https://github.com/torvalds/linux.git
 # Linux v7.3-rc5, tagged 2026-09-27; current mainline forward-compatibility baseline.
 linux_commit=72d3fcf802c45d00b300f25b848a93c3a2bd7c7e
-rm -rf "$output"
-mkdir -p "$output/src" "$output/build"
+# Refuse to erase an unrelated directory supplied as the output argument.
+# A previous invocation owns the directory only if its marker is intact.
+marker=.dniv-diagnostic-kernel-root
+marker_value=DNIV-DIAGNOSTIC-KERNEL-OUTPUT-v1
+if [[ -e "$output" || -L "$output" ]]; then
+    if [[ ! -d "$output" || -L "$output" ||
+          ! -f "$output/$marker" || -L "$output/$marker" ||
+          $(cat -- "$output/$marker") != "$marker_value" ]]; then
+        echo "build-diagnostic-kernel: refusing unowned output directory: $output" >&2
+        exit 2
+    fi
+fi
+rm -rf -- "$output"
+mkdir -p -- "$output/src" "$output/build"
+printf '%s\n' "$marker_value" > "$output/$marker"
 
 git -C "$output/src" init -q
 git -C "$output/src" remote add origin "$linux_repo"
