@@ -3356,3 +3356,8 @@ Same defect-bearing mixed-SHA discovery, clean 0/3. Predecessor `1677ff06201ecfd
 ### 2026-10-16: correct diagnostic fixture argv mock operands
 
 Followup diagnostic source-derived test fixture uses final positional argument for qemu-img raw output and sudo mount target rather than an option or raw source operand. No change to production workflow. Requalify new SHA, inspect unchanged source and continue same first defect-bearing scan #016; 0/3 clean certification.
+
+
+### 2026-10-16: faithfully simulate sudo umount in isolated regression
+
+Mock unmount removes the guest-mounted boot view after clearing its mounted sentinel, like a successful real unmount; retained on injected unmount failure. Fixture change only, production workflow unchanged. Must requalify newest SHA before any accepted clean audit.

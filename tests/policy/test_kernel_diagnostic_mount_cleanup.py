@@ -48,7 +48,7 @@ def exercise(mode: str) -> None:
             "sudo": '''#!/bin/bash
 case "$1" in
  mount) mkdir -p "${@: -1}/boot"; echo 'CONFIG_MODULES=y' > "${@: -1}/boot/config-linux"; touch "${@: -1}/.mounted";;
- umount) if [[ "${MODE}" == umountfail ]]; then exit 1; fi; rm -f "$2/.mounted";;
+ umount) if [[ "${MODE}" == umountfail ]]; then exit 1; fi; rm -f "$2/.mounted"; rm -rf "$2/boot";;
  cp) if [[ "${MODE}" == copyfail ]]; then exit 1; fi; command cp "$2" "$3";;
  chown) :;;
 esac
