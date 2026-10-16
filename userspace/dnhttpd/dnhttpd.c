@@ -299,10 +299,10 @@ static int selftest(void)
 {
     char directory[] = "/tmp/dnhttpd-selftest.XXXXXX";
     char victim[] = "/tmp/dnhttpd-victim.XXXXXX";
-    char good[256];
-    char link[256];
-    char hardlink_path[256];
-    char fifo_path[256];
+    char good[256] = {0};
+    char link[256] = {0};
+    char hardlink_path[256] = {0};
+    char fifo_path[256] = {0};
     char name[64];
     unsigned char boundary[8192];
     size_t boundary_len = 0U;

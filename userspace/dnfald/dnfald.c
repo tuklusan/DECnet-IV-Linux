@@ -1422,10 +1422,10 @@ static int selftest(void)
     unsigned char rat;
     char directory[] = "/tmp/dnfald-selftest.XXXXXX";
     char victim[] = "/tmp/dnfald-victim.XXXXXX";
-    char good[256];
-    char escape[256];
-    char hardlink_path[256];
-    char fifo_path[256];
+    char good[256] = {0};
+    char escape[256] = {0};
+    char hardlink_path[256] = {0};
+    char fifo_path[256] = {0};
     char victim_buf[16];
     int rootfd = -1;
     int victim_fd = -1;
