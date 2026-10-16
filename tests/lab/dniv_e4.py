@@ -108,6 +108,7 @@ class Lab:
                       work / "area32.pcap"]
         self.guests: list[Guest] = []
         self.captures: list[subprocess.Popen[bytes]] = []
+        self.created_taps: list[str] = []
 
     @property
     def accel(self) -> str:
@@ -128,6 +129,7 @@ class Lab:
             for tap in taps:
                 sudo("ip", "tuntap", "add", "dev", tap, "mode", "tap",
                      "user", str(os.getuid()))
+                self.created_taps.append(tap)
                 sudo("ip", "link", "set", tap, "master", bridge)
                 sudo("ip", "link", "set", tap, "up")
             proc = subprocess.Popen(
@@ -210,6 +212,8 @@ class Lab:
                     proc.wait()
         for bridge in self.bridges:
             sudo("ip", "link", "del", bridge, check=False)
+        for tap in reversed(self.created_taps):
+            sudo("ip", "tuntap", "del", "dev", tap, "mode", "tap", check=False)
 
 
 def main() -> int:
