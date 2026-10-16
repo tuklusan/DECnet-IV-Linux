@@ -179,7 +179,7 @@ static void test_negative(void)
     const unsigned char bad_ack_trailing[] = {
         0x04,0x03,0x00,0x05,0x01,0x05,0x80,0x00,0x00
     };
-    const unsigned char ignored_bad_optional_ack[] = {
+    const unsigned char bad_optional_ack_reserved_qual[] = {
         0x04,0x03,0x00,0x05,0x01,0x05,0x80,0x07,0xc0
     };
     const unsigned char bad_ci_dst[] = {
@@ -210,10 +210,10 @@ static void test_negative(void)
            DNIV_NSP_MALFORMED);
     assert(dniv_nsp_parse(bad_ack_trailing, sizeof(bad_ack_trailing), &p) ==
            DNIV_NSP_MALFORMED);
-    assert(dniv_nsp_parse(ignored_bad_optional_ack,
-                          sizeof(ignored_bad_optional_ack), &p) ==
-           DNIV_NSP_OK);
-    assert(p.ack1.present && !p.ack2.present);
+    /* Qualifier 4 is reserved even in an optional second ACK word. */
+    assert(dniv_nsp_parse(bad_optional_ack_reserved_qual,
+                          sizeof(bad_optional_ack_reserved_qual), &p) ==
+           DNIV_NSP_MALFORMED);
     assert(dniv_nsp_parse(bad_ci_dst, sizeof(bad_ci_dst), &p) ==
            DNIV_NSP_MALFORMED);
     assert(dniv_nsp_parse(bad_ls, sizeof(bad_ls), &p) ==
