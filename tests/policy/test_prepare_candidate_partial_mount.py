@@ -28,7 +28,7 @@ SOURCES = ("tests/lab/prepare-candidate-image.sh",
 def check_source(source):
     src = source.read_text()
     func_start = src.index("cleanup() {\n")
-    func_end = src.index("\n}\ntrap cleanup EXIT INT TERM", func_start) + len("\n}\n")
+    func_end = src.index("\n}\ntrap cleanup EXIT", func_start) + len("\n}\n")
     cleanup = src[func_start:func_end]
     mount_start = src.index('sudo mount -t proc proc "$mnt/proc"\n')
     last_mount = 'sudo mount --make-rslave "$mnt/dev"\n'
@@ -73,9 +73,48 @@ trap cleanup EXIT
 
 
 
+def check_failed_root_unmount(source):
+    src = source.read_text()
+    func_start = src.index("cleanup() {\n")
+    func_end = src.index("\n}\ntrap cleanup EXIT", func_start) + len("\n}\n")
+    cleanup = src[func_start:func_end]
+    for root_fails in (True, False):
+        with tempfile.TemporaryDirectory(prefix="dniv-root-umount-") as tmp:
+            log = Path(tmp) / "cleanup.log"
+            script = f'''set -euo pipefail
+work="{tmp}/work"
+mnt="$work/root"
+mkdir -p "$mnt"
+mounted=1
+chroot_mounted=1
+sudo() {{
+    printf '%s\n' "$*" >> "{log}"
+    if [[ "$1" == umount && "$2" == "$mnt" ]]; then
+        return {1 if root_fails else 0}
+    fi
+}}
+rm() {{ printf 'rm:%s\n' "$*" >> "{log}"; }}
+{cleanup}
+trap cleanup EXIT
+exit 0
+'''
+            proc = subprocess.run(["bash", "-c", script], capture_output=True,
+                                  text=True, timeout=5)
+            operations = log.read_text().splitlines()
+            deleted = any(entry.startswith("rm:-rf ") for entry in operations)
+            if root_fails:
+                assert proc.returncode != 0 and not deleted, (
+                    source, proc.returncode, operations, proc.stderr)
+            else:
+                assert proc.returncode == 0 and deleted, (
+                    source, proc.returncode, operations, proc.stderr)
+
+
 def check():
     for name in SOURCES:
         check_source(ROOT / name)
+    for name in (*SOURCES, "tests/lab/prepare-reference-image.sh"):
+        check_failed_root_unmount(ROOT / name)
     print("candidate, PP12 and foundation partial mount cleanup source regression passed")
 
 

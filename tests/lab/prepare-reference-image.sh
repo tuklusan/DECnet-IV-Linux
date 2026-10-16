@@ -37,13 +37,22 @@ mnt="$work/root"
 mkdir -p "$mnt" "$(dirname "$output")"
 mounted=0
 cleanup() {
+    local status=$?
+    trap - EXIT INT TERM
     set +e
     if (( mounted )); then
-        sudo umount "$mnt" 2>/dev/null || true
+        if ! sudo umount "$mnt" 2>/dev/null; then
+            echo "prepare-reference-image: guest root unmount failed; preserving $work" >&2
+            exit 1
+        fi
+        mounted=0
     fi
-    rm -rf "$work"
+    rm -rf "$work" || exit 1
+    exit "$status"
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 normalize_ext4() {
     local image=$1 rc
