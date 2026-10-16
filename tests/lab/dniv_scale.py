@@ -140,15 +140,33 @@ class Lab:
             "-b", str(self.base), str(path))
         return path
 
-    def setup_network(self, groups: list[list[str]]) -> None:
+    def setup_network(self, groups: list[list[str]], *,
+                      external_taps: set[str] | None = None) -> None:
         if len(groups) != len(self.bridges):
             raise RuntimeError("scale segment definition mismatch")
+        # The distributed VDE cable is created by its parent harness. Only
+        # that explicitly named interface may be reused; generated guest TAPs
+        # must be newly owned by this lab before they can be reconfigured.
+        external = set(external_taps or ())
+        provided = {tap for taps in groups for tap in taps}
+        if not external.issubset(provided):
+            raise RuntimeError("scale external TAP is not part of any segment")
+        assigned: set[str] = set()
         for bridge, taps, pcap in zip(self.bridges, groups, self.pcaps):
             sudo("ip", "link", "add", bridge, "type", "bridge")
             self.created_bridges.append(bridge)
             sudo("ip", "link", "set", bridge, "up")
             for tap in taps:
-                if not Path(f"/sys/class/net/{tap}").exists():
+                if tap in assigned:
+                    raise RuntimeError(f"scale TAP assigned more than once: {tap}")
+                assigned.add(tap)
+                exists = Path(f"/sys/class/net/{tap}").exists()
+                if tap in external:
+                    if not exists:
+                        raise RuntimeError(f"scale external TAP is missing: {tap}")
+                else:
+                    if exists:
+                        raise RuntimeError(f"scale TAP is pre-existing: {tap}")
                     sudo("ip", "tuntap", "add", "dev", tap, "mode", "tap",
                          "user", str(os.getuid()))
                     self.created_taps.append(tap)

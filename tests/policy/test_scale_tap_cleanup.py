@@ -52,7 +52,7 @@ def main() -> None:
     with mock.patch.object(dniv_scale, "sudo", side_effect=fake_sudo), \
             mock.patch.object(dniv_scale.subprocess, "Popen", return_value=DummyCapture()), \
             mock.patch.object(dniv_scale.time, "sleep", return_value=None):
-        lab.setup_network([["lo", tap]])
+        lab.setup_network([[tap]])
         lab.close()
 
     assert ("ip", "tuntap", "add", "dev", tap, "mode", "tap", "user", str(os.getuid())) in seen, seen

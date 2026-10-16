@@ -101,7 +101,7 @@ def run_partition(args: argparse.Namespace, work: Path, session: str) -> None:
         lab.setup_network([
             [g.taps[0] for g in endpoints] + [l1.taps[0], l2.taps[0]],
             [l2.taps[1], args.cross_tap],
-        ])
+        ], external_taps={args.cross_tap})
         lab.start(l1)
         time.sleep(2)
         lab.start(l2)
