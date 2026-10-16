@@ -47,14 +47,24 @@ module="$work/decnet_iv.ko"
 mkdir -p "$mnt"
 mounted=0
 cleanup() {
+    local status=$?
+    trap - EXIT INT TERM
     set +e
     if (( mounted )); then
-        sudo umount "$mnt" 2>/dev/null || true
+        if ! sudo umount "$mnt" 2>/dev/null; then
+            echo "install-diagnostic-module: unmount failed; preserving mounted work tree $mnt" >&2
+            make -C "$repo_root/kernel/decnet" KDIR="$kdir" clean >/dev/null 2>&1 || true
+            exit 1
+        fi
+        mounted=0
     fi
     make -C "$repo_root/kernel/decnet" KDIR="$kdir" clean >/dev/null 2>&1 || true
-    rm -rf "$work"
+    rm -rf "$work" || exit 1
+    exit "$status"
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 make -C "$repo_root/kernel/decnet" KDIR="$kdir" clean all
 cp "$repo_root/kernel/decnet/decnet_iv.ko" "$module"
