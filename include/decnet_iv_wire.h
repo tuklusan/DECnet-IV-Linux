@@ -631,6 +631,7 @@ static inline int dniv_wire_build_forwarded_long(
     if (!buf || !data || !dniv_wire_address_valid(data->destination) ||
         !dniv_wire_address_valid(data->source) ||
         data->visit >= dniv_wire_data_visit_limit(data) ||
+        (data->payload_len && !data->payload) ||
         data->payload_len > DNIV_WIRE_BLOCK_SIZE - DNIV_WIRE_LONG_DATA_LEN)
         return 0;
 

@@ -88,6 +88,15 @@ static void test_forwarded_long(void)
     assert(len > 0 && out[18] == 62U);
     data.visit = DNIV_WIRE_MAX_RETURN_VISIT;
     assert(dniv_wire_build_forwarded_long(out, sizeof(out), &data, 0U) == 0);
+
+    /* A nonzero payload length without a buffer must fail, not crash. */
+    data.visit = 0U;
+    data.payload_len = 1U;
+    data.payload = NULL;
+    assert(dniv_wire_build_forwarded_long(out, sizeof(out), &data, 0U) == 0);
+    data.payload_len = 0U;
+    assert(dniv_wire_build_forwarded_long(out, sizeof(out), &data, 0U) ==
+           DNIV_WIRE_LONG_DATA_LEN);
 }
 
 
