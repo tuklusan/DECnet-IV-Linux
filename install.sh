@@ -220,8 +220,8 @@ put() {
             exit 2
         }
     fi
-    record "$target"
     install -D -m "$mode" "$source" "$destdir$target"
+    record "$target"
 }
 
 link_to() {
@@ -231,9 +231,9 @@ link_to() {
         echo "install.sh: refusing non-symlink at link target: $link" >&2
         exit 2
     fi
-    record "$link"
     mkdir -p "$(dirname "$destdir$link")"
     ln -sfn "$target" "$destdir$link"
+    record "$link"
 }
 
 put 0644 "$module_path" "$module_root/extra/decnet_iv.ko"

@@ -113,6 +113,52 @@ def main():
         assert not (stage / "lib/modules/6.8.0-fixture/extra/decnet_iv.ko").exists()
         assert ncp.read_text() == "foreign-ncp-must-survive\n"
 
+        # A failed first install must not promise ownership of an artifact
+        # that was never installed: it might later belong to another writer.
+        # Stub only install(1); the real packaged install/uninstall scripts run.
+        failing_install = fakebin / "install"
+        failing_install.write_text("#!/bin/sh\nexit 42\n")
+        failing_install.chmod(0o755)
+        manifest.write_text("")
+        module_member = "/lib/modules/6.8.0-fixture/extra/decnet_iv.ko"
+        module_file = stage / module_member.lstrip("/")
+        module_file.parent.mkdir(parents=True, exist_ok=True)
+        assert not module_file.exists()
+        failed = run("env", f"DESTDIR={stage}",
+                     "MODULE_ROOT=/lib/modules/6.8.0-fixture",
+                     f"PATH={fakebin}:/usr/bin:/bin", "bash",
+                     str(package / "install.sh"))
+        assert failed.returncode == 42, failed.stdout + failed.stderr
+        assert not module_file.exists()
+        assert module_member not in manifest.read_text(), (
+            "incomplete install falsely claimed ownership of module")
+        module_file.write_text("FOREIGN-WRITER-KEEPS-THIS\n")
+        clean = run("env", f"DESTDIR={stage}",
+                    "MODULE_ROOT=/lib/modules/6.8.0-fixture",
+                    "KERNEL_RELEASE=6.8.0-fixture", str(UNINSTALL))
+        assert clean.returncode == 0, clean.stdout + clean.stderr
+        assert module_file.read_text() == "FOREIGN-WRITER-KEEPS-THIS\n", (
+            "uninstall removed a foreign file after failed install")
+
+        # A completed file installation must still be recorded, even if a
+        # later component fails: the uninstaller owns ONLY the completed one.
+        module_file.unlink()  # remove the synthetic foreign test fixture
+        manifest.parent.mkdir(parents=True, exist_ok=True)
+        failing_install.write_text('#!/bin/sh\nexec /usr/bin/install "$@"\n')
+        installed = run("env", f"DESTDIR={stage}",
+                        "MODULE_ROOT=/lib/modules/6.8.0-fixture",
+                        f"PATH={fakebin}:/usr/bin:/bin", "bash",
+                        str(package / "install.sh"))
+        assert installed.returncode != 0, installed.stdout + installed.stderr
+        assert "missing built artifact" in installed.stderr, installed.stderr
+        assert module_file.read_bytes() == b"fixture module"
+        assert manifest.read_text() == module_member + "\n"
+        cleanup = run("env", f"DESTDIR={stage}",
+                      "MODULE_ROOT=/lib/modules/6.8.0-fixture",
+                      "KERNEL_RELEASE=6.8.0-fixture", str(UNINSTALL))
+        assert cleanup.returncode == 0, cleanup.stdout + cleanup.stderr
+        assert not module_file.exists() and not manifest.exists()
+
         # A legitimate installed command, alias or source document is allowed.
         for path in ("/usr/local/bin/dncopy", "/usr/local/bin/sethost",
                      "/usr/local/sbin/dnctl",
@@ -120,6 +166,7 @@ def main():
             assert run("bash", "-c",
                        'source "$1"; dniv_manifest_prefix_member "$2" "$3"',
                        "bash", str(HELPER), path, prefix).returncode == 0, path
+        manifest.parent.mkdir(parents=True, exist_ok=True)
         manifest.write_text("/usr/local/bin/dncopy\n")
         ok = run("env", f"DESTDIR={stage}", str(UNINSTALL))
         assert ok.returncode == 0, ok.stdout + ok.stderr
