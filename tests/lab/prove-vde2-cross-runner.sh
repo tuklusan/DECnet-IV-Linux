@@ -201,6 +201,7 @@ key_file="$work/bastion.key"
 known_hosts="$work/known_hosts"
 ssh_config="$work/ssh_config"
 switch_pid=
+switch_sock_owned=
 bridge_pid=
 py_pid=
 echo_pid=
@@ -232,7 +233,10 @@ cleanup() {
     if [[ -n "${switch_pid:-}" ]]; then
         kill "$switch_pid" 2>/dev/null || true
     fi
-    rm -rf "$server_sock" "$work"
+    if [[ -n "${switch_sock_owned:-}" ]]; then
+        rm -rf -- "$switch_sock_owned"
+    fi
+    rm -rf -- "$work"
 }
 trap cleanup EXIT INT TERM
 
@@ -280,7 +284,11 @@ done
 
 start_switch() {
     local sock=$1
-    rm -rf "$sock"
+    if [[ -e "$sock" || -L "$sock" ]]; then
+        echo "vde2-cross: refusing preexisting VDE socket path: $sock" >&2
+        return 1
+    fi
+    switch_sock_owned=$sock
     "$vde_switch_bin" -daemon -sock "$sock" >/dev/null 2>&1
     switch_pid=
     for _ in $(seq 1 80); do
@@ -573,6 +581,7 @@ if [[ -n "${switch_pid:-}" ]]; then
     switch_pid=
 fi
 rm -rf "$local_sock"
+switch_sock_owned=
 start_switch "$local_sock"
 start_bridge
 up_before=$(grep -Fc "Adjacency up" "$work/pydecnet.log" || true)

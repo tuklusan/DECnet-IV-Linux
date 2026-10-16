@@ -143,10 +143,27 @@ async def handshake(conn) -> None:
 
 async def serve(api_socket: str, system: str) -> int:
     connector = AsyncApiConnector(api_socket)
-    await connector.start()
-    listener = await connector.bind(42, "CTERM", system=system)
-    fal = await connector.bind(17, "FAL", system=system)
-    task = await connector.bind(0, "TASKTEST", system=system)
+    listener = fal = task = None
+    try:
+        await connector.start()
+        listener = await connector.bind(42, "CTERM", system=system)
+        fal = await connector.bind(17, "FAL", system=system)
+        task = await connector.bind(0, "TASKTEST", system=system)
+    except BaseException:
+        try:
+            if task is not None:
+                task.close()
+        finally:
+            try:
+                if fal is not None:
+                    fal.close()
+            finally:
+                try:
+                    if listener is not None:
+                        listener.close()
+                finally:
+                    await connector.close()
+        raise
     try:
         print("pydecnet-cterm: ready", flush=True)
         probe = await listener.listen()
