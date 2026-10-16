@@ -44,10 +44,10 @@ def exercise(mode: str) -> None:
         mock = base / "bin"
         mock.mkdir()
         for command, script in {
-            "qemu-img": "#!/bin/bash\ntouch \"$5\"\n",
+            "qemu-img": "#!/bin/bash\ntouch \"${@: -1}\"\n",
             "sudo": '''#!/bin/bash
 case "$1" in
- mount) mkdir -p "$4/boot"; echo 'CONFIG_MODULES=y' > "$4/boot/config-linux"; touch "$4/.mounted";;
+ mount) mkdir -p "${@: -1}/boot"; echo 'CONFIG_MODULES=y' > "${@: -1}/boot/config-linux"; touch "${@: -1}/.mounted";;
  umount) if [[ "${MODE}" == umountfail ]]; then exit 1; fi; rm -f "$2/.mounted";;
  cp) if [[ "${MODE}" == copyfail ]]; then exit 1; fi; command cp "$2" "$3";;
  chown) :;;
