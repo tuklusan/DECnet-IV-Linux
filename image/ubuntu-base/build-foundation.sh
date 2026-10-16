@@ -92,10 +92,10 @@ printf 'LABEL=dniv-root / ext4 defaults 0 1\n' | sudo tee "$mnt/etc/fstab" >/dev
 printf 'dniv-foundation\n' | sudo tee "$mnt/etc/hostname" >/dev/null
 
 sudo mount -t proc proc "$mnt/proc"
+chroot_mounted=1
 sudo mount -t sysfs sysfs "$mnt/sys"
 sudo mount --rbind /dev "$mnt/dev"
 sudo mount --make-rslave "$mnt/dev"
-chroot_mounted=1
 
 sudo tee "$mnt/usr/sbin/policy-rc.d" >/dev/null <<'EOF_POLICY'
 #!/bin/sh

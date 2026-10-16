@@ -20,7 +20,9 @@ import tempfile
 
 
 ROOT = Path(__file__).resolve().parents[2]
-SOURCES = ("prepare-candidate-image.sh", "prepare-pp12-source-image.sh")
+SOURCES = ("tests/lab/prepare-candidate-image.sh",
+           "tests/lab/prepare-pp12-source-image.sh",
+           "image/ubuntu-base/build-foundation.sh")
 
 
 def check_source(source):
@@ -29,7 +31,10 @@ def check_source(source):
     func_end = src.index("\n}\ntrap cleanup EXIT INT TERM", func_start) + len("\n}\n")
     cleanup = src[func_start:func_end]
     mount_start = src.index('sudo mount -t proc proc "$mnt/proc"\n')
-    mount_end = src.index('sudo chroot "$mnt"', mount_start)
+    last_mount = 'sudo mount --make-rslave "$mnt/dev"\n'
+    mount_end = src.index(last_mount, mount_start) + len(last_mount)
+    if src[mount_end:].startswith("chroot_mounted=1\n"):
+        mount_end += len("chroot_mounted=1\n")
     mount_steps = src[mount_start:mount_end]
     assert "chroot_mounted=1" in mount_steps
 
@@ -70,8 +75,8 @@ trap cleanup EXIT
 
 def check():
     for name in SOURCES:
-        check_source(ROOT / "tests/lab" / name)
-    print("candidate and PP12 partial mount cleanup source regression passed")
+        check_source(ROOT / name)
+    print("candidate, PP12 and foundation partial mount cleanup source regression passed")
 
 
 if __name__ == "__main__":
