@@ -26,8 +26,12 @@ async def serve_one(api_socket: str, system: str, object_name: str, marker: str)
         raise RuntimeError("invalid DECnet object name")
     body=(marker+"\n").encode("ascii")
     connector=AsyncApiConnector(api_socket)
-    await connector.start()
-    listener=await connector.bind(name=object_name,auth="off",system=system)
+    try:
+        await connector.start()
+        listener=await connector.bind(name=object_name,auth="off",system=system)
+    except BaseException:
+        await connector.close()
+        raise
     print(f"pydecnet-http-server: ready object={object_name}",flush=True)
     try:
         conn=await asyncio.wait_for(listener.listen(),45)
