@@ -855,13 +855,15 @@ def main() -> int:
                 break
             time.sleep(0.1 if diagnostic_fault else 1)
     finally:
-        if startup_a_paused:
-            lab.resume_guest(guest_a)
-        if fault_b_paused:
-            lab.resume_guest(guest_b)
-        if fault_a_paused and not fault_restored:
-            lab.resume_guest(guest_a)
-        lab.close()
+        try:
+            if startup_a_paused:
+                lab.resume_guest(guest_a)
+            if fault_b_paused:
+                lab.resume_guest(guest_b)
+            if fault_a_paused and not fault_restored:
+                lab.resume_guest(guest_a)
+        finally:
+            lab.close()
 
     if not (pass_a and pass_b):
         for guest in (guest_a, guest_b):
