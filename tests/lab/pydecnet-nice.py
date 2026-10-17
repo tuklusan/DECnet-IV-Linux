@@ -89,6 +89,8 @@ def main() -> int:
         status_off += 4
         if status[status_off:status_off + 3] != b"\x58\x02\x02":
             raise RuntimeError(f"missing NICE active-links parameter: {status!r}")
+        if len(status) < status_off + 5:
+            raise RuntimeError(f"truncated NICE active-links value: {status!r}")
         active_links = int.from_bytes(status[status_off + 3:status_off + 5],
                                       "little")
         if active_links < 1:
