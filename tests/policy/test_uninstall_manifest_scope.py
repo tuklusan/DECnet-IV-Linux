@@ -37,7 +37,7 @@ def main():
     assert put.index('install -D -m') < put.index('record "$target"')
     assert link.index('ln -sfn') < link.index('record "$link"')
     docs = (ROOT / "INSTALL.md").read_text()
-    assert ("\`install.sh\` records each managed target in the installation "
+    assert ("`install.sh` records each managed target in the installation "
             "manifest only after successfully writing it") in docs, (
                 "INSTALL.md must describe post-success manifest ownership")
     with tempfile.TemporaryDirectory(prefix="dniv-manifest-scope-") as td:
