@@ -221,7 +221,10 @@ def main() -> int:
                 break
             if len(raw) < 4 or raw[0] != 15 or raw[2] != 1 or len(raw) != 4 + raw[3]:
                 raise RuntimeError(f"bad FAL directory record: {raw!r}")
-            names.add(raw[4:].decode("ascii"))
+            name = raw[4:].decode("ascii")
+            if name in names:
+                raise RuntimeError(f"duplicate FAL directory entry: {name!r}")
+            names.add(name)
         if names != {"SERVER.TXT", "RENAMED.BIN"}:
             raise RuntimeError(f"bad FAL directory names: {sorted(names)!r}")
         connection.disconnect()
