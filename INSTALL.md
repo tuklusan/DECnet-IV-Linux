@@ -112,7 +112,7 @@ rm -rf /tmp/dniv-stage
 DESTDIR=/tmp/dniv-stage ./install.sh
 ```
 
-This requires no root privilege and is the supported packaging/release-validation path. `DESTDIR` must be a normalized absolute non-root path. For staged operations, `install.sh` and `uninstall.sh` reject existing symlinked parent components so file creation or removal cannot traverse outside the selected staging tree. `install.sh` records each managed target in the installation manifest before writing it, refuses to overwrite an existing target that is not already managed, and preserves the manifest on failure. If a staged or live install is interrupted or otherwise fails, rerun `uninstall.sh` with the same `DESTDIR`, `PREFIX` and `MODULE_ROOT` values to clean the tracked partial installation before retrying.
+This requires no root privilege and is the supported packaging/release-validation path. `DESTDIR` must be a normalized absolute non-root path. For staged operations, `install.sh` and `uninstall.sh` reject existing symlinked parent components so file creation or removal cannot traverse outside the selected staging tree. `install.sh` records each managed target in the installation manifest only after successfully writing it, refuses to overwrite an existing target that is not already managed, and preserves the manifest on failure. If a staged or live install is interrupted or otherwise fails, rerun `uninstall.sh` with the same `DESTDIR`, `PREFIX` and `MODULE_ROOT` values to clean the tracked partial installation before retrying.
 
 ## 7. Live install
 

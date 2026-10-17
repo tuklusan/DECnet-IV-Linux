@@ -30,6 +30,16 @@ def run(*args):
 
 
 def main():
+    # The user manual must not claim ownership until a write or link succeeds.
+    installer = (ROOT / "install.sh").read_text()
+    put = installer.split("\nput() {", 1)[1].split("\nlink_to() {", 1)[0]
+    link = installer.split("\nlink_to() {", 1)[1].split("\nput 0644", 1)[0]
+    assert put.index('install -D -m') < put.index('record "$target"')
+    assert link.index('ln -sfn') < link.index('record "$link"')
+    docs = (ROOT / "INSTALL.md").read_text()
+    assert ("\`install.sh\` records each managed target in the installation "
+            "manifest only after successfully writing it") in docs, (
+                "INSTALL.md must describe post-success manifest ownership")
     with tempfile.TemporaryDirectory(prefix="dniv-manifest-scope-") as td:
         stage = pathlib.Path(td)
         prefix = "/usr/local"
