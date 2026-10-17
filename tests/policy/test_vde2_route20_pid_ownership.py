@@ -15,6 +15,7 @@
 """Only a Route20 daemon owned by this VDE2 invocation may be stopped."""
 
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 
@@ -29,12 +30,34 @@ def check_script(script_path):
     end = original.index("\n}\ntrap cleanup EXIT INT TERM", begin) + 3
     cleanup = original[begin:end]
     assert "route20_pid" in cleanup, "cleanup must scope Route20 ownership"
-    assert 'if [[ -e /var/run/route20.pid ]]; then' in original, (
-        "preexisting Route20 service must prevent server launch"
+    guard_pattern = 'if [[ -e /var/run/route20.pid || -L /var/run/route20.pid ]]; then'
+    assert guard_pattern in original, (
+        "preexisting Route20 file OR dangling pid symlink must prevent launch"
     )
-    assert original.index('if [[ -e /var/run/route20.pid ]]; then') < original.index(
+    assert original.index(guard_pattern) < original.index(
         'sudo "$work/route20/Route20/route20" "$work/route20.ini"'
     )
+    guard = original[original.index(guard_pattern):]
+    guard_end = re.search(r"\n[ \t]*fi(?:\n|$)", guard)
+    assert guard_end, "preflight guard has no matching fi"
+    guard = guard[:guard_end.end()]
+    for condition in ("missing", "regular", "dangling-symlink"):
+        with tempfile.TemporaryDirectory(prefix="dniv-route20-preflight-") as tmp:
+            pidfile = Path(tmp) / "route20.pid"
+            if condition == "regular":
+                pidfile.write_text("5555\n")
+            elif condition == "dangling-symlink":
+                pidfile.symlink_to(Path(tmp) / "absent")
+            patched_guard = guard.replace("/var/run/route20.pid", str(pidfile))
+            result = subprocess.run(
+                ["bash", "-c", f"set -euo pipefail\nwork={tmp!r}\n" + patched_guard +
+                 "\nprintf 'SERVER_START_ALLOWED\\n'\n"],
+                capture_output=True, text=True, timeout=5)
+            assert (result.returncode == 0) == (condition == "missing"), (
+                script_path, condition, result.returncode, result.stderr)
+            assert ("SERVER_START_ALLOWED" in result.stdout) == (
+                condition == "missing"), (script_path, condition, result.stdout)
+
     for owned, expected in (("", False), ("32145", True), ("11111", False)):
         with tempfile.TemporaryDirectory(prefix="dniv-route20-ownership-") as tmp:
             pidfile = Path(tmp) / "route20.pid"

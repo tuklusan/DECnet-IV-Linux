@@ -257,7 +257,7 @@ circuit ETH-0 Ethernet $url --mode vde --cost 3 --t3 2 --priority 64
 logging console --events 4.15,4.16
 EOF
 
-if [[ -e /var/run/route20.pid ]]; then
+if [[ -e /var/run/route20.pid || -L /var/run/route20.pid ]]; then
     echo "vde2-proof: Route20 pid file already exists; refusing to disrupt another service" >&2
     exit 1
 fi

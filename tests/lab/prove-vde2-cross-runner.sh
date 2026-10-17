@@ -328,7 +328,7 @@ InactivityTimer=30
 [session]
 InactivityTimer=60
 EOF
-    if [[ -e /var/run/route20.pid ]]; then
+    if [[ -e /var/run/route20.pid || -L /var/run/route20.pid ]]; then
         echo "vde2-cross: Route20 pid file exists; refusing to disrupt an existing service" >&2
         exit 1
     fi
