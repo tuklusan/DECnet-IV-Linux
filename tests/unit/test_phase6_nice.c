@@ -142,6 +142,20 @@ int main(void)
         reply[reply_len + 1U] = 0x10U;
         assert(dniv_nice_parse_node_reply(reply, reply_len + 2U,
                                           &parsed) != 0);
+        /* A trailing parameter with a missing count or data is invalid,
+         * even when its ID is above the known state/link IDs. */
+        reply[reply_len] = 0x59U; /* parameter 601 */
+        reply[reply_len + 1U] = 0x02U;
+        reply[reply_len + 2U] = DNIV_NICE_TYPE_ASCII;
+        assert(dniv_nice_parse_node_reply(reply, reply_len + 3U,
+                                          &parsed) != 0);
+        reply[reply_len + 3U] = 0xffU;
+        assert(dniv_nice_parse_node_reply(reply, reply_len + 4U,
+                                          &parsed) != 0);
+        reply[reply_len + 3U] = 1U;
+        reply[reply_len + 4U] = 'X';
+        assert(dniv_nice_parse_node_reply(reply, reply_len + 5U,
+                                          &parsed) == 0);
         {
             __u8 canonical[128];
             size_t canonical_len = reply_len - 3U;
@@ -185,6 +199,13 @@ int main(void)
         assert(reply[29] == 0x63U && reply[30] == 0xe2U);
         assert(reply[31] == 0x18U && reply[32] == 0x17U &&
                reply[33] == 0x16U && reply[34] == 0x15U);
+        {
+            struct dniv_nice_node_reply parsed;
+
+            /* High-numbered counters are legitimate optional fields. */
+            assert(dniv_nice_parse_node_reply(reply, reply_len, &parsed) == 0);
+            assert(parsed.address == DNIV_ADDR(31, 70));
+        }
         assert(dniv_nice_build_node_counters_reply(
                    reply, sizeof(reply), &reply_len,
                    DNIV_ADDR(31, 70), "DN70",

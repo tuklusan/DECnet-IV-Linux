@@ -435,6 +435,48 @@ dniv_nice_build_remote_node_status_reply(__u8 *buf, size_t capacity,
     return 0;
 }
 
+/* Walk optional NICE values without accepting truncated tail fields. */
+static inline int
+dniv_nice_skip_value(const __u8 *buf, size_t length, size_t *consumed,
+                     unsigned int depth)
+{
+    __u8 type;
+    size_t off;
+
+    if (!buf || !consumed || !length || depth > 8U)
+        return -1;
+    type = buf[0];
+    if (type == 0x20U || type == DNIV_NICE_TYPE_ASCII) {
+        if (length < 2U || length - 2U < (size_t)buf[1])
+            return -1;
+        *consumed = 2U + (size_t)buf[1];
+        return 0;
+    }
+    if ((type >= 0x01U && type <= 0x1fU) ||
+        (type >= 0x81U && type <= 0x9fU)) {
+        size_t width = type & 0x1fU;
+
+        if (!width || length - 1U < width)
+            return -1;
+        *consumed = 1U + width;
+        return 0;
+    }
+    if (type < 0xc1U || type > 0xdfU)
+        return -1;
+    off = 1U;
+    for (__u8 i = 0U; i < (type & 0x1fU); i++) {
+        size_t width;
+
+        if (off >= length ||
+            dniv_nice_skip_value(buf + off, length - off, &width,
+                                 depth + 1U))
+            return -1;
+        off += width;
+    }
+    *consumed = off;
+    return 0;
+}
+
 struct dniv_nice_node_reply {
     __u16 address;
     __u16 active_links;
@@ -495,29 +537,32 @@ dniv_nice_parse_node_reply(const __u8 *buf, size_t length,
             off += 2U;
             continue;
         }
-        if (param > 600U)
-            break;
-        if (type == 0x20U || type == 0x40U) {
-            size_t value_len;
+        if ((param & 0xf000U) >= 0xa000U) {
+            size_t width;
 
-            if (off >= length)
+            switch (param & 0xf000U) {
+            case 0xa000U: width = 1U; break;
+            case 0xb000U: width = 3U; break;
+            case 0xc000U: width = 2U; break;
+            case 0xd000U: width = 4U; break;
+            case 0xe000U: width = 4U; break;
+            case 0xf000U: width = 6U; break;
+            default: return -1;
+            }
+            /* The first counter byte was read as `type` above. */
+            if (length - off < width - 1U)
                 return -1;
-            value_len = buf[off];
-            if (length - off < value_len + 1U)
-                return -1;
-            off += value_len + 1U;
+            off += width - 1U;
             continue;
         }
-        if ((type >= 0x01U && type <= 0x1fU) ||
-            (type >= 0x81U && type <= 0x9fU)) {
-            size_t value_len = type & 0x1fU;
+        {
+            size_t consumed;
 
-            if (!value_len || length - off < value_len)
+            if (dniv_nice_skip_value(buf + off - 1U,
+                                     length - off + 1U, &consumed, 0U))
                 return -1;
-            off += value_len;
-            continue;
+            off += consumed - 1U;
         }
-        break;
     }
     return 0;
 }
