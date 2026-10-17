@@ -120,6 +120,7 @@ The default installed library layout also includes the compatibility links `libd
 | `tools/evidence_guard.py` | Acceptance evidence preflight, manifesting and verification. |
 | `tools/scratch_state.py` | Acceptance scratch-state lineage and result tracking. |
 | `tools/workflow_guard.sh` | Exact-SHA/main/workflow lineage guard. |
+| `tools/actions_gc.sh` | Permanent bounded Actions run/log/artifact/cache collector; observed evidence lives in the SHA-bound issue ledger. |
 | `tools/project_state_gate.py` | Durable Project State/RESUME continuity gate. |
 | `tools/repo_policy.py` | Main-only repository and acceptance policy enforcement. |
 | `tools/workflow_budget_gate.py` | Hosted-runner workflow budget/concurrency policy check. |
@@ -141,6 +142,7 @@ These files are shipped in the source archive so the accepted source SHA can be 
 | `.github/workflows/source-release.yml` | Reproducible exact-artifact source release, install/uninstall and portability gate. |
 | `.github/workflows/production-release.yml` | Fail-closed publication of the exact fully accepted production source artifact, checksum and release notes. |
 | `.github/workflows/repository-policy.yml` | Main-only policy enforcement and bounded acceptance dispatcher. |
+| `.github/workflows/actions-gc.yml` | Hourly Actions history/cache housekeeping and owner-requested backlog purge. |
 | `.github/workflows/project-state.yml` | Durable Project State/RESUME continuity gate. |
 | `.github/workflows/false-green.yml` | Acceptance-harness false-green regression. |
 | `.github/workflows/interop.yml` | Independent Ethernet interoperability workflow. |

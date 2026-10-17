@@ -3290,3 +3290,8 @@ Pre-change main `b35f08665ab5192240c86bd38724d922bc6cc6c5`: four green source ga
 ### 2026-10-17: Garbage-collection first-run regression closure
 
 Main `78038460422c1a4b16b2a828bb24032a81f1393d` deployed new GC, run `39048360402`. It deleted 7 cache entries, 0 old runs: GitHub REST `created=..timestamp` filter is INVALID for intended predate predicate and falsely reported zero. A live independent count still showed approximately 9,500 Actions runs. Also policy run `39048360324` FAILED repository workflow-budget check: missing `queue: max`. Fix both: `created=%3Ctimestamp` and concurrency `queue: max`, with strengthened mocked test enforcing URI filter. Do not claim old runs purged or old source qualified from that failed policy. Trigger fresh cleanup and exact-SHA targeted qualification on corrected main. Audit lexical next #042 after fresh accepted artifact; clean 0/3, PP/full/public pending.
+
+
+### 2026-10-17: Garbage-collection component inventory repair
+
+First dual-arch Build Bootstrap run `39048715890` for exact `274d709cd2c8c049f27a9838cbb4ccd66b04b112` FAILED after GC mock tests passed. Full source-release policy unit test correctly reported `undocumented release/support tool: actions_gc.sh`; the workflow `.github/workflows/actions-gc.yml` is likewise absent from `docs/COMPONENTS.md`. Update both entries without loosening policy, together with both continuity files in a single direct-main commit, then requalify four gates/fresh archive. Historical Actions cleanup is independent and actively reducing old run count through #1239. Discovery next #042 after qualification, 0/3 complete clean audits; canonical PP/full/public blocked.
