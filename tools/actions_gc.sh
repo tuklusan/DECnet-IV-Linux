@@ -75,7 +75,7 @@ done
 # Never cancel an in-progress job. This workflow cannot delete its own
 # in-progress run; a subsequent sweep deletes it after its grace period.
 while available; do
-    list=$(gh api "$api/actions/runs?per_page=100&status=completed&created=..$cutoff" --jq '.workflow_runs[].id')
+    list=$(gh api "$api/actions/runs?per_page=100&status=completed&created=%3C$cutoff" --jq '.workflow_runs[].id')
     [[ -n "$list" ]] || break
     while IFS= read -r id; do
         [[ "$id" =~ ^[0-9]+$ ]] || exit 2
@@ -88,8 +88,8 @@ while available; do
 done
 
 cache_left=$(gh api "$api/actions/caches?per_page=1" --jq '.total_count')
-old_left=$(gh api "$api/actions/runs?per_page=1&status=completed&created=..$initial_cutoff" --jq '.total_count')
-expired_left=$(gh api "$api/actions/runs?per_page=1&status=completed&created=..$cutoff" --jq '.total_count')
+old_left=$(gh api "$api/actions/runs?per_page=1&status=completed&created=%3C$initial_cutoff" --jq '.total_count')
+expired_left=$(gh api "$api/actions/runs?per_page=1&status=completed&created=%3C$cutoff" --jq '.total_count')
 summary="Actions GC run ${GITHUB_RUN_ID:-local}: mode=$mode; removed caches=$removed_cache, completed runs=$removed_runs; cache entries left=$cache_left, runs before original cutoff left=$old_left, eligible runs left=$expired_left; current grace=$hours hours."
 echo "$summary"
 if [[ -n "$active_issue" ]]; then

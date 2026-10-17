@@ -23,6 +23,7 @@ on:
 
 concurrency:
   group: dniv-actions-gc
+  queue: max
   cancel-in-progress: false
 
 permissions:

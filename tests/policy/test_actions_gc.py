@@ -55,6 +55,7 @@ elif '/issues?' in url:
 elif '/actions/caches?' in url:
     print(len(state['caches']) if '--jq' in args and '.total_count' in args else '\\n'.join(map(str,state['caches'])))
 elif '/actions/runs?' in url:
+    assert 'created=%3C' in url, 'run deletion query requires encoded less-than date filter'
     print(len(state['runs']) if '--jq' in args and '.total_count' in args else '\\n'.join(map(str,state['runs'])))
 else:
     sys.exit('unexpected API call: '+url)
