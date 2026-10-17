@@ -1305,6 +1305,11 @@ def main() -> int:
     if "if (send(fd, buf, total, flags | MSG_EOR | MSG_NOSIGNAL) != (ssize_t)total)" in dnwindow:
         raise SystemExit("source-release gate: window probe again leaves errno undefined on short success")
 
+    if ('window did not stop segment %u: errno=%d' not in dnwindow or
+            'WINDOW_COUNT + 1U, errno);' not in dnwindow or
+            'ninth segment' in dnwindow):
+        raise SystemExit("source-release gate: window block diagnostic must report dynamic first blocked segment")
+
     dnflow = read_text("tests/lab/dnflow.c")
     for marker in (
         "ssize_t sent;",

@@ -137,7 +137,8 @@ int main(int argc, char **argv)
     errno = 0;
     if (!send_tag(fd, WINDOW_COUNT + 1U, MSG_DONTWAIT) ||
         (errno != EAGAIN && errno != EWOULDBLOCK)) {
-        fprintf(stderr, "window did not stop ninth segment: errno=%d\n", errno);
+        fprintf(stderr, "window did not stop segment %u: errno=%d\n",
+                WINDOW_COUNT + 1U, errno);
         goto fail;
     }
     if (pressure)
