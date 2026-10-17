@@ -38,7 +38,19 @@ echo "$arm64_normalizer_sha256  $arm64_normalizer" | sha256sum -c - >/dev/null
 . "$script_dir/images.env"
 snapshot=${UBUNTU_APT_SNAPSHOT:?images.env must pin UBUNTU_APT_SNAPSHOT}
 disk_bytes=${DNIV_DISK_BYTES:-4294967296}
-if [[ ! "$disk_bytes" =~ ^[0-9]+$ ]] || (( disk_bytes < 4294967296 )); then
+if [[ ! "$disk_bytes" =~ ^[0-9]+$ ]]; then
+    echo "build-foundation: DNIV_DISK_BYTES must be an integer >= 4294967296" >&2
+    exit 2
+fi
+# Compare decimal digits, not Bash arithmetic: leading zero means octal and
+# an overly long decimal can silently wrap a signed 64-bit shell integer.
+if [[ "$disk_bytes" =~ ^0*([1-9][0-9]*)$ ]]; then
+    disk_decimal=${BASH_REMATCH[1]}
+else
+    disk_decimal=0
+fi
+if (( ${#disk_decimal} < 10 )) ||
+   { (( ${#disk_decimal} == 10 )) && [[ "$disk_decimal" < 4294967296 ]]; }; then
     echo "build-foundation: DNIV_DISK_BYTES must be an integer >= 4294967296" >&2
     exit 2
 fi
