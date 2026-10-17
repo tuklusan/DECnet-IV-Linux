@@ -3295,3 +3295,8 @@ Main `78038460422c1a4b16b2a828bb24032a81f1393d` deployed new GC, run `3904836040
 ### 2026-10-17: Garbage-collection component inventory repair
 
 First dual-arch Build Bootstrap run `39048715890` for exact `274d709cd2c8c049f27a9838cbb4ccd66b04b112` FAILED after GC mock tests passed. Full source-release policy unit test correctly reported `undocumented release/support tool: actions_gc.sh`; the workflow `.github/workflows/actions-gc.yml` is likewise absent from `docs/COMPONENTS.md`. Update both entries without loosening policy, together with both continuity files in a single direct-main commit, then requalify four gates/fresh archive. Historical Actions cleanup is independent and actively reducing old run count through #1239. Discovery next #042 after qualification, 0/3 complete clean audits; canonical PP/full/public blocked.
+
+
+### 2026-10-17: Retry-safe Actions GC
+
+Cleanup run `39048652500` removed hundreds of old Actions run records then FAILED with REST 404 for a run already absent when deletion was attempted. Current no-cache count was observed; approximately 9,227 workflow runs remained. Make a missing-run delete benign only if follow-up GET also returns not found, track vanished IDs, keep unrelated API failures fatal, bound attempted API deletion calls, and add a mocked 404-race policy test. Commit main with both continuity records then trigger owner cleanup issue and four-gate exact-SHA acceptance; do not claim purge completion until API old-run count zero. Ongoing discovery next lexical #042 after artifact qualification; formal clean 0/3.

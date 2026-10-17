@@ -44,6 +44,15 @@ if method=='DELETE':
     assert item in state[field], (field,item,state)
     state[field].remove(item)
     state['deleted_'+field].append(item)
+    if field == 'runs' and item == state.get('race_run'):
+        path.write_text(json.dumps(state))
+        print('gh: Not Found (HTTP 404)', file=sys.stderr)
+        sys.exit(1)
+elif method == 'GET' and '/actions/runs/' in url:
+    item=int(url.rsplit('/',1)[-1])
+    if item not in state['runs']:
+        sys.exit(1)
+    print(item)
 elif method == 'POST':
     state['comments']+=1
 elif method == 'PATCH':
@@ -63,7 +72,7 @@ path.write_text(json.dumps(state))
 '''
 
 
-def scenario(issue_open: bool) -> None:
+def scenario(issue_open: bool, race_run: int | None = None) -> None:
     with tempfile.TemporaryDirectory() as directory:
         root = pathlib.Path(directory)
         cli = root / 'gh'
@@ -71,7 +80,7 @@ def scenario(issue_open: bool) -> None:
         cli.chmod(0o755)
         state_path = root / 'state.json'
         state = dict(issue_open=issue_open, caches=[11, 12], runs=[21, 22],
-                     deleted_caches=[], deleted_runs=[], comments=0)
+                     deleted_caches=[], deleted_runs=[], comments=0, race_run=race_run)
         state_path.write_text(json.dumps(state))
         env = dict(os.environ, PATH=str(root) + os.pathsep + os.environ['PATH'],
                    GH_TOKEN='offline-test-token', GITHUB_REPOSITORY='tuklusan/DECnet-IV-Linux',
@@ -93,4 +102,5 @@ if __name__ == '__main__':
     subprocess.run(['bash', '-n', str(SCRIPT)], check=True)
     scenario(True)
     scenario(False)
+    scenario(True, 21)
     print('Actions GC policy regression: PASS (mocked historical/routine, repository safety)')

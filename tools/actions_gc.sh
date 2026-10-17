@@ -51,6 +51,9 @@ fi
 used=0
 removed_cache=0
 removed_runs=0
+missing_runs=0
+error_file=$(mktemp)
+trap 'rm -f "$error_file"' EXIT
 available() {
     local quota
     quota=$(gh api rate_limit --jq '.resources.core.remaining')
@@ -80,9 +83,18 @@ while available; do
     while IFS= read -r id; do
         [[ "$id" =~ ^[0-9]+$ ]] || exit 2
         [[ "$id" == "${GITHUB_RUN_ID:-}" ]] && continue
-        gh api -X DELETE "$api/actions/runs/$id" >/dev/null
+        if gh api -X DELETE "$api/actions/runs/$id" >/dev/null 2>"$error_file"; then
+            removed_runs=$((removed_runs + 1))
+        elif grep -q 'Not Found (HTTP 404)' "$error_file" && \
+             ! gh api "$api/actions/runs/$id" >/dev/null 2>&1; then
+            # A recorded run may expire between listing and deletion.
+            missing_runs=$((missing_runs + 1))
+        else
+            echo "Actions GC failed to delete run $id:" >&2
+            cat "$error_file" >&2
+            exit 1
+        fi
         used=$((used + 1))
-        removed_runs=$((removed_runs + 1))
         (( used < max_deletes )) || break
     done <<< "$list"
 done
@@ -90,7 +102,7 @@ done
 cache_left=$(gh api "$api/actions/caches?per_page=1" --jq '.total_count')
 old_left=$(gh api "$api/actions/runs?per_page=1&status=completed&created=%3C$initial_cutoff" --jq '.total_count')
 expired_left=$(gh api "$api/actions/runs?per_page=1&status=completed&created=%3C$cutoff" --jq '.total_count')
-summary="Actions GC run ${GITHUB_RUN_ID:-local}: mode=$mode; removed caches=$removed_cache, completed runs=$removed_runs; cache entries left=$cache_left, runs before original cutoff left=$old_left, eligible runs left=$expired_left; current grace=$hours hours."
+summary="Actions GC run ${GITHUB_RUN_ID:-local}: mode=$mode; removed caches=$removed_cache, completed runs=$removed_runs, raced/vanished runs=$missing_runs; cache entries left=$cache_left, runs before original cutoff left=$old_left, eligible runs left=$expired_left; current grace=$hours hours."
 echo "$summary"
 if [[ -n "$active_issue" ]]; then
     gh api -X POST "$api/issues/$active_issue/comments" -f "body=$summary" >/dev/null
