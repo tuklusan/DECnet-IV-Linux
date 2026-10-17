@@ -88,15 +88,19 @@ session=${DNIV_INTEROP_SESSION_ID:-"local-$(date -u +%Y%m%dT%H%M%SZ)-${BASHPID}-
 timer_proof=${DNIV_INTEROP_TIMER_PROOF:-0}
 [[ "$timer_proof" =~ ^[01]$ ]] || { echo "interop: bad timer-proof selector" >&2; exit 2; }
 peer_segsize=${DNIV_INTEROP_PEER_SEGMENT_SIZE:-0}
-[[ "$peer_segsize" =~ ^[0-9]+$ ]] || { echo "interop: bad peer segment size" >&2; exit 2; }
+[[ "$peer_segsize" =~ ^(0|[1-9][0-9]*)$ ]] || { echo "interop: bad peer segment size" >&2; exit 2; }
 flow_proof=${DNIV_INTEROP_FLOW_PROOF:-0}
 [[ "$flow_proof" =~ ^[01]$ ]] || { echo "interop: bad flow-proof selector" >&2; exit 2; }
 pp11_pressure=${DNIV_INTEROP_PP11_PRESSURE:-0}
 [[ "$pp11_pressure" =~ ^[01]$ ]] || { echo "interop: bad PP-11 pressure selector" >&2; exit 2; }
 churn_cycles=${DNIV_INTEROP_CHURN_CYCLES:-16}
 [[ "$churn_cycles" =~ ^[1-9][0-9]*$ ]] || { echo "interop: bad churn-cycle count" >&2; exit 2; }
-(( churn_cycles <= 10000 )) || { echo "interop: churn-cycle count exceeds bound" >&2; exit 2; }
-if (( peer_segsize != 0 && (peer_segsize < 64 || peer_segsize > 563) )); then
+if (( ${#churn_cycles} > 5 )) || (( 10#$churn_cycles > 10000 )); then
+    echo "interop: churn-cycle count exceeds bound" >&2
+    exit 2
+fi
+if (( ${#peer_segsize} > 3 )) || \
+   (( 10#$peer_segsize != 0 && (10#$peer_segsize < 64 || 10#$peer_segsize > 563) )); then
     echo "interop: peer segment size out of bounded proof range" >&2
     exit 2
 fi
