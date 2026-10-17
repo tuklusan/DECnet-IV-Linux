@@ -40,6 +40,9 @@ def main():
     assert ("`install.sh` records each managed target in the installation "
             "manifest only after successfully writing it") in docs, (
                 "INSTALL.md must describe post-success manifest ownership")
+    delivery = (ROOT / "docs" / "DELIVERY.md").read_text()
+    assert "records each successfully written managed path after the write" in delivery, (
+        "DELIVERY.md must describe post-success manifest ownership")
     with tempfile.TemporaryDirectory(prefix="dniv-manifest-scope-") as td:
         stage = pathlib.Path(td)
         prefix = "/usr/local"
