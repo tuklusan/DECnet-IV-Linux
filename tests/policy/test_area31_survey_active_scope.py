@@ -59,4 +59,25 @@ timeout() { printf '%s %s\n' "$3" "$4" >>"$operations"; return 0; }
     assert [c for c in calls if c.startswith("--mirror-once ")] == [
         "--mirror-once 31.1", "--mirror-once 31.2"]
     assert "node=31.13" in run.stdout and "mirror=skipped" in run.stdout
+# PP-12 protects external QCOCAL: the documented remote scope must match the
+# actual read-only Area-31 probe, not older temporary-alias or HTTP/task tests.
+manual = (ROOT / "docs/TEST_LAB.md").read_text(encoding="utf-8")
+pp12 = manual.split("### PP-12 exact-source real-peer mode\n", 1)[1].split(
+    "\nFor direct host-TAP", 1)[0]
+assert "QCOCAL" in pp12 and "read-only" in pp12
+assert "`dncopy --probe`" in pp12 and "`dndir`" in pp12
+assert "`dnnice`" in pp12 and "`dnping`" in pp12
+assert "local/SIMH" in pp12 and "HTTP/task" in pp12
+assert "Not tested in lab environment" in pp12
+assert "safe temporary QCOCAL DAP alias checks" not in pp12
+assert "existing login/FAL/NICE/MIRROR/HTTP/task coverage" not in pp12
+actual = source.split('if [ -n "$qcocal" ]; then\n', 2)[-1].split(
+    "\nsurvey_live=0", 1)[0]
+for required in ('/usr/local/bin/dncopy --probe "$qcocal"',
+                 '/usr/local/bin/dndir "$qcocal"',
+                 '/usr/local/bin/dnnice "$qcocal" summary',
+                 '/usr/local/bin/dnping -q -c 2'):
+    assert required in actual, required
+for forbidden in ('--put', '--delete', '--rename', 'dnhttp', 'dntask'):
+    assert forbidden not in actual, forbidden
 print("Area-31 unknown-node active-probe exclusion passed")
