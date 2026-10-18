@@ -780,6 +780,12 @@ def main() -> int:
     dispatcher = read_text(".github/workflows/repository-policy.yml")
     if "SOURCE_RELEASE source-release.yml" not in dispatcher or "RELEASE_IMAGE release-image.yml" in dispatcher:
         raise SystemExit("source-release gate: acceptance dispatcher not synchronized")
+    dispatch_part = dispatcher.split("  dispatch-acceptance:", 1)[1]
+    dispatch_gate = dispatch_part.split("    needs: repository-policy", 1)[0]
+    if ("github.event_name == 'schedule'" in dispatch_gate or
+            'if [[ "$GITHUB_EVENT_NAME" == schedule ]]' in dispatch_part or
+            "github.event.issue.title == 'DNIV acceptance gates'" not in dispatch_gate):
+        raise SystemExit("source-release gate: recurring policy must not auto-dispatch premature full acceptance")
     for marker in (
         "all|socket|routing|pp11-pressure|pp11-s2|pp12|post-timing|source-release",
         'scope" == pp12',

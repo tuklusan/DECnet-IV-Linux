@@ -227,11 +227,10 @@ jobs:
 
   dispatch-acceptance:
     if: >-
-      github.event_name == 'schedule' ||
-      (github.event_name == 'issues' &&
+      github.event_name == 'issues' &&
       github.event.action == 'opened' &&
       github.event.sender.login == github.repository_owner &&
-      github.event.issue.title == 'DNIV acceptance gates')
+      github.event.issue.title == 'DNIV acceptance gates'
     needs: repository-policy
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -267,21 +266,17 @@ jobs:
           profile=fast
           scope=all
           pp10_retry_probe=false
-          if [[ "$GITHUB_EVENT_NAME" == schedule ]]; then
-            profile=full
-          else
-            body=$(jq -r '.issue.body // ""' "$GITHUB_EVENT_PATH")
-            requested_profile=$(printf '%s\n' "$body" | sed -n 's/^PROFILE=//p' | tail -1)
-            requested_scope=$(printf '%s\n' "$body" | sed -n 's/^SCOPE=//p' | tail -1)
-            requested_pp10_retry_probe=$(printf '%s\n' "$body" | sed -n 's/^PP10_RETRY_PROBE=//p' | tail -1)
-            [[ -z "$requested_profile" ]] || profile=$requested_profile
-            [[ -z "$requested_scope" ]] || scope=$requested_scope
-            case "$requested_pp10_retry_probe" in
-              ""|false) ;;
-              true) pp10_retry_probe=true ;;
-              *) echo "bad PP-10 retry probe value: $requested_pp10_retry_probe" >&2; exit 2 ;;
-            esac
-          fi
+          body=$(jq -r '.issue.body // ""' "$GITHUB_EVENT_PATH")
+          requested_profile=$(printf '%s\n' "$body" | sed -n 's/^PROFILE=//p' | tail -1)
+          requested_scope=$(printf '%s\n' "$body" | sed -n 's/^SCOPE=//p' | tail -1)
+          requested_pp10_retry_probe=$(printf '%s\n' "$body" | sed -n 's/^PP10_RETRY_PROBE=//p' | tail -1)
+          [[ -z "$requested_profile" ]] || profile=$requested_profile
+          [[ -z "$requested_scope" ]] || scope=$requested_scope
+          case "$requested_pp10_retry_probe" in
+            ""|false) ;;
+            true) pp10_retry_probe=true ;;
+            *) echo "bad PP-10 retry probe value: $requested_pp10_retry_probe" >&2; exit 2 ;;
+          esac
           case "$profile" in fast|targeted|consolidated|full) ;; *) echo "bad acceptance profile: $profile" >&2; exit 2 ;; esac
           case "$scope" in all|socket|routing|pp11-pressure|pp11-s2|pp12|post-timing|source-release) ;; *) echo "bad acceptance scope: $scope" >&2; exit 2 ;; esac
           if [[ "$profile" == targeted && "$scope" != pp11-pressure && "$scope" != pp11-s2 && "$scope" != pp12 && "$scope" != post-timing && "$scope" != source-release ]]; then
