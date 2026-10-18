@@ -1,0 +1,79 @@
+# ============================================================================
+# Copyright (c) 2026 Supratim Sanyal of SANYALnet Labs.
+# Proprietary rights reserved except as expressly licensed herein.
+#
+# DECnet-IV-Linux
+# This file is governed by the SANYALnet Labs Non-Commercial License in the
+# root LICENSE file. Non-Commercial use is permitted; Commercial Use and use
+# for AI/ML model training are prohibited unless separately authorized.
+#
+# Attribution is required: "Based on original work by Supratim Sanyal of
+# SANYALnet Labs." See LICENSE for full terms, warranty disclaimer, termination,
+# patent, trademark, and governing-law provisions.
+# ============================================================================
+
+name: Provisional Source Archive
+
+# This is NOT a qualification gate. One request produces ONE fresh tar,
+# for independent source-byte review before the mandatory four gates.
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+
+jobs:
+  provisional-source:
+    if: >-
+      github.event.issue.number == 1131 &&
+      github.event.comment.user.login == github.repository_owner &&
+      startsWith(github.event.comment.body, 'DNIV-PROVISIONAL-TAR ')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out exact issue-comment source commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Authenticate request and build one canonical provisional tar
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          import sys
+          with open(os.environ['GITHUB_EVENT_PATH'], encoding='utf-8') as stream:
+              event = json.load(stream)
+          msg = event.get('comment', {}).get('body', '').strip()
+          match = re.fullmatch(r'DNIV-PROVISIONAL-TAR SOURCE_SHA=([0-9a-f]{40})', msg)
+          if not match or match.group(1) != os.environ['GITHUB_SHA']:
+              sys.exit('provisional-source: owner-requested SHA does not match event commit')
+          PY
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          mapfile -t versions < <(sed -n 's/^version=//p' VERSION)
+          test "${#versions[@]}" -eq 1
+          version=${versions[0]}
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          mkdir -p "$RUNNER_TEMP/dniv-provisional"
+          archive=$(tools/build-source-release.sh "$RUNNER_TEMP/dniv-provisional" "$version" "$GITHUB_SHA")
+          test -f "$archive"
+          (cd "$(dirname "$archive")" && sha256sum -c "$(basename "$archive").sha256")
+          test "$(tar -xJOf "$archive" "DECnet-IV-Linux-$version/SOURCE-METADATA" |
+            sed -n 's/^source_sha=//p')" = "$GITHUB_SHA"
+          printf 'source_sha=%s\nversion=%s\narchive=%s\n' \
+            "$GITHUB_SHA" "$version" "$(basename "$archive")" >"$RUNNER_TEMP/dniv-provisional/provisional-identity.txt"
+          sha256sum "$archive" >>"$RUNNER_TEMP/dniv-provisional/provisional-identity.txt"
+
+      - name: Upload fresh provisional source (not accepted release evidence)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: provisional-source-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/dniv-provisional/
+          if-no-files-found: error
+          retention-days: 1
