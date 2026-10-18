@@ -436,9 +436,13 @@ static int collect_node_status(__s8 entity_code,
                 break;
             }
         }
-        if (!duplicate && address_count <
-            sizeof(addresses) / sizeof(addresses[0]))
+        if (!duplicate) {
+            if (address_count >= sizeof(addresses) / sizeof(addresses[0])) {
+                close(fd);
+                return -1;
+            }
             addresses[address_count++] = adjacency.address;
+        }
     }
 
     if (entity_code != -4) {
@@ -467,9 +471,13 @@ static int collect_node_status(__s8 entity_code,
                     break;
                 }
             }
-            if (!duplicate && address_count <
-                sizeof(addresses) / sizeof(addresses[0]))
+            if (!duplicate) {
+                if (address_count >= sizeof(addresses) / sizeof(addresses[0])) {
+                    close(fd);
+                    return -1;
+                }
                 addresses[address_count++] = address;
+            }
         }
     }
     close(fd);
