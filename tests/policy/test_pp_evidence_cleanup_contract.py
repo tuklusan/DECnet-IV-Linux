@@ -39,5 +39,8 @@ assert 'independently checked at original closure' in lab.lower()
 assert 'originally unverified proof never counts' in lab.lower()
 assert 'active new exact-SHA gate still needs its actual fresh-download artifact' in lab
 assert 'unverified, stale, failed, skipped or missing original evidence' in hand
-assert 'each clean scan freshly downloads that identical accepted tarball' in rel.lower()
+assert 'newly build a provisional tarball from the same unchanged frozen source sha' in rel.lower()
+assert 'each fully zero-defect pass remains provisional until the four exact-sha gates' in rel.lower()
+assert 'independently fresh-download the gate-produced archive' in rel.lower()
+assert 'after all three scans' in rel.lower()
 print('historical PP evidence closure and Actions cleanup policy passed')
