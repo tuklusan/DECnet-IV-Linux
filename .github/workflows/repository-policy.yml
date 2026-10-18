@@ -16,7 +16,7 @@ name: Repository Policy
 
 # Ordinary source pushes do not consume a hosted runner. Local hooks guard
 # commits and pushes; this workflow handles explicit metadata review, automatic
-# non-main branch cleanup, and the owner acceptance/maintenance dispatchers.
+# non-main branch cleanup, and owner-requested acceptance dispatchers.
 on:
   create:
   issues:
@@ -34,8 +34,6 @@ on:
   discussion_comment:
     types: [created, edited]
   workflow_dispatch:
-  schedule:
-    - cron: '17 5 * * 0'
 
 # Repository-control runs are isolated by exact candidate SHA. They must not
 # share the scarce protocol-lab runner slots or an obsolete candidate can block

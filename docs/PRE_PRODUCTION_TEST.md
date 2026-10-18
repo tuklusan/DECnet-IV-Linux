@@ -119,7 +119,7 @@ Boundary coverage is not satisfied by the words `minimum` and `maximum`. Test th
 
 ## Development versus promotion execution
 
-The complete procedure below defines production acceptance coverage; it does not require every production case to run after every development increment. Exact-SHA development uses bounded targeted/fast/consolidated execution plus full promotion coverage as documented in `docs/TEST_LAB.md`. Reduced profiles eliminate unrelated repetition while preserving the full catalogue for scheduled weekly revalidation and mandatory phase/release promotion. Only a full run can satisfy a phase-closure or release acceptance claim.
+The complete procedure below defines production acceptance coverage; it does not require every production case to run after every development increment. Exact-SHA development uses bounded targeted/fast/consolidated execution plus full promotion coverage as documented in `docs/TEST_LAB.md`. Reduced profiles eliminate unrelated repetition while preserving the full catalogue for explicitly authorized revalidation and mandatory phase/release promotion. Only a full run can satisfy a phase-closure or release acceptance claim.
 
 Scenario parallelism is an execution optimization only. Splitting independent interoperability scenarios into separate jobs does not change their assertions, peer pins, evidence rules or pass criteria.
 
@@ -363,7 +363,7 @@ After any code, test-lab infrastructure, source-release workflow or acceptance-d
 1. invalidate prior-candidate promotion status;
 2. run exact-SHA mechanical/build/state plus the smallest fail-closed VM/protocol/interoperability gate that directly exercises the changed behavior and its required architecture coverage;
 3. rerun every affected canonical acceptance stage and downstream dependent stage before claiming that stage complete;
-4. do not launch the full repository-wide matrix after every intermediate fix. Full acceptance is reserved for closing a canonical PP increment, deliberate release/pre-production checkpoints, the weekly scheduled regression, or an explicit owner request;
+4. do not launch the full repository-wide matrix after every intermediate fix. Full acceptance is reserved for closing a canonical PP increment, deliberate release/pre-production checkpoints, a specifically authorized regression checkpoint or an explicit owner request;
 5. promote only the exact unchanged commit whose required canonical evidence and final full matrix are green.
 
 `PROFILE=targeted` is the bounded development profile for a named expensive gate. Its scope must identify the exact target and must not silently stand in for final full acceptance. `SCOPE=pp11-pressure` runs Build Bootstrap, Project State, dual-architecture E1 and only the amd64/arm64 PyDECnet L1 pressure jobs. `SCOPE=source-release` runs Build Bootstrap, Project State, dual-architecture source-tarball reproducibility/build/install/uninstall, and the exact packaged tarball through Debian 13/Fedora 44 on amd64/arm64 with GCC/Clang.

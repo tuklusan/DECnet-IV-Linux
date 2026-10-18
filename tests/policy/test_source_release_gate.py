@@ -780,6 +780,9 @@ def main() -> int:
     dispatcher = read_text(".github/workflows/repository-policy.yml")
     if "SOURCE_RELEASE source-release.yml" not in dispatcher or "RELEASE_IMAGE release-image.yml" in dispatcher:
         raise SystemExit("source-release gate: acceptance dispatcher not synchronized")
+    if any(line.lstrip() == "schedule:" and line.startswith("  ")
+           for line in dispatcher.splitlines()):
+        raise SystemExit("source-release gate: scheduled weekly repository maintenance is prohibited")
     dispatch_part = dispatcher.split("  dispatch-acceptance:", 1)[1]
     dispatch_gate = dispatch_part.split("    needs: repository-policy", 1)[0]
     if ("github.event_name == 'schedule'" in dispatch_gate or
