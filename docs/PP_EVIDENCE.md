@@ -14,11 +14,11 @@
 
 # Pre-Production Evidence Ledger
 
-This is the canonical repository-tracked index for `docs/PRE_PRODUCTION_TEST.md`. Raw proof remains in retained run-attempt-qualified workflow artifacts, packet captures, serial logs, state snapshots and application logs. A ledger entry without its required raw evidence is not a pass.
+This is the canonical repository-tracked index for `docs/PRE_PRODUCTION_TEST.md`. At case closure, the required run-attempt-qualified artifacts, packet captures, serial logs, state snapshots and application logs must actually have existed and been checked. Record the exact candidate, run/attempt/job/artifact IDs, relevant hashes, measured results and proof disposition here or in the linked issue ledger **before** routine Actions-history/cache cleanup. Later deletion under the owner-authorized no-lingering-Actions rule does not retroactively invalidate an established, recorded result; missing, incomplete, unverified, stale or mismatched proof never counts.
 
 ## Result vocabulary
 
-- `PASS` — exact executed requirement passed and the listed raw evidence is retained.
+- `PASS` — exact executed requirement passed, mandatory raw evidence was verified at closure, and its identifying metadata and verdict were durably recorded before any cleanup.
 - `FAIL` — executed requirement failed; the candidate is not promotable on that evidence.
 - `PARTIAL` — useful executed proof exists but does not satisfy the full canonical requirement.
 - `OWNER-AUTHORIZED SKIP` — explicit release-owner waiver; never relabel as test evidence.

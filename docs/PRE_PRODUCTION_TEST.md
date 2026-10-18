@@ -20,7 +20,7 @@ This is the single pre-production acceptance procedure for DECnet-IV-Linux. It c
 
 Tests progress from deterministic byte/vector checks to destructive routed and distributed-transport endurance. Positive, negative, stress and recovery coverage are all mandatory when applicable. Self-to-self success is development evidence only; final interoperability requires independent implementations or real DEC peers.
 
-A documented test that was not actually executed is not green. Manual and physical tests count only when their exact procedure, candidate identity and evidence are retained.
+A documented test that was not actually executed is not green. Manual and physical tests count only when the exact procedure, candidate identity and mandatory evidence were verified at closure and durably recorded before any later housekeeping. The owner-authorized deletion of old Actions runs, artifacts and caches does not erase valid historical proof; absent, skipped, failed, incomplete, stale or mismatched original proof never counts.
 
 ## Authority and pinned references
 
@@ -348,11 +348,11 @@ Current `tests/lab/dniv_lab.py`, `tests/lab/dniv-smoke.sh` and the repository-tr
 
 ## Evidence required for every run
 
-`docs/PP_EVIDENCE.md` is the canonical repository-tracked proof index. Every executed canonical PP case must get an entry tying its result to the exact candidate, workflow/run/job and retained artifact/log evidence. Owner-authorized skips and every impossible post-Timing requirement must also appear there explicitly; the ledger never substitutes for the raw artifacts.
+`docs/PP_EVIDENCE.md` is the canonical repository-tracked proof index. Every executed canonical PP case must get an entry tying its result to the exact candidate, workflow/run/attempt/job, original artifact/log IDs, applicable hashes and verified outcome. Owner-authorized skips and every impossible post-Timing requirement must also appear there explicitly. A ledger entry never substitutes for actual proof at case closure; after successful closure, the recorded proof lineage survives routine Actions artifact/log/cache expiry or deletion.
 
-Retain exact source commit/tree and source-tarball SHA-256; reference SHAs; kernel/compiler/configuration/harness version; built module/userspace/library/header/install-manifest hashes; architecture/vCPU/driver/offload/MTU/topology/identity/media; canonical case and stress level; random/fuzz/fault seed; requested and actual injection counts; packet/VDE2/MULTINET traces where transport behavior matters; complete serial/kernel/service/application logs; state/counter/resource snapshots before/during/after fault and after quiescence; fault/topology timeline; duration/packet/session/byte/restart/churn counts; measured distributions; diagnostic output; and explicit pass/fail for every canonical case/applicable negative family.
+Record before any cleanup the exact source commit/tree and source-tarball SHA-256; reference SHAs; kernel/compiler/configuration/harness version; built module/userspace/library/header/install-manifest hashes; architecture/vCPU/driver/offload/MTU/topology/identity/media; canonical case and stress level; random/fuzz/fault seed; requested and actual injection counts; packet/VDE2/MULTINET traces where transport behavior matters; complete serial/kernel/service/application logs; state/counter/resource snapshots before/during/after fault and after quiescence; fault/topology timeline; duration/packet/session/byte/restart/churn counts; measured distributions; diagnostic output; and explicit pass/fail for every canonical case/applicable negative family.
 
-Missing mandatory evidence invalidates the run.
+Mandatory evidence that was never actually produced, verified and recorded invalidates the run. Later routine removal of already-verified Actions artifacts/logs does not invalidate historical closure, but an active unverified gate or a fresh-download requirement still needs the actual exact artifact at the time it is checked.
 
 ## Failure, retry and regression rule
 
