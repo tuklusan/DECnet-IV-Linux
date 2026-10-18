@@ -125,7 +125,8 @@ def send_nsp_probe(
 
 
 def expect_no_link(
-    sniff: socket.socket, dst_link: bytes, src_link: bytes, label: str,
+    sniff: socket.socket, dst_link: bytes, src_link: bytes,
+    candidate: bytes, label: str,
 ) -> None:
     deadline = time.monotonic() + 2.0
     while time.monotonic() < deadline:
@@ -368,7 +369,7 @@ def main() -> int:
                 f"dst_link={wrong_local_value} src_link={wrong_remote_value}",
                 flush=True,
             )
-            expect_no_link(sniff, wrong_local_link, wrong_remote_link, label)
+            expect_no_link(sniff, wrong_local_link, wrong_remote_link, candidate, label)
 
         sniff.settimeout(0.5)
         deadline = sent_at + 7.0
