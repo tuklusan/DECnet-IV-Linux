@@ -783,6 +783,11 @@ def main() -> int:
     if any(line.lstrip() == "schedule:" and line.startswith("  ")
            for line in dispatcher.splitlines()):
         raise SystemExit("source-release gate: scheduled weekly repository maintenance is prohibited")
+    test_lab_guide = read_text("docs/TEST_LAB.md")
+    if ("A scheduled weekly run uses the full profile" in test_lab_guide or
+            "scheduled runs force `full`" in test_lab_guide or
+            "No weekly acceptance run is scheduled" not in test_lab_guide):
+        raise SystemExit("source-release gate: TEST_LAB falsely promises weekly full acceptance")
     dispatch_part = dispatcher.split("  dispatch-acceptance:", 1)[1]
     dispatch_gate = dispatch_part.split("    needs: repository-policy", 1)[0]
     if ("github.event_name == 'schedule'" in dispatch_gate or
