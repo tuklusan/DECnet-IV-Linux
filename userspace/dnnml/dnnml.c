@@ -229,6 +229,8 @@ static int read_node_state(__u16 address, __u8 *node_type,
     struct dniv_adjacency adjacency;
     struct dniv_route route;
     int ifindices[32];
+    struct dniv_adjacency up_peers[64];
+    size_t up_peer_count = 0U;
     size_t circuits = 0U;
     size_t target_circuit = 0U;
     int target_ifindex = 0;
@@ -269,6 +271,13 @@ static int read_node_state(__u16 address, __u8 *node_type,
             }
             ifindices[circuits++] = adjacency.ifindex;
         }
+        if (adjacency.state == DNIV_ADJ_STATE_UP) {
+            if (up_peer_count >= sizeof(up_peers) / sizeof(up_peers[0])) {
+                close(fd);
+                return -1;
+            }
+            up_peers[up_peer_count++] = adjacency;
+        }
         if (adjacency.address == address &&
             adjacency.state == DNIV_ADJ_STATE_UP) {
             for (i = 0U; i < circuits; i++) {
@@ -282,11 +291,6 @@ static int read_node_state(__u16 address, __u8 *node_type,
                           5U : 4U;
         }
     }
-    if (!target_ifindex) {
-        close(fd);
-        return -1;
-    }
-
     for (index = 0U;; index++) {
         memset(&route, 0, sizeof(route));
         route.uapi_version = DNIV_UAPI_VERSION;
@@ -297,14 +301,46 @@ static int read_node_state(__u16 address, __u8 *node_type,
             close(fd);
             return -1;
         }
-        if (route.ifindex == target_ifindex &&
+        if ((!target_ifindex || route.ifindex == target_ifindex) &&
             ((route.level == 1U &&
               route.destination == DNIV_ADDR_NODE(address) &&
               DNIV_ADDR_AREA(route.next_hop) == DNIV_ADDR_AREA(address)) ||
              (route.level == 2U &&
               route.destination == DNIV_ADDR_AREA(address)))) {
-            int written = snprintf(circuit, circuit_size, "ETH-%zu",
-                                   target_circuit);
+            size_t i;
+            int written;
+
+            /* A routed node has no direct adjacency of its own. */
+            if (!target_ifindex) {
+                size_t peer;
+                int next_hop_up = 0;
+
+                if (route.level != 1U)
+                    continue;
+                for (peer = 0U; peer < up_peer_count; peer++) {
+                    if (up_peers[peer].ifindex == route.ifindex &&
+                        up_peers[peer].address == route.next_hop &&
+                        (up_peers[peer].node_type == DNIV_NODE_TYPE_L1_ROUTER ||
+                         up_peers[peer].node_type == DNIV_NODE_TYPE_L2_ROUTER)) {
+                        next_hop_up = 1;
+                        break;
+                    }
+                }
+                if (!next_hop_up)
+                    continue;
+                for (i = 0U; i < circuits; i++) {
+                    if (ifindices[i] == route.ifindex) {
+                        target_circuit = i;
+                        target_ifindex = route.ifindex;
+                        target_type = 4U; /* Routing IV next hop. */
+                        break;
+                    }
+                }
+                if (!target_ifindex)
+                    continue;
+            }
+            written = snprintf(circuit, circuit_size, "ETH-%zu",
+                               target_circuit);
 
             if (written < 0 || (size_t)written >= circuit_size) {
                 close(fd);
@@ -319,6 +355,10 @@ static int read_node_state(__u16 address, __u8 *node_type,
         }
     }
 
+    if (!target_ifindex) {
+        close(fd);
+        return -1;
+    }
     {
         int written = snprintf(circuit, circuit_size, "ETH-%zu",
                                target_circuit);
