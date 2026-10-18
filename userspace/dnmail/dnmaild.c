@@ -155,6 +155,19 @@ static int write_all(int fd, const void *data, size_t len)
     return 0;
 }
 
+/* Failed delivery pipes must return EPIPE, not kill the MAIL-11 daemon.
+ * Reset SIGPIPE disposition in external sendmail children. */
+static int configure_sigpipe(void)
+{
+    struct sigaction action;
+
+    memset(&action, 0, sizeof(action));
+    action.sa_handler = SIG_IGN;
+    if (sigemptyset(&action.sa_mask))
+        return -1;
+    return sigaction(SIGPIPE, &action, NULL);
+}
+
 static int start_sendmail(const char *path, int *input_fd, pid_t *child)
 {
     int pipefd[2];
@@ -170,6 +183,8 @@ static int start_sendmail(const char *path, int *input_fd, pid_t *child)
     }
     if (!pid) {
         close(pipefd[1]);
+        if (signal(SIGPIPE, SIG_DFL) == SIG_ERR)
+            _exit(127);
         if (dup2(pipefd[0], STDIN_FILENO) < 0)
             _exit(127);
         close(pipefd[0]);
@@ -1131,6 +1146,10 @@ int main(int argc, char **argv)
     if (sendmail_path && smtp_host) {
         fprintf(stderr, "dnmaild: choose either sendmail or SMTP delivery\n");
         return 2;
+    }
+    if (configure_sigpipe()) {
+        perror("dnmaild: configure SIGPIPE");
+        return 1;
     }
     setvbuf(stdout, NULL, _IONBF, 0);
     listener = make_listener();
