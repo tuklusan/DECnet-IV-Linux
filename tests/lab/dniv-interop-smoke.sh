@@ -357,10 +357,13 @@ esac
 case "$churn_cycles" in
     ''|*[!0-9]*) echo "DNIV-INTEROP-FAIL session=$session reason=bad-churn-cycles"; exit 1 ;;
 esac
-if [ "$churn_cycles" -lt 1 ] || [ "$churn_cycles" -gt 10000 ]; then
+churn_normalized=$(printf '%s' "$churn_cycles" | sed 's/^0*//')
+if [ -z "$churn_normalized" ] || [ "${#churn_normalized}" -gt 5 ] ||
+   { [ "${#churn_normalized}" -eq 5 ] && [ "$churn_normalized" -gt 10000 ]; }; then
     echo "DNIV-INTEROP-FAIL session=$session reason=bad-churn-cycles"
     exit 1
 fi
+churn_cycles=$churn_normalized
 case "$scenario" in
     l1) local_type=2; peer_kind='L1 router' ;;
     l2) local_type=1; peer_kind='L2 router' ;;
