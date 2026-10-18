@@ -70,6 +70,13 @@ def nsp_payload(frame: bytes) -> bytes | None:
     return route[off:] if len(route) > off else None
 
 
+def candidate_nsp(frame: bytes, candidate: bytes) -> bytes | None:
+    """Accept only candidate-origin traffic, never reference or injected frames."""
+    if len(frame) < 12 or frame[6:12] != candidate:
+        return None
+    return nsp_payload(frame)
+
+
 def send_ls(sock: socket.socket, dst_mac: bytes, src_mac: bytes,
             src_node: int, dst_node: int, dst_link: bytes, src_link: bytes,
             sequence: int, fcmod: int) -> None:
@@ -114,7 +121,7 @@ def main() -> int:
         deadline = time.monotonic() + 15.0
         links = None
         while time.monotonic() < deadline:
-            nsp = nsp_payload(sniff.recv(4096))
+            nsp = candidate_nsp(sniff.recv(4096), candidate)
             if nsp is None or FIRST not in nsp or len(nsp) < 5:
                 continue
             # Candidate Data has destination=peer link, source=local link.
@@ -140,7 +147,7 @@ def main() -> int:
         hold_deadline = time.monotonic() + 6.0
         while time.monotonic() < hold_deadline:
             try:
-                nsp = nsp_payload(sniff.recv(4096))
+                nsp = candidate_nsp(sniff.recv(4096), candidate)
             except TimeoutError:
                 continue
             if nsp is not None and FIRST in nsp:
@@ -161,7 +168,7 @@ def main() -> int:
         deadline = time.monotonic() + 10.0
         while time.monotonic() < deadline:
             try:
-                nsp = nsp_payload(sniff.recv(4096))
+                nsp = candidate_nsp(sniff.recv(4096), candidate)
             except TimeoutError:
                 continue
             if nsp is None:

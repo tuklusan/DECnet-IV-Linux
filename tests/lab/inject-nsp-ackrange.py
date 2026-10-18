@@ -68,6 +68,13 @@ def nsp_payload(frame: bytes) -> bytes | None:
     return route[off:] if len(route) > off else None
 
 
+def candidate_nsp(frame: bytes, candidate: bytes) -> bytes | None:
+    """Accept only candidate-origin traffic, never reference or injected frames."""
+    if len(frame) < 12 or frame[6:12] != candidate:
+        return None
+    return nsp_payload(frame)
+
+
 def data_sequence(nsp: bytes) -> int:
     if len(nsp) < 7:
         raise ValueError("short Data packet")
@@ -123,7 +130,7 @@ def expect_no_link(
     deadline = time.monotonic() + 2.0
     while time.monotonic() < deadline:
         try:
-            nsp = nsp_payload(sniff.recv(4096))
+            nsp = candidate_nsp(sniff.recv(4096), candidate)
         except TimeoutError:
             continue
         if nsp is None or len(nsp) < 7 or nsp[0] != 0x48:
@@ -170,7 +177,7 @@ def main() -> int:
         links = None
         seq = None
         while time.monotonic() < deadline:
-            nsp = nsp_payload(sniff.recv(4096))
+            nsp = candidate_nsp(sniff.recv(4096), candidate)
             if nsp is None or TAG not in nsp or len(nsp) < 7:
                 continue
             links = (nsp[3:5], nsp[1:3])
@@ -367,7 +374,7 @@ def main() -> int:
         deadline = sent_at + 7.0
         while time.monotonic() < deadline:
             try:
-                nsp = nsp_payload(sniff.recv(4096))
+                nsp = candidate_nsp(sniff.recv(4096), candidate)
             except TimeoutError:
                 continue
             if nsp is not None and TAG in nsp:
@@ -396,7 +403,7 @@ def main() -> int:
         deadline = sent_at + 2.5
         while time.monotonic() < deadline:
             try:
-                nsp = nsp_payload(sniff.recv(4096))
+                nsp = candidate_nsp(sniff.recv(4096), candidate)
             except TimeoutError:
                 continue
             if nsp is not None and TAG in nsp:

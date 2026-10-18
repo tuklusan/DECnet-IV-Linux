@@ -71,6 +71,13 @@ def nsp_payload(frame: bytes) -> bytes | None:
     return route[off:] if len(route) > off else None
 
 
+def candidate_nsp(frame: bytes, candidate: bytes) -> bytes | None:
+    """Accept only candidate-origin traffic, never reference or injected frames."""
+    if len(frame) < 12 or frame[6:12] != candidate:
+        return None
+    return nsp_payload(frame)
+
+
 def send_interrupt_credit(
     sock: socket.socket, dst_mac: bytes, src_mac: bytes,
     src_node: int, dst_node: int, dst_link: bytes, src_link: bytes,
@@ -120,7 +127,7 @@ def main() -> int:
             links = None
             seen: set[int] = set()
             while time.monotonic() < deadline:
-                nsp = nsp_payload(sniff.recv(4096))
+                nsp = candidate_nsp(sniff.recv(4096), candidate)
                 if nsp is None or nsp[0] != 0x30 or b"DNIV-IPR-01" not in nsp or len(nsp) < 7:
                     continue
                 links = (nsp[3:5], nsp[1:3])
@@ -142,7 +149,7 @@ def main() -> int:
             deadline = time.monotonic() + 10.0
             while time.monotonic() < deadline and len(seen) < 64:
                 try:
-                    nsp = nsp_payload(sniff.recv(4096))
+                    nsp = candidate_nsp(sniff.recv(4096), candidate)
                 except TimeoutError:
                     continue
                 if nsp is None or nsp[0] != 0x30:
@@ -164,7 +171,7 @@ def main() -> int:
         deadline = time.monotonic() + 15.0
         links = None
         while time.monotonic() < deadline:
-            nsp = nsp_payload(sniff.recv(4096))
+            nsp = candidate_nsp(sniff.recv(4096), candidate)
             if nsp is None or nsp[0] != 0x30 or FIRST not in nsp or len(nsp) < 7:
                 continue
             links = (nsp[3:5], nsp[1:3])
@@ -190,7 +197,7 @@ def main() -> int:
         hold_deadline = time.monotonic() + 2.0
         while time.monotonic() < hold_deadline:
             try:
-                nsp = nsp_payload(sniff.recv(4096))
+                nsp = candidate_nsp(sniff.recv(4096), candidate)
             except TimeoutError:
                 continue
             if nsp is not None and nsp[0] == 0x30 and (
@@ -209,7 +216,7 @@ def main() -> int:
         deadline = time.monotonic() + 5.0
         while time.monotonic() < deadline:
             try:
-                nsp = nsp_payload(sniff.recv(4096))
+                nsp = candidate_nsp(sniff.recv(4096), candidate)
             except TimeoutError:
                 continue
             if nsp is None or nsp[0] != 0x30:
@@ -233,7 +240,7 @@ def main() -> int:
         quiet_deadline = time.monotonic() + 4.0
         while time.monotonic() < quiet_deadline:
             try:
-                nsp = nsp_payload(sniff.recv(4096))
+                nsp = candidate_nsp(sniff.recv(4096), candidate)
             except TimeoutError:
                 continue
             if nsp is not None and nsp[0] == 0x30 and FOURTH in nsp:
