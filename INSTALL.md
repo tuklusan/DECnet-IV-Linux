@@ -72,10 +72,14 @@ The native stack and C userspace do not require PyDECnet, Route20, SIMH, QEMU or
 
 ## 4. Verify and extract
 
+Set `version` to the version on the downloaded source archive (1.0.0 for this release). The quoted archive name prevents accidental shell input/output redirections.
+
 ```sh
-sha256sum -c DECnet-IV-Linux-<version>.tar.xz.sha256
-tar -xJf DECnet-IV-Linux-<version>.tar.xz
-cd DECnet-IV-Linux-<version>
+version=1.0.0
+archive="DECnet-IV-Linux-${version}.tar.xz"
+sha256sum -c "${archive}.sha256"
+tar -xJf "$archive"
+cd "DECnet-IV-Linux-${version}"
 ```
 
 Read `SOURCE-METADATA` and `LICENSE`.
@@ -94,10 +98,10 @@ CC=clang ./build.sh
 
 Many distribution kernels are configured and built with GCC. Their exported external-module flags can be GCC-specific, so forcing Clang against such a `KDIR` is not supported. `build.sh` detects the common `CONFIG_CC_IS_GCC`/`CONFIG_CC_IS_CLANG` mismatch and fails with a clear diagnostic. Use the compiler family compatible with the target kernel; userspace itself is continuously checked with both GCC and Clang.
 
-Another installed kernel:
+Another installed kernel (replace the example target with the *exact* installed kernel release listed under `/lib/modules`):
 
 ```sh
-target=<kernel-release>
+target='6.8.0-31-generic'
 KERNEL_RELEASE="$target" \
 KDIR="/lib/modules/$target/build" \
 ./build.sh
