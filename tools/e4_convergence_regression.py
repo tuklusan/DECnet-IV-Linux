@@ -23,7 +23,11 @@ SCALE = Path("tests/lab/dniv_scale.py").read_text(encoding="utf-8")
 LAB = Path("tests/lab/dniv_lab.py").read_text(encoding="utf-8")
 
 required_smoke = (
-    'probe_count=${probe_override:-180}',
+    'positive_decimal_count() {',
+    'probe_count=$(positive_decimal_count "${probe_override:-180}") || {',
+    'reason=bad-probe-count',
+    '[ "${#decimal}" -le 5 ] || return 1',
+    '[ "$decimal" -le 10000 ] || return 1',
     'reason=l1-not-ready',
     'reason=local-l1-not-ready',
     'reason=remote-l2-not-ready',
@@ -42,7 +46,7 @@ for marker in required_controller:
     if marker not in E4:
         raise SystemExit(f"E4-CONVERGENCE: missing controller guard: {marker}")
 
-if SMOKE.count('probe_count=${probe_override:-180}') != 1:
+if SMOKE.count('probe_count=$(positive_decimal_count "${probe_override:-180}") || {') != 1:
     raise SystemExit("E4-CONVERGENCE: endpoint probe window is ambiguous")
 
 required_scale = (
