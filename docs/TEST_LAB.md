@@ -131,7 +131,7 @@ Project-owner authorization dated 2026-10-01 marks PP-13 completely skipped/non-
 
 ## Remaining pre-production owner constraints
 
-The canonical proof index is `docs/PP_EVIDENCE.md`; raw serial/pcap/log/state proof remains in run-attempt-qualified Actions artifacts. Every canonical case must have an explicit result and evidence pointer before it can contribute to release acceptance.
+The canonical proof index is `docs/PP_EVIDENCE.md`. Raw serial/pcap/log/state proof must actually be produced and independently checked at original closure, with source SHA, run/attempt/artifact IDs, hashes, results and evidence pointers durably recorded before owner Actions cleanup. Historical closure remains valid after authorized deletion of already-verified raw Actions runs/artifacts/caches; failed, skipped, stale, incomplete, mismatched or originally unverified proof never counts. An active new exact-SHA gate still needs its actual fresh-download artifact.
 
 PP-11 S3-S6 remain owner-authorized skips for this release. From and including `## Timing/scheduler tests` in `docs/PRE_PRODUCTION_TEST.md`, execute only practically possible tests. Remote hosts may be used only for user-mode C/C++ test programs, with unavailable requirements recorded exactly as `Not tested in lab environment`. MIM `1.13` is stricter: read-only valid DECnet methods only; no remote writes, program execution, load/stress/endurance/fault testing or state change.
 

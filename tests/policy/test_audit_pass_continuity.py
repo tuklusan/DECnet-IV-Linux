@@ -35,6 +35,14 @@ def validate(text: str) -> None:
     assert "3/3" in text or "three independent" in text, "three clean scans missing"
 
 
+def checkpoint_contract(section: str) -> None:
+    lowered = section.casefold()
+    assert "checkpoint only at the end" in lowered, "mid-pass requalification still required"
+    assert "not after individual repairs" in lowered, "per-fix checkpoint rule remains"
+    assert "four" in lowered, "all four mandatory source gates missing"
+    assert "fresh" in lowered, "fresh exact-source artifact proof missing"
+
+
 def main() -> int:
     for path, (start, stop) in SOURCES.items():
         data = (ROOT / path).read_text(encoding="utf-8")
@@ -42,6 +50,16 @@ def main() -> int:
         assert data.count(stop) >= 1, path
         section = data.split(start, 1)[1].split(stop, 1)[0]
         validate(section)
+        checkpoint_contract(section)
+
+    # Source-derived negative: old per-fix gates must not be certifiable.
+    old_rule = "SAME next unreviewed file ONLY at END NO clean credit 0/3 3/3; four gates and fresh artifact after every repair"
+    try:
+        checkpoint_contract(old_rule)
+    except AssertionError:
+        pass
+    else:
+        raise AssertionError("per-repair requalification falsely accepted")
 
     # An old immediate-restart instruction must not pass the same test.
     negative = "SAME pass next unreviewed file ONLY at END NO clean credit 0/3 3/3"

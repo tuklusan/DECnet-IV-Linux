@@ -22,6 +22,7 @@ led = (ROOT / 'docs/PP_EVIDENCE.md').read_text()
 plan = (ROOT / 'docs/PRE_PRODUCTION_TEST.md').read_text()
 hand = (ROOT / 'docs/HANDOVER.md').read_text()
 rel = (ROOT / 'docs/DELIVERY.md').read_text()
+lab = (ROOT / 'docs/TEST_LAB.md').read_text()
 
 assert 'must actually have existed and been checked' in led
 assert 'before** routine Actions-history/cache cleanup' in led
@@ -33,6 +34,10 @@ assert 'active unverified gate or a fresh-download requirement still needs the a
 assert 'later housekeeping' in plan
 assert 'recorded proof lineage survives routine Actions artifact/log/cache expiry' in plan
 assert 'historical closure remains valid' in hand
+assert 'historical closure remains valid after authorized deletion' in lab.lower()
+assert 'independently checked at original closure' in lab.lower()
+assert 'originally unverified proof never counts' in lab.lower()
+assert 'active new exact-SHA gate still needs its actual fresh-download artifact' in lab
 assert 'unverified, stale, failed, skipped or missing original evidence' in hand
 assert 'each clean scan freshly downloads that identical accepted tarball' in rel.lower()
 print('historical PP evidence closure and Actions cleanup policy passed')

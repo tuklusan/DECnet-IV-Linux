@@ -23,14 +23,20 @@ source-delivery 3/3 audit are historical evidence, not promotion evidence for ch
 bytes. PP-11 S3-S6 and first-release PP-13 remain owner-authorized skips. An altered source
 release does not inherit an earlier 3/3 audit or exact-SHA acceptance.
 
-The current release blocker is three independent comprehensive zero-defect semantic reviews of
-fresh copies of one fully green exact-SHA packaged source artifact. During discovery, repair
-any defect on main, requalify and fresh-download the changed package, recheck affected files,
-and CONTINUE the SAME exhaustive discovery pass at the next unreviewed file. Preserve completed
-per-file coverage and source SHA provenance. ONLY at the END of the ENTIRE discovery pass, if
-any defect was found, close it with NO clean credit (0/3) and begin the next complete review
-from file #1 on the final qualified package. A zero-defect clean pass requires one unchanged
-package, and three independent complete clean passes must certify identical package bytes.
+The current release blocker is three independent comprehensive zero-defect semantic reviews
+of fresh copies of one fully green exact-SHA packaged source artifact. During a defect-bearing
+discovery pass, prove and repair each defect minimally on main with source-derived regression;
+recheck affected files/dependencies and CONTINUE the SAME discovery pass at the next unreviewed file.
+Preserve exact file/source SHA provenance; after-repair review is provisional until final-package
+reconciliation. Local/targeted regressions run per repair, but there is NO per-repair hosted
+qualification or fresh artifact download. All four green same-SHA source gates and an independently
+fresh, safely verified archive form the qualification CHECKPOINT ONLY at the END of each COMPLETE
+discovery pass, not after individual repairs. ONLY at the END of the ENTIRE discovery pass, if
+any defect occurred, close it with NO clean credit (0/3), qualify the final repaired main SHA,
+reconcile the full final packaged roster/interactions, and start a new clean attempt at file #1.
+All 3/3 independent COMPLETE zero-defect clean passes must reread unchanged accepted package bytes,
+freshly downloading the same accepted archive before each pass. No redundant gate rerun is needed
+if the previously qualified SHA is unchanged. Partial, provisional and mixed-SHA passes never count.
 After 3/3, reconcile and re-prove applicable canonical PP evidence in dependency order (S1 before S2),
 then require green full-profile exact-SHA acceptance. Production publication uses only the
 accepted versioned source tarball bytes without repacking, with checksum and release notes.
