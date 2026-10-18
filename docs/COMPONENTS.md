@@ -140,6 +140,7 @@ These files are shipped in the source archive so the accepted source SHA can be 
 | --- | --- |
 | `.github/workflows/build.yml` | x86_64/aarch64 build bootstrap gate. |
 | `.github/workflows/source-release.yml` | Reproducible exact-artifact source release, install/uninstall and portability gate. |
+| `.github/workflows/provisional-source.yml` | Owner-only exact-SHA provisional source archive builder for independent pre-gate semantic reviews; not a qualification gate. |
 | `.github/workflows/production-release.yml` | Fail-closed publication of the exact fully accepted production source artifact, checksum and release notes. |
 | `.github/workflows/repository-policy.yml` | Main-only policy enforcement and bounded acceptance dispatcher. |
 | `.github/workflows/actions-gc.yml` | Hourly Actions history/cache housekeeping and owner-requested backlog purge. |

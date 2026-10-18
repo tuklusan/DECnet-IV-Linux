@@ -1644,16 +1644,19 @@ def main() -> int:
     handover = read_text("docs/HANDOVER.md")
     if "four exact-SHA acceptance depths" not in handover:
         raise SystemExit("source-release gate: handover acceptance-depth model is stale")
+    normalized_handover = " ".join(handover.lower().split())
     for required in (
-        "three independent comprehensive zero-defect semantic reviews",
-        "An altered source",
-        "CONTINUE the SAME exhaustive discovery pass",
-        "ONLY at the END of the ENTIRE discovery pass",
-        "NO clean credit (0/3)",
-        "three independent complete clean passes",
-        "re-prove applicable canonical PP evidence",
+        "three independent complete zero-defect semantic reviews",
+        "an altered source",
+        "continue the same discovery pass",
+        "only at the end of the entire discovery pass",
+        "no clean credit (0/3)",
+        "three independent clean attempts",
+        "sole four-gate checkpoint is after all three complete zero-defect passes",
+        "independently download the resulting gate artifact",
+        "re-prove applicable canonical pp evidence",
     ):
-        if required not in handover:
+        if required not in normalized_handover:
             raise SystemExit("source-release gate: handover does not enforce current release audit order")
     for path in ("README.md", "docs/ROADMAP.md", "docs/ARCHITECTURE.md", "docs/PRE_PRODUCTION_TEST.md"):
         value = read_text(path)
