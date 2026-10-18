@@ -39,6 +39,17 @@ get_arg() {
     return 1
 }
 
+positive_decimal_count() {
+    case "$1" in
+        ''|*[!0-9]*) return 1 ;;
+    esac
+    decimal=$(printf '%s' "$1" | sed 's/^0*//')
+    [ -n "$decimal" ] || return 1
+    [ "${#decimal}" -le 5 ] || return 1
+    [ "$decimal" -le 10000 ] || return 1
+    printf '%s\n' "$decimal"
+}
+
 find_iface() {
     i=0
     while [ "$i" -lt 50 ]; do
@@ -890,13 +901,10 @@ e4)
             # The scale-16 controller may lower the per-endpoint probe count
             # while retaining the host-side requirement for at least five
             # correctly forwarded frames in every direction.
-            probe_count=${probe_override:-180}
-            case "$probe_count" in
-                ''|*[!0-9]*|0)
-                    echo "DNIV-E4-FAIL session=$session node=$name reason=bad-probe-count"
-                    exit 1
-                    ;;
-            esac
+            probe_count=$(positive_decimal_count "${probe_override:-180}") || {
+                echo "DNIV-E4-FAIL session=$session node=$name reason=bad-probe-count"
+                exit 1
+            }
             i=0
             while [ "$i" -lt "$probe_count" ]; do
                 i=$((i + 1))
@@ -994,9 +1002,10 @@ pp11s2)
                 echo "DNIV-LAB-FAIL session=$session node=$name reason=pp11-s2-no-router"
                 exit 1
             fi
-            count=$probe_override
-            [ -n "$count" ] || count=1200
-            case "$count" in ''|*[!0-9]*|0) echo "DNIV-LAB-FAIL session=$session node=$name reason=pp11-s2-bad-count"; exit 1 ;; esac
+            count=$(positive_decimal_count "${probe_override:-1200}") || {
+                echo "DNIV-LAB-FAIL session=$session node=$name reason=pp11-s2-bad-count"
+                exit 1
+            }
             pp11_s2_resource initial
             echo "DNIV-PP11-S2-TRAFFIC-READY session=$session node=$name count=$count"
             i=0
