@@ -34,7 +34,7 @@ def frame(source: bytes) -> bytes:
 
 
 def check() -> None:
-    for name in ("inject-nsp-ackrange", "inject-nsp-flow", "inject-nsp-intflow"):
+    for name in ("inject-nsp-ackrange", "inject-nsp-flow", "inject-nsp-intflow", "inject-nsp-intloss"):
         path = LAB / (name + ".py")
         source = path.read_text(encoding="utf-8")
         assert "nsp_payload(sniff.recv(4096))" not in source, name
