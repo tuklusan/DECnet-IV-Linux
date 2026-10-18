@@ -833,7 +833,14 @@ static inline int dniv_wire_parse_routing(
                  (__u32)count * DNIV_WIRE_ROUTE_ENTRY_LEN;
         if (seglen > end - off)
             return DNIV_WIRE_MALFORMED;
-        (void)j;
+        /* Inbound vectors must obey the same reserved-bit rule as
+         * locally generated entries; checksum validity is insufficient. */
+        for (j = 0; j < count; j++) {
+            if (!dniv_wire_route_entry_valid(dniv_wire_get_le16(
+                    buf + off + DNIV_WIRE_ROUTE_SEGMENT_HEADER_LEN +
+                    (__u32)j * DNIV_WIRE_ROUTE_ENTRY_LEN)))
+                return DNIV_WIRE_MALFORMED;
+        }
         off += seglen;
         segcount++;
     }

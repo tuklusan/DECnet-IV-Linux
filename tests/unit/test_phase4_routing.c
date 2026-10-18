@@ -110,6 +110,9 @@ static void test_boundaries(void)
 
     seg.start = 1;
     seg.count = 1;
+    entry = 0x8000U;
+    assert(dniv_wire_build_routing(buf, sizeof(buf), 1, 1, &seg, 1) == 0);
+    entry = 0U;
     assert(dniv_wire_build_routing(buf, sizeof(buf), 1, 2, &seg, 1) > 0);
     seg.start = 63;
     assert(dniv_wire_build_routing(buf, sizeof(buf), 1, 2, &seg, 1) > 0);
@@ -176,7 +179,7 @@ static void test_malformed(void)
                            (sizeof(good) - DNIV_WIRE_ROUTE_HEADER_LEN -
                             DNIV_WIRE_ROUTE_CHECKSUM_LEN) / 2U));
     assert(dniv_wire_parse_routing(buf, sizeof(good), &msg) ==
-           DNIV_WIRE_OK);
+           DNIV_WIRE_MALFORMED);
 
     memcpy(buf, good, sizeof(good));
     buf[sizeof(good) - 1U] ^= 1U;
