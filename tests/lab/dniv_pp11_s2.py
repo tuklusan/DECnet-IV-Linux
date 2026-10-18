@@ -71,9 +71,60 @@ def parse_resources(path: Path, session: str, node: str) -> list[tuple[int, int,
             for match in pattern.finditer(read_text(path))]
 
 
-def pcap_faults(paths: list[Path]) -> int:
+def pcap_faults(paths: list[Path], *, final: bool = False) -> int:
+    """Count uniquely numbered valid injector frames, never raw marker substrings."""
     marker = b"DNIV-S2-FAULT-"
-    return sum(path.read_bytes().count(marker) for path in paths if path.exists())
+    source = bytes.fromhex("02444e495602")
+    destination = bytes.fromhex(decnet_mac(31, 72).replace(":", ""))
+    seen: set[int] = set()
+    for path in paths:
+        if not path.is_file():
+            if final:
+                raise RuntimeError(f"pp11-s2: missing fault capture {path}")
+            continue
+        data = path.read_bytes()
+        if len(data) < 24:
+            if final:
+                raise RuntimeError(f"pp11-s2: short fault capture {path}")
+            continue
+        magic = data[:4].hex()
+        if magic in {"d4c3b2a1", "4d3cb2a1"}:
+            endian = "<"
+        elif magic in {"a1b2c3d4", "a1b23c4d"}:
+            endian = ">"
+        else:
+            raise RuntimeError(f"pp11-s2: bad fault capture magic in {path}")
+        if struct.unpack_from(endian + "I", data, 20)[0] != 1:
+            raise RuntimeError(f"pp11-s2: fault capture is not Ethernet in {path}")
+        pos = 24
+        while pos < len(data):
+            if pos + 16 > len(data):
+                if final:
+                    raise RuntimeError(f"pp11-s2: truncated fault record header in {path}")
+                break
+            _, _, incl, _ = struct.unpack_from(endian + "IIII", data, pos)
+            pos += 16
+            if incl > len(data) - pos:
+                if final:
+                    raise RuntimeError(f"pp11-s2: truncated fault record payload in {path}")
+                break
+            frame = data[pos:pos + incl]
+            pos += incl
+            if (len(frame) < 36 or frame[:6] != destination or
+                    frame[6:12] != source or frame[12:14].hex() != "6003" or
+                    frame[14:16] != (100).to_bytes(2, "little") or
+                    frame[16] != 0x06 or frame[17:31] != marker):
+                continue
+            token = frame[31:36]
+            if len(token) != 5 or any(ch < 48 or ch > 57 for ch in token):
+                raise RuntimeError("pp11-s2: bad fault sequence marker")
+            number = int(token)
+            if not 1 <= number <= FAULT_EVENTS or number in seen:
+                raise RuntimeError(f"pp11-s2: duplicate/out-of-range fault event {number}")
+            seen.add(number)
+    if final and len(seen) != FAULT_EVENTS:
+        raise RuntimeError(f"pp11-s2: missing distinct fault events {len(seen)}/{FAULT_EVENTS}")
+    return len(seen)
 
 
 def forwarded_timestamps(path: Path, marker: str, router_mac: str) -> list[float]:
@@ -234,7 +285,7 @@ def main() -> int:
     duration_match = re.search(r"^DURATION_ACTUAL=([0-9.]+)$", evidence, re.MULTILINE)
     if not duration_match or float(duration_match.group(1)) < FAULT_DURATION:
         raise RuntimeError("pp11-s2: one-hour fault duration not proven")
-    captured_faults = pcap_faults(lab.pcaps)
+    captured_faults = pcap_faults(lab.pcaps, final=True)
     if captured_faults < FAULT_EVENTS:
         raise RuntimeError(f"pp11-s2: captured faults={captured_faults} < {FAULT_EVENTS}")
     forwarded = {

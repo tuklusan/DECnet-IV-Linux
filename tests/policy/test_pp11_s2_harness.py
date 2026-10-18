@@ -25,6 +25,61 @@ VM = (ROOT / ".github/workflows/vm-lab.yml").read_text(encoding="utf-8")
 DISPATCH = (ROOT / ".github/workflows/repository-policy.yml").read_text(encoding="utf-8")
 
 
+def exercise_exact_fault_pcap() -> None:
+    """One packet with 10,000 markers must never prove 10,000 fault frames."""
+    import importlib.util
+    import struct
+    import sys
+    import tempfile
+
+    sys.path.insert(0, str(ROOT / "tests/lab"))
+    spec = importlib.util.spec_from_file_location("dniv_pp11_s2", ROOT / "tests/lab/dniv_pp11_s2.py")
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    header = bytes.fromhex("d4c3b2a1") + struct.pack("<HHIIII", 2, 4, 0, 0, 65535, 1)
+    destination = bytes.fromhex("aa000400487c")
+    source = bytes.fromhex("02444e495602")
+    marker = b"DNIV-S2-FAULT-"
+
+    def packet(number: int, tail: bytes = b"") -> bytes:
+        frame = (destination + source + bytes.fromhex("6003") + b"\x64\x00\x06" +
+                 marker + f"{number:05d}".encode("ascii") + tail)
+        return struct.pack("<IIII", 0, 0, len(frame), len(frame)) + frame
+
+    with tempfile.TemporaryDirectory(prefix="dniv-pp11-s2-") as temp:
+        a, b = Path(temp) / "a.pcap", Path(temp) / "b.pcap"
+        a.write_bytes(header + packet(1, marker * 9999))
+        if module.pcap_faults([a]) != 1:
+            raise SystemExit("pp11-s2 regression: marker-stuffed ONE frame was counted many times")
+        try:
+            module.pcap_faults([a], final=True)
+        except RuntimeError:
+            pass
+        else:
+            raise SystemExit("pp11-s2 regression: partial fault roster was accepted")
+
+        a.write_bytes(header + b"".join(packet(i) for i in range(1, 10001, 2)))
+        b.write_bytes(header + b"".join(packet(i) for i in range(2, 10001, 2)))
+        if module.pcap_faults([a, b], final=True) != 10000:
+            raise SystemExit("pp11-s2 regression: exact two-bridge 10000-frame roster failed")
+        b.write_bytes(b.read_bytes() + packet(1))
+        try:
+            module.pcap_faults([a, b], final=True)
+        except RuntimeError:
+            pass
+        else:
+            raise SystemExit("pp11-s2 regression: duplicate fault ID accepted")
+        b.write_bytes(b.read_bytes()[:-1])
+        try:
+            module.pcap_faults([a, b], final=True)
+        except RuntimeError:
+            pass
+        else:
+            raise SystemExit("pp11-s2 regression: truncated PCAP accepted")
+
+
 def main() -> int:
     for marker in (
         "FAULT_EVENTS = 10000",
@@ -94,6 +149,7 @@ def main() -> int:
     ):
         if marker not in DISPATCH:
             raise SystemExit(f"pp11-s2 regression: missing acceptance dispatch guard: {marker}")
+    exercise_exact_fault_pcap()
     print("pp11-s2 regression passed")
     return 0
 
