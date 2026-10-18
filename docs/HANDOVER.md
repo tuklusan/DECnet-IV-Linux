@@ -23,20 +23,30 @@ source-delivery 3/3 audit are historical evidence, not promotion evidence for ch
 bytes. PP-11 S3-S6 and first-release PP-13 remain owner-authorized skips. An altered source
 release does not inherit an earlier 3/3 audit or exact-SHA acceptance.
 
-The current release blocker is three independent comprehensive zero-defect semantic reviews
-of fresh copies of one fully green exact-SHA packaged source artifact. During a defect-bearing
-discovery pass, prove and repair each defect minimally on main with source-derived regression;
-recheck affected files/dependencies and CONTINUE the SAME discovery pass at the next unreviewed file.
-Preserve exact file/source SHA provenance; after-repair review is provisional until final-package
-reconciliation. Local/targeted regressions run per repair, but there is NO per-repair hosted
-qualification or fresh artifact download. All four green same-SHA source gates and an independently
-fresh, safely verified archive form the qualification CHECKPOINT ONLY at the END of each COMPLETE
-discovery pass, not after individual repairs. ONLY at the END of the ENTIRE discovery pass, if
-any defect occurred, close it with NO clean credit (0/3), qualify the final repaired main SHA,
-reconcile the full final packaged roster/interactions, and start a new clean attempt at file #1.
-All 3/3 independent COMPLETE zero-defect clean passes must reread unchanged accepted package bytes,
-freshly downloading the same accepted archive before each pass. No redundant gate rerun is needed
-if the previously qualified SHA is unchanged. Partial, provisional and mixed-SHA passes never count.
+The current release blocker is three independent COMPLETE zero-defect semantic reviews
+of one unchanged source archive, followed by final exact-SHA qualification. During
+defect-bearing discovery, prove each defect, repair minimally on main with source-derived
+local/targeted regression, recheck dependencies, and CONTINUE the SAME discovery pass at
+the next unreviewed file. Preserve SHA-bound coverage and mark changed-byte observations
+provisional. Only at the END of the ENTIRE discovery pass, close it with NO clean credit
+(0/3) if any defect was found, and freeze the repaired main SHA for new whole reviews.
+There is NO four-gate qualification after individual repairs OR after a discovery pass.
+
+For each of three independent clean attempts, independently create a fresh provisional
+tarball using the production deterministic packager at that SAME frozen SHA, verify its
+SHA-256, metadata, safe roster and exact byte identity with the other two tarballs;
+review EVERY packaged file and interaction from file #1 to the end. No skipped,
+incomplete, mixed-SHA or defect-bearing pass is clean. If any defect is discovered,
+complete its defect-bearing review, repair on main and restart clean attempts only
+after that pass ends. The 3/3 reviews are provisional, not accepted certification,
+until all FOUR mandatory same-SHA source qualification gates run successfully.
+The sole four-gate CHECKPOINT is AFTER ALL THREE complete zero-defect passes, not
+at the end of a discovery pass. Independently download the resulting gate artifact
+and prove its tarball bytes, checksum, metadata and source SHA EXACTLY match every
+previously reviewed tarball. Only THEN certify clean 1/3, 2/3 and 3/3. If any
+mandatory gate fails, or package bytes differ, do NOT certify 3/3; diagnose,
+repair/review as required, refreeze and repeat the three complete scans for any
+changed bytes. Full release acceptance and publication still require exact-SHA proof.
 After 3/3, reconcile and re-prove applicable canonical PP evidence in dependency order (S1 before S2),
 then require green full-profile exact-SHA acceptance. Production publication uses only the
 accepted versioned source tarball bytes without repacking, with checksum and release notes.

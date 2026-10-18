@@ -36,11 +36,21 @@ def validate(text: str) -> None:
 
 
 def checkpoint_contract(section: str) -> None:
+    # A run of the four mandatory hosted gates belongs AFTER all three
+    # complete semantic scans of one frozen, byte-identical archive.
     lowered = section.casefold()
-    assert "checkpoint only at the end" in lowered, "mid-pass requalification still required"
-    assert "not after individual repairs" in lowered, "per-fix checkpoint rule remains"
-    assert "four" in lowered, "all four mandatory source gates missing"
-    assert "fresh" in lowered, "fresh exact-source artifact proof missing"
+    pos = lowered.find("checkpoint")
+    assert pos >= 0 and (
+        "after all three complete zero-defect passes" in lowered[pos:pos + 110]
+    ), "four-gate checkpoint must follow all three whole-source scans"
+    assert (
+        "no four-gate qualification after" in lowered
+        or "do not run full four-gate requalification after" in lowered
+    ), "per-repair/per-discovery gate dispatch still required"
+    assert ("four green" in lowered or "four mandatory" in lowered), "mandatory four-gate source qualification lost"
+    assert "provisional" in lowered, "pre-gate reviews falsely certified"
+    assert "sha-256" in lowered, "archive byte identity proof missing"
+    assert "artifact" in lowered and "download" in lowered, "post-gate artifact verification missing"
 
 
 def main() -> int:
@@ -52,14 +62,41 @@ def main() -> int:
         validate(section)
         checkpoint_contract(section)
 
-    # Source-derived negative: old per-fix gates must not be certifiable.
-    old_rule = "SAME next unreviewed file ONLY at END NO clean credit 0/3 3/3; four gates and fresh artifact after every repair"
+    # RED old policy (end-of-discovery checkpoints) is forbidden.
+    old_rule = (
+        "SAME next unreviewed file ONLY at END NO clean credit 0/3 3/3; "
+        "the four-gate checkpoint is after each completed discovery pass, "
+        "not after individual repairs. Fresh artifact."
+    )
     try:
         checkpoint_contract(old_rule)
     except AssertionError:
         pass
     else:
-        raise AssertionError("per-repair requalification falsely accepted")
+        raise AssertionError("end-of-discovery requalification falsely accepted")
+
+    # Positive fixture, with adversarial removal of independent safeguards.
+    clean_rule = (
+        "The four-gate CHECKPOINT is AFTER ALL THREE complete zero-defect passes. "
+        "NO four-gate qualification after individual repairs OR after a discovery pass. "
+        "All scans are PROVISIONAL until FOUR green gates. Match the exact SHA-256 "
+        "of the fresh downloaded artifact against all three scanned archives."
+    )
+    checkpoint_contract(clean_rule)
+    for marker in (
+        "AFTER ALL THREE complete zero-defect passes",
+        "NO four-gate qualification after",
+        "FOUR green gates",
+        "PROVISIONAL",
+        "SHA-256",
+        "artifact",
+        "downloaded",
+    ):
+        try:
+            checkpoint_contract(clean_rule.replace(marker, "", 1))
+        except AssertionError:
+            continue
+        raise AssertionError("audit checkpoint negative fixture was accepted: " + marker)
 
     # An old immediate-restart instruction must not pass the same test.
     negative = "SAME pass next unreviewed file ONLY at END NO clean credit 0/3 3/3"
