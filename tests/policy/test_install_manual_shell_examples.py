@@ -12,6 +12,7 @@
 # SANYALnet Labs." See LICENSE for full terms, warranty disclaimer, termination,
 # patent, trademark, and governing-law provisions.
 # ============================================================================
+
 """Run the shipped installation manual's extraction commands as actual Bash."""
 
 import hashlib
