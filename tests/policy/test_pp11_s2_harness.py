@@ -50,9 +50,11 @@ def exercise_exact_fault_pcap() -> None:
 
     with tempfile.TemporaryDirectory(prefix="dniv-pp11-s2-") as temp:
         a, b = Path(temp) / "a.pcap", Path(temp) / "b.pcap"
-        a.write_bytes(header + packet(1, marker * 9999))
-        if module.pcap_faults([a]) != 1:
-            raise SystemExit("pp11-s2 regression: marker-stuffed ONE frame was counted many times")
+        # 100 ordinary-sized Ethernet frames, each with 100 marker strings:
+        # an earlier substring oracle falsely certified 10,000 fault events.
+        a.write_bytes(header + b"".join(packet(i, marker * 99) for i in range(1, 101)))
+        if module.pcap_faults([a]) != 100:
+            raise SystemExit("pp11-s2 regression: 100 marker-stuffed frames counted as 10000")
         try:
             module.pcap_faults([a], final=True)
         except RuntimeError:
