@@ -29,7 +29,7 @@ command -v jq >/dev/null
 
 api="repos/$GITHUB_REPOSITORY"
 max_deletes="${DNIV_GC_MAX_DELETES:-650}"
-[[ "$max_deletes" =~ ^[1-9][0-9]*$ ]] && (( max_deletes <= 800 )) || {
+[[ "$max_deletes" =~ ^[1-9][0-9]*$ ]] && (( ${#max_deletes} <= 3 )) && (( 10#$max_deletes <= 800 )) || {
     echo 'Bad deletion budget' >&2
     exit 2
 }
@@ -37,7 +37,7 @@ max_deletes="${DNIV_GC_MAX_DELETES:-650}"
 # The initial historical sweep removes only runs before this fixed boundary.
 initial_cutoff='2026-10-17T15:36:00Z'
 hours="${DNIV_GC_GRACE_HOURS:-4}"
-[[ "$hours" =~ ^[1-9][0-9]*$ ]] && (( hours <= 48 )) || exit 2
+[[ "$hours" =~ ^[1-9][0-9]*$ ]] && (( ${#hours} <= 2 )) && (( 10#$hours <= 48 )) || exit 2
 active_issue=$(gh api "$api/issues?state=open&per_page=100" --jq \
     '.[] | select(.title == "DNIV actions cleanup" and .user.login == "tuklusan" and .pull_request == null) | .number' | head -1)
 if [[ -n "$active_issue" ]]; then

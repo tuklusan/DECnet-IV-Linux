@@ -96,6 +96,22 @@ def scenario(issue_open: bool, race_run: int | None = None) -> None:
         result = subprocess.run(['bash', str(SCRIPT)], env=env, capture_output=True, text=True)
         assert result.returncode == 2
         assert json.loads(state_path.read_text()) == observed
+        env['GITHUB_REPOSITORY'] = 'tuklusan/DECnet-IV-Linux'
+        if issue_open and race_run is None:
+            invalid = (
+                ('DNIV_GC_MAX_DELETES', '18446744073709551616'),
+                ('DNIV_GC_MAX_DELETES', '18446744073709551617'),
+                ('DNIV_GC_MAX_DELETES', '801'),
+                ('DNIV_GC_GRACE_HOURS', '18446744073709551616'),
+                ('DNIV_GC_GRACE_HOURS', '49'),
+            )
+            for setting, bad in invalid:
+                trial = dict(env, **{setting: bad})
+                result = subprocess.run(['bash', str(SCRIPT)], env=trial,
+                                        capture_output=True, text=True, timeout=10)
+                assert result.returncode == 2, (setting, bad, result.returncode,
+                                                result.stdout, result.stderr)
+                assert json.loads(state_path.read_text()) == observed
 
 
 if __name__ == '__main__':

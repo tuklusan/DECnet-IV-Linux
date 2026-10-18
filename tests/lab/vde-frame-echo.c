@@ -158,7 +158,7 @@ int main(int argc, char **argv)
 
     errno = 0;
     token = strtoul(argv[3], &end, 10);
-    if (errno || !end || *end || token > 255)
+    if (errno || !end || end == argv[3] || *end || token > 255)
         return 2;
     return run_client(argv[2], (unsigned char)token);
 }
