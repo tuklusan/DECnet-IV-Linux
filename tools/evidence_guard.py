@@ -151,7 +151,7 @@ def verify(root: Path, manifest_path: Path) -> None:
         payload = json.loads(manifest_path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         die(f"invalid evidence manifest: {exc}")
-    if not isinstance(payload, dict) or payload.get("version") != 1:
+    if not isinstance(payload, dict) or type(payload.get("version")) is not int or payload["version"] != 1:
         die("invalid evidence manifest version")
     files = payload.get("files")
     if not isinstance(files, list) or not files:
@@ -167,7 +167,7 @@ def verify(root: Path, manifest_path: Path) -> None:
         if not isinstance(rel, str) or rel in seen:
             die("invalid or duplicate manifest path")
         seen.add(rel)
-        if not isinstance(size, int) or size <= 0:
+        if type(size) is not int or size <= 0:
             die(f"invalid manifest size for {rel}")
         if not isinstance(expected, str) or len(expected) != 64:
             die(f"invalid manifest hash for {rel}")
