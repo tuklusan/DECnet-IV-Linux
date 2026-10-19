@@ -394,7 +394,36 @@ while pos + 16 <= len(data):
         break
     frame = data[pos:pos + incl]
     pos += incl
-    if len(frame) >= 14 and frame[6:12] == source and marker in frame:
+    # Ignore Ethernet padding/trailer bytes outside the DECnet length field.
+    # Count only complete markers in a routed NSP Data payload.
+    if len(frame) < 16 or frame[6:12] != source or frame[12:14] != b"\x60\x03":
+        continue
+    body = frame[14:]
+    declared = int.from_bytes(body[:2], "little")
+    if not 1 <= declared <= 1498 or len(body) < 2 + declared:
+        continue
+    route = body[2:2 + declared]
+    if route[0] & 0x80:
+        pad = route[0] & 0x7f
+        if not 0 < pad < len(route):
+            continue
+        route = route[pad:]
+    if not route:
+        continue
+    fmt = route[0] & 0xc7
+    header = 6 if fmt == 0x02 else 21 if fmt == 0x06 else 0
+    if not header or len(route) <= header + 7:
+        continue
+    nsp = route[header:]
+    if nsp[0] & 0x9f:
+        continue
+    off = 5
+    for _ in range(2):
+        if off + 2 <= len(nsp) and int.from_bytes(nsp[off:off + 2], "little") & 0x8000:
+            off += 2
+    if off + 2 > len(nsp):
+        continue
+    if marker in nsp[off + 2:]:
         count += 1
 print(count)
 PY
