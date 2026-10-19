@@ -12,6 +12,7 @@
 # SANYALnet Labs." See LICENSE for full terms, warranty disclaimer, termination,
 # patent, trademark, and governing-law provisions.
 # ============================================================================
+
 """Scale PCAP markers must be inside declared DECnet data, never Ethernet padding."""
 import importlib.util
 from pathlib import Path
