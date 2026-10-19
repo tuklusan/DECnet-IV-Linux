@@ -26,6 +26,7 @@ from __future__ import annotations
 import hashlib
 import math
 import os
+import struct
 from pathlib import Path
 import re
 import sys
@@ -121,11 +122,47 @@ def percentile(values: list[int], q: float) -> int:
     rank = max(1, math.ceil(q * len(ordered)))
     return ordered[rank - 1]
 
-def pcap_marker_count(path: Path, marker: str) -> int:
+def pcap_marker_count(path: Path, marker: str, source_mac: str) -> int:
+    """Count unique, complete dnraw marker packets on the expected Ethernet source."""
     try:
-        return path.read_bytes().count(marker.encode("ascii"))
+        data = path.read_bytes()
     except FileNotFoundError:
         return 0
+    if len(data) < 24:
+        raise RuntimeError("pp11-s1: missing pcap global header")
+    if data[:4] == b"\xd4\xc3\xb2\xa1":
+        endian = "<"
+    elif data[:4] == b"\xa1\xb2\xc3\xd4":
+        endian = ">"
+    else:
+        raise RuntimeError("pp11-s1: unsupported pcap magic")
+    if struct.unpack_from(endian + "I", data, 20)[0] != 1:
+        raise RuntimeError("pp11-s1: capture is not Ethernet")
+    expected_source = bytes.fromhex(source_mac.replace(":", ""))
+    prefix = marker.encode("ascii")
+    sequences: set[int] = set()
+    off = 24
+    while off < len(data):
+        if off + 16 > len(data):
+            raise RuntimeError("pp11-s1: truncated pcap record header")
+        _, _, incl, orig = struct.unpack_from(endian + "IIII", data, off)
+        off += 16
+        if incl > orig or incl > len(data) - off:
+            raise RuntimeError("pp11-s1: truncated or invalid pcap record")
+        frame = data[off:off + incl]
+        off += incl
+        if (len(frame) < 16 or frame[6:12] != expected_source or
+                frame[12:14] != b"\x60\x03"):
+            continue
+        size = int.from_bytes(frame[14:16], "little")
+        if size > 256 or 16 + size > len(frame):
+            continue
+        payload = frame[16:16 + size]
+        if payload.startswith(prefix):
+            suffix = payload[len(prefix):]
+            if re.fullmatch(rb"[1-9][0-9]*", suffix):
+                sequences.add(int(suffix))
+    return len(sequences)
 
 def parse_local_cycles(guest: Guest, session: str) -> dict[str, int]:
     counts = {key: 0 for key in LOCAL_EXPECTED}
@@ -199,7 +236,7 @@ def write_summary(path: Path, session: str, host_arch: str, runtime: float,
             raise RuntimeError(f"pp11-s1: {guest.name} did not exercise both vCPUs: cpus={sorted(cpus)}")
         total_successes += len(values)
         total_bytes += len(values) * 5240
-        raw = pcap_marker_count(path.parent / "lan.pcap", f"DNIV-PP11-RAW-{session}-{guest.name}-")
+        raw = pcap_marker_count(path.parent / "lan.pcap", f"DNIV-PP11-RAW-{session}-{guest.name}-", guest.nic_mac)
         if raw < MIN_RAW_MARKERS:
             raise RuntimeError(f"pp11-s1: {guest.name} raw traffic markers={raw} < {MIN_RAW_MARKERS}")
         resources = parse_resources(guest, session)

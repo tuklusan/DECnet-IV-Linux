@@ -16,6 +16,10 @@
 """Lock PP-11 S1 reboot and reciprocal-actor harness invariants."""
 
 from pathlib import Path
+import runpy
+import struct
+import sys
+import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 LAB = (ROOT / "tests/lab/dniv_lab.py").read_text(encoding="utf-8")
@@ -33,6 +37,62 @@ INTFLOW = (ROOT / "tests/lab/inject-nsp-intflow.py").read_text(encoding="utf-8")
 INTFLOW_CLIENT = (ROOT / "tests/lab/dnintflow.c").read_text(encoding="utf-8")
 PCAP = (ROOT / "tests/lab/validate-interop-pcap.py").read_text(encoding="utf-8")
 SOCKET = (ROOT / "kernel/decnet/decnet_iv_socket.c").read_text(encoding="utf-8")
+
+
+def test_raw_pcap_source_oracle() -> None:
+    """Reject false raw-traffic counts from repeated text and non-DECnet frames."""
+    sys.path.insert(0, str(ROOT / "tests/lab"))
+    oracle = runpy.run_path(
+        str(ROOT / "tests/lab/dniv_pp11_s1.py"), run_name="dniv_pp11_s1_oracle_test"
+    )["pcap_marker_count"]
+    prefix = "DNIV-PP11-RAW-fixture-DN70-"
+    source = "aa:00:04:00:46:7c"
+    src_bytes = bytes.fromhex(source.replace(":", ""))
+    dst_bytes = bytes.fromhex("aa000400477c")
+
+    def frame(payload: bytes, *, proto: bytes = b"\x60\x03",
+              src: bytes = src_bytes) -> bytes:
+        assert len(payload) <= 256
+        return dst_bytes + src + proto + len(payload).to_bytes(2, "little") + payload
+
+    def pcap(frames: list[bytes], *, endian: str = "<") -> bytes:
+        magic = b"\xd4\xc3\xb2\xa1" if endian == "<" else b"\xa1\xb2\xc3\xd4"
+        data = magic + struct.pack(endian + "HHIIII", 2, 4, 0, 0, 65535, 1)
+        for packet in frames:
+            data += struct.pack(endian + "IIII", 0, 0, len(packet), len(packet)) + packet
+        return data
+
+    with tempfile.TemporaryDirectory() as directory:
+        path = Path(directory) / "raw.pcap"
+        path.write_bytes(pcap([frame(((prefix + "1").encode()) * 5)] * 20))
+        if oracle(path, prefix, source) != 0:
+            raise SystemExit("pp11-s1: repeated textual markers falsely counted as raw packets")
+        path.write_bytes(pcap([frame((prefix + str(index)).encode())
+                               for index in range(1, 101)]))
+        if oracle(path, prefix, source) != 100:
+            raise SystemExit("pp11-s1: 100 valid distinct raw frames not counted")
+        path.write_bytes(pcap([frame((prefix + "1").encode())] * 100))
+        if oracle(path, prefix, source) != 1:
+            raise SystemExit("pp11-s1: duplicate raw sequence falsely counted")
+        path.write_bytes(pcap([frame((prefix + str(index)).encode(),
+                                    proto=b"\x08\x00") for index in range(1, 101)]))
+        if oracle(path, prefix, source) != 0:
+            raise SystemExit("pp11-s1: non-DECnet frames falsely counted")
+        path.write_bytes(pcap([frame((prefix + str(index)).encode(),
+                                    src=dst_bytes) for index in range(1, 101)]))
+        if oracle(path, prefix, source) != 0:
+            raise SystemExit("pp11-s1: wrong-source frames falsely counted")
+        path.write_bytes(pcap([frame((prefix + str(index)).encode())
+                               for index in range(1, 101)], endian=">"))
+        if oracle(path, prefix, source) != 100:
+            raise SystemExit("pp11-s1: big-endian pcap valid evidence not recognized")
+        path.write_bytes(pcap([frame((prefix + "1").encode())])[:-3])
+        try:
+            oracle(path, prefix, source)
+        except RuntimeError:
+            pass
+        else:
+            raise SystemExit("pp11-s1: truncated capture passed")
 
 
 def main() -> int:
@@ -167,6 +227,7 @@ def main() -> int:
             )
     if SOCKET.count("dniv_reject_unowned(") != 5:
         raise SystemExit("pp11-s1 regression: unowned reject paths changed")
+    test_raw_pcap_source_oracle()
     print("pp11-s1 regression passed")
     return 0
 
