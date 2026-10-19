@@ -150,13 +150,14 @@ def forwarded_timestamps(path: Path, marker: str, router_mac: str) -> list[float
         off += 16
         frame = data[off:off + incl]
         off += incl
-        if len(frame) < 37 or frame[12:14].hex() != "6003" or needle not in frame:
+        if len(frame) < 37 or frame[12:14].hex() != "6003":
             continue
         plen = int.from_bytes(frame[14:16], "little")
         if 16 + plen > len(frame):
             continue
         route = frame[16:16 + plen]
-        if len(route) < 21 or (route[0] & 0xc7) != 0x06:
+        if (len(route) < 21 or (route[0] & 0xc7) != 0x06 or
+                needle not in route[21:]):
             continue
         source = ":".join(f"{value:02x}" for value in frame[6:12])
         if source == router_mac and route[18] == 1:
