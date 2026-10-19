@@ -39,6 +39,18 @@ parse_node() {
     [ "$node" -ge 1 ] && [ "$node" -le 1023 ]
 }
 
+# Normalize DECnet node numbers before comparing configured identities.
+# Otherwise 31.003 and 31.3 pass a string inequality but are the same node.
+canonical_node() {
+    parse_node "$1" || return 1
+    canonical_digits=${1#31.}
+    while [ "${canonical_digits#0}" != "$canonical_digits" ]; do
+        canonical_digits=${canonical_digits#0}
+    done
+    [ -n "$canonical_digits" ] || return 1
+    printf '31.%s\n' "$canonical_digits"
+}
+
 parse_name() {
     case "$1" in
         [A-Za-z][A-Za-z0-9]|[A-Za-z][A-Za-z0-9][A-Za-z0-9]|[A-Za-z][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9]|[A-Za-z][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9]|[A-Za-z][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9]|[A-Za-z]) return 0 ;;
@@ -81,15 +93,15 @@ vax_password=$(cat "$password_file")
 
 scratch=$(mktemp -d /tmp/dniv-area31.XXXXXX) || fail scratch-dir
 
-parse_node "$linux_node" || fail bad-linux-node
-parse_node "$gateway_node" || fail bad-gateway-node
-parse_node "$target" || fail bad-target
+linux_node=$(canonical_node "$linux_node") || fail bad-linux-node
+gateway_node=$(canonical_node "$gateway_node") || fail bad-gateway-node
+target=$(canonical_node "$target") || fail bad-target
 parse_name "$linux_name" || fail bad-linux-name
 [ "$linux_node" != "$gateway_node" ] || fail duplicate-node
 [ "$linux_node" != "$target" ] || fail duplicate-node
 [ "$gateway_node" != "$target" ] || fail duplicate-node
 if [ -n "$qcocal" ]; then
-    parse_node "$qcocal" || fail bad-qcocal-node
+    qcocal=$(canonical_node "$qcocal") || fail bad-qcocal-node
     [ "$qcocal" != "$linux_node" ] || fail duplicate-qcocal-node
     [ "$qcocal" != "$gateway_node" ] || fail duplicate-qcocal-node
     [ "$qcocal" != "$target" ] || fail duplicate-qcocal-node

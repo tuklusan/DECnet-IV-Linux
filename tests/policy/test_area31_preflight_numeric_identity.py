@@ -42,6 +42,45 @@ def preflight(vax, gateway, linux, qcocal=""):
                           capture_output=True, text=True, timeout=5)
 
 
+GUEST = ROOT / "tests/lab/dniv-area31-smoke.sh"
+
+
+def guest_identity(linux, gateway, target, qcocal, guest_source=None):
+    source = GUEST.read_text() if guest_source is None else guest_source
+    start = source.index("parse_node() {")
+    end = source.index("\nread_field() {", start)
+    functions = source[start:end]
+    start = source.index('parse_node "$linux_node" || fail bad-linux-node') if (
+        'parse_node "$linux_node" || fail bad-linux-node' in source
+    ) else source.index('linux_node=$(canonical_node "$linux_node") || fail bad-linux-node')
+    end = source.index("\niface=", start)
+    validation = source[start:end]
+    fixture = ("set -eu\n" + functions +
+               '\nfail() { echo "REJECT:$1" >&2; exit 2; }\n' +
+               f"linux_node={linux}\nlinux_name=DNIV\n"
+               f"gateway_node={gateway}\ntarget={target}\nqcocal={qcocal}\n" +
+               validation +
+               '\nprintf "PASS nodes=%s,%s,%s,%s\\n" "$linux_node" "$gateway_node" "$target" "$qcocal"\n')
+    return subprocess.run(["sh", "-c", fixture], capture_output=True,
+                          text=True, timeout=5)
+
+
+def check_guest_identity():
+    for args in (
+        ("31.003", "31.3", "31.13", "31.14"),
+        ("31.3", "31.004", "31.4", "31.14"),
+        ("31.8", "31.9", "31.0004", "31.4"),
+        ("31.8", "31.9", "31.10", "31.0010"),
+    ):
+        result = guest_identity(*args)
+        assert result.returncode == 2 and "duplicate" in result.stderr, (
+            args, result.returncode, result.stdout, result.stderr)
+    result = guest_identity("31.0008", "31.0009", "31.0010", "31.0011")
+    assert result.returncode == 0 and result.stdout.strip() == (
+        "PASS nodes=31.8,31.9,31.10,31.11"), (
+        result.returncode, result.stdout, result.stderr)
+
+
 def check():
     for args in (
         ("31.0008", "31.8", "31.9", "31.10"),
@@ -59,7 +98,8 @@ def check():
         result = preflight(*args)
         assert result.returncode == 0 and "preflight pass" in result.stdout, (
             args, result.returncode, result.stdout, result.stderr)
-    print("Area-31 numeric identity preflight source regression passed")
+    check_guest_identity()
+    print("Area-31 numeric identity preflight and guest source regressions passed")
 
 
 if __name__ == "__main__":
