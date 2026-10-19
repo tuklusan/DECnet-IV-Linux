@@ -75,7 +75,7 @@ def marker_sources(path: Path, marker: str) -> list[tuple[str, int]]:
         if 16 + plen > len(frame):
             continue
         route = frame[16:16 + plen]
-        if len(route) >= 21 and (route[0] & 0xc7) == 0x06:
+        if len(route) >= 21 and (route[0] & 0xc7) == 0x06 and needle in route[21:]:
             source = ":".join(f"{b:02x}" for b in frame[6:12])
             out.append((source, route[18]))
     return out
