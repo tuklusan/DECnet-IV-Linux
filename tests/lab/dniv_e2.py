@@ -67,13 +67,14 @@ def pcap_forwarded_long_visits(path: Path, marker: str) -> list[int]:
         off += 16
         frame = data[off:off + incl]
         off += incl
-        if len(frame) < 22 or frame[12:14] != b"\x60\x03" or needle not in frame:
+        if len(frame) < 22 or frame[12:14] != b"\x60\x03":
             continue
         plen = int.from_bytes(frame[14:16], "little")
         if 16 + plen > len(frame):
             continue
         route = frame[16:16 + plen]
-        if route and (route[0] & 0xc7) == 0x06 and len(route) >= 21:
+        if (len(route) >= 21 and (route[0] & 0xc7) == 0x06 and
+                needle in route[21:]):
             visits.append(route[18])
     return visits
 
@@ -100,7 +101,7 @@ def pcap_rts_returns(path: Path, marker: str, router_mac: str,
         frame = data[off:off + incl]
         off += incl
         if (len(frame) < 37 or frame[12:14] != b"\x60\x03" or
-                frame[6:12] != expected_link_source or needle not in frame):
+                frame[6:12] != expected_link_source):
             continue
         plen = int.from_bytes(frame[14:16], "little")
         if 16 + plen > len(frame):
@@ -109,7 +110,8 @@ def pcap_rts_returns(path: Path, marker: str, router_mac: str,
         if (len(route) >= 21 and (route[0] & 0xc7) == 0x06 and
                 (route[0] & 0x38) == 0x10 and
                 int.from_bytes(route[7:9], "little") == destination and
-                int.from_bytes(route[15:17], "little") == source):
+                int.from_bytes(route[15:17], "little") == source and
+                needle in route[21:]):
             visits.append(route[18])
     return visits
 
