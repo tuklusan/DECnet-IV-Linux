@@ -50,10 +50,15 @@ static int parse_node(const char *text, uint16_t *addr)
     unsigned long area;
     unsigned long node;
 
+    if (!text || *text < '0' || *text > '9')
+        return -1;
     errno = 0;
     area = strtoul(text, &end, 10);
     if (errno || end == text || *end != '.' || area < 1U || area > 63U)
         return -1;
+    if (end[1] < '0' || end[1] > '9')
+        return -1;
+    errno = 0;
     node = strtoul(end + 1, &end, 10);
     if (errno || *end || node == 0U || node > 1023U)
         return -1;
@@ -524,6 +529,8 @@ int main(int argc, char **argv)
             char *end = NULL;
             long value;
 
+            if (argv[arg + 1][0] < '0' || argv[arg + 1][0] > '9')
+                goto usage;
             errno = 0;
             value = strtol(argv[arg + 1], &end, 10);
             if (errno || end == argv[arg + 1] || *end ||
