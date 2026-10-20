@@ -14,6 +14,7 @@
 
 #define _DEFAULT_SOURCE
 #include <arpa/inet.h>
+#include <ctype.h>
 #include <errno.h>
 #include <linux/if_ether.h>
 #include <net/if.h>
@@ -32,12 +33,22 @@
 
 static int parse_decnet(const char *text, unsigned short *address)
 {
-    unsigned int area;
-    unsigned int node;
-    char tail;
+    unsigned long area;
+    unsigned long node;
+    char *end;
 
-    if (sscanf(text, "%u.%u%c", &area, &node, &tail) != 2 ||
-        area < 1 || area > 63 || node < 1 || node > 1023)
+    if (!text || !isdigit((unsigned char)*text))
+        return -1;
+    errno = 0;
+    area = strtoul(text, &end, 10);
+    if (errno || *end != '.' || area < 1 || area > 63)
+        return -1;
+    text = end + 1;
+    if (!isdigit((unsigned char)*text))
+        return -1;
+    errno = 0;
+    node = strtoul(text, &end, 10);
+    if (errno || *end || node < 1 || node > 1023)
         return -1;
     *address = (unsigned short)((area << 10) | node);
     return 0;
@@ -45,17 +56,23 @@ static int parse_decnet(const char *text, unsigned short *address)
 
 static int parse_mac(const char *text, unsigned char mac[ETH_ALEN])
 {
-    unsigned int b[ETH_ALEN];
-    char tail;
     int i;
 
-    if (sscanf(text, "%x:%x:%x:%x:%x:%x%c",
-               &b[0], &b[1], &b[2], &b[3], &b[4], &b[5], &tail) != ETH_ALEN)
+    if (!text)
         return -1;
     for (i = 0; i < ETH_ALEN; i++) {
-        if (b[i] > 0xff)
+        unsigned long byte;
+        char *end;
+
+        if (!isxdigit((unsigned char)*text))
             return -1;
-        mac[i] = (unsigned char)b[i];
+        errno = 0;
+        byte = strtoul(text, &end, 16);
+        if (errno || byte > 0xff ||
+            (i < ETH_ALEN - 1 ? *end != ':' : *end != '\0'))
+            return -1;
+        mac[i] = (unsigned char)byte;
+        text = end + (i < ETH_ALEN - 1);
     }
     return 0;
 }
