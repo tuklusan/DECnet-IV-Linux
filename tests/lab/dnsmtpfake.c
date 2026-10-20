@@ -90,6 +90,8 @@ int main(int argc, char **argv)
         fprintf(stderr, "usage: %s PORT OUTPUT\n", argv[0]);
         return 2;
     }
+    if (argv[1][0] < '0' || argv[1][0] > '9')
+        return 2;
     errno = 0;
     port = strtoul(argv[1], &end, 10);
     if (errno || !*argv[1] || *end || !port || port > 65535U)
