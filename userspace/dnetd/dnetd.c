@@ -63,6 +63,8 @@ static int parse_unsigned(const char *text, unsigned long max,
     char *end;
     unsigned long parsed;
 
+    if (!text || *text < '0' || *text > '9')
+        return -1;
     errno = 0;
     parsed = strtoul(text, &end, 10);
     if (errno || end == text || *end || parsed > max)
@@ -587,6 +589,14 @@ static int run_selftest(void)
         "TEST 0 N,N root /bin/cat "
         "1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16";
     int rc;
+    unsigned long numeric;
+
+    if (parse_unsigned("241", 255U, &numeric) || numeric != 241U ||
+        !parse_unsigned("-18446744073709551615", 255U, &numeric) ||
+        !parse_unsigned("+241", 255U, &numeric) ||
+        !parse_unsigned(" 241", 255U, &numeric) ||
+        !parse_unsigned("18446744073709551617", 255U, &numeric))
+        return 1;
 
     rc = parse_line(good, "/usr/local/sbin", &service);
     if (rc != 1 || strcmp(service.name, "TEST") || service.number ||
