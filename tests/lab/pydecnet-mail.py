@@ -19,6 +19,12 @@ from decnet.connectors import SimpleApiConnector
 
 ACK = bytes((1, 0, 0, 0))
 MAIL11_V3 = bytes((3, 0, 0, 18, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 0, 0))
+MAIL11_V3_ACCEPT = bytes((3, 1, 0, 18, 0, 0, 0, 0,
+                          0xa0, 2, 0, 0, 1, 0, 0, 0))
+
+
+def valid_mail_accept(reply: bytes) -> bool:
+    return reply == MAIL11_V3_ACCEPT
 
 def main() -> int:
     if len(sys.argv) != 4:
@@ -35,7 +41,7 @@ def main() -> int:
         )
         if connection is None or response.type != "accept":
             raise RuntimeError("MAIL object connect rejected")
-        if len(response) != 16 or response[0] != 3:
+        if not valid_mail_accept(bytes(response)):
             raise RuntimeError(f"bad MAIL-11 v3 accept data: {bytes(response)!r}")
         connection.data(b"PYDECNET")
         connection.data(b"TEST")

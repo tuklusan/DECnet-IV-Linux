@@ -19,7 +19,7 @@ import sys
 from decnet.async_connectors import AsyncApiConnector
 
 def valid_object(name: str) -> bool:
-    return 1 <= len(name) <= 16 and name[0].isalpha() and name.isalnum()
+    return 1 <= len(name) <= 16 and name.isascii() and name[0].isalpha() and name.isalnum()
 
 async def serve_one(api_socket: str, system: str, object_name: str, marker: str) -> None:
     if not valid_object(object_name):

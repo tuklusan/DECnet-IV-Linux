@@ -25,6 +25,23 @@ STATUS_REQUEST = bytes.fromhex("14 10 00 00 00")
 VERSION = bytes((4, 0, 0))
 
 
+def valid_status(data: bytes) -> bool:
+    if len(data) < 20 or data[:4] != b"\x01\xff\xff\x00":
+        return False
+    if not int.from_bytes(data[4:6], "little"):
+        return False
+    name_len = data[6] & 0x7f
+    if not (data[6] & 0x80) or not name_len:
+        return False
+    off = 7 + name_len
+    if data[off:off + 4] != b"\x00\x00\x81\x00":
+        return False
+    off += 4
+    if data[off:off + 3] != b"\x58\x02\x02" or len(data) < off + 5:
+        return False
+    return int.from_bytes(data[off + 3:off + 5], "little") >= 1
+
+
 def main() -> int:
     if len(sys.argv) != 5:
         raise SystemExit(
@@ -68,14 +85,8 @@ def main() -> int:
                     f"unexpected concurrent NICE response {response.type!r}"
                 )
             data = bytes(response)
-            if len(data) < 20 or data[:4] != b"\x01\xff\xff\x00":
+            if not valid_status(data):
                 raise RuntimeError(f"bad concurrent NICE status: {data!r}")
-            name_len = data[6] & 0x7f
-            off = 7 + name_len
-            if data[off:off + 4] != b"\x00\x00\x81\x00":
-                raise RuntimeError(
-                    f"concurrent NICE state missing: {data!r}"
-                )
 
         for connection in connections:
             connection.disconnect()
