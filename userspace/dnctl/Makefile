@@ -17,8 +17,11 @@ CPPFLAGS += -I../../include/uapi
 CFLAGS ?= -O2 -g
 CFLAGS += -std=c11 -Wall -Wextra -Werror
 
-.PHONY: all clean
-all: dnctl
+.PHONY: all check clean
+all: dnctl check
+
+check: dnctl
+	python3 ../../tests/policy/test_dnctl_address_exact.py
 
 dnctl: dnctl.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ $<

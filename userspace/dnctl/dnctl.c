@@ -64,11 +64,15 @@ static int parse_address(const char *text, __u16 *address)
         return -1;
     *dot++ = '\0';
 
+    if (*copy < '0' || *copy > '9')
+        return -1;
     errno = 0;
     area = strtoul(copy, &end, 10);
     if (errno || *copy == '\0' || *end != '\0' || area < 1 || area > 63)
         return -1;
 
+    if (*dot < '0' || *dot > '9')
+        return -1;
     errno = 0;
     node = strtoul(dot, &end, 10);
     if (errno || *dot == '\0' || *end != '\0' || node < 1 || node > 1023)
