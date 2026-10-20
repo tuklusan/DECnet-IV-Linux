@@ -34,10 +34,14 @@ MAX_BLOCK = 1498
 
 
 def mac(text: str) -> bytes:
-    value = bytes.fromhex(text.replace(":", ""))
-    if len(value) != 6:
+    parts = text.split(":")
+    hexdigits = "0123456789abcdefABCDEF"
+    if len(parts) != 6 or any(
+        len(part) != 2 or any(char not in hexdigits for char in part)
+        for part in parts
+    ):
         raise argparse.ArgumentTypeError(f"bad MAC address: {text}")
-    return value
+    return bytes(int(part, 16) for part in parts)
 
 
 def packets(path: Path):
@@ -103,37 +107,36 @@ def routed_nsp_payload(payload: bytes) -> bytes | None:
     return None
 
 
-def enduser_end(buf: bytes, off: int) -> int:
+def enduser_end(buf: bytes, off: int, destination: bool) -> int:
     if off + 2 > len(buf):
         raise ValueError("truncated Session end-user")
     fmt = buf[off]
     if fmt == 0:
+        if buf[off + 1] == 0:
+            raise ValueError("invalid zero numeric Session end-user")
         return off + 2
-    if fmt == 1:
-        prefix = 2
-    elif fmt == 2:
-        prefix = 6
-    elif fmt == 4:
-        prefix = 10
-    else:
+    if (destination and fmt != 1) or fmt not in (1, 2) or buf[off + 1] != 0:
         raise ValueError("invalid Session end-user format")
+    prefix = 2 if fmt == 1 else 6
     pos = off + prefix
     if pos >= len(buf):
         raise ValueError("truncated Session end-user name")
     length = buf[pos]
+    if not 1 <= length <= (16 if fmt == 1 else 12):
+        raise ValueError("invalid Session end-user name length")
     end = pos + 1 + length
     if end > len(buf):
         raise ValueError("truncated Session end-user value")
     return end
 
 
-def counted_field(buf: bytes, off: int) -> tuple[bytes, int]:
+def counted_field(buf: bytes, off: int, maximum: int) -> tuple[bytes, int]:
     if off >= len(buf):
         raise ValueError("truncated Session counted field")
     length = buf[off]
     end = off + 1 + length
-    if end > len(buf):
-        raise ValueError("truncated Session counted value")
+    if length > maximum or end > len(buf):
+        raise ValueError("invalid Session counted value")
     return buf[off + 1 : end], end
 
 
@@ -141,22 +144,26 @@ def session_ci_options(nsp: bytes) -> tuple[tuple[bytes, bytes, bytes], bytes] |
     if not nsp or nsp[0] not in (0x18, 0x68):
         return None
     off = 9
-    off = enduser_end(nsp, off)
-    off = enduser_end(nsp, off)
+    off = enduser_end(nsp, off, destination=True)
+    off = enduser_end(nsp, off, destination=False)
     if off >= len(nsp):
         raise ValueError("truncated Session CI menu")
     menu = nsp[off]
+    if menu & ~0x03:
+        raise ValueError("invalid Session CI menu reserved bits")
     off += 1
     access = (b"", b"", b"")
     conndata = b""
     if menu & 0x01:
         fields = []
         for _ in range(3):
-            field, off = counted_field(nsp, off)
+            field, off = counted_field(nsp, off, 40)
             fields.append(field)
         access = tuple(fields)
     if menu & 0x02:
-        conndata, off = counted_field(nsp, off)
+        conndata, off = counted_field(nsp, off, 16)
+    if off != len(nsp):
+        raise ValueError("trailing Session CI payload")
     return access, conndata
 
 
