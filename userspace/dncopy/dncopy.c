@@ -93,13 +93,19 @@ static int set_access_field(unsigned char *dst, size_t cap, __u8 *len,
 static int parse_node(const char *s, uint16_t *addr)
 {
     char *end;
-    unsigned long area = strtoul(s, &end, 10);
+    unsigned long area;
     unsigned long node;
 
-    if (!s[0] || *end != '.' || area < 1 || area > 63)
+    if (!s || s[0] < '0' || s[0] > '9')
         return -1;
+    errno = 0;
+    area = strtoul(s, &end, 10);
+    if (errno || *end != '.' || area < 1 || area > 63 ||
+        end[1] < '0' || end[1] > '9')
+        return -1;
+    errno = 0;
     node = strtoul(end + 1, &end, 10);
-    if (*end || node == 0 || node > 1023)
+    if (errno || *end || node == 0 || node > 1023)
         return -1;
     *addr = (uint16_t)((area << 10) | node);
     return 0;
@@ -1736,7 +1742,13 @@ static int selftest(void)
     if (parse_node("31.70", &addr) || addr != (uint16_t)((31U << 10) | 70U))
         return 1;
     if (!parse_node("0.1", &addr) || !parse_node("64.1", &addr) ||
-        !parse_node("31.0", &addr))
+        !parse_node("31.0", &addr) ||
+        !parse_node("-18446744073709551615.1", &addr) ||
+        !parse_node("1.-18446744073709551615", &addr) ||
+        !parse_node("+31.70", &addr) || !parse_node("31.+70", &addr) ||
+        !parse_node(" 31.70", &addr) || !parse_node("31. 70", &addr) ||
+        !parse_node("18446744073709551617.1", &addr) ||
+        !parse_node("31.18446744073709551617", &addr))
         return 1;
     if (make_config(config, sizeof(config)) != 12U ||
         config[0] != DAP_CONFIG || config[2] != 0 || config[3] != 8 ||
