@@ -40,6 +40,12 @@ int socket(int domain, int type, int protocol) {
         "dnreset.c": lambda peer: [peer, "SESSION", "SCENARIO"],
         "dnseqwrap.c": lambda peer: [peer],
         "dnsignal.c": lambda peer: [peer],
+        "dnsocklife.c": lambda peer: [peer],
+        "dnsockstress.c": lambda peer: [peer],
+        "dnstream.c": lambda peer: [peer],
+        "dntermrace.c": lambda peer: [peer, "SESSION", "SCENARIO"],
+        "dntimeout.c": lambda peer: [peer, "SESSION", "SCENARIO"],
+        "dnwindow.c": lambda peer: [peer, "SESSION", "SCENARIO"],
     }
     malformed = ["-18446744073709551615.1", "1.-18446744073709551615",
                  "+1.1", "1.+1", " 1.1", "1. 1", "64.1", "31.1024",
@@ -51,6 +57,13 @@ int socket(int domain, int type, int protocol) {
         for value, code in [("31.70", 1), ("01.00070", 1)] + [(x, 2) for x in malformed]:
             run = subprocess.run([str(exe), *args(value)], capture_output=True, text=True, env=env, timeout=3)
             assert run.returncode == code, (name, value, code, run.returncode, run.stderr)
+
+    # The optional cycle count is also a decimal unsigned token, not a C sign alias.
+    life = directory / "dnsocklife"
+    for value in ["-18446744073709551615", "+1", " 1", "10001",
+                  "18446744073709551617"]:
+        run = subprocess.run([str(life), "31.70", value], capture_output=True, text=True, env=env, timeout=3)
+        assert run.returncode == 2, ("dnsocklife cycles", value, run.returncode, run.stderr)
 
     smtp = directory / "dnsmtpfake"
     subprocess.run(["cc", *CFLAGS, str(ROOT / "tests/lab/dnsmtpfake.c"), "-o", str(smtp)], check=True)
