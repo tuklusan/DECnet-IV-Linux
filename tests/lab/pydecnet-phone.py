@@ -17,6 +17,11 @@ from __future__ import annotations
 import sys
 from decnet.connectors import SimpleApiConnector
 
+def valid_directory_reply(reply: bytes) -> bool:
+    expected = f"{'TEST':<15} {'TEST':<15} {'LOCAL':<15} Available".encode("ascii")
+    return reply == expected
+
+
 def main() -> int:
     if len(sys.argv) != 4:
         raise SystemExit(f"usage: {sys.argv[0]} API-SOCKET AREA.NODE SYSTEM")
@@ -52,7 +57,7 @@ def main() -> int:
             raise RuntimeError("PHONE directory connect rejected")
         directory.data(b"\x0f")
         reply = directory.recv()
-        if reply.type != "data" or b"TEST" not in bytes(reply):
+        if reply.type != "data" or not valid_directory_reply(bytes(reply)):
             raise RuntimeError(f"bad PHONE DIRECTORY reply: {bytes(reply)!r}")
         directory.disconnect()
     finally:
