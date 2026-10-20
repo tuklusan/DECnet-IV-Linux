@@ -53,6 +53,10 @@ static int parse_numeric(const char *text, struct dn_naddr *out)
         errno = EINVAL;
         return -1;
     }
+    if (*text < '0' || *text > '9') {
+        errno = EINVAL;
+        return -1;
+    }
     errno = 0;
     area = strtoul(text, &end, 10);
     if (errno || end == text || *end != '.' || area < 1U || area > 63U) {
@@ -60,6 +64,10 @@ static int parse_numeric(const char *text, struct dn_naddr *out)
         return -1;
     }
     text = end + 1;
+    if (*text < '0' || *text > '9') {
+        errno = EINVAL;
+        return -1;
+    }
     errno = 0;
     node = strtoul(text, &end, 10);
     if (errno || end == text || *end || node < 1U || node > 1023U) {
