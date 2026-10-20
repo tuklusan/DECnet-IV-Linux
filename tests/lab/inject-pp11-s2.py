@@ -28,8 +28,12 @@ MARKER = b"DNIV-S2-FAULT-"
 
 def mac(text: str) -> bytes:
     parts = text.split(":")
-    if len(parts) != 6:
-        raise ValueError("bad MAC")
+    hexdigits = "0123456789abcdefABCDEF"
+    if len(parts) != 6 or any(
+        len(part) != 2 or any(char not in hexdigits for char in part)
+        for part in parts
+    ):
+        raise ValueError(text)
     return bytes(int(part, 16) for part in parts)
 
 

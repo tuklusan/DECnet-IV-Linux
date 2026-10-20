@@ -29,6 +29,9 @@ TAG = b"DNIV-ACKRANGE-PROBE"
 
 def nodeaddr(text: str) -> int:
     area_s, node_s = text.split(".", 1)
+    if not (area_s.isascii() and area_s.isdecimal() and
+            node_s.isascii() and node_s.isdecimal()):
+        raise ValueError(text)
     area = int(area_s)
     node = int(node_s)
     if not (1 <= area <= 63 and 1 <= node <= 1023):
@@ -37,10 +40,14 @@ def nodeaddr(text: str) -> int:
 
 
 def mac(text: str) -> bytes:
-    value = bytes.fromhex(text.replace(":", ""))
-    if len(value) != 6:
+    parts = text.split(":")
+    hexdigits = "0123456789abcdefABCDEF"
+    if len(parts) != 6 or any(
+        len(part) != 2 or any(char not in hexdigits for char in part)
+        for part in parts
+    ):
         raise ValueError(text)
-    return value
+    return bytes(int(part, 16) for part in parts)
 
 
 def nsp_payload(frame: bytes) -> bytes | None:

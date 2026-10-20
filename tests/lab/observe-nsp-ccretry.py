@@ -27,10 +27,14 @@ CC = 0x28
 
 
 def mac(text: str) -> bytes:
-    value = bytes.fromhex(text.replace(":", ""))
-    if len(value) != 6:
+    parts = text.split(":")
+    hexdigits = "0123456789abcdefABCDEF"
+    if len(parts) != 6 or any(
+        len(part) != 2 or any(char not in hexdigits for char in part)
+        for part in parts
+    ):
         raise ValueError(text)
-    return value
+    return bytes(int(part, 16) for part in parts)
 
 
 def nsp_payload(frame: bytes) -> bytes | None:
