@@ -48,10 +48,15 @@ static int parse_target(const char *text, uint16_t *addr, const char **user)
         return -1;
     memcpy(node, text, len);
     node[len] = '\0';
+    if (node[0] < '0' || node[0] > '9')
+        return -1;
     errno = 0;
     area = strtoul(node, &end, 10);
     if (errno || end == node || *end != '.' || area < 1U || area > 63U)
         return -1;
+    if (end[1] < '0' || end[1] > '9')
+        return -1;
+    errno = 0;
     n = strtoul(end + 1, &end, 10);
     if (errno || *end || n == 0U || n > 1023U)
         return -1;

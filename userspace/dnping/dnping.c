@@ -48,6 +48,8 @@ static int parse_positive(const char *text, long max, long *out)
     char *end;
     long value;
 
+    if (!text || *text < '0' || *text > '9')
+        return -1;
     errno = 0;
     value = strtol(text, &end, 10);
     if (errno || end == text || *end || value <= 0 || value > max)
