@@ -156,6 +156,8 @@ int main(int argc, char **argv)
     if (strcmp(argv[1], "client") != 0 || argc != 4)
         return 2;
 
+    if (argv[3][0] < '0' || argv[3][0] > '9')
+        return 2;
     errno = 0;
     token = strtoul(argv[3], &end, 10);
     if (errno || !end || end == argv[3] || *end || token > 255)
