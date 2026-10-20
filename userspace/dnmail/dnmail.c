@@ -60,16 +60,31 @@ static int parse_target(const char *text, uint16_t *addr, const char **user)
         return -1;
     memcpy(node, text, len);
     node[len] = '\0';
+    if (node[0] < '0' || node[0] > '9')
+        return -1;
     errno = 0;
     area = strtoul(node, &end, 10);
     if (errno || end == node || *end != '.' || area < 1U || area > 63U)
         return -1;
+    if (end[1] < '0' || end[1] > '9')
+        return -1;
+    errno = 0;
     n = strtoul(end + 1, &end, 10);
     if (errno || *end || n == 0U || n > 1023U)
         return -1;
     *addr = (uint16_t)((area << 10) | n);
     *user = sep + 2;
     return strlen(*user) < 256U ? 0 : -1;
+}
+
+static int valid_v3_accept(const unsigned char *data, size_t len)
+{
+    static const unsigned char expected[MAIL11_V3_LEN] = {
+        3U, 1U, 0U, 18U, 0U, 0U, 0U, 0U,
+        0xa0U, 0x02U, 0U, 0U, 1U, 0U, 0U, 0U
+    };
+
+    return len == sizeof(expected) && !memcmp(data, expected, sizeof(expected));
 }
 
 static int connect_mail(uint16_t addr, int v3)
@@ -111,8 +126,7 @@ static int connect_mail(uint16_t addr, int v3)
         memset(&opt, 0, sizeof(opt));
         if (getsockopt(fd, DNPROTO_NSP, DSO_CONDATA, &opt, &len) ||
             len != sizeof(opt) ||
-            le16_to_cpu_u(opt.opt_optl) != MAIL11_V3_LEN ||
-            opt.opt_data[0] != 3U)
+            !valid_v3_accept(opt.opt_data, le16_to_cpu_u(opt.opt_optl)))
             goto fail;
     }
     return fd;
@@ -194,8 +208,30 @@ static int selftest(void)
         parse_target("1.23::ALICE,BOB", &addr, &user) ||
         addr != 1047U || strcmp(user, "ALICE,BOB") ||
         !parse_target("1.0::ALICE", &addr, &user) ||
-        !parse_target("0.23::ALICE", &addr, &user))
+        !parse_target("0.23::ALICE", &addr, &user) ||
+        !parse_target("+1.23::ALICE", &addr, &user) ||
+        !parse_target("1.+23::ALICE", &addr, &user) ||
+        !parse_target("1.-23::ALICE", &addr, &user) ||
+        !parse_target(" 1.23::ALICE", &addr, &user))
         return 1;
+    {
+        static const unsigned char good[MAIL11_V3_LEN] = {
+            3U, 1U, 0U, 18U, 0U, 0U, 0U, 0U,
+            0xa0U, 0x02U, 0U, 0U, 1U, 0U, 0U, 0U
+        };
+        unsigned char bad[MAIL11_V3_LEN];
+        size_t i;
+
+        if (!valid_v3_accept(good, sizeof(good)) ||
+            valid_v3_accept(good, sizeof(good) - 1U))
+            return 1;
+        for (i = 0U; i < sizeof(good); i++) {
+            memcpy(bad, good, sizeof(bad));
+            bad[i] ^= 1U;
+            if (valid_v3_accept(bad, sizeof(bad)))
+                return 1;
+        }
+    }
     puts("dnmail selftest passed");
     return 0;
 }
