@@ -123,6 +123,13 @@ def common_body(msg: bytes, expected_type: int) -> bytes:
         )
     return msg[4:]
 
+def valid_characteristics_after_set(initial: bytes, changed: bytes) -> bool:
+    """Check the complete readback, not stray characteristic substrings."""
+    old = bytes((0x05, 0x02, 1))
+    new = bytes((0x05, 0x02, 0))
+    return initial.count(old) == 1 and changed == initial.replace(old, new, 1)
+
+
 async def handshake(conn) -> None:
     request = await conn.recv()
     if request.type != "connect":
@@ -809,6 +816,7 @@ async def serve(api_socket: str, system: str) -> int:
         )
         if rest != expected_tail:
             raise RuntimeError(f"bad remaining CHARACTERISTICS body: {rest!r}")
+        initial_characteristics = body
 
         interactive.data(cterm_set_characteristics(0, 1))
         interactive.data(cterm_read_characteristics())
@@ -816,10 +824,8 @@ async def serve(api_socket: str, system: str) -> int:
         if reply.type != "data":
             raise RuntimeError(f"expected CHARACTERISTICS after set, got {reply.type!r}")
         body = common_body(bytes(reply), CTERM_CHARACTERISTICS)
-        if bytes((0x05, 0x02, 0)) not in body:
-            raise RuntimeError(f"normal-echo characteristic did not update: {body!r}")
-        if bytes((0x08, 0x02, 1, 0)) not in body:
-            raise RuntimeError(f"input-count-state characteristic did not persist: {body!r}")
+        if not valid_characteristics_after_set(initial_characteristics, body):
+            raise RuntimeError(f"characteristic readback changed unexpectedly: {body!r}")
 
         interactive.data(cterm_start_read())
         reply = await interactive.recv()
