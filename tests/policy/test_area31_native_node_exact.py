@@ -37,6 +37,7 @@ for source_path, function, end_marker in (
     ("tests/lab/dnintloss.c", "parse_node", "\nint main("),
     ("tests/lab/dnkeepalive.c", "parse_node", "\nint main("),
     ("tests/lab/dnloss.c", "parse_node", "\nint main("),
+    ("tests/lab/dnmrr.c", "parse_node", "\nint main("),
 ):
     source = (root / source_path).read_text()
     start = source.index("static int " + function + "(")
@@ -148,3 +149,37 @@ with tempfile.TemporaryDirectory() as tmp:
         if result.returncode != 2:
             raise AssertionError(f"invalid hostile iterations {count!r} accepted")
 print("hostile iterations strict decimal source validation passed")
+
+# Compile the source's own PP-11 sequence-wrap PRESSURE ROUND validator.
+source = (root / "tests/lab/dnseqwrap.c").read_text()
+start = source.index("        errno = 0;\n        round = strtoul(argv[3], &end, 10);")
+end = source.index("\n        pressure = 1;", start)
+validation = source[start:end]
+probe = """
+#include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
+int main(int argc, char **argv) {
+    char *end;
+    unsigned long round;
+    if (argc != 4)
+        return 3;
+""" + validation + """
+    return 0;
+}
+"""
+with tempfile.TemporaryDirectory() as tmp:
+    cfile = Path(tmp) / "round.c"
+    binary = Path(tmp) / "round"
+    cfile.write_text(probe)
+    subprocess.run(["cc", "-std=c11", "-Wall", "-Wextra", "-Werror",
+                    str(cfile), "-o", str(binary)], check=True)
+    for valid in ("1", "2", "3", "0001"):
+        subprocess.run([str(binary), "31.70", "pressure", valid], check=True)
+    for invalid in ("-18446744073709551615", "+1", " 1",
+                    "0", "4", "1bad", "", "9999999999999999999999"):
+        got = subprocess.run([str(binary), "31.70", "pressure", invalid],
+                             capture_output=True, check=False)
+        if got.returncode != 2:
+            raise AssertionError(f"invalid seqwrap round {invalid!r} accepted")
+print("dnseqwrap strict decimal source validation passed")

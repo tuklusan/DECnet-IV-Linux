@@ -78,7 +78,8 @@ int main(int argc, char **argv)
 
         errno = 0;
         round = strtoul(argv[3], &end, 10);
-        if (errno || end == argv[3] || *end || round < 1UL || round > 3UL) {
+        if (*argv[3] < '0' || *argv[3] > '9' || errno ||
+            end == argv[3] || *end || round < 1UL || round > 3UL) {
             fprintf(stderr, "invalid pressure round: %s\n", argv[3]);
             return 2;
         }
