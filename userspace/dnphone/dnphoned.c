@@ -341,7 +341,8 @@ int main(int argc, char **argv)
 
             errno = 0;
             value = strtol(argv[++i], &end, 10);
-            if (errno || !*argv[i] || *end || value < 1 || value > 64)
+            if (argv[i][0] < '0' || argv[i][0] > '9' ||
+                errno || *end || value < 1 || value > 64)
                 return 2;
             sessions = (int)value;
         } else if (!strcmp(argv[i], "--user") && i + 1 < argc)

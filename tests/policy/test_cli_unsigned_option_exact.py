@@ -36,9 +36,11 @@ int __wrap_socket(int family, int type, int protocol)
 }
 """
 TARGETS = (
-    ("userspace/dnobject/dnobject.c", "--number", ("1", "0241", "255")),
-    ("userspace/dnnml/dnnml.c", "--sessions", ("1", "01", "32")),
-    ("userspace/dnmail/dnmaild.c", "--smtp-port", ("1", "025", "65535")),
+    ("userspace/dnobject/dnobject.c", "--number", ("1", "0241", "255"), ()),
+    ("userspace/dnnml/dnnml.c", "--sessions", ("1", "01", "32"), ()),
+    ("userspace/dnmail/dnmaild.c", "--smtp-port", ("1", "025", "65535"), ()),
+    ("userspace/dnphone/dnphoned.c", "--sessions", ("1", "01", "64"),
+     ("--user", "ALICE")),
 )
 BAD = ("+1", "-18446744073709551615", " 1", "1 ", "1x",
        "0", "65536", "18446744073709551617", "")
@@ -47,7 +49,7 @@ with tempfile.TemporaryDirectory() as temp:
     directory = Path(temp)
     stub = directory / "socket_stub.c"
     stub.write_text(SHIM, encoding="utf-8")
-    for index, (source, option, valid) in enumerate(TARGETS):
+    for index, (source, option, valid, extra) in enumerate(TARGETS):
         exe = directory / f"program{index}"
         subprocess.run(
             ["cc", "-std=c11", "-Wall", "-Wextra", "-Werror",
@@ -59,12 +61,12 @@ with tempfile.TemporaryDirectory() as temp:
         )
         for value in valid:
             result = subprocess.run(
-                [str(exe), option, value], capture_output=True, timeout=3
+                [str(exe), option, value, *extra], capture_output=True, timeout=3
             )
             assert result.returncode == 1, (source, value, result.returncode)
         for value in BAD:
             result = subprocess.run(
-                [str(exe), option, value], capture_output=True, timeout=3
+                [str(exe), option, value, *extra], capture_output=True, timeout=3
             )
             assert result.returncode == 2, (source, value, result.returncode)
 
