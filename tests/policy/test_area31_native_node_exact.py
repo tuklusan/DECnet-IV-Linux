@@ -35,6 +35,8 @@ for source_path, function, end_marker in (
     ("tests/lab/dnflow.c", "parse_node", "\nstatic int send_record("),
     ("tests/lab/dnintflow.c", "parse_node", "\nstatic int send_oob("),
     ("tests/lab/dnintloss.c", "parse_node", "\nint main("),
+    ("tests/lab/dnkeepalive.c", "parse_node", "\nint main("),
+    ("tests/lab/dnloss.c", "parse_node", "\nint main("),
 ):
     source = (root / source_path).read_text()
     start = source.index("static int " + function + "(")
