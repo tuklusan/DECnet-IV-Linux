@@ -113,7 +113,9 @@ int main(int argc, char **argv)
 
             errno = 0;
             parsed = strtoul(argv[++i], &end, 10);
-            if (errno || end == argv[i] || *end || !parsed || parsed > 255U) {
+            if (argv[i][0] < '0' || argv[i][0] > '9' ||
+                errno || end == argv[i] || *end ||
+                !parsed || parsed > 255U) {
                 fprintf(stderr, "dnobject: invalid object number\n");
                 return 2;
             }

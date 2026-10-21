@@ -1128,7 +1128,8 @@ int main(int argc, char **argv)
 
             errno = 0;
             value = strtoul(argv[++i], &end, 10);
-            if (errno || !*argv[i] || *end || value == 0U || value > 65535U) {
+            if (argv[i][0] < '0' || argv[i][0] > '9' ||
+                errno || *end || value == 0U || value > 65535U) {
                 fprintf(stderr, "dnmaild: invalid SMTP port\n");
                 return 2;
             }

@@ -819,7 +819,8 @@ int main(int argc, char **argv)
 
         errno = 0;
         parsed = strtoul(argv[2], &end, 10);
-        if (errno || end == argv[2] || *end != '\0' || parsed == 0U ||
+        if (argv[2][0] < '0' || argv[2][0] > '9' ||
+            errno || end == argv[2] || *end != '\0' || parsed == 0U ||
             parsed > DNIV_NML_MAX_BOUNDED_SESSIONS) {
             fprintf(stderr, "dnnml: invalid session count\n");
             return 2;
