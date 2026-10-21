@@ -322,6 +322,36 @@ int main(void)
                reply[37] == 0x47U && reply[38] == 0x7cU);
     }
 
+    /* Address 63.1023 (0xffff) must not be mistaken for the optional
+     * two-byte status detail header in a canonical NICE success reply.
+     */
+    {
+        __u8 extended[512];
+        __u8 canonical[512];
+        struct dniv_nice_node_reply parsed;
+        size_t extended_len;
+        size_t canonical_len;
+        size_t entity_off = 0U;
+
+        assert(dniv_nice_build_node_status_reply(
+                   extended, sizeof(extended), &extended_len,
+                   0xffffU, "LASTNODE", 4U) == 0);
+        canonical[0] = extended[0];
+        memcpy(canonical + 1U, extended + 4U, extended_len - 4U);
+        canonical_len = extended_len - 3U;
+        assert(dniv_nice_reply_entity_offset(canonical, canonical_len,
+                                              &entity_off) == 0);
+        assert(entity_off == 1U);
+        assert(dniv_nice_parse_node_reply(canonical, canonical_len,
+                                          &parsed) == 0);
+        assert(parsed.address == 0xffffU);
+        assert(strcmp(parsed.name, "LASTNODE") == 0);
+        assert(parsed.has_active_links && parsed.active_links == 4U);
+        assert(dniv_nice_parse_node_reply(extended, extended_len,
+                                          &parsed) == 0);
+        assert(parsed.address == 0xffffU);
+    }
+
     puts("Phase 6 NICE codec tests passed");
     return 0;
 }

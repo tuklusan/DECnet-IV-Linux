@@ -58,6 +58,17 @@ dniv_nice_reply_entity_offset(const __u8 *buf, size_t length, size_t *offset)
      * two-byte detail plus counted-message fields used by error replies.
      * Accept both forms without mistaking a valid node entity for a header.
      */
+    /* The valid node address 63.1023 is also 0xffff.  In a canonical
+     * success reply it is followed directly by a name-length byte whose
+     * top bit identifies a named node, not a counted error message.
+     * Prefer that unambiguous entity form over the optional detail header.
+     */
+    if (length >= 4U && buf[1] == 0xffU && buf[2] == 0xffU &&
+        (buf[3] & 0x80U) != 0U && (buf[3] & 0x7fU) != 0U &&
+        length - 4U >= (size_t)(buf[3] & 0x7fU)) {
+        *offset = off;
+        return 0;
+    }
     if (length >= 4U &&
         ((buf[1] == 0U && buf[2] == 0U) ||
          (buf[1] == 0xffU && buf[2] == 0xffU))) {
