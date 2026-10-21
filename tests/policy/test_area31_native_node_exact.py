@@ -26,6 +26,10 @@ for source_path, function, end_marker in (
     ("tests/lab/dnadjwait.c", "parse_address", "\nstatic int monotonic_ms("),
     ("tests/lab/dnbacklog.c", "parse_node", "\nstatic int make_listener("),
     ("tests/lab/dnccretry.c", "parse_node", "\nstatic int peer_is("),
+    ("tests/lab/dnconnectloss.c", "parse_node", "\nstatic void fill_peer("),
+    ("tests/lab/dndiexhaust.c", "parse_node", "\nstatic void fill_peer("),
+    ("tests/lab/dndiloss.c", "parse_node", "\nstatic void fill_peer("),
+    ("tests/lab/dndrain.c", "parse_node", "\nint main("),
 ):
     source = (root / source_path).read_text()
     start = source.index("static int " + function + "(")
