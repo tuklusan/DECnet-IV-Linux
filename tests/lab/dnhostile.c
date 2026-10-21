@@ -68,7 +68,8 @@ int main(int argc, char **argv)
         char *end = NULL;
         errno = 0;
         iterations = strtoul(argv[1], &end, 10);
-        if (errno || !end || *end || iterations < 256 || iterations > 100000) {
+        if (*argv[1] < '0' || *argv[1] > '9' || errno || !end ||
+            *end || iterations < 256 || iterations > 100000) {
             fprintf(stderr, "usage: %s [ITERATIONS(256..100000)]\n", argv[0]);
             return 2;
         }

@@ -33,6 +33,8 @@ for source_path, function, end_marker in (
     ("tests/lab/dnexhaust.c", "parse_node", "\nint main("),
     ("tests/lab/dnfair.c", "parse_node", "\nstatic void fill_peer("),
     ("tests/lab/dnflow.c", "parse_node", "\nstatic int send_record("),
+    ("tests/lab/dnintflow.c", "parse_node", "\nstatic int send_oob("),
+    ("tests/lab/dnintloss.c", "parse_node", "\nint main("),
 ):
     source = (root / source_path).read_text()
     start = source.index("static int " + function + "(")
@@ -110,3 +112,37 @@ with tempfile.TemporaryDirectory() as tmp:
         if outcome.returncode != 2:
             raise AssertionError(f"invalid timeout {invalid_timeout!r} accepted")
 print("dnadjwait source timeout validation passed")
+
+# Extract the actual negative-test ITERATIONS parser from dnhostile.
+source = (root / "tests/lab/dnhostile.c").read_text()
+start = source.index("        errno = 0;\n        iterations = strtoul(argv[1], &end, 10);")
+end = source.index("\n    } else if (argc != 1)", start)
+iteration_block = source[start:end]
+probe = """
+#include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
+int main(int argc, char **argv) {
+    unsigned long iterations = 4096U;
+    char *end = NULL;
+    if (argc != 2)
+        return 3;
+""" + iteration_block + """
+    return 0;
+}
+"""
+with tempfile.TemporaryDirectory() as tmp:
+    cfile = Path(tmp) / "iterations.c"
+    binary = Path(tmp) / "iterations"
+    cfile.write_text(probe)
+    subprocess.run(["cc", "-std=c11", "-Wall", "-Wextra", "-Werror",
+                    str(cfile), "-o", str(binary)], check=True)
+    for count in ("256", "100000", "0004096"):
+        subprocess.run([str(binary), count], check=True)
+    for count in ("-18446744073709551360", "+256", " 256", "255",
+                  "100001", "999999999999999999999", "256bad", ""):
+        result = subprocess.run([str(binary), count], capture_output=True,
+                                check=False)
+        if result.returncode != 2:
+            raise AssertionError(f"invalid hostile iterations {count!r} accepted")
+print("hostile iterations strict decimal source validation passed")
