@@ -43,6 +43,8 @@ static int parse_address(const char *text, __u16 *address)
     if (!dot || strchr(dot + 1, '.'))
         return -1;
     *dot++ = '\0';
+    if (*copy < '0' || *copy > '9' || *dot < '0' || *dot > '9')
+        return -1;
 
     errno = 0;
     area = strtoul(copy, &end, 10);
@@ -119,7 +121,7 @@ int main(int argc, char **argv)
 
     errno = 0;
     timeout_ms = strtoul(argv[3], &end, 10);
-    if (errno || *argv[3] == '\0' || *end != '\0' ||
+    if (*argv[3] < '0' || *argv[3] > '9' || errno || *argv[3] == '\0' || *end != '\0' ||
         timeout_ms < 1 || timeout_ms > 600000) {
         fprintf(stderr, "dnadjwait: invalid timeout\n");
         return 2;
