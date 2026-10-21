@@ -93,8 +93,7 @@ probe = """
 int main(int argc, char **argv) {
     unsigned long timeout_ms;
     char *end;
-    if (argc != 4)
-        return 3;
+    if (argc != 4) { return 3; }
 """ + timeout_block + """
     return 0;
 }
@@ -128,8 +127,7 @@ probe = """
 int main(int argc, char **argv) {
     unsigned long iterations = 4096U;
     char *end = NULL;
-    if (argc != 2)
-        return 3;
+    if (argc != 2) { return 3; }
 """ + iteration_block + """
     return 0;
 }
@@ -162,8 +160,7 @@ probe = """
 int main(int argc, char **argv) {
     char *end;
     unsigned long round;
-    if (argc != 4)
-        return 3;
+    if (argc != 4) { return 3; }
 """ + validation + """
     return 0;
 }
