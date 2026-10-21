@@ -24,7 +24,7 @@ bytes. PP-11 S3-S6 and first-release PP-13 remain owner-authorized skips. An alt
 release does not inherit an earlier 3/3 audit or exact-SHA acceptance.
 
 The current release blocker is three independent COMPLETE zero-defect semantic reviews
-of one unchanged source archive, followed by final exact-SHA qualification. During
+of PRODUCT IMPLEMENTATION SOURCE in one unchanged source archive, followed by final exact-SHA qualification. During
 defect-bearing discovery, prove each defect, repair minimally on main with source-derived
 local/targeted regression, recheck dependencies, and CONTINUE the SAME discovery pass at
 the next unreviewed file. Preserve SHA-bound coverage and mark changed-byte observations
@@ -32,10 +32,12 @@ provisional. Only at the END of the ENTIRE discovery pass, close it with NO clea
 (0/3) if any defect was found, and freeze the repaired main SHA for new whole reviews.
 There is NO four-gate qualification after individual repairs OR after a discovery pass.
 
+**Owner source-only audit scope (2026-10-21; overrides older all-file wording):** The exhaustive per-line, per-file discovery and three independent semantic clean reviews inspect ONLY the 42 product implementation sources: `kernel/decnet/*.[ch]`, `include/**/*.h` (including direct children), and `userspace/**/*.[ch]`, plus `userspace/dnmultinet/dnmultinet.py`. Exclude `userspace/**/selftest.c`, `userspace/**/selftest.py`, workflows, YAML/JSON, checksums (MD5/SHA), configuration and manifest data, Markdown, READMEs, policy/unit/lab tests and harnesses, `image/`, `references/`, `scratch/`, `.githooks/`, `tools/`, all Makefiles and root build/install/uninstall scripts. No path outside this strict implementation-source roster gets a semantic scan ordinal or clean-pass credit. These other files remain in the unmodified production archive and MUST pass independent full-archive path/mode/member hash/size/metadata/SHA-256/byte-identity validation, source provenance, policy, CI, security, full build, staged installation/uninstallation, PP and full acceptance gates. The separation removes manual infrastructure review, NOT testing or validation. Each of three independent 42-file semantic scans must still be complete and zero-defect on the same frozen SHA. Four mandatory gates remain AFTER all three scans. Previous provisional #001-#020 of 372 were infrastructure inspections and do NOT count as product-code clean reviews; the earlier completed defect-bearing discovery stays historical with 0/3 credit. Scope changes themselves alter packaged bytes, so a fresh provisional archive and clean source-code scan from selected #001 are needed on the new main SHA.
+
 For each of three independent clean attempts, independently create a fresh provisional
 tarball using the production deterministic packager at that SAME frozen SHA, verify its
 SHA-256, metadata, safe roster and exact byte identity with the other two tarballs;
-review EVERY packaged file and interaction from file #1 to the end. No skipped,
+review EVERY implementation-source file and interaction from selected file #1 to the end. No skipped,
 incomplete, mixed-SHA or defect-bearing pass is clean. If any defect is discovered,
 complete its defect-bearing review, repair on main and restart clean attempts only
 after that pass ends. The 3/3 reviews are provisional, not accepted certification,
