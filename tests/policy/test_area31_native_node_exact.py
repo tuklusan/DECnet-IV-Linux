@@ -30,6 +30,9 @@ for source_path, function, end_marker in (
     ("tests/lab/dndiexhaust.c", "parse_node", "\nstatic void fill_peer("),
     ("tests/lab/dndiloss.c", "parse_node", "\nstatic void fill_peer("),
     ("tests/lab/dndrain.c", "parse_node", "\nint main("),
+    ("tests/lab/dnexhaust.c", "parse_node", "\nint main("),
+    ("tests/lab/dnfair.c", "parse_node", "\nstatic void fill_peer("),
+    ("tests/lab/dnflow.c", "parse_node", "\nstatic int send_record("),
 ):
     source = (root / source_path).read_text()
     start = source.index("static int " + function + "(")
