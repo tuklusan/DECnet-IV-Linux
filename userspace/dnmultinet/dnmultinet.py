@@ -33,7 +33,7 @@ NAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9]{0,5}$")
 
 
 def node_address(value):
-    match = NODE_RE.match(value)
+    match = NODE_RE.fullmatch(value)
     if not match:
         raise argparse.ArgumentTypeError("node must be AREA.NODE")
     area, node = (int(x) for x in match.groups())
@@ -43,7 +43,7 @@ def node_address(value):
 
 
 def node_name(value):
-    if not NAME_RE.match(value):
+    if not NAME_RE.fullmatch(value):
         raise argparse.ArgumentTypeError("name must be 1..6 alphanumeric characters, starting with a letter")
     return value.upper()
 
