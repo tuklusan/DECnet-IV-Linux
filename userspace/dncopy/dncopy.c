@@ -1418,14 +1418,18 @@ static int selftest_buffer_limit(void)
     if (socketpair(AF_UNIX, SOCK_SEQPACKET, 0, pair))
         return -1;
     dap_send_limit = 128U;
-    if (send_record(pair[0], data, 128U) ||
+    if (send(pair[0], data, 128U, MSG_EOR | MSG_NOSIGNAL) != 128 ||
         (got = recv_record(pair[1], data, 128U, 0)) != 128U)
         goto finish;
     errno = 0;
     if (send_record(pair[0], data, 129U) != -1 || errno != EMSGSIZE)
         goto finish;
+    /* AF_UNIX SOCK_SEQPACKET treats every send as a complete record even
+     * without MSG_EOR; only native DECnet sockets support spanning sends.
+     * Test receive truncation using one actual 129-byte Unix record.
+     */
     errno = 0;
-    if (dniv_send_record(pair[0], data, 129U, 0) ||
+    if (send(pair[0], data, 129U, MSG_EOR | MSG_NOSIGNAL) != 129 ||
         recv_record(pair[1], data, 129U, 0) != -1 ||
         errno != EMSGSIZE)
         goto finish;
