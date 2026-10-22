@@ -14,6 +14,14 @@
 
 # Project State
 
+## LIVE CHECKPOINT — 2026-10-22, second source scan converted to discovery
+
+**Current parent commit:** `e8d21f37b7660b823bee0981c1c9318ec2e82e8f`; an atomic subsequent main commit records the fix below. **Formal clean certification remains 0/3.** The original first 42/42 clean scan is now HISTORICAL for the repaired source. The second independent fresh provisional tar from run 39815831452 attempt 2/artifact 12456346207, tar SHA256 `561ccc823c89028c5c2e7229094f6f4445dfeb1ba75ecaca2090ed96bc9bd660`, was byte-identical to attempt 1 and yielded complete independent second-source reviews #001–007/42. At #008 `kernel/decnet/decnet_iv_ethernet.c` (1,587/1,587 original physical lines; 50,874 bytes, mode 100644, SHA256 `0733e2e31dc5086cce82916f3afd7a1cf9904d7458142d0b7ba76ec1902313f5`) discovered a REAL out-of-order Router Hello defect: in endnode mode, any lower-priority Router Hello could replace a live higher-priority designated router, with equally invalid lower-address tie takeover. Actual source-derived C regression `tests/policy/test_endnode_dr_priority.py` compiled successfully against original bytes but ran RED (exit 1, "priority downgrade"). Small kernel source fix compares usable router priority/address under the adjacency lock before withdrawing peers. With repaired source, the same compiled regression turns GREEN (exit 0), as does adjacency expiry regression; nine existing userspace/unit executables PASS. No CI/four-gate proof claimed.
+
+**NEXT audit ordinal #009 `kernel/decnet/decnet_iv_ethernet.h`, physical line 1** on second scan now DEFECT-BEARING DISCOVERY; continue #009–042 without restarting #001, rechecking changed earlier dependencies. At end of entire discovery, freeze resulting main, create three fresh original same-SHA tars and perform three independent clean 42/42 semantic scans. Only then execute all four mandatory exact-SHA gates and independent gate artifact byte-equality proof; then PP, PROFILE=full/SCOPE=all, publication. All previously reviewed tars and first clean attempt are historical after this commit. **NO gates on a repair.** Provenance in GitHub #1131.
+
+
+
 This is the authoritative continuity record for DECnet-IV-Linux. Read `docs/HANDOVER.md`, this file, `scratch/RESUME.md`, `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, `docs/TEST_LAB.md`, `docs/HECNET_LAB.md` and `docs/PRE_PRODUCTION_TEST.md` before changing protocol, image or acceptance behavior.
 
 ## Goal

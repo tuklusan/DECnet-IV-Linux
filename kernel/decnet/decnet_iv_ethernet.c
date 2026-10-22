@@ -833,11 +833,28 @@ static void dniv_age_workfn(struct work_struct *work)
     schedule_delayed_work(&dniv_age_work, HZ);
 }
 
-static void dniv_remove_other_endnode_router_locked(int ifindex,
-                                                     __u16 keep_address)
+/* An endnode keeps one router per circuit: the highest-priority live
+ * candidate, breaking ties by the numerically higher DECnet address.
+ * An out-of-order lower-priority Router Hello must not steal that role.
+ */
+static bool dniv_remove_other_endnode_router_locked(int ifindex,
+                                                     __u16 keep_address,
+                                                     __u8 keep_priority)
 {
     unsigned int i;
 
+    for (i = 0; i < DNIV_MAX_ADJACENCIES; i++) {
+        const struct dniv_adj_entry *adj = &dniv_adjacencies[i];
+
+        if (!dniv_adj_usable(adj) || adj->ifindex != ifindex ||
+            adj->address == keep_address ||
+            adj->node_type == DNIV_NODE_TYPE_ENDNODE)
+            continue;
+        if (adj->priority > keep_priority ||
+            (adj->priority == keep_priority &&
+             adj->address > keep_address))
+            return false;
+    }
     for (i = 0; i < DNIV_MAX_ADJACENCIES; i++) {
         struct dniv_adj_entry *adj = &dniv_adjacencies[i];
 
@@ -846,6 +863,7 @@ static void dniv_remove_other_endnode_router_locked(int ifindex,
             adj->node_type != DNIV_NODE_TYPE_ENDNODE)
             dniv_drop_adj_locked(adj);
     }
+    return true;
 }
 
 static void dniv_handle_valid_hello(int ifindex, const __u8 source[ETH_ALEN],
@@ -894,8 +912,10 @@ static void dniv_handle_valid_hello(int ifindex, const __u8 source[ETH_ALEN],
         }
     }
 
-    if (dniv_local_node_type == DNIV_NODE_TYPE_ENDNODE)
-        dniv_remove_other_endnode_router_locked(ifindex, hello->address);
+    if (dniv_local_node_type == DNIV_NODE_TYPE_ENDNODE &&
+        !dniv_remove_other_endnode_router_locked(
+            ifindex, hello->address, hello->priority))
+        goto out_unlock;
 
     adj = dniv_find_adj_locked(ifindex, hello->address);
     if (adj && (adj->node_type != hello->node_type ||
