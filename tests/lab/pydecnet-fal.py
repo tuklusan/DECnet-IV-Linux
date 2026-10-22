@@ -21,6 +21,37 @@ from decnet.connectors import SimpleApiConnector
 
 CONFIG = bytes((1, 0, 0, 4, 128, 128, 4, 1, 0, 0, 0, 0))
 
+# DAP peers independently advertise their OWN complete-message capacities.
+# The client offers 1024; the native FAL server offers its own 2048.
+SERVER_BUFFER_LIMIT = 2048
+CLIENT_BUFFER_LIMIT = int.from_bytes(CONFIG[2:4], "little")
+
+
+class BoundedConnection:
+    """Reject peer DAP frames exceeding the buffer advertised by this client."""
+
+    def __init__(self, connection):
+        self.connection = connection
+
+    def recv(self):
+        reply = self.connection.recv()
+        if reply.type == "data" and len(bytes(reply)) > CLIENT_BUFFER_LIMIT:
+            raise RuntimeError("FAL peer exceeded advertised receive bound")
+        return reply
+
+    def __getattr__(self, name):
+        return getattr(self.connection, name)
+
+
+def verify_config_reply(reply):
+    raw = bytes(reply)
+    if (reply.type != "data" or len(raw) != len(CONFIG) or
+            raw[:2] != CONFIG[:2] or raw[4:] != CONFIG[4:] or
+            int.from_bytes(raw[2:4], "little") != SERVER_BUFFER_LIMIT):
+        raise RuntimeError(
+            f"bad FAL CONFIG reply type={reply.type!r} data={raw!r}"
+        )
+
 def main() -> int:
     if len(sys.argv) != 4:
         raise SystemExit(f"usage: {sys.argv[0]} API-SOCKET AREA.NODE SYSTEM")
@@ -55,12 +86,9 @@ def main() -> int:
             raise RuntimeError(
                 f"FAL connect rejected: {getattr(response, 'reason', 'unknown')}"
             )
+        connection = BoundedConnection(connection)
         connection.data(CONFIG)
-        reply = connection.recv()
-        if reply.type != "data" or bytes(reply) != CONFIG:
-            raise RuntimeError(
-                f"bad FAL CONFIG reply type={reply.type!r} data={bytes(reply)!r}"
-            )
+        verify_config_reply(connection.recv())
 
         name = b"SERVER.TXT"
         connection.data(bytes((3, 0, 1, 0, len(name))) + name)
@@ -108,10 +136,9 @@ def main() -> int:
             raise RuntimeError(
                 f"FAL create rejected: {getattr(response, 'reason', 'unknown')}"
             )
+        connection = BoundedConnection(connection)
         connection.data(CONFIG)
-        reply = connection.recv()
-        if reply.type != "data" or bytes(reply) != CONFIG:
-            raise RuntimeError(f"bad FAL create CONFIG: {bytes(reply)!r}")
+        verify_config_reply(connection.recv())
 
         name = b"UPLOAD.BIN"
         connection.data(bytes((2, 0, 0x0f, 1, 0, 3, 4)))
@@ -141,10 +168,9 @@ def main() -> int:
         )
         if connection is None or response.type != "accept":
             raise RuntimeError("FAL metadata get connect rejected")
+        connection = BoundedConnection(connection)
         connection.data(CONFIG)
-        reply = connection.recv()
-        if reply.type != "data" or bytes(reply) != CONFIG:
-            raise RuntimeError(f"bad FAL metadata CONFIG: {bytes(reply)!r}")
+        verify_config_reply(connection.recv())
         name = b"UPLOAD.BIN"
         connection.data(bytes((3, 0, 1, 0, len(name))) + name)
         reply = connection.recv()
@@ -186,10 +212,9 @@ def main() -> int:
         )
         if connection is None or response.type != "accept":
             raise RuntimeError("FAL rename connect rejected")
+        connection = BoundedConnection(connection)
         connection.data(CONFIG)
-        reply = connection.recv()
-        if reply.type != "data" or bytes(reply) != CONFIG:
-            raise RuntimeError(f"bad FAL rename CONFIG: {bytes(reply)!r}")
+        verify_config_reply(connection.recv())
         oldname = b"UPLOAD.BIN"
         newname = b"RENAMED.BIN"
         connection.data(bytes((3, 0, 3, 0, len(oldname))) + oldname)
@@ -205,10 +230,9 @@ def main() -> int:
         )
         if connection is None or response.type != "accept":
             raise RuntimeError("FAL directory connect rejected")
+        connection = BoundedConnection(connection)
         connection.data(CONFIG)
-        reply = connection.recv()
-        if reply.type != "data" or bytes(reply) != CONFIG:
-            raise RuntimeError(f"bad FAL directory CONFIG: {bytes(reply)!r}")
+        verify_config_reply(connection.recv())
         pattern = b"*"
         connection.data(bytes((3, 0, 6, 0, len(pattern))) + pattern)
         names = set()
@@ -235,10 +259,9 @@ def main() -> int:
         )
         if connection is None or response.type != "accept":
             raise RuntimeError("FAL erase connect rejected")
+        connection = BoundedConnection(connection)
         connection.data(CONFIG)
-        reply = connection.recv()
-        if reply.type != "data" or bytes(reply) != CONFIG:
-            raise RuntimeError(f"bad FAL erase CONFIG: {bytes(reply)!r}")
+        verify_config_reply(connection.recv())
         name = b"RENAMED.BIN"
         connection.data(bytes((3, 0, 4, 0, len(name))) + name)
         reply = connection.recv()
