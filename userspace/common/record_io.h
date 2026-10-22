@@ -41,8 +41,16 @@ static inline int dniv_send_record(int fd, const void *buf, size_t len, int flag
     }
 
     while (off < len) {
-        ssize_t sent = send(fd, p + off, len - off,
-                            flags | MSG_EOR | MSG_NOSIGNAL);
+        /* A partial send must not end the DECnet record early. Reserve the
+         * final byte for the one send that actually carries MSG_EOR. */
+        size_t remaining = len - off;
+        size_t requested = remaining == 1U ? 1U : remaining - 1U;
+        int send_flags = (flags & ~MSG_EOR) | MSG_NOSIGNAL;
+        ssize_t sent;
+
+        if (remaining == 1U)
+            send_flags |= MSG_EOR;
+        sent = send(fd, p + off, requested, send_flags);
 
         if (sent < 0) {
             if (errno == EINTR)
