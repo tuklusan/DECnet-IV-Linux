@@ -1648,7 +1648,8 @@ int main(int argc, char **argv)
 
             errno = 0;
             value = strtol(argv[++i], &end, 10);
-            if (errno || end == argv[i] || *end || value < 1 || value > 32) {
+            if (argv[i][0] < '0' || argv[i][0] > '9' || errno ||
+                end == argv[i] || *end || value < 1 || value > 32) {
                 fprintf(stderr, "dnfald: invalid session count\n");
                 return 2;
             }
