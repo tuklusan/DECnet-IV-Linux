@@ -78,11 +78,11 @@ def check():
         Reply(request),                              # client echo is NOT server CONFIG
         Reply(observed, "reject"),                 # wrong event
         Reply(observed[:-1]),                       # truncation
-        Reply(observed + b"\\x00"),                # trailing bytes
-        Reply(b"\\x01\\x01" + observed[2:]),    # reserved flags
-        Reply(observed[:4] + b"\\x00" + observed[5:]), # wrong capability
-        Reply(observed[:2] + b"\\x00\\x00" + observed[4:]),
-        Reply(observed[:2] + b"\\x00\\x04" + observed[4:]),
+        Reply(observed + b"\x00"),                # trailing bytes
+        Reply(b"\x01\x01" + observed[2:]),    # reserved flags
+        Reply(observed[:4] + b"\x00" + observed[5:]), # wrong capability
+        Reply(observed[:2] + b"\x00\x00" + observed[4:]),
+        Reply(observed[:2] + b"\x00\x04" + observed[4:]),
     )
     for reply in malformed:
         try:
