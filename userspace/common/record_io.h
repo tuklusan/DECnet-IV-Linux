@@ -40,6 +40,35 @@ static inline int dniv_send_record(int fd, const void *buf, size_t len, int flag
         return 0;
     }
 
+    /* AF_UNIX SOCK_SEQPACKET ends a record on every send(2), even when
+     * MSG_EOR is absent. The native DECnet split-send scheme below would
+     * make two records from one local test frame. Send one atomic record. */
+    {
+        struct sockaddr_storage local = { 0 };
+        socklen_t local_len = sizeof(local);
+        int type = 0;
+        socklen_t optlen = sizeof(type);
+
+        if (!getsockname(fd, (struct sockaddr *)&local, &local_len) &&
+            local_len >= sizeof(local.ss_family) &&
+            local.ss_family == AF_UNIX) {
+            if (!getsockopt(fd, SOL_SOCKET, SO_TYPE, &type, &optlen) &&
+                optlen == sizeof(type) && type == SOCK_SEQPACKET) {
+                ssize_t sent;
+
+                do {
+                    sent = send(fd, buf, len,
+                                flags | MSG_EOR | MSG_NOSIGNAL);
+                } while (sent < 0 && errno == EINTR);
+                if (sent == (ssize_t)len)
+                    return 0;
+                if (sent >= 0)
+                    errno = EIO;
+                return -1;
+            }
+        }
+    }
+
     while (off < len) {
         /* A partial send must not end the DECnet record early. Reserve the
          * final byte for the one send that actually carries MSG_EOR. */
