@@ -11,6 +11,7 @@
 # SANYALnet Labs." See LICENSE for full terms, warranty disclaimer, termination,
 # patent, trademark, and governing-law provisions.
 # ============================================================================
+
 """The actual PyDECnet MULTINET bridge must reject trailing newline tokens.
 
 Python '$' anchors before a single terminal newline, so regex.match alone is

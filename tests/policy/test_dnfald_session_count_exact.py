@@ -11,6 +11,7 @@
 # SANYALnet Labs." See LICENSE for full terms, warranty disclaimer, termination,
 # patent, trademark, and governing-law provisions.
 # ============================================================================
+
 """Actual-source FAL daemon positive decimal CLI must reject signed aliases.
 
 Build with a socket link-wrap to prevent any live DECnet activity. A valid
