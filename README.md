@@ -14,8 +14,6 @@
 
 # DECnet-IV-Linux
 
-[![Build](https://github.com/tuklusan/DECnet-IV-Linux/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/tuklusan/DECnet-IV-Linux/actions/workflows/build.yml)
-
 Native DECnet Phase IV for maintained Linux, built from portable source. Ethernet, routing, NSP, sockets, management, and classic DECnet applications—without needing a vintage kernel or a ready-made disk image. The protocol may be old; the kernel does not have to be.
 
 This repository contains the complete source tree for **x86_64 and aarch64**. Build it against the target machine's own Linux **6.8+** kernel headers.
