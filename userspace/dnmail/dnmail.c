@@ -1,0 +1,309 @@
+// ============================================================================
+// Copyright (c) 2026 Supratim Sanyal of SANYALnet Labs.
+// Proprietary rights reserved except as expressly licensed herein.
+//
+// DECnet-IV-Linux
+// This file is governed by the SANYALnet Labs Non-Commercial License in the
+// root LICENSE file. Non-Commercial use is permitted; Commercial Use and use
+// for AI/ML model training are prohibited unless separately authorized.
+//
+// Attribution is required: "Based on original work by Supratim Sanyal of
+// SANYALnet Labs." See LICENSE for full terms, warranty disclaimer, termination,
+// patent, trademark, and governing-law provisions.
+// ============================================================================
+
+#include <errno.h>
+#include <linux/dn.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <sys/time.h>
+#include <unistd.h>
+
+#include "../common/record_io.h"
+
+#define MAIL_OBJECT 27U
+#define MAIL11_V3_LEN 16U
+
+static __le16 cpu_to_le16_u(uint16_t value)
+{
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+    return (__le16)value;
+#else
+    return (__le16)__builtin_bswap16(value);
+#endif
+}
+
+static uint16_t le16_to_cpu_u(__le16 value)
+{
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+    return (uint16_t)value;
+#else
+    return __builtin_bswap16((uint16_t)value);
+#endif
+}
+
+static int parse_target(const char *text, uint16_t *addr, const char **user)
+{
+    char node[16];
+    const char *sep = strstr(text, "::");
+    char *end;
+    unsigned long area, n;
+    size_t len;
+
+    if (!sep || !sep[2])
+        return -1;
+    len = (size_t)(sep - text);
+    if (!len || len >= sizeof(node))
+        return -1;
+    memcpy(node, text, len);
+    node[len] = '\0';
+    if (node[0] < '0' || node[0] > '9')
+        return -1;
+    errno = 0;
+    area = strtoul(node, &end, 10);
+    if (errno || end == node || *end != '.' || area < 1U || area > 63U)
+        return -1;
+    if (end[1] < '0' || end[1] > '9')
+        return -1;
+    errno = 0;
+    n = strtoul(end + 1, &end, 10);
+    if (errno || *end || n == 0U || n > 1023U)
+        return -1;
+    *addr = (uint16_t)((area << 10) | n);
+    *user = sep + 2;
+    return strlen(*user) < 256U ? 0 : -1;
+}
+
+static int valid_v3_accept(const unsigned char *data, size_t len)
+{
+    static const unsigned char expected[MAIL11_V3_LEN] = {
+        3U, 1U, 0U, 18U, 0U, 0U, 0U, 0U,
+        0xa0U, 0x02U, 0U, 0U, 1U, 0U, 0U, 0U
+    };
+
+    return len == sizeof(expected) && !memcmp(data, expected, sizeof(expected));
+}
+
+static int connect_mail(uint16_t addr, int v3)
+{
+    struct sockaddr_dn peer;
+    struct timeval timeout = { .tv_sec = 30, .tv_usec = 0 };
+    int fd = socket(AF_DECnet, SOCK_SEQPACKET, DNPROTO_NSP);
+
+    if (fd < 0)
+        return -1;
+    if (v3) {
+        static const unsigned char request[MAIL11_V3_LEN] = {
+            3U, 0U, 0U, 18U, 0U, 0U, 0U, 0U,
+            0U, 0U, 0U, 0U, 2U, 2U, 0U, 0U
+        };
+        struct optdata_dn opt;
+
+        memset(&opt, 0, sizeof(opt));
+        opt.opt_optl = cpu_to_le16_u(MAIL11_V3_LEN);
+        memcpy(opt.opt_data, request, sizeof(request));
+        if (setsockopt(fd, DNPROTO_NSP, DSO_CONDATA, &opt, sizeof(opt)))
+            goto fail;
+    }
+    if (setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)) ||
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)))
+        goto fail;
+    memset(&peer, 0, sizeof(peer));
+    peer.sdn_family = AF_DECnet;
+    peer.sdn_objnum = MAIL_OBJECT;
+    peer.sdn_add.a_len = 2;
+    peer.sdn_add.a_addr[0] = (unsigned char)(addr & 0xffU);
+    peer.sdn_add.a_addr[1] = (unsigned char)(addr >> 8);
+    if (connect(fd, (struct sockaddr *)&peer, sizeof(peer)))
+        goto fail;
+    if (v3) {
+        struct optdata_dn opt;
+        socklen_t len = sizeof(opt);
+
+        memset(&opt, 0, sizeof(opt));
+        if (getsockopt(fd, DNPROTO_NSP, DSO_CONDATA, &opt, &len) ||
+            len != sizeof(opt) ||
+            !valid_v3_accept(opt.opt_data, le16_to_cpu_u(opt.opt_optl)))
+            goto fail;
+    }
+    return fd;
+fail:
+    close(fd);
+    return -1;
+}
+
+static int send_record(int fd, const void *data, size_t len)
+{
+    return dniv_send_record(fd, data, len, 0);
+}
+
+static int recv_ack(int fd)
+{
+    unsigned char ack[8];
+    ssize_t got = dniv_recv_record(fd, ack, sizeof(ack), 0);
+
+    return got == 4 && ack[0] == 1U && ack[1] == 0U &&
+        ack[2] == 0U && ack[3] == 0U ? 0 : -1;
+}
+
+static int send_recipients(int fd, const char *users)
+{
+    const unsigned char zero = 0U;
+    const char *part = users;
+
+    if (!*users || strlen(users) >= 256U)
+        return -1;
+    for (;;) {
+        const char *comma = strchr(part, ',');
+        size_t len = comma ? (size_t)(comma - part) : strlen(part);
+
+        if (!len || send_record(fd, part, len) || recv_ack(fd))
+            return -1;
+        if (!comma)
+            break;
+        part = comma + 1;
+        if (!*part)
+            return -1;
+    }
+    return send_record(fd, &zero, 1U);
+}
+
+/* An empty MAIL-11 body is represented by the EOM marker directly.
+ * A zero-byte SOCK_SEQPACKET write is not a body record for the peer. */
+static int send_body_record(int fd, const char *body)
+{
+    size_t len = strlen(body);
+
+    return len ? send_record(fd, body, len) : 0;
+}
+
+static int selftest_empty_body(void)
+{
+    int pair[2];
+    unsigned char marker[2];
+    int rc = -1;
+    const unsigned char eom = 0U;
+
+    if (socketpair(AF_UNIX, SOCK_SEQPACKET, 0, pair))
+        return -1;
+    if (!send_body_record(pair[0], "") &&
+        !send_record(pair[0], &eom, 1U) &&
+        dniv_recv_record(pair[1], marker, sizeof(marker), 0) == 1 &&
+        marker[0] == eom)
+        rc = 0;
+    close(pair[0]);
+    close(pair[1]);
+    return rc;
+}
+
+static int selftest(void)
+{
+    uint16_t addr;
+    const char *user;
+
+    if (selftest_empty_body() ||
+        parse_target("1.23::ALICE,BOB", &addr, &user) ||
+        addr != 1047U || strcmp(user, "ALICE,BOB") ||
+        !parse_target("1.0::ALICE", &addr, &user) ||
+        !parse_target("0.23::ALICE", &addr, &user) ||
+        !parse_target("+1.23::ALICE", &addr, &user) ||
+        !parse_target("1.+23::ALICE", &addr, &user) ||
+        !parse_target("1.-23::ALICE", &addr, &user) ||
+        !parse_target(" 1.23::ALICE", &addr, &user))
+        return 1;
+    {
+        static const unsigned char good[MAIL11_V3_LEN] = {
+            3U, 1U, 0U, 18U, 0U, 0U, 0U, 0U,
+            0xa0U, 0x02U, 0U, 0U, 1U, 0U, 0U, 0U
+        };
+        unsigned char bad[MAIL11_V3_LEN];
+        size_t i;
+
+        if (!valid_v3_accept(good, sizeof(good)) ||
+            valid_v3_accept(good, sizeof(good) - 1U))
+            return 1;
+        for (i = 0U; i < sizeof(good); i++) {
+            memcpy(bad, good, sizeof(bad));
+            bad[i] ^= 1U;
+            if (valid_v3_accept(bad, sizeof(bad)))
+                return 1;
+        }
+    }
+    puts("dnmail selftest passed");
+    return 0;
+}
+
+int main(int argc, char **argv)
+{
+    const char *from = "LINUX";
+    const char *subject = "No subject";
+    const char *target;
+    const char *user;
+    const char *message;
+    uint16_t addr;
+    int fd;
+    int arg = 1;
+    int v3 = 0;
+    const unsigned char zero = 0U;
+
+    if (argc == 2 && !strcmp(argv[1], "--selftest"))
+        return selftest();
+    while (arg + 1 < argc) {
+        if (!strcmp(argv[arg], "-3")) {
+            v3 = 1;
+            arg++;
+            continue;
+        }
+        if (!strcmp(argv[arg], "-f")) {
+            from = argv[arg + 1];
+            arg += 2;
+            continue;
+        }
+        if (!strcmp(argv[arg], "-s")) {
+            subject = argv[arg + 1];
+            arg += 2;
+            continue;
+        }
+        break;
+    }
+    if (arg + 2 != argc) {
+        fprintf(stderr,
+                "usage: %s [-3] [-f FROM] [-s SUBJECT] AREA.NODE::USER[,USER...] MESSAGE\n",
+                argv[0]);
+        return 2;
+    }
+    target = argv[arg];
+    message = argv[arg + 1];
+    /* The native NSP seqpacket sender does not emit zero-byte records.
+     * Reject an empty subject rather than shifting the message into the
+     * subject field and falsely acknowledging a corrupted MAIL-11 delivery.
+     */
+    if (!*from || !*subject || strlen(from) >= 256U ||
+        strlen(subject) >= 256U ||
+        strlen(message) > 4095U || parse_target(target, &addr, &user)) {
+        fprintf(stderr, "dnmail: invalid arguments\n");
+        return 2;
+    }
+
+    fd = connect_mail(addr, v3);
+    if (fd < 0) {
+        perror("dnmail: connect");
+        return 1;
+    }
+    if (send_record(fd, from, strlen(from)) ||
+        send_recipients(fd, user) ||
+        send_record(fd, target, strlen(target)) ||
+        send_record(fd, subject, strlen(subject)) ||
+        send_body_record(fd, message) ||
+        send_record(fd, &zero, 1U) ||
+        recv_ack(fd)) {
+        fprintf(stderr, "dnmail: MAIL-11 protocol failure\n");
+        close(fd);
+        return 1;
+    }
+    close(fd);
+    return 0;
+}

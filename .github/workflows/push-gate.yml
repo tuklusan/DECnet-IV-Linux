@@ -1,0 +1,20 @@
+name: Repository push gate
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan changed files
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_EVENT_NAME -eq 'push' -and $env:GITHUB_EVENT_BEFORE -match '^0+$') { exit 0 }
+          $base = if ($env:GITHUB_EVENT_NAME -eq 'pull_request') { $env:GITHUB_BASE_REF } else { 'HEAD^' }
+          if ($base -ne 'HEAD^') { git fetch origin $base --depth=1; $base = "origin/$base" }
+          ./scripts/push-gate.ps1 -Base $base

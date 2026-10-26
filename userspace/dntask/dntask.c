@@ -1,0 +1,582 @@
+// ============================================================================
+// Copyright (c) 2026 Supratim Sanyal of SANYALnet Labs.
+// Proprietary rights reserved except as expressly licensed herein.
+//
+// DECnet-IV-Linux
+// This file is governed by the SANYALnet Labs Non-Commercial License in the
+// root LICENSE file. Non-Commercial use is permitted; Commercial Use and use
+// for AI/ML model training are prohibited unless separately authorized.
+//
+// Attribution is required: "Based on original work by Supratim Sanyal of
+// SANYALnet Labs." See LICENSE for full terms, warranty disclaimer, termination,
+// patent, trademark, and governing-law provisions.
+// ============================================================================
+
+#include <errno.h>
+#include <linux/dn.h>
+#include <poll.h>
+#include <stdint.h>
+#include <signal.h>
+#include <sys/wait.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <sys/time.h>
+#include <unistd.h>
+
+#include "../common/record_io.h"
+
+struct task_spec {
+    uint16_t addr;
+    char object[DN_MAXOBJL + 1];
+    char user[DN_MAXACCL + 1];
+    char password[DN_MAXACCL + 1];
+    char account[DN_MAXACCL + 1];
+};
+
+static __le16 cpu_to_le16_u(uint16_t value)
+{
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+    return (__le16)value;
+#else
+    return (__le16)__builtin_bswap16(value);
+#endif
+}
+
+static int parse_node(const char *text, uint16_t *addr)
+{
+    char *end;
+    unsigned long area;
+    unsigned long node;
+
+    if (!text || *text < '0' || *text > '9')
+        return -1;
+    errno = 0;
+    area = strtoul(text, &end, 10);
+    if (errno || end == text || *end != '.' || area < 1U || area > 63U)
+        return -1;
+    if (end[1] < '0' || end[1] > '9')
+        return -1;
+    errno = 0;
+    node = strtoul(end + 1, &end, 10);
+    if (errno || *end || node == 0U || node > 1023U)
+        return -1;
+    *addr = (uint16_t)((area << 10) | node);
+    return 0;
+}
+
+static int copy_field(char *dst, size_t cap, const char *start, size_t len)
+{
+    if (len >= cap)
+        return -1;
+    memcpy(dst, start, len);
+    dst[len] = '\0';
+    return 0;
+}
+
+static int parse_spec(const char *text, struct task_spec *spec)
+{
+    const char *sep = strstr(text, "::");
+    const char *quote;
+    char node[16];
+
+    memset(spec, 0, sizeof(*spec));
+    if (!sep || strstr(sep + 2, "::"))
+        return -1;
+    quote = memchr(text, '"', (size_t)(sep - text));
+    if (quote) {
+        const char *close = memchr(quote + 1, '"', (size_t)(sep - quote - 1));
+        char auth[(DN_MAXACCL + 1) * 3];
+        char *save = NULL;
+        char *part;
+        unsigned int field = 0U;
+        size_t n;
+
+        if (!close || close != sep - 1 ||
+            copy_field(node, sizeof(node), text, (size_t)(quote - text)))
+            return -1;
+        n = (size_t)(close - quote - 1);
+        if (n >= sizeof(auth))
+            return -1;
+        memcpy(auth, quote + 1, n);
+        auth[n] = '\0';
+        part = strtok_r(auth, " ", &save);
+        while (part) {
+            char *dst;
+            size_t cap;
+
+            if (field == 0U) {
+                dst = spec->user;
+                cap = sizeof(spec->user);
+            } else if (field == 1U) {
+                dst = spec->password;
+                cap = sizeof(spec->password);
+            } else if (field == 2U) {
+                dst = spec->account;
+                cap = sizeof(spec->account);
+            } else {
+                return -1;
+            }
+            if (strlen(part) >= cap)
+                return -1;
+            strcpy(dst, part);
+            field++;
+            part = strtok_r(NULL, " ", &save);
+        }
+    } else {
+        if (copy_field(node, sizeof(node), text, (size_t)(sep - text)))
+            return -1;
+    }
+    if (parse_node(node, &spec->addr))
+        return -1;
+    if (!sep[2])
+        strcpy(spec->object, "TASK");
+    else if (strlen(sep + 2) > DN_MAXOBJL)
+        return -1;
+    else
+        strcpy(spec->object, sep + 2);
+    return 0;
+}
+
+static int set_access_field(unsigned char *dst, size_t cap, __u8 *len,
+                            const char *text)
+{
+    size_t n = text ? strlen(text) : 0U;
+
+    if (n > cap)
+        return -1;
+    if (n)
+        memcpy(dst, text, n);
+    *len = (__u8)n;
+    return 0;
+}
+
+static int apply_access_defaults(struct task_spec *spec)
+{
+    const char *value;
+
+    if (!spec->user[0] && (value = getenv("DNACCESS_USER")) && value[0] &&
+        copy_field(spec->user, sizeof(spec->user), value, strlen(value)))
+        return -1;
+    if (!spec->password[0] && (value = getenv("DNACCESS_PASSWORD")) && value[0] &&
+        copy_field(spec->password, sizeof(spec->password), value, strlen(value)))
+        return -1;
+    if (!spec->account[0] && (value = getenv("DNACCESS_ACCOUNT")) && value[0] &&
+        copy_field(spec->account, sizeof(spec->account), value, strlen(value)))
+        return -1;
+    return 0;
+}
+
+static int connect_task(const struct task_spec *spec, int timeout_seconds)
+{
+    struct sockaddr_dn peer;
+    struct accessdata_dn access;
+    struct timeval timeout;
+    int fd;
+
+    fd = socket(AF_DECnet, SOCK_SEQPACKET, DNPROTO_NSP);
+    if (fd < 0)
+        return -1;
+    timeout.tv_sec = timeout_seconds;
+    timeout.tv_usec = 0;
+    if (timeout_seconds > 0 &&
+        setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)) < 0)
+        goto fail;
+
+    memset(&access, 0, sizeof(access));
+    if (set_access_field(access.acc_user, sizeof(access.acc_user),
+                         &access.acc_userl, spec->user) ||
+        set_access_field(access.acc_pass, sizeof(access.acc_pass),
+                         &access.acc_passl, spec->password) ||
+        set_access_field(access.acc_acc, sizeof(access.acc_acc),
+                         &access.acc_accl, spec->account))
+        goto fail;
+    if ((access.acc_userl || access.acc_passl || access.acc_accl) &&
+        setsockopt(fd, DNPROTO_NSP, SO_CONACCESS,
+                   &access, sizeof(access)) < 0)
+        goto fail;
+
+    memset(&peer, 0, sizeof(peer));
+    peer.sdn_family = AF_DECnet;
+    peer.sdn_objnamel = cpu_to_le16_u((uint16_t)strlen(spec->object));
+    memcpy(peer.sdn_objname, spec->object, strlen(spec->object));
+    peer.sdn_add.a_len = cpu_to_le16_u(2U);
+    peer.sdn_add.a_addr[0] = (unsigned char)(spec->addr & 0xffU);
+    peer.sdn_add.a_addr[1] = (unsigned char)(spec->addr >> 8);
+    if (connect(fd, (struct sockaddr *)&peer, sizeof(peer)) < 0)
+        goto fail;
+    return fd;
+
+fail:
+    close(fd);
+    return -1;
+}
+
+static int output_record(const unsigned char *buf, size_t len, int binary)
+{
+    if (len && fwrite(buf, 1, len, stdout) != len)
+        return -1;
+    if (!binary && (!len || buf[len - 1U] != '\n') && fputc('\n', stdout) == EOF)
+        return -1;
+    return fflush(stdout);
+}
+
+static int run_output(int fd, int binary, int timeout_seconds)
+{
+    unsigned char buf[DNBUFSIZE];
+    const int timeout_ms = timeout_seconds ? timeout_seconds * 1000 : -1;
+
+    for (;;) {
+        struct pollfd ready = { .fd = fd, .events = POLLIN };
+        int rc = poll(&ready, 1, timeout_ms);
+
+        if (rc == 0) {
+            errno = ETIMEDOUT;
+            return -1;
+        }
+        if (rc < 0) {
+            if (errno == EINTR)
+                continue;
+            return -1;
+        }
+        if (ready.revents & POLLIN) {
+            ssize_t got = dniv_recv_record(fd, buf, sizeof(buf), 0);
+
+            if (got == 0)
+                return 0;
+            if (got < 0 || output_record(buf, (size_t)got, binary))
+                return -1;
+            /* POLLHUP can accompany POLLIN with several queued records.
+             * Keep draining until receive itself reports end-of-stream. */
+            continue;
+        }
+        if (ready.revents & (POLLERR | POLLNVAL)) {
+            errno = EIO;
+            return -1;
+        }
+        if (ready.revents & POLLHUP)
+            return 0;
+    }
+}
+
+static int run_interactive(int fd, int binary, int timeout_seconds)
+{
+    unsigned char buf[DNBUFSIZE];
+    int stdin_open = 1;
+
+    for (;;) {
+        struct pollfd fds[2] = {
+            { .fd = fd, .events = POLLIN },
+            { .fd = STDIN_FILENO, .events = POLLIN }
+        };
+        int timeout_ms = timeout_seconds ? timeout_seconds * 1000 : -1;
+        int rc = poll(fds, stdin_open ? 2 : 1, timeout_ms);
+        int received_record = 0;
+
+        if (rc == 0) {
+            errno = ETIMEDOUT;
+            return -1;
+        }
+        if (rc < 0) {
+            if (errno == EINTR)
+                continue;
+            return -1;
+        }
+        if (fds[0].revents & POLLIN) {
+            ssize_t got = dniv_recv_record(fd, buf, sizeof(buf), 0);
+
+            if (got == 0)
+                return 0;
+            if (got < 0 || output_record(buf, (size_t)got, binary))
+                return -1;
+            received_record = 1;
+        }
+        if (stdin_open && (fds[1].revents & POLLIN)) {
+            ssize_t got = read(STDIN_FILENO, buf, sizeof(buf));
+
+            if (got == 0)
+                stdin_open = 0;
+            else {
+                if (got < 0)
+                    return -1;
+                if (!binary && buf[got - 1] == '\n')
+                    got--;
+                if (got && dniv_send_record(fd, buf, (size_t)got, 0))
+                    return -1;
+            }
+        }
+        /* A closed input pipe must not repeatedly wake poll(), hide the
+         * inactivity timer, or discard a pending remote response. */
+        if (stdin_open && (fds[1].revents & (POLLHUP | POLLERR | POLLNVAL)))
+            stdin_open = 0;
+        /* An orderly peer hangup can accompany unread sequenced records. */
+        if (received_record)
+            continue;
+        if (fds[0].revents & (POLLERR | POLLNVAL)) {
+            errno = EIO;
+            return -1;
+        }
+        if (fds[0].revents & POLLHUP)
+            return 0;
+    }
+}
+
+/* Noninteractive task output must honor -t just as the interactive path
+ * does. Test using a silent local seqpacket peer, never remote HECnet. */
+static int selftest_output_timeout(void)
+{
+    int pair[2] = { -1, -1 };
+    pid_t child;
+    int status;
+
+    if (socketpair(AF_UNIX, SOCK_SEQPACKET, 0, pair))
+        return -1;
+    child = fork();
+    if (child < 0) {
+        close(pair[0]);
+        close(pair[1]);
+        return -1;
+    }
+    if (!child) {
+        int rc;
+
+        close(pair[0]);
+        alarm(5U);
+        errno = 0;
+        rc = run_output(pair[1], 1, 1);
+        {
+            int failure_errno = errno;
+            close(pair[1]);
+            _exit(rc == -1 && failure_errno == ETIMEDOUT ? 0 : 1);
+        }
+    }
+    close(pair[1]);
+    /* The peer must remain open (but silent) until timeout is observed. */
+    {
+        pid_t waited = waitpid(child, &status, 0);
+
+        close(pair[0]);
+        if (waited != child || !WIFEXITED(status) || WEXITSTATUS(status))
+            return -1;
+    }
+    return 0;
+}
+
+/* A poll wakeup may include POLLIN|POLLHUP while *several* records are
+ * queued. Both client modes must drain them before reporting success. */
+static int selftest_drain_hangup(int interactive)
+{
+    int peer[2] = { -1, -1 };
+    int capture[2] = { -1, -1 };
+    char output[32];
+    size_t used = 0U;
+    pid_t child;
+    int status;
+    ssize_t got;
+
+    if (socketpair(AF_UNIX, SOCK_SEQPACKET, 0, peer))
+        return -1;
+    if (pipe(capture)) {
+        close(peer[0]);
+        close(peer[1]);
+        return -1;
+    }
+    if (dniv_send_record(peer[0], "first", 5U, 0) ||
+        dniv_send_record(peer[0], "second", 6U, 0)) {
+        close(peer[0]);
+        close(peer[1]);
+        close(capture[0]);
+        close(capture[1]);
+        return -1;
+    }
+    close(peer[0]);
+    child = fork();
+    if (child < 0) {
+        close(peer[1]);
+        close(capture[0]);
+        close(capture[1]);
+        return -1;
+    }
+    if (!child) {
+        int rc;
+
+        alarm(5U);
+        close(capture[0]);
+        if (dup2(capture[1], STDOUT_FILENO) < 0)
+            _exit(1);
+        close(capture[1]);
+        if (interactive) {
+            int input[2];
+
+            if (pipe(input) || dup2(input[0], STDIN_FILENO) < 0)
+                _exit(1);
+            close(input[0]);
+            close(input[1]); /* Explicit stdin EOF must not discard output. */
+        }
+        rc = interactive ? run_interactive(peer[1], 1, 1) :
+                           run_output(peer[1], 1, 1);
+        if (fflush(stdout))
+            _exit(1);
+        close(peer[1]);
+        _exit(rc ? 1 : 0);
+    }
+    close(peer[1]);
+    close(capture[1]);
+    while ((got = read(capture[0], output + used,
+                       sizeof(output) - used)) > 0)
+        used += (size_t)got;
+    close(capture[0]);
+    if (waitpid(child, &status, 0) != child || got < 0 ||
+        !WIFEXITED(status) || WEXITSTATUS(status) ||
+        used != 11U || memcmp(output, "firstsecond", 11U))
+        return -1;
+    return 0;
+}
+
+/* Closing stdin while the remote peer remains quiet must not cause a
+ * permanently ready poll loop that bypasses the inactivity timeout. */
+static int selftest_interactive_stdin_eof(void)
+{
+    int peer[2] = { -1, -1 };
+    pid_t child;
+    int status;
+
+    if (socketpair(AF_UNIX, SOCK_SEQPACKET, 0, peer))
+        return -1;
+    child = fork();
+    if (child < 0) {
+        close(peer[0]);
+        close(peer[1]);
+        return -1;
+    }
+    if (!child) {
+        int input[2];
+        int rc;
+        int saved_errno;
+
+        close(peer[0]);
+        alarm(5U);
+        if (pipe(input) || dup2(input[0], STDIN_FILENO) < 0)
+            _exit(1);
+        close(input[0]);
+        close(input[1]);
+        errno = 0;
+        rc = run_interactive(peer[1], 1, 1);
+        saved_errno = errno;
+        close(peer[1]);
+        _exit(rc == -1 && saved_errno == ETIMEDOUT ? 0 : 1);
+    }
+    close(peer[1]);
+    /* Keep the other end open and silent until the child's timeout. */
+    if (waitpid(child, &status, 0) != child) {
+        close(peer[0]);
+        return -1;
+    }
+    close(peer[0]);
+    return WIFEXITED(status) && !WEXITSTATUS(status) ? 0 : -1;
+}
+
+static int selftest(void)
+{
+    struct task_spec spec;
+
+    if (parse_spec("31.71::", &spec) ||
+        spec.addr != (uint16_t)((31U << 10) | 71U) ||
+        strcmp(spec.object, "TASK"))
+        return 1;
+    if (parse_spec("31.71\"USER PASS ACCT\"::SHOW_SYSTEM", &spec) ||
+        strcmp(spec.object, "SHOW_SYSTEM") || strcmp(spec.user, "USER") ||
+        strcmp(spec.password, "PASS") || strcmp(spec.account, "ACCT"))
+        return 1;
+    if (!parse_spec("64.1::TASK", &spec) ||
+        !parse_spec("0.71::TASK", &spec) ||
+        !parse_spec("31.0::TASK", &spec) ||
+        !parse_spec("31.71::THIS_OBJECT_NAME_IS_TOO_LONG", &spec) ||
+        selftest_output_timeout() ||
+        selftest_drain_hangup(0) || selftest_drain_hangup(1) ||
+        selftest_interactive_stdin_eof())
+        return 1;
+    puts("dntask selftest passed");
+    return 0;
+}
+
+int main(int argc, char **argv)
+{
+    struct task_spec spec;
+    int interactive = 0;
+    int binary = 0;
+    int timeout_seconds = 60;
+    int connect_timeout = 60;
+    int arg = 1;
+    int fd;
+
+    while (arg < argc && argv[arg][0] == '-' && argv[arg][1]) {
+        if (!strcmp(argv[arg], "--selftest") && arg + 1 == argc)
+            return selftest();
+        if (!strcmp(argv[arg], "-i")) {
+            interactive = 1;
+            arg++;
+            continue;
+        }
+        if (!strcmp(argv[arg], "-b")) {
+            binary = 1;
+            arg++;
+            continue;
+        }
+        if ((!strcmp(argv[arg], "-t") || !strcmp(argv[arg], "-T")) &&
+            arg + 1 < argc) {
+            char *end = NULL;
+            long value;
+
+            if (argv[arg + 1][0] < '0' || argv[arg + 1][0] > '9')
+                goto usage;
+            errno = 0;
+            value = strtol(argv[arg + 1], &end, 10);
+            if (errno || end == argv[arg + 1] || *end ||
+                value < 0 || value > 86400)
+                goto usage;
+            if (argv[arg][1] == 't')
+                timeout_seconds = (int)value;
+            else
+                connect_timeout = (int)value;
+            arg += 2;
+            continue;
+        }
+        goto usage;
+    }
+    if (arg + 1 != argc || parse_spec(argv[arg], &spec))
+        goto usage;
+    if (apply_access_defaults(&spec)) {
+        fprintf(stderr, "dntask: DNACCESS field exceeds %u bytes\n", DN_MAXACCL);
+        return 2;
+    }
+
+    fd = connect_task(&spec, connect_timeout);
+    if (fd < 0) {
+        perror("dntask: connect");
+        return 1;
+    }
+    if (interactive) {
+        if (run_interactive(fd, binary, timeout_seconds)) {
+            perror("dntask: session");
+            close(fd);
+            return 1;
+        }
+    } else if (run_output(fd, binary, timeout_seconds)) {
+        perror("dntask: receive");
+        close(fd);
+        return 1;
+    }
+    close(fd);
+    return 0;
+
+usage:
+    fprintf(stderr,
+            "usage: %s [-i] [-b] [-t SECONDS] [-T SECONDS] "
+            "'AREA.NODE[\"USER PASS ACCOUNT\"]::[TASK]'\n"
+            "DNACCESS_USER, DNACCESS_PASSWORD and DNACCESS_ACCOUNT provide "
+            "non-command-line access defaults.\n",
+            argv[0]);
+    return 2;
+}

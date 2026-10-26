@@ -1,0 +1,1191 @@
+// ============================================================================
+// Copyright (c) 2026 Supratim Sanyal of SANYALnet Labs.
+// Proprietary rights reserved except as expressly licensed herein.
+//
+// DECnet-IV-Linux
+// This file is governed by the SANYALnet Labs Non-Commercial License in the
+// root LICENSE file. Non-Commercial use is permitted; Commercial Use and use
+// for AI/ML model training are prohibited unless separately authorized.
+//
+// Attribution is required: "Based on original work by Supratim Sanyal of
+// SANYALnet Labs." See LICENSE for full terms, warranty disclaimer, termination,
+// patent, trademark, and governing-law provisions.
+// ============================================================================
+
+#define _POSIX_C_SOURCE 200809L
+
+#include <errno.h>
+#include <fcntl.h>
+#include <linux/dn.h>
+#include <netdb.h>
+#include <netinet/in.h>
+#include <poll.h>
+#include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <string.h>
+#include <sys/file.h>
+#include <sys/resource.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <time.h>
+#include <sys/time.h>
+#include <unistd.h>
+
+#include "../common/record_io.h"
+
+#define MAIL_OBJECT 27U
+#define MAIL_BACKLOG 8
+#define MAIL11_V3_LEN 16U
+
+static __le16 cpu_to_le16_u(uint16_t value)
+{
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+    return (__le16)value;
+#else
+    return (__le16)__builtin_bswap16(value);
+#endif
+}
+
+static uint16_t le16_to_cpu_u(__le16 value)
+{
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+    return (uint16_t)value;
+#else
+    return __builtin_bswap16((uint16_t)value);
+#endif
+}
+
+static int make_listener(void)
+{
+    struct sockaddr_dn local;
+    int mode = ACC_DEFER;
+    int fd = socket(AF_DECnet, SOCK_SEQPACKET, DNPROTO_NSP);
+
+    if (fd < 0)
+        return -1;
+    if (setsockopt(fd, DNPROTO_NSP, DSO_ACCEPTMODE, &mode, sizeof(mode))) {
+        close(fd);
+        return -1;
+    }
+    memset(&local, 0, sizeof(local));
+    local.sdn_family = AF_DECnet;
+    local.sdn_objnum = MAIL_OBJECT;
+    if (bind(fd, (struct sockaddr *)&local, sizeof(local)) ||
+        listen(fd, MAIL_BACKLOG)) {
+        close(fd);
+        return -1;
+    }
+    return fd;
+}
+
+static int accept_mail_session(int fd)
+{
+    static const unsigned char reply[MAIL11_V3_LEN] = {
+        3U, 1U, 0U, 18U, 0U, 0U, 0U, 0U,
+        0xa0U, 0x02U, 0U, 0U, 1U, 0U, 0U, 0U
+    };
+    struct optdata_dn incoming;
+    struct optdata_dn outgoing;
+    socklen_t len = sizeof(incoming);
+    uint16_t n;
+
+    memset(&incoming, 0, sizeof(incoming));
+    if (getsockopt(fd, DNPROTO_NSP, DSO_CONDATA, &incoming, &len) ||
+        len != sizeof(incoming))
+        return -1;
+    n = le16_to_cpu_u(incoming.opt_optl);
+    if (n && (n != MAIL11_V3_LEN || incoming.opt_data[0] != 3U))
+        return -1;
+    if (n) {
+        memset(&outgoing, 0, sizeof(outgoing));
+        outgoing.opt_optl = cpu_to_le16_u(MAIL11_V3_LEN);
+        memcpy(outgoing.opt_data, reply, sizeof(reply));
+        if (setsockopt(fd, DNPROTO_NSP, DSO_CONDATA,
+                       &outgoing, sizeof(outgoing)))
+            return -1;
+    }
+    return setsockopt(fd, DNPROTO_NSP, DSO_CONACCEPT, NULL, 0);
+}
+
+static int recv_field(int fd, char *buf, size_t cap, int allow_empty)
+{
+    ssize_t got = dniv_recv_record(fd, buf, cap - 1U, 0);
+    size_t i;
+
+    if (got < 0 || (got == 0 && !allow_empty))
+        return -1;
+    for (i = 0; i < (size_t)got; i++) {
+        if (buf[i] == '\0' || buf[i] == '\r' || buf[i] == '\n')
+            return -1;
+    }
+    buf[got] = '\0';
+    return (int)got;
+}
+
+static int send_ack(int fd)
+{
+    const unsigned char ack[4] = { 1U, 0U, 0U, 0U };
+
+    return dniv_send_record(fd, ack, sizeof(ack), 0);
+}
+
+static int write_all(int fd, const void *data, size_t len)
+{
+    const unsigned char *p = data;
+
+    while (len) {
+        ssize_t done = write(fd, p, len);
+
+        if (done < 0) {
+            if (errno == EINTR)
+                continue;
+            return -1;
+        }
+        if (!done) {
+            errno = EIO;
+            return -1;
+        }
+        p += done;
+        len -= (size_t)done;
+    }
+    return 0;
+}
+
+/* Failed delivery pipes must return EPIPE, not kill the MAIL-11 daemon.
+ * Reset SIGPIPE disposition in external sendmail children. */
+static int configure_sigpipe(void)
+{
+    struct sigaction action;
+
+    memset(&action, 0, sizeof(action));
+    action.sa_handler = SIG_IGN;
+    if (sigemptyset(&action.sa_mask))
+        return -1;
+    return sigaction(SIGPIPE, &action, NULL);
+}
+
+static int start_sendmail(const char *path, int *input_fd, pid_t *child)
+{
+    int pipefd[2];
+    pid_t pid;
+
+    if (pipe(pipefd))
+        return -1;
+    pid = fork();
+    if (pid < 0) {
+        close(pipefd[0]);
+        close(pipefd[1]);
+        return -1;
+    }
+    if (!pid) {
+        close(pipefd[1]);
+        if (signal(SIGPIPE, SIG_DFL) == SIG_ERR)
+            _exit(127);
+        if (dup2(pipefd[0], STDIN_FILENO) < 0)
+            _exit(127);
+        close(pipefd[0]);
+        execl(path, path, "-i", "-t", (char *)NULL);
+        _exit(127);
+    }
+    close(pipefd[0]);
+    *input_fd = pipefd[1];
+    *child = pid;
+    return 0;
+}
+
+/* On error, kill the subprocess *before* closing its stdin.  Sending
+ * EOF first could let a sendmail-style command queue incomplete input. */
+static void abort_sendmail(int input_fd, pid_t child)
+{
+    int status;
+
+    if (child > 0)
+        (void)kill(child, SIGKILL);
+    if (input_fd >= 0)
+        close(input_fd);
+    if (child <= 0)
+        return;
+    while (waitpid(child, &status, 0) < 0 && errno == EINTR)
+        ;
+}
+
+/* A remote MAIL-11 peer has not committed the message until it sends
+ * the end-of-message marker.  Invoke external sendmail only AFTER that
+ * record arrives, by replaying the private complete staged message.
+ */
+static int start_complete_sendmail(FILE *staged, const char *path,
+                                   int *input_fd, pid_t *child)
+{
+    unsigned char bytes[4096];
+
+    if (fflush(staged) || fseek(staged, 0L, SEEK_SET))
+        return -1;
+    if (start_sendmail(path, input_fd, child))
+        return -1;
+    for (;;) {
+        size_t n = fread(bytes, 1U, sizeof(bytes), staged);
+
+        if (n && write_all(*input_fd, bytes, n))
+            return -1;
+        if (n < sizeof(bytes)) {
+            if (ferror(staged))
+                return -1;
+            break;
+        }
+    }
+    return fseek(staged, 0L, SEEK_END);
+}
+
+static int finish_sendmail(int input_fd, pid_t child)
+{
+    static const struct timespec delay = { .tv_sec = 0, .tv_nsec = 100000000L };
+    int close_errno = 0;
+    int status;
+    int i;
+
+    if (close(input_fd))
+        close_errno = errno;
+    for (i = 0; i < 300; i++) {
+        pid_t rc = waitpid(child, &status, WNOHANG);
+
+        if (rc == child) {
+            if (close_errno) {
+                errno = close_errno;
+                return -1;
+            }
+            return WIFEXITED(status) && WEXITSTATUS(status) == 0 ? 0 : -1;
+        }
+        if (rc < 0 && errno != EINTR)
+            return -1;
+        nanosleep(&delay, NULL);
+    }
+    kill(child, SIGKILL);
+    while (waitpid(child, &status, 0) < 0 && errno == EINTR)
+        ;
+    errno = ETIMEDOUT;
+    return -1;
+}
+
+
+static int smtp_read_reply(int fd, int expected)
+{
+    char line[512];
+    int code = -1;
+    unsigned int lines;
+
+    /* RFC 5321 replies have matching three-digit codes on every line,
+     * a SP or '-' separator, and a CRLF terminator.  A numeric prefix
+     * alone is not proof that the relay accepted the message.
+     */
+    for (lines = 0U; lines < 32U; lines++) {
+        size_t used = 0U, i;
+        int current;
+
+        while (used + 1U < sizeof(line)) {
+            char ch;
+            ssize_t got = read(fd, &ch, 1U);
+
+            if (got < 0) {
+                if (errno == EINTR)
+                    continue;
+                return -1;
+            }
+            if (!got)
+                return -1;
+            line[used++] = ch;
+            if (ch == '\n')
+                break;
+        }
+        if (used < 6U || line[used - 2U] != '\r' ||
+            line[used - 1U] != '\n' ||
+            line[0] < '0' || line[0] > '9' ||
+            line[1] < '0' || line[1] > '9' ||
+            line[2] < '0' || line[2] > '9' ||
+            (line[3] != ' ' && line[3] != '-'))
+            return -1;
+        for (i = 4U; i + 2U < used; i++) {
+            unsigned char ch = (unsigned char)line[i];
+
+            if ((ch < 0x20U && ch != '\t') || ch == 0x7fU)
+                return -1;
+        }
+        current = (line[0] - '0') * 100 + (line[1] - '0') * 10 +
+                  (line[2] - '0');
+        if (code >= 0 && current != code)
+            return -1;
+        code = current;
+        if (line[3] == ' ')
+            return code == expected ? 0 : -1;
+    }
+    return -1;
+}
+
+static int smtp_command(int fd, int expected, const char *command)
+{
+    if (write_all(fd, command, strlen(command)))
+        return -1;
+    return smtp_read_reply(fd, expected);
+}
+
+static int smtp_open(const char *host, unsigned int port, const char *from,
+                     const char *recipients, const char *sender,
+                     const char *subject, const char *full_user)
+{
+    struct hostent *resolved;
+    struct sockaddr_in peer;
+    struct timeval timeout = { .tv_sec = 30, .tv_usec = 0 };
+    char command[1400];
+    const char *part;
+    int fd;
+
+    if (!host || !*host || !from || !*from ||
+        strchr(from, '\r') || strchr(from, '\n') ||
+        strchr(from, '<') || strchr(from, '>') ||
+        port == 0U || port > 65535U)
+        return -1;
+    resolved = gethostbyname(host);
+    if (!resolved || resolved->h_addrtype != AF_INET ||
+        resolved->h_length != (int)sizeof(peer.sin_addr) ||
+        !resolved->h_addr_list[0])
+        return -1;
+    memset(&peer, 0, sizeof(peer));
+    peer.sin_family = AF_INET;
+    peer.sin_port = htons((uint16_t)port);
+    memcpy(&peer.sin_addr, resolved->h_addr_list[0], sizeof(peer.sin_addr));
+
+    fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0)
+        return -1;
+    if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) ||
+        setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout))) {
+        close(fd);
+        return -1;
+    }
+    if (connect(fd, (struct sockaddr *)&peer, sizeof(peer))) {
+        close(fd);
+        return -1;
+    }
+    if (smtp_read_reply(fd, 220) ||
+        smtp_command(fd, 250, "HELO decnet-iv-linux\r\n"))
+        goto fail;
+    if (snprintf(command, sizeof(command), "MAIL FROM:<%s>\r\n", from) >=
+        (int)sizeof(command) || smtp_command(fd, 250, command))
+        goto fail;
+
+    part = recipients;
+    for (;;) {
+        const char *comma = strchr(part, ',');
+        size_t len = comma ? (size_t)(comma - part) : strlen(part);
+
+        if (!len || len > 255U)
+            goto fail;
+        if (snprintf(command, sizeof(command), "RCPT TO:<%.*s>\r\n",
+                     (int)len, part) >= (int)sizeof(command) ||
+            smtp_command(fd, 250, command))
+            goto fail;
+        if (!comma)
+            break;
+        part = comma + 1;
+    }
+    if (smtp_command(fd, 354, "DATA\r\n"))
+        goto fail;
+    if (snprintf(command, sizeof(command),
+                 "From: %s\r\nTo: %s\r\nX-VMSmail: %s\r\n"
+                 "Subject: %s\r\n\r\n",
+                 sender, recipients, full_user, subject) >=
+        (int)sizeof(command) ||
+        write_all(fd, command, strlen(command)))
+        goto fail;
+    return fd;
+
+fail:
+    close(fd);
+    return -1;
+}
+
+static int smtp_write_record(int fd, const unsigned char *data, size_t len)
+{
+    size_t i;
+
+    for (i = 0U; i < len; i++) {
+        if (data[i] == '\r' || data[i] == '\n' || data[i] == '\0')
+            return -1;
+    }
+    if (len && data[0] == '.' && write_all(fd, ".", 1U))
+        return -1;
+    if (write_all(fd, data, len) || write_all(fd, "\r\n", 2U))
+        return -1;
+    return 0;
+}
+
+static int smtp_finish(int fd)
+{
+    int rc = 0;
+
+    if (smtp_command(fd, 250, ".\r\n"))
+        rc = -1;
+    else if (smtp_command(fd, 221, "QUIT\r\n"))
+        rc = -1;
+    close(fd);
+    return rc;
+}
+
+
+static FILE *open_mailbox(const char *root)
+{
+    struct stat st;
+    FILE *out;
+    int rootfd;
+    int fd;
+
+    rootfd = open(root, O_RDONLY | O_CLOEXEC);
+    if (rootfd < 0)
+        return NULL;
+    if (fstat(rootfd, &st) || !S_ISDIR(st.st_mode)) {
+        int saved = errno;
+
+        close(rootfd);
+        errno = saved ? saved : ENOTDIR;
+        return NULL;
+    }
+    fd = openat(rootfd, "mailbox.log",
+                O_WRONLY | O_CREAT | O_APPEND | O_NOFOLLOW | O_CLOEXEC |
+                O_NONBLOCK, 0600);
+    close(rootfd);
+    if (fd < 0)
+        return NULL;
+    if (fstat(fd, &st)) {
+        int saved = errno;
+
+        close(fd);
+        errno = saved;
+        return NULL;
+    }
+    if (!S_ISREG(st.st_mode) || st.st_nlink != 1) {
+        close(fd);
+        errno = EACCES;
+        return NULL;
+    }
+    out = fdopen(fd, "ab");
+    if (!out)
+        close(fd);
+    return out;
+}
+
+/* Keep incomplete MAIL-11 data in a private temporary stream.  A peer
+ * disconnect before the end-of-message marker must not publish partial
+ * headers or body into the persistent mailbox spool.
+ */
+static int append_complete_spool(const char *root, FILE *staged)
+{
+    unsigned char data[4096];
+    struct stat original;
+    FILE *spool;
+    int guarded_fd = -1;
+    int saved_errno;
+
+    if (fflush(staged) || fseek(staged, 0L, SEEK_SET))
+        return -1;
+    spool = open_mailbox(root);
+    if (!spool)
+        return -1;
+    /* Lock all writers of this daemon's managed spool across append and
+     * rollback. Duplicate the descriptor to retain that lock if fclose
+     * itself reports a failure; never let a partial append survive EIO,
+     * ENOSPC or RLIMIT_FSIZE. The stream is unbuffered to avoid a later
+     * fclose flushing bytes after we truncate a failed append.
+     */
+    if (flock(fileno(spool), LOCK_EX) ||
+        (guarded_fd = dup(fileno(spool))) < 0 ||
+        fstat(guarded_fd, &original) ||
+        setvbuf(spool, NULL, _IONBF, 0))
+        goto fail;
+    for (;;) {
+        size_t got = fread(data, 1, sizeof(data), staged);
+
+        if (got && fwrite(data, 1, got, spool) != got)
+            goto rollback;
+        if (got < sizeof(data)) {
+            if (ferror(staged))
+                goto rollback;
+            break;
+        }
+    }
+    if (fflush(spool) || fsync(guarded_fd))
+        goto rollback;
+    if (fclose(spool)) {
+        saved_errno = errno;
+        if (ftruncate(guarded_fd, original.st_size))
+            saved_errno = EIO;
+        if (fsync(guarded_fd))
+            saved_errno = EIO;
+        close(guarded_fd);
+        errno = saved_errno;
+        return -1;
+    }
+    close(guarded_fd);
+    return 0;
+rollback:
+    saved_errno = errno;
+    /* Keep the advisory lock until any partial append is truncated. */
+    if (ftruncate(guarded_fd, original.st_size) || fsync(guarded_fd))
+        saved_errno = EIO;
+    (void)fclose(spool);
+    close(guarded_fd);
+    errno = saved_errno;
+    return -1;
+fail:
+    saved_errno = errno;
+    (void)fclose(spool);
+    if (guarded_fd >= 0)
+        close(guarded_fd);
+    errno = saved_errno;
+    return -1;
+}
+
+static int serve(int fd, const char *root, const char *sendmail_path,
+                 const char *smtp_host, unsigned int smtp_port,
+                 const char *smtp_from)
+{
+    struct timeval timeout = { .tv_sec = 30, .tv_usec = 0 };
+    unsigned char body[4096];
+    char sender[256], recipient[256], recipients[1024];
+    char full_user[256], subject[256], header[4096];
+    FILE *out = NULL;
+    int mail_fd = -1;
+    int smtp_fd = -1;
+    long body_start = -1L;
+    pid_t mail_child = -1;
+    ssize_t got;
+
+    if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) ||
+        setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)))
+        return -1;
+    if (recv_field(fd, sender, sizeof(sender), 0) < 0)
+        return -1;
+    recipients[0] = '\0';
+    for (;;) {
+        got = dniv_recv_record(fd, recipient, sizeof(recipient) - 1U, 0);
+        if (got < 0)
+            return -1;
+        if (got == 1 && recipient[0] == '\0')
+            break;
+        if (got <= 0 || (size_t)got >= sizeof(recipient))
+            return -1;
+        recipient[got] = '\0';
+        if (strchr(recipient, '\r') || strchr(recipient, '\n') ||
+            strchr(recipient, '\0') != recipient + got)
+            return -1;
+        {
+            size_t used = strlen(recipients);
+            size_t add = strlen(recipient);
+            size_t need = used + (used ? 1U : 0U) + add + 1U;
+
+            if (need > sizeof(recipients))
+                return -1;
+            if (used)
+                recipients[used++] = ',';
+            memcpy(recipients + used, recipient, add + 1U);
+        }
+        if (send_ack(fd))
+            return -1;
+    }
+    if (!recipients[0])
+        return -1;
+    if (recv_field(fd, full_user, sizeof(full_user), 1) < 0 ||
+        recv_field(fd, subject, sizeof(subject), 1) < 0)
+        return -1;
+
+    out = tmpfile();
+    if (!out)
+        return -1;
+    {
+        int header_len = snprintf(
+            header, sizeof(header),
+            "From: %s\nTo: %s\nX-VMSmail: %s\nSubject: %s\n\n",
+            sender, recipients, full_user, subject);
+
+        if (header_len < 0 || (size_t)header_len >= sizeof(header))
+            goto fail;
+        if (fwrite(header, 1, (size_t)header_len, out) !=
+            (size_t)header_len)
+            goto fail;
+        /* Track where the text records begin.  SMTP delivery is deferred
+         * until the remote MAIL-11 end-of-message marker has arrived. */
+        if (smtp_host && (body_start = ftell(out)) < 0)
+            goto fail;
+    }
+
+    for (;;) {
+        got = dniv_recv_record(fd, body, sizeof(body), 0);
+        if (got < 0)
+            goto fail;
+        if (got == 1 && body[0] == 0U)
+            break;
+        if (got == 0)
+            goto fail;
+        if (fwrite(body, 1, (size_t)got, out) != (size_t)got ||
+            fputc('\n', out) == EOF)
+            goto fail;
+        /* The spool uses newline separators for records. Refuse embedded
+         * newline/NUL/CR before staging so replay cannot change boundaries. */
+        if (smtp_host && (memchr(body, '\r', (size_t)got) ||
+                          memchr(body, '\n', (size_t)got) ||
+                          memchr(body, '\0', (size_t)got)))
+            goto fail;
+    }
+    if (smtp_host) {
+        /* No SMTP socket or DATA command before confirmed MAIL-11 EOM.
+         * Reconstruct the exact record body from the validated private
+         * staging file; size covers a full 4096-byte record plus LF/NUL. */
+        char line[sizeof(body) + 2U];
+
+        if (fflush(out) || fseek(out, body_start, SEEK_SET))
+            goto fail;
+        smtp_fd = smtp_open(smtp_host, smtp_port, smtp_from, recipients,
+                            sender, subject, full_user);
+        if (smtp_fd < 0)
+            goto fail;
+        while (fgets(line, sizeof(line), out)) {
+            size_t len = strlen(line);
+
+            if (!len || line[len - 1U] != '\n' ||
+                smtp_write_record(smtp_fd, (const unsigned char *)line,
+                                  len - 1U))
+                goto fail;
+        }
+        if (ferror(out) || fseek(out, 0L, SEEK_END))
+            goto fail;
+    }
+    if (sendmail_path && start_complete_sendmail(out, sendmail_path,
+                                                  &mail_fd, &mail_child))
+        goto fail;
+    if (fputs("--\n", out) == EOF || append_complete_spool(root, out))
+        goto fail;
+    if (fclose(out)) {
+        out = NULL;
+        goto fail;
+    }
+    out = NULL;
+    if (mail_fd >= 0) {
+        int finish_rc = finish_sendmail(mail_fd, mail_child);
+
+        mail_fd = -1;
+        mail_child = -1;
+        if (finish_rc)
+            return -1;
+    }
+    if (smtp_fd >= 0) {
+        int finish_rc = smtp_finish(smtp_fd);
+
+        smtp_fd = -1;
+        if (finish_rc)
+            return -1;
+    }
+    return send_ack(fd);
+
+fail:
+    if (out)
+        fclose(out);
+    abort_sendmail(mail_fd, mail_child);
+    if (smtp_fd >= 0)
+        close(smtp_fd);
+    return -1;
+}
+
+static int selftest_smtp_reply(const char *reply, size_t len, int expected)
+{
+    int pair[2] = { -1, -1 };
+    int rc = -1;
+
+    if (socketpair(AF_UNIX, SOCK_STREAM, 0, pair))
+        return -1;
+    if (write_all(pair[0], reply, len) ||
+        shutdown(pair[0], SHUT_WR))
+        goto finish;
+    rc = smtp_read_reply(pair[1], 250) == expected ? 0 : -1;
+finish:
+    close(pair[0]);
+    close(pair[1]);
+    return rc;
+}
+
+/* An invalid/incomplete network session cannot append a partial message,
+ * while a completed session must still produce the existing mailbox data.
+ */
+static int selftest_spool_session(const char *root, int complete,
+                                  const char *sendmail_path, int empty_body)
+{
+    int pair[2] = { -1, -1 };
+    unsigned char ack[8];
+    pid_t child;
+    int status;
+    int ok = 0;
+
+    if (socketpair(AF_UNIX, SOCK_SEQPACKET, 0, pair))
+        return -1;
+    child = fork();
+    if (child < 0) {
+        close(pair[0]);
+        close(pair[1]);
+        return -1;
+    }
+    if (!child) {
+        int rc;
+
+        close(pair[0]);
+        rc = serve(pair[1], root, sendmail_path, NULL, 25U,
+                   "mail11@localhost");
+        close(pair[1]);
+        _exit(rc ? 1 : 0);
+    }
+    close(pair[1]);
+    if (dniv_send_record(pair[0], "sender", 6U, 0) ||
+        dniv_send_record(pair[0], "recipient", 9U, 0) ||
+        dniv_recv_record(pair[0], ack, sizeof(ack), 0) != 4 ||
+        memcmp(ack, "\1\0\0\0", 4U) ||
+        dniv_send_record(pair[0], "\0", 1U, 0) ||
+        dniv_send_record(pair[0], "user", 4U, 0) ||
+        dniv_send_record(pair[0], "subject", 7U, 0) ||
+        (!empty_body && dniv_send_record(pair[0], "body", 4U, 0)))
+        goto done;
+    if (complete) {
+        if (dniv_send_record(pair[0], "\0", 1U, 0) ||
+            dniv_recv_record(pair[0], ack, sizeof(ack), 0) != 4 ||
+            memcmp(ack, "\1\0\0\0", 4U))
+            goto done;
+    }
+    /* Give an erroneously early external deliverer ample time to launch
+     * while the remote peer deliberately withholds its completion marker. */
+    if (!complete && sendmail_path) {
+        struct timespec pause = { .tv_sec = 0, .tv_nsec = 200000000L };
+        (void)nanosleep(&pause, NULL);
+    }
+    ok = 1;
+done:
+    close(pair[0]);
+    if (!ok)
+        (void)kill(child, SIGKILL);
+    if (waitpid(child, &status, 0) != child || !WIFEXITED(status) ||
+        WEXITSTATUS(status) != (complete ? 0 : 1))
+        return -1;
+    return ok ? 0 : -1;
+}
+
+/* Force a partial physical append to fail after a successful staged write.
+ * The original mailbox prefix must survive intact under RLIMIT_FSIZE. */
+static int selftest_spool_io_rollback(const char *root, const char *mailbox)
+{
+    unsigned char block[512];
+    struct stat before, after;
+    struct rlimit limit;
+    FILE *staged = NULL;
+    pid_t child;
+    int status;
+
+    if (stat(mailbox, &before))
+        return -1;
+    staged = tmpfile();
+    if (!staged)
+        return -1;
+    memset(block, 'R', sizeof(block));
+    if (fwrite(block, 1, sizeof(block), staged) != sizeof(block) ||
+        fflush(staged)) {
+        fclose(staged);
+        return -1;
+    }
+    child = fork();
+    if (child < 0) {
+        fclose(staged);
+        return -1;
+    }
+    if (!child) {
+        signal(SIGXFSZ, SIG_IGN);
+        limit.rlim_cur = (rlim_t)before.st_size + 24U;
+        limit.rlim_max = limit.rlim_cur;
+        if (setrlimit(RLIMIT_FSIZE, &limit) ||
+            append_complete_spool(root, staged) != -1)
+            _exit(1);
+        _exit(0);
+    }
+    fclose(staged);
+    if (waitpid(child, &status, 0) != child ||
+        !WIFEXITED(status) || WEXITSTATUS(status) ||
+        stat(mailbox, &after) || after.st_size != before.st_size)
+        return -1;
+    return 0;
+}
+
+/* External delivery must not run for aborted MAIL-11 input. Once a
+ * complete message arrives, the child must receive exactly the staged
+ * header/body, excluding the local mailbox's "--" spool separator. */
+static int selftest_sendmail_replay(const char *root)
+{
+    static const char expected[] =
+        "From: sender\nTo: recipient\nX-VMSmail: user\nSubject: subject\n\nbody\n";
+    char script[256], marker[256], capture[256], content[256];
+    FILE *file = NULL;
+    size_t n;
+    int rc = -1;
+
+    if (snprintf(script, sizeof(script), "%s/sendmail-stub", root) >=
+            (int)sizeof(script) ||
+        snprintf(marker, sizeof(marker), "%s/sendmail-invoked", root) >=
+            (int)sizeof(marker) ||
+        snprintf(capture, sizeof(capture), "%s/sendmail-capture", root) >=
+            (int)sizeof(capture))
+        return -1;
+    file = fopen(script, "wb");
+    if (!file)
+        return -1;
+    if (fprintf(file, "#!/bin/sh\nprintf x > '%s'\ncat > '%s'\n",
+                marker, capture) < 0)
+        goto out;
+    if (fclose(file)) {
+        file = NULL;
+        goto out;
+    }
+    file = NULL;
+    if (chmod(script, 0700) || selftest_spool_session(root, 0, script, 0) ||
+        access(marker, F_OK) == 0 || access(capture, F_OK) == 0 ||
+        selftest_spool_session(root, 1, script, 0) ||
+        access(marker, F_OK) != 0)
+        goto out;
+    file = fopen(capture, "rb");
+    if (!file)
+        goto out;
+    n = fread(content, 1U, sizeof(content), file);
+    if (n != sizeof(expected) - 1U ||
+        memcmp(content, expected, sizeof(expected) - 1U) || ferror(file))
+        goto out;
+    rc = 0;
+out:
+    if (file)
+        fclose(file);
+    unlink(capture);
+    unlink(marker);
+    unlink(script);
+    return rc;
+}
+
+/* Verify a remote MAIL-11 abort cannot open the configured SMTP relay.
+ * This uses only an isolated loopback listener and Unix sequenced sockets. */
+static int selftest_smtp_not_before_eom(const char *root)
+{
+    struct sockaddr_in loop;
+    struct pollfd watched;
+    socklen_t loop_len = sizeof(loop);
+    int listener = -1, pair[2] = { -1, -1 };
+    unsigned char ack[8];
+    pid_t child = -1;
+    int status, rc = -1;
+
+    listener = socket(AF_INET, SOCK_STREAM, 0);
+    if (listener < 0)
+        return -1;
+    memset(&loop, 0, sizeof(loop));
+    loop.sin_family = AF_INET;
+    loop.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    if (bind(listener, (struct sockaddr *)&loop, sizeof(loop)) ||
+        listen(listener, 2) ||
+        getsockname(listener, (struct sockaddr *)&loop, &loop_len) ||
+        socketpair(AF_UNIX, SOCK_SEQPACKET, 0, pair))
+        goto finish;
+    child = fork();
+    if (child < 0)
+        goto finish;
+    if (!child) {
+        int result;
+
+        close(pair[0]);
+        close(listener);
+        alarm(6U);
+        result = serve(pair[1], root, NULL, "127.0.0.1",
+                       ntohs(loop.sin_port), "mail11@localhost");
+        close(pair[1]);
+        _exit(result == -1 ? 0 : 1);
+    }
+    close(pair[1]);
+    pair[1] = -1;
+    if (dniv_send_record(pair[0], "sender", 6U, 0) ||
+        dniv_send_record(pair[0], "recipient", 9U, 0) ||
+        dniv_recv_record(pair[0], ack, sizeof(ack), 0) != 4 ||
+        memcmp(ack, "\1\0\0\0", 4U) ||
+        dniv_send_record(pair[0], "\0", 1U, 0) ||
+        dniv_send_record(pair[0], "user", 4U, 0) ||
+        dniv_send_record(pair[0], "subject", 7U, 0) ||
+        dniv_send_record(pair[0], "body", 4U, 0))
+        goto finish;
+    watched.fd = listener;
+    watched.events = POLLIN;
+    watched.revents = 0;
+    /* No SMTP TCP connection while the peer withholds its EOM marker. */
+    if (poll(&watched, 1, 300) != 0)
+        goto finish;
+    close(pair[0]);
+    pair[0] = -1;
+    if (waitpid(child, &status, 0) != child ||
+        !WIFEXITED(status) || WEXITSTATUS(status))
+        goto finish;
+    child = -1;
+    rc = 0;
+finish:
+    if (pair[0] >= 0)
+        close(pair[0]);
+    if (pair[1] >= 0)
+        close(pair[1]);
+    if (listener >= 0)
+        close(listener);
+    if (child > 0) {
+        (void)kill(child, SIGKILL);
+        (void)waitpid(child, NULL, 0);
+    }
+    return rc;
+}
+
+static int selftest(void)
+{
+    char directory[] = "/tmp/dnmaild-selftest.XXXXXX";
+    char victim[] = "/tmp/dnmaild-victim.XXXXXX";
+    char mailbox[256] = {0};
+    char victim_buf[16];
+    FILE *out = NULL;
+    int victim_fd = -1;
+    int pair[2] = { -1, -1 };
+    unsigned char record_probe[4];
+    int rc = 1;
+
+    static const char hidden_nul[] = {
+        '2', '5', '0', ' ', 'O', 'K', '\0', 'X', '\r', '\n'
+    };
+
+    if (MAIL_OBJECT != 27U || MAIL11_V3_LEN != 16U ||
+        selftest_smtp_reply("250 OK\r\n", sizeof("250 OK\r\n") - 1U, 0) ||
+        selftest_smtp_reply("250-First\r\n250 Final\r\n",
+                            sizeof("250-First\r\n250 Final\r\n") - 1U, 0) ||
+        selftest_smtp_reply("250Xgarbage\n",
+                            sizeof("250Xgarbage\n") - 1U, -1) ||
+        selftest_smtp_reply("250 OK\n", sizeof("250 OK\n") - 1U, -1) ||
+        selftest_smtp_reply(hidden_nul, sizeof(hidden_nul), -1) ||
+        selftest_smtp_reply("550-First\r\n250 Final\r\n",
+                            sizeof("550-First\r\n250 Final\r\n") - 1U, -1))
+        return 1;
+    {
+        pid_t child = fork();
+
+        if (child < 0)
+            return 1;
+        if (!child)
+            _exit(0);
+        errno = 0;
+        if (finish_sendmail(-1, child) >= 0 || errno != EBADF)
+            return 1;
+        errno = 0;
+        if (waitpid(child, NULL, WNOHANG) != -1 || errno != ECHILD)
+            return 1;
+    }
+    if (!mkdtemp(directory))
+        return 1;
+    victim_fd = mkstemp(victim);
+    if (victim_fd < 0 || write(victim_fd, "victim\n", 7U) != 7)
+        goto out;
+    close(victim_fd);
+    victim_fd = -1;
+    if (snprintf(mailbox, sizeof(mailbox), "%s/mailbox.log", directory) >=
+        (int)sizeof(mailbox))
+        goto out;
+    if (socketpair(AF_UNIX, SOCK_SEQPACKET, 0, pair) ||
+        send(pair[0], "12345", 5U, MSG_EOR) != 5)
+        goto out;
+    errno = 0;
+    if (dniv_recv_record(pair[1], record_probe, sizeof(record_probe), 0) >= 0 ||
+        errno != EMSGSIZE)
+        goto out;
+    close(pair[0]);
+    close(pair[1]);
+    pair[0] = pair[1] = -1;
+    if (symlink(victim, mailbox))
+        goto out;
+    out = open_mailbox(directory);
+    if (out)
+        goto out;
+    unlink(mailbox);
+    if (link(victim, mailbox))
+        goto out;
+    out = open_mailbox(directory);
+    if (out)
+        goto out;
+    unlink(mailbox);
+    out = open_mailbox(directory);
+    if (!out)
+        goto out;
+    if (fputs("ok\n", out) == EOF)
+        goto out;
+    if (fclose(out)) {
+        out = NULL;
+        goto out;
+    }
+    out = NULL;
+    victim_fd = open(victim, O_RDONLY | O_CLOEXEC);
+    if (victim_fd < 0 || read(victim_fd, victim_buf, sizeof(victim_buf)) != 7 ||
+        memcmp(victim_buf, "victim\n", 7U))
+        goto out;
+    close(victim_fd);
+    victim_fd = -1;
+    if (selftest_spool_session(directory, 0, NULL, 0))
+        goto out;
+    victim_fd = open(mailbox, O_RDONLY | O_CLOEXEC);
+    if (victim_fd < 0 || read(victim_fd, victim_buf, sizeof(victim_buf)) != 3 ||
+        memcmp(victim_buf, "ok\n", 3U))
+        goto out;
+    close(victim_fd);
+    victim_fd = -1;
+    if (selftest_spool_session(directory, 1, NULL, 0))
+        goto out;
+    victim_fd = open(mailbox, O_RDONLY | O_CLOEXEC);
+    if (victim_fd < 0 || read(victim_fd, victim_buf, sizeof(victim_buf)) != 16 ||
+        memcmp(victim_buf, "ok\nFrom: sender", 15U) ||
+        selftest_spool_io_rollback(directory, mailbox) ||
+        selftest_sendmail_replay(directory) ||
+        selftest_smtp_not_before_eom(directory))
+        goto out;
+    {
+        static const char empty_entry[] =
+            "From: sender\nTo: recipient\nX-VMSmail: user\n"
+            "Subject: subject\n\n--\n";
+        struct stat before, after;
+        char actual[sizeof(empty_entry) - 1U];
+        FILE *readback;
+
+        if (stat(mailbox, &before) ||
+            selftest_spool_session(directory, 1, NULL, 1) ||
+            stat(mailbox, &after) ||
+            after.st_size - before.st_size !=
+                (off_t)(sizeof(empty_entry) - 1U))
+            goto out;
+        readback = fopen(mailbox, "rb");
+        if (!readback)
+            goto out;
+        if (fseeko(readback, before.st_size, SEEK_SET) ||
+            fread(actual, 1U, sizeof(actual), readback) != sizeof(actual) ||
+            memcmp(actual, empty_entry, sizeof(actual)) ||
+            fgetc(readback) != EOF || ferror(readback)) {
+            fclose(readback);
+            goto out;
+        }
+        if (fclose(readback))
+            goto out;
+    }
+    rc = 0;
+
+out:
+    if (out)
+        fclose(out);
+    if (victim_fd >= 0)
+        close(victim_fd);
+    if (pair[0] >= 0)
+        close(pair[0]);
+    if (pair[1] >= 0)
+        close(pair[1]);
+    unlink(mailbox);
+    unlink(victim);
+    rmdir(directory);
+    if (rc)
+        return 1;
+    puts("dnmaild selftest passed");
+    return 0;
+}
+
+int main(int argc, char **argv)
+{
+    const char *root = ".";
+    const char *sendmail_path = NULL;
+    const char *smtp_host = NULL;
+    const char *smtp_from = "mail11@localhost";
+    unsigned int smtp_port = 25U;
+    int once = 0;
+    int listener;
+    int i;
+
+    if (argc == 2 && !strcmp(argv[1], "--selftest"))
+        return selftest();
+    for (i = 1; i < argc; i++) {
+        if (!strcmp(argv[i], "--once"))
+            once = 1;
+        else if (!strcmp(argv[i], "--root") && i + 1 < argc)
+            root = argv[++i];
+        else if (!strcmp(argv[i], "--sendmail") && i + 1 < argc)
+            sendmail_path = argv[++i];
+        else if (!strcmp(argv[i], "--smtp") && i + 1 < argc)
+            smtp_host = argv[++i];
+        else if (!strcmp(argv[i], "--smtp-port") && i + 1 < argc) {
+            char *end;
+            unsigned long value;
+
+            errno = 0;
+            value = strtoul(argv[++i], &end, 10);
+            if (argv[i][0] < '0' || argv[i][0] > '9' ||
+                errno || *end || value == 0U || value > 65535U) {
+                fprintf(stderr, "dnmaild: invalid SMTP port\n");
+                return 2;
+            }
+            smtp_port = (unsigned int)value;
+        } else if (!strcmp(argv[i], "--smtp-from") && i + 1 < argc)
+            smtp_from = argv[++i];
+        else {
+            fprintf(stderr,
+                    "usage: %s [--once] [--root DIR] [--sendmail PATH | --smtp HOST [--smtp-port PORT] [--smtp-from ADDRESS]] | --selftest\n",
+                    argv[0]);
+            return 2;
+        }
+    }
+
+    if (sendmail_path && smtp_host) {
+        fprintf(stderr, "dnmaild: choose either sendmail or SMTP delivery\n");
+        return 2;
+    }
+    if (configure_sigpipe()) {
+        perror("dnmaild: configure SIGPIPE");
+        return 1;
+    }
+    setvbuf(stdout, NULL, _IONBF, 0);
+    listener = make_listener();
+    if (listener < 0) {
+        perror("dnmaild: listen");
+        return 1;
+    }
+    printf("dnmaild: ready object=%u root=%s\n", MAIL_OBJECT, root);
+    for (;;) {
+        int fd = accept(listener, NULL, NULL);
+        int rc;
+
+        if (fd < 0) {
+            if (errno == EINTR)
+                continue;
+            perror("dnmaild: accept");
+            close(listener);
+            return 1;
+        }
+        rc = accept_mail_session(fd);
+        if (!rc)
+            rc = serve(fd, root, sendmail_path, smtp_host, smtp_port,
+                       smtp_from);
+        close(fd);
+        if (rc) {
+            perror("dnmaild: session");
+            if (once) {
+                close(listener);
+                return 1;
+            }
+            continue;
+        }
+        if (once)
+            break;
+    }
+    close(listener);
+    return 0;
+}

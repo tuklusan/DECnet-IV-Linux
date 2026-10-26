@@ -1,0 +1,5 @@
+# Local editor and operating-system state
+.DS_Store
+Thumbs.db
+*.swp
+
